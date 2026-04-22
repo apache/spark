@@ -63,6 +63,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   private def hadoopConf = session.sessionState.newHadoopConf()
 
+  // recaches all cache entries without time travel for the given table
+  // after a write operation that moves the state of the table forward (e.g. append, overwrite)
+  // this method accounts for V2 tables loaded via TableProvider (no catalog/identifier)
   private def refreshCache(r: DataSourceV2Relation)(): Unit = r match {
     case ExtractV2CatalogAndIdentifier(catalog, ident) =>
       val nameParts = ident.toQualifiedNameParts(catalog)

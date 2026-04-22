@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import org.apache.spark.sql.catalyst.catalog.TempVariableManager
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 
 /**
@@ -25,12 +26,14 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
  * All mutable state (current catalog, current namespace, loaded catalogs) is delegated to the
  * wrapped [[CatalogManager]].
  */
-// TODO: Consider extracting a CatalogManager trait that both the real
-//  implementation and the decorator implement
+// TODO: Extracting a CatalogManager trait (so this class can implement it instead of extending
+//  CatalogManager) would eliminate the inherited mutable state that this decorator doesn't use.
 private[sql] class TransactionAwareCatalogManager(
     delegate: CatalogManager,
     txn: Transaction)
   extends CatalogManager(delegate.defaultSessionCatalog, delegate.v1SessionCatalog) {
+
+  override val tempVariableManager: TempVariableManager = delegate.tempVariableManager
 
   override def transaction: Option[Transaction] = Some(txn)
 

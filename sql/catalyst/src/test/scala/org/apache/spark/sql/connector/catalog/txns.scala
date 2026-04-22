@@ -69,7 +69,7 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
     delegate.properties,
     delegate.constraints) {
 
-  // TODO(achatzis): Rethink how schema evolution works on top of transactions.
+  // TODO: Revise schema evolution.
   alterTableWithData(delegate.data, schema)
 
   // A tracker of filters used in each scan.
@@ -81,7 +81,7 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable)
 
   def commit(): Unit = {
     delegate.dataMap.clear()
-    // TODO(achatzis): Rethink how schema evolution works on top of transactions.
+    // TODO: Revise schema evolution.
     delegate.alterTableWithData(data, delegate.schema)
     delegate.replacedPartitions = replacedPartitions
     delegate.lastWriteInfo = lastWriteInfo

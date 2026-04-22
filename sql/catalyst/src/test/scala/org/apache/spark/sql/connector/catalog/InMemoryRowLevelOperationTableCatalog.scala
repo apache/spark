@@ -21,8 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
 
 class InMemoryRowLevelOperationTableCatalog
-  extends InMemoryTableCatalog
-  with TransactionalCatalogPlugin {
+    extends InMemoryTableCatalog
+    with TransactionalCatalogPlugin {
   import CatalogV2Implicits._
 
   // The current active transaction.

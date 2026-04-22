@@ -478,8 +478,6 @@ class RelationResolution(
     }
   }
 
-  // TODO: how to validate the output is compatible?
-  // TODO: what shall we do if the output mismatches (schema changes?)
   def resolveReference(ref: V2TableReference): LogicalPlan = {
     val relation = getOrLoadRelation(ref)
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)

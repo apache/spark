@@ -100,8 +100,8 @@ class QueryExecution(
   // 1. At the pre-Analyzed plan we look for nodes that implement the TransactionalWrite trait.
   //    When a plan contains such a node we initiate a transaction. Note, we should never start
   //    a transaction for operations that are not executed, e.g. EXPLAIN.
-  // 2. Create an analyzer clone with a transaction aware Catalog Manager. The latter is the single
-  //    choke point of all catalog access, and it is also the transaction context carrier.
+  // 2. Create an analyzer clone with a transaction aware Catalog Manager. The latter is the
+  //    narrow waist of all catalog accesses, and it is also the transaction context carrier.
   //    This is then passed to all rules during analysis that need to check the catalog. Rules
   //    that are specifically interested in transactionality can access the transaction directly
   //    from the Catalog Manager. The transaction catalog, is potentially the place where connectors
@@ -281,15 +281,18 @@ class QueryExecution(
     sparkSession.withActive {
       assertAnalyzed()
       assertSupported()
-      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-      // optimizing and planning.
-      val plan = normalized.clone()
-      // During a transaction, skip cache substitution. useCachedData replaces DataSourceV2Relation
-      // nodes (loaded via the transaction catalog) with InMemoryRelation, which bypasses read
-      // tracking in the transaction catalog and may serve stale data.
-      // if (transactionOpt.isDefined) plan
-      // else sparkSession.sharedState.cacheManager.useCachedData(plan)
-      sparkSession.sharedState.cacheManager.useCachedData(plan)
+
+      // During a transaction, skip cache substitution. This is to avoid replacing relations
+      // loaded by the transactional catalog with potentially stale relations cached before
+      // the transaction was active.
+      val plan = if (transactionOpt.isDefined) {
+        plan
+      }
+      else {
+        // clone the plan to avoid sharing the plan instance between different stages like
+        // analyzing, optimizing and planning.
+        sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      }
     }
   }
 
@@ -332,11 +335,7 @@ class QueryExecution(
       // plan.
       QueryExecution.createSparkPlan(planner, optimizedPlan.clone())
     }
-    transactionOpt match {
-      case Some(txn) =>
-        plan.transformDown { case w: TransactionalExec => w.withTransaction(Some(txn)) }
-      case None => plan
-    }
+    attachTransaction(plan)
   }
 
   def sparkPlan: SparkPlan = executeWithTransactionContext {
@@ -610,20 +609,26 @@ class QueryExecution(
   }
 
   /**
-   * Execute the given block with the transaction context if exists. If there is an exception thrown
-   * during the execution, the transaction will be aborted.
+   * Executes the given block with the transaction context if exists. If there is an exception
+   * thrown during the execution, the transaction will be aborted.
    *
-   * Note 1: The transaction is not committed in this method. The caller should commit the
+   * Note: The transaction is not committed in this method. The caller should commit the
    * transaction if the execution is successful.
-   *
-   * Note 2: In some cases, post commit execution might generate an exception. The abort operation
-   * should be no-op in this case.
    */
   private def executeWithTransactionContext[T](block: => T): T = transactionOpt match {
     case Some(transaction) =>
       try block
       catch { case e: Throwable => TransactionUtils.abort(transaction); throw e }
     case None => block
+  }
+
+
+  /** Attaches a transaction to the given SparkPlan to the transactional execution nodes. */
+  private def attachTransaction(plan: SparkPlan): SparkPlan = transactionOpt match {
+    case Some(txn) => plan.transformDown {
+      case w: TransactionalExec => w.withTransaction(Some(txn))
+    }
+    case None => plan
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

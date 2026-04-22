@@ -145,7 +145,18 @@ abstract class RowLevelOperationSuiteBase
     (catalog.lastTransaction, indexByName(tables))
   }
 
-  private def indexByName[T <: Table](tables: Seq[T]): Map[String, T] = {
+  protected def executeTransactionMultiQE(func: => Unit): (Txn, Map[String, TxnTable]) = {
+    val qes = withQueryExecutionsCaptured(spark)(func)
+    val tables = qes.flatMap { qe =>
+      collectWithSubqueries(qe.executedPlan) {
+        case BatchScanExec(_, _, _, _, table: TxnTable, _) => table
+        case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _) => table
+      }
+    }
+    (catalog.lastTransaction, indexByName(tables))
+  }
+
+  protected def indexByName[T <: Table](tables: Seq[T]): Map[String, T] = {
     tables.groupBy(_.name).map {
       case (name, sameNameTables) =>
         val Seq(table) = sameNameTables.distinct
