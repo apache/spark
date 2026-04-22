@@ -35,30 +35,33 @@ class TypeChangePreservesColIdTableCatalog extends InMemoryTableCatalog {
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val oldColumns = loadTable(ident).columns()
-    val altered = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
+    val alteredTable = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
 
-    // Force-preserve old column IDs by name, ignoring type changes
+    // The parent alterTable assigns new column IDs when a column's type changes.
+    // Preserve the old column IDs by matching on name, so the column ID check
+    // passes and the [[validateDataColumns]] data columns validation catches the
+    // incompatible type change instead.
     val oldIdsByName = oldColumns
       .filter(_.id() != null)
-      .map(c => c.name().toLowerCase(Locale.ROOT) -> c.id())
+      .map(oldCol => oldCol.name().toLowerCase(Locale.ROOT) -> oldCol.id())
       .toMap
-    val patchedColumns = altered.columns().map { col =>
-      oldIdsByName.get(col.name().toLowerCase(Locale.ROOT)) match {
+    val newColsWithPreservedIds = alteredTable.columns().map { newCol =>
+      oldIdsByName.get(newCol.name().toLowerCase(Locale.ROOT)) match {
         case Some(oldId) =>
-          col.asInstanceOf[ColumnImpl].copy(id = oldId)
+          newCol.asInstanceOf[ColumnImpl].copy(id = oldId)
         case None =>
-          col
+          newCol
       }
     }
 
-    val patchedTable = new InMemoryTable(
-      altered.name,
-      patchedColumns,
-      altered.partitioning,
-      altered.properties,
-      altered.constraints)
-    patchedTable.alterTableWithData(altered.data, altered.schema)
-    tables.put(ident, patchedTable)
-    patchedTable
+    val tableWithPreservedIds = new InMemoryTable(
+      alteredTable.name,
+      newColsWithPreservedIds,
+      alteredTable.partitioning,
+      alteredTable.properties,
+      alteredTable.constraints)
+    tableWithPreservedIds.alterTableWithData(alteredTable.data, alteredTable.schema)
+    tables.put(ident, tableWithPreservedIds)
+    tableWithPreservedIds
   }
 }
