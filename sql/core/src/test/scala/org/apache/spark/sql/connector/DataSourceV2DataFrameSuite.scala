@@ -1299,11 +1299,11 @@ class DataSourceV2DataFrameSuite
       // column's type changes. Dropping a nested field changes the parent
       // struct type, so the parent column gets a new ID. The column ID
       // check fires before schema validation.
-      val exception = intercept[AnalysisException] { df.collect() }
-      assert(exception.getCondition ==
-        "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH" ||
-        exception.getCondition ==
-          "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH")
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
@@ -1910,12 +1910,13 @@ class DataSourceV2DataFrameSuite
 
   // Column ID tests: Write operations
   //
-  // [[writeTo().append()]] re-analyzes the source plan before writing,
-  // which picks up the latest column IDs from the table. So even if
-  // a column was dropped and re-added, the write sees the new IDs
-  // and succeeds, unlike [[df.collect()]] which uses stale captured IDs.
+  // [[writeTo().append()]] includes the source DataFrame's plan as a
+  // child of the [[AppendData]] command. The refresh logic validates
+  // column IDs for ALL [[DataSourceV2Relation]] nodes in the plan,
+  // including the source. If the source was captured before a column
+  // drop+re-add, its stale column IDs are detected.
 
-  test("writeTo().append() succeeds after drop+re-add column same type") {
+  test("writeTo().append() rejects stale source after drop+re-add column") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -1925,11 +1926,14 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      source.writeTo(t).append()
-      // Original row has salary=null because the column was dropped and
-      // re-added (data for the dropped column is lost in InMemoryTable).
-      // The appended row has salary=100 from the source DataFrame.
-      checkAnswer(spark.table(t), Seq(Row(1, null), Row(1, 100)))
+      // The source DataFrame's captured column IDs no longer match the
+      // current table's column IDs (salary was dropped and re-added with
+      // a new ID). The refresh logic detects this mismatch.
+      checkError(
+        exception = intercept[AnalysisException] { source.writeTo(t).append() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
   }
 

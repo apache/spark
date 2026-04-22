@@ -90,4 +90,18 @@ class NullColumnIdInMemoryTable(
   override def columns(): Array[Column] = {
     super.columns().map(_.asInstanceOf[ColumnImpl].copy(id = null))
   }
+
+  override def copy(): Table = {
+    val copiedTable = new NullColumnIdInMemoryTable(
+      name,
+      columns(),
+      partitioning,
+      properties,
+      constraints,
+      id)
+    dataMap.synchronized {
+      copiedTable.alterTableWithData(data, schema)
+    }
+    copiedTable
+  }
 }
