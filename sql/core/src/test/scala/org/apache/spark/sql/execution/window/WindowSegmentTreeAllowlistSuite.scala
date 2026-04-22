@@ -146,6 +146,30 @@ class WindowSegmentTreeAllowlistSuite
     }
   }
 
+  // Gate: aggregates carrying a FILTER (WHERE ...) clause fall through.
+  // `eligibleForSegTree` requires `filters.forall(_.isEmpty)` because the
+  // segment-tree combine contract is defined over the unfiltered partial
+  // buffer. A defensive regression: if any future analyzer rule ever rewrites
+  // `AGG(x) FILTER (WHERE p)` in a way that strips `AggregateExpression.filter`
+  // (e.g., pushing the predicate into the aggregate function), this test
+  // fails and forces an explicit eligibility review.
+  test("FILTER (WHERE ...) disables segment-tree path") {
+    withSQLConf(enableSegTree.toSeq: _*) {
+      withTempView("t") {
+        baseDF.createOrReplaceTempView("t")
+        val df = spark.sql(
+          """SELECT id, pk, v,
+            |  sum(v) FILTER (WHERE v % 2 = 0)
+            |    OVER (PARTITION BY pk ORDER BY id ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING)
+            |    AS filtered_sum
+            |FROM t""".stripMargin)
+        val (seg, _) = segTreeCounters(df)
+        assert(seg == 0,
+          s"filtered aggregate must not take segment-tree path (got $seg segtree frames)")
+      }
+    }
+  }
+
   // Mixed: ANY non-eligible aggregate disqualifies the group
 
   test("mix of allowlisted + non-allowlisted aggregates falls through entirely") {
