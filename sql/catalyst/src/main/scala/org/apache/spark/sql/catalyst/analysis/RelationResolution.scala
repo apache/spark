@@ -344,6 +344,9 @@ class RelationResolution(
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         createDataSourceV1Scan(v1Table.v1Table)
 
+      // MetadataOnlyTable is a sentinel meaning "interpret via v1", so unlike the V1Table
+      // case above we apply no session-catalog / tracksPartitionsInCatalog guard — any catalog
+      // returning MetadataOnlyTable has opted into v1 read semantics.
       case t: MetadataOnlyTable =>
         createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 

@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
  * the resulting {@link TableInfo} in a {@code MetadataOnlyTable} to return from
  * {@link TableCatalog#loadTable(Identifier)}.
  *
- * @since 4.1.0
+ * @since 4.2.0
  */
 @Evolving
 public class MetadataOnlyTable implements Table {

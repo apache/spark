@@ -146,15 +146,20 @@ private[sql] object V1Table {
       Map.empty[String, String]
     }
     CatalogTable(
+      // CatalogTable.identifier uses a single-string database; for multi-part namespaces we
+      // preserve only the last part. The view-expansion path does not rely on this — it reads
+      // the captured catalog+namespace from PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE (translated
+      // below into V1's numbered keys) — so the narrowing only affects identifier rendering in
+      // error messages.
       identifier = TableIdentifier(
         table = ident.name(),
-        database = Some(ident.namespace().lastOption.getOrElse("root")),
+        database = ident.namespace().lastOption,
         catalog = Some(catalog.name())),
       tableType = tableType,
       storage = CatalogStorageFormat.empty.copy(
         locationUri = props.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI),
         // v2 table properties should be put into the serde properties as well in case
-        // it contains data source options.
+        // they contain data source options.
         properties = tablePropsMap ++ serdeProps.map {
           case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
         }

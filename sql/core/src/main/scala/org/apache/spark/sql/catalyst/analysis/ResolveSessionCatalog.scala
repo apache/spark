@@ -517,6 +517,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
+    // The final `_, _` are CreateView.isAnalyzed and referredTempFunctions. We drop both:
+    // CreateViewCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
+    // from HandleSpecialCommand after this rewrite.
     case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
         _, _) =>

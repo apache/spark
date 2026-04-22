@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -753,7 +753,7 @@ object CatalogTable {
     props.toMap
   }
 
-  val VIEW_SQL_CONFIG_PREFIX = VIEW_PREFIX + "sqlConfig."
+  val VIEW_SQL_CONFIG_PREFIX = TableCatalog.VIEW_CONF_PREFIX
 
   val VIEW_QUERY_OUTPUT_PREFIX = VIEW_PREFIX + "query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
