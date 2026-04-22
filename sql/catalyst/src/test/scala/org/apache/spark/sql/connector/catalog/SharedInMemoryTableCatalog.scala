@@ -17,27 +17,28 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util
-import java.util.concurrent.ConcurrentHashMap
-
 /**
- * A [[NullTableIdInMemoryTableCatalog]] that shares table state across
- * all instances. This allows multiple [[SparkSession]]s to read and
- * write the same tables, simulating a real shared metastore.
+ * An InMemoryTableCatalog that shares table state across all instances.
+ * This allows multiple SparkSessions (via newSession/cloneSession) to
+ * read and write the same tables, simulating a real shared metastore.
  *
- * Table IDs are null (inherited from [[NullTableIdInMemoryTableCatalog]]),
- * so cross-session drop+recreate is detected via column IDs rather
- * than table IDs.
+ * Use this catalog for multi-session concurrency tests where one session
+ * writes and another session reads the same DSv2 table.
  */
-class SharedInMemoryTableCatalog extends NullTableIdInMemoryTableCatalog {
-  tables = SharedInMemoryTableCatalog.sharedTables
-  override protected val namespaces: util.Map[List[String], Map[String, String]] =
+class SharedInMemoryTableCatalog extends InMemoryTableCatalog {
+  override protected val tables: java.util.Map[Identifier, Table] =
+    SharedInMemoryTableCatalog.sharedTables
+  override protected val namespaces
+    : java.util.Map[List[String], Map[String, String]] =
     SharedInMemoryTableCatalog.sharedNamespaces
 }
 
 object SharedInMemoryTableCatalog {
-  val sharedTables = new ConcurrentHashMap[Identifier, Table]()
-  val sharedNamespaces = new ConcurrentHashMap[List[String], Map[String, String]]()
+  val sharedTables =
+    new java.util.concurrent.ConcurrentHashMap[Identifier, Table]()
+  val sharedNamespaces =
+    new java.util.concurrent.ConcurrentHashMap[
+      List[String], Map[String, String]]()
 
   def reset(): Unit = {
     sharedTables.clear()
