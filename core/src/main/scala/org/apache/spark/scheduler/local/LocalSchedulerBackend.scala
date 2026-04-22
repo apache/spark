@@ -20,12 +20,13 @@ package org.apache.spark.scheduler.local
 import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
+
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.internal.{LogKeys, Logging, config}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
