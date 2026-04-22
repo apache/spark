@@ -111,20 +111,6 @@ private[sql] object V1Table {
     }
   }
 
-  // Reserved keys that are promoted to first-class fields on CatalogTable and must be stripped
-  // from the user-visible properties map so they're not double-persisted.
-  private val METADATA_ONLY_RESERVED_KEYS = Set(
-    TableCatalog.PROP_PROVIDER,
-    TableCatalog.PROP_LOCATION,
-    TableCatalog.PROP_TABLE_TYPE,
-    TableCatalog.PROP_OWNER,
-    TableCatalog.PROP_COMMENT,
-    TableCatalog.PROP_COLLATION,
-    TableCatalog.PROP_VIEW_TEXT,
-    TableCatalog.PROP_VIEW_CURRENT_CATALOG,
-    TableCatalog.PROP_VIEW_CURRENT_NAMESPACE
-  )
-
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
@@ -137,7 +123,9 @@ private[sql] object V1Table {
       case _ => CatalogTableType.EXTERNAL
     }
     val viewText = props.get(TableCatalog.PROP_VIEW_TEXT)
-    val userProps = props -- METADATA_ONLY_RESERVED_KEYS
+    // Reserved keys are promoted to first-class CatalogTable fields; strip them from the
+    // user-visible properties map so they're not double-persisted or leaked into the serde bag.
+    val userProps = props -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
     val (serdeProps, tableProps) = userProps.toSeq
       .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
     val tablePropsMap = tableProps.toMap
