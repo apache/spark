@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, TableSummary}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -254,6 +254,45 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  test("CREATE VIEW over a non-view table entry is rejected (plain TableCatalog)") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingViewCatalog]
+    val tableIdent = Identifier.of(Array("default"), "v_existing_table")
+    val tableInfo = new TableInfo.Builder()
+      .withSchema(new StructType().add("col", "string"))
+      .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
+      .build()
+    catalog.createTable(tableIdent, tableInfo)
+    try {
+      withTable("spark_catalog.default.t") {
+        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+
+        // CREATE OR REPLACE VIEW must not silently destroy a non-view table -- v1 parity.
+        val replaceEx = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE VIEW view_catalog.default.v_existing_table AS " +
+            "SELECT x FROM spark_catalog.default.t")
+        }
+        assert(replaceEx.getCondition == "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE")
+
+        // Plain CREATE VIEW over a table surfaces TABLE_OR_VIEW_ALREADY_EXISTS, matching v1.
+        val createEx = intercept[AnalysisException] {
+          sql("CREATE VIEW view_catalog.default.v_existing_table AS " +
+            "SELECT x FROM spark_catalog.default.t")
+        }
+        assert(createEx.getCondition == "TABLE_OR_VIEW_ALREADY_EXISTS")
+
+        // CREATE VIEW IF NOT EXISTS is a no-op -- the table entry is untouched.
+        sql("CREATE VIEW IF NOT EXISTS view_catalog.default.v_existing_table AS " +
+          "SELECT x FROM spark_catalog.default.t")
+        val stored = catalog.getStoredView(Array("default"), "v_existing_table")
+        assert(stored.properties().get(TableCatalog.PROP_TABLE_TYPE) ==
+          TableSummary.EXTERNAL_TABLE_TYPE)
+      }
+    } finally {
+      catalog.dropTable(tableIdent)
+    }
+  }
+
   // --- CREATE VIEW on a StagingTableCatalog -------------------------------
 
   test("CREATE VIEW on a StagingTableCatalog uses the atomic exec") {
@@ -290,6 +329,48 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
           "SELECT x + 100 AS x FROM spark_catalog.default.t")
         // Value unchanged -- IF NOT EXISTS was a no-op.
         checkAnswer(spark.table("staging_catalog.default.v_atomic"), Row(3))
+      }
+    }
+  }
+
+  test("CREATE VIEW over a non-view table entry is rejected (StagingTableCatalog)") {
+    withSQLConf(
+      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
+      val stagingCatalog = spark.sessionState.catalogManager.catalog("staging_catalog")
+        .asInstanceOf[TestingStagingCatalog]
+      val tableIdent = Identifier.of(Array("default"), "v_existing_table")
+      val tableInfo = new TableInfo.Builder()
+        .withSchema(new StructType().add("col", "string"))
+        .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
+        .build()
+      stagingCatalog.createTable(tableIdent, tableInfo)
+      try {
+        withTable("spark_catalog.default.t") {
+          Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+
+          // CREATE OR REPLACE VIEW must not silently destroy a non-view table. On a staging
+          // catalog this specifically guards against `stageCreateOrReplace` committing over
+          // the table.
+          val replaceEx = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE VIEW staging_catalog.default.v_existing_table AS " +
+              "SELECT x FROM spark_catalog.default.t")
+          }
+          assert(replaceEx.getCondition == "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE")
+
+          val createEx = intercept[AnalysisException] {
+            sql("CREATE VIEW staging_catalog.default.v_existing_table AS " +
+              "SELECT x FROM spark_catalog.default.t")
+          }
+          assert(createEx.getCondition == "TABLE_OR_VIEW_ALREADY_EXISTS")
+
+          sql("CREATE VIEW IF NOT EXISTS staging_catalog.default.v_existing_table AS " +
+            "SELECT x FROM spark_catalog.default.t")
+          val loaded = stagingCatalog.loadTable(tableIdent).asInstanceOf[MetadataOnlyTable]
+          assert(loaded.getTableInfo.properties.get(TableCatalog.PROP_TABLE_TYPE) ==
+            TableSummary.EXTERNAL_TABLE_TYPE)
+        }
+      } finally {
+        stagingCatalog.dropTable(tableIdent)
       }
     }
   }
@@ -345,6 +426,49 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         .asInstanceOf[TestingViewCatalog]
       val info = catalog.getStoredView(Array("default"), "v_preserve")
       assert(info.properties().get("mykey") == "myvalue")
+    }
+  }
+
+  test("ALTER VIEW preserves PROP_OWNER (v1-parity)") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingViewCatalog]
+    val viewIdent = Identifier.of(Array("default"), "v_owner")
+    // Pre-seed a view whose stored TableInfo carries an explicit owner.
+    val initialInfo = new TableInfo.Builder()
+      .withSchema(new StructType().add("x", "int"))
+      .withViewText("SELECT 1 AS x")
+      .withOwner("alice")
+      .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
+      .build()
+    catalog.createTable(viewIdent, initialInfo)
+    try {
+      withTable("spark_catalog.default.t") {
+        Seq(2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+        sql("ALTER VIEW view_catalog.default.v_owner AS " +
+          "SELECT x FROM spark_catalog.default.t")
+        // v1 ALTER VIEW AS carries `owner` forward via `viewMeta.copy(...)`. v2 must match:
+        // the stored TableInfo after the ALTER should still have the original owner.
+        val info = catalog.getStoredView(Array("default"), "v_owner")
+        assert(info.properties().get(TableCatalog.PROP_OWNER) == "alice")
+      }
+    } finally {
+      catalog.dropTable(viewIdent)
+    }
+  }
+
+  test("ALTER VIEW preserves SCHEMA EVOLUTION binding mode") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.default.v_evo WITH SCHEMA EVOLUTION AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      sql("ALTER VIEW view_catalog.default.v_evo AS " +
+        "SELECT x + 1 AS x FROM spark_catalog.default.t")
+
+      val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+        .asInstanceOf[TestingViewCatalog]
+      val info = catalog.getStoredView(Array("default"), "v_evo")
+      // Use the same stored key v1 uses (CatalogTable.VIEW_SCHEMA_MODE = "view.schemaMode").
+      assert(info.properties().get("view.schemaMode") == "EVOLUTION")
     }
   }
 

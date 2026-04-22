@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, TableInfo, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -75,12 +75,16 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   override def userSpecifiedColumns: Seq[(String, Option[String])] = Seq.empty
   override def comment: Option[String] = existingProp(TableCatalog.PROP_COMMENT)
   override def collation: Option[String] = existingProp(TableCatalog.PROP_COLLATION)
-  // Strip reserved keys; those become first-class `TableInfo` / `CatalogTable` fields or are
-  // re-emitted by `buildTableInfo` (view text, current-catalog-namespace, comment, collation).
-  // User TBLPROPERTIES and view.sqlConfig.* / view.query.out.* / view.referredTempNames /
-  // view.schemaMode pass through -- generateViewProperties handles their cleanup + re-emit.
+  // Carry the existing view's full property map forward. Keys the ALTER actually changes are
+  // overwritten downstream: view text + PROP_TABLE_TYPE via `withViewText`, comment / collation
+  // via `withComment` / `withCollation`, view.sqlConfig.* / view.query.out.* /
+  // view.referredTempNames re-emitted by `generateViewProperties`, and
+  // PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE re-emitted by the v2 encoder inside
+  // `buildTableInfo`. Everything else -- notably PROP_OWNER and view.schemaMode -- flows
+  // through unchanged, matching v1 `AlterViewAsCommand.alterPermanentView`'s `viewMeta.copy`
+  // semantics.
   override def userProperties: Map[String, String] =
-    existingInfo.properties.asScala.toMap -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
+    existingInfo.properties.asScala.toMap
 
   override def viewSchemaMode: ViewSchemaMode = existingCatalogTable.viewSchemaMode
 }

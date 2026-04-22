@@ -22,11 +22,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvolution, TableAlreadyExistsException, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, SchemaEvolution, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils}
-import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableSummary}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -116,6 +116,27 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 
   protected def viewAlreadyExists(): Throwable =
     QueryCompilationErrors.viewAlreadyExistsError(legacyName)
+
+  // Loads the existing entry at `identifier` or returns None if it does not exist. Combines
+  // the existence check and type check into a single catalog round-trip (vs. the previous
+  // tableExists + implicit assume-view flow).
+  protected def tryLoadTable(): Option[Table] = {
+    try {
+      Some(catalog.loadTable(identifier))
+    } catch {
+      case _: NoSuchTableException => None
+    }
+  }
+
+  // A catalog with SUPPORTS_VIEW round-trips views as MetadataOnlyTable with PROP_TABLE_TYPE
+  // set to VIEW. Anything else at the same identifier is a non-view table -- REPLACE'ing it as
+  // a view would silently destroy the table's data, so we reject at the exec layer.
+  protected def isViewTable(table: Table): Boolean = table match {
+    case mot: MetadataOnlyTable =>
+      TableSummary.VIEW_TABLE_TYPE.equals(
+        mot.getTableInfo.properties.get(TableCatalog.PROP_TABLE_TYPE))
+    case _ => false
+  }
 }
 
 /**
@@ -138,16 +159,20 @@ case class CreateV2ViewExec(
   override protected def run(): Seq[InternalRow] = {
     val info = buildTableInfo()
 
-    if (catalog.tableExists(identifier)) {
+    tryLoadTable().foreach { existing =>
       if (allowExisting) {
         return Seq.empty
+      }
+      if (!isViewTable(existing)) {
+        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
+          legacyName, replace)
       }
       if (!replace) throw viewAlreadyExists()
       // Cyclic reference detection is done at analysis time in CheckViewReferences.
       CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       catalog.dropTable(identifier)
     }
-    // TOCTOU: if another writer creates the table between tableExists and createTable, a bare
+    // TOCTOU: if another writer creates an entry between tryLoadTable and createTable, a bare
     // TableAlreadyExistsException is unhelpful; present the same viewAlreadyExists error the
     // atomic path uses.
     try {
@@ -185,12 +210,19 @@ case class AtomicCreateV2ViewExec(
     // both execs: the malformed view body is rejected even when the allow-existing short-
     // circuit would otherwise skip creation.
     val info = buildTableInfo()
-    if (allowExisting && catalog.tableExists(identifier)) {
+    val existing = tryLoadTable()
+    if (allowExisting && existing.isDefined) {
       return Seq.empty
+    }
+    existing.foreach { table =>
+      if (!isViewTable(table)) {
+        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
+          legacyName, replace)
+      }
     }
     val staged: StagedTable = if (replace) {
       // Cyclic reference detection is done at analysis time in CheckViewReferences.
-      if (catalog.tableExists(identifier)) {
+      if (existing.isDefined) {
         CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       }
       catalog.stageCreateOrReplace(identifier, info)

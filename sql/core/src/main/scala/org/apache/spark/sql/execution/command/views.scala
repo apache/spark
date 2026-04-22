@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, NamespaceHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -856,30 +857,29 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
 object CheckViewReferences extends (LogicalPlan => Unit) {
   import ViewHelper._
 
-  private def legacyNameFor(resolved: LogicalPlan): TableIdentifier = resolved match {
-    case ri: ResolvedIdentifier =>
-      TableIdentifier(
-        table = ri.identifier.name(),
-        database = ri.identifier.namespace().lastOption,
-        catalog = Some(ri.catalog.name()))
-    case rpv: ResolvedPersistentView =>
-      TableIdentifier(
-        table = rpv.identifier.name(),
-        database = rpv.identifier.namespace().lastOption,
-        catalog = Some(rpv.catalog.name()))
-    case other =>
-      throw SparkException.internalError(
-        s"Unexpected child of view command: ${other.getClass.getName}")
+  // Extract (catalog, identifier) for the two resolved shapes view commands reach us with:
+  // `ResolvedIdentifier` for CREATE VIEW on a new target, `ResolvedPersistentView` for ALTER
+  // VIEW or CREATE OR REPLACE VIEW on an existing view. All other shapes are an analyzer bug.
+  private def catalogAndIdent(resolved: LogicalPlan): (CatalogPlugin, Identifier) =
+    resolved match {
+      case ri: ResolvedIdentifier => (ri.catalog, ri.identifier)
+      case rpv: ResolvedPersistentView => (rpv.catalog, rpv.identifier)
+      case other =>
+        throw SparkException.internalError(
+          s"Unexpected child of view command: ${other.getClass.getName}")
+    }
+
+  private def legacyNameFor(resolved: LogicalPlan): TableIdentifier = {
+    val (catalog, ident) = catalogAndIdent(resolved)
+    TableIdentifier(
+      table = ident.name(),
+      database = ident.namespace().lastOption,
+      catalog = Some(catalog.name()))
   }
 
-  private def fullIdentFor(resolved: LogicalPlan): Seq[String] = resolved match {
-    case ri: ResolvedIdentifier =>
-      ri.catalog.name() +: ri.identifier.asMultipartIdentifier
-    case rpv: ResolvedPersistentView =>
-      rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier
-    case other =>
-      throw SparkException.internalError(
-        s"Unexpected child of view command: ${other.getClass.getName}")
+  private def fullIdentFor(resolved: LogicalPlan): Seq[String] = {
+    val (catalog, ident) = catalogAndIdent(resolved)
+    catalog.name() +: ident.asMultipartIdentifier
   }
 
   override def apply(plan: LogicalPlan): Unit = plan.foreach {
