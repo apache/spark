@@ -1029,4 +1029,32 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
     }
   }
+
+  test("SPARK-56032: FilterExec CSE preserves short-circuit across predicates") {
+    // CSE'd subexpressions in a *later* otherPred must not be hoisted above an *earlier*
+    // otherPred's short-circuit, otherwise rows the earlier predicate would have rejected
+    // still pay the cost of the later predicate's throw-prone expression.
+    val schema = StructType(Seq(
+      StructField("x", IntegerType, nullable = false)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(0), Row(2), Row(4)))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema)
+      // Two otherPreds:
+      //   - x > 0: cheap, rejects the x=0 row.
+      //   - ((100 / x) > 0 OR (100 / x) < 1000): references `100 / x` twice, which CSE
+      //     will pull out. If the precompute is hoisted to the top of the do { } block,
+      //     it runs 100/0 on the x=0 row under ANSI and throws before x > 0 rejects.
+      val filtered = df.where("x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)")
+      val plan = filtered.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(filtered, Seq(Row(2), Row(4)))
+    }
+  }
 }
