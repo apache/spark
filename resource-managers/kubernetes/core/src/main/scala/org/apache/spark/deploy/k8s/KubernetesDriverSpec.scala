@@ -37,7 +37,12 @@ case class KubernetesDriverSpec(
     pod: SparkPod,
     driverPreKubernetesResources: Seq[HasMetadata],
     driverKubernetesResources: Seq[HasMetadata],
-    systemProperties: Map[String, String])
+    systemProperties: Map[String, String]) {
+
+  /** Get system properties as a Java-friendly map. */
+  @Since("4.2.0")
+  def getSystemPropertiesAsJavaMap: JMap[String, String] = systemProperties.asJava
+}
 
 @Unstable
 @DeveloperApi
