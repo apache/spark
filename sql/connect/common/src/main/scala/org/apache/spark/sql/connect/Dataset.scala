@@ -778,7 +778,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  override protected def withColumnsRenamed(
+  override protected[spark] def withColumnsRenamed(
       colNames: Seq[String],
       newColNames: Seq[String]): DataFrame = {
     require(
@@ -1228,7 +1228,7 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def toJSON: Dataset[String] = {
-    select(to_json(struct(col("*")))).as(StringEncoder)
+    select(to_json(struct(col("*"))).as("value")).as(StringEncoder)
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {

@@ -1963,7 +1963,7 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
 
   test("position mapping - parse error with identifier clause - SPARK-49757 regression test") {
     val sqlText = "SET CATALOG IDENTIFIER(:param)"
-    val exception = checkParameterError[ParseException](
+    val exception = checkParameterError[AnalysisException](
       sqlText,
       params = Map("param" -> "testcat.ns1")
     )
@@ -1987,20 +1987,34 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
     // This is the SPARK-49757 regression test - multipart names in IDENTIFIER should fail
     val sqlText = "SET CATALOG IDENTIFIER(:catalogName)"
     checkError(
-      exception = intercept[ParseException] {
+      exception = intercept[AnalysisException] {
         spark.sql(sqlText, Map("catalogName" -> "catalog.namespace"))
       },
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       parameters = Map(
         "name" -> "`catalog`.`namespace`",
         "statement" -> "SET CATALOG"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = sqlText.length - 1
       )
     )
+  }
+
+  test("SET PATH with named parameter in IDENTIFIER (PATH feature enabled)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      // current_path() resolves via system.builtin; include it when PATH is not DEFAULT_PATH.
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(:ns), system.builtin", Map("ns" -> "default"))
+      val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH + IDENTIFIER(:ns); got: $pathStr")
+    }
+  }
+
+  test("SET PATH with positional parameter in IDENTIFIER (PATH feature enabled)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(?), system.builtin", Array("default"))
+      val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH + IDENTIFIER(?); got: $pathStr")
+    }
   }
 
   test("IDENTIFIER clause with parameter marker - table reference") {

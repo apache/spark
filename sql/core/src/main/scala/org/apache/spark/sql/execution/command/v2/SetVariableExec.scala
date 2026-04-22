@@ -66,7 +66,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     }
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
+    val scriptingVariableManager = SqlScriptingContextManager.get().flatMap(_.getVariableManager)
 
     val variableManager = variable.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>

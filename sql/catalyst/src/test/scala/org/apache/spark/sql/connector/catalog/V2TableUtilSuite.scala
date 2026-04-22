@@ -392,6 +392,25 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.isEmpty)
   }
 
+  test("extractMetadataColumns - doesn't access table metadata unless needed") {
+    val dataCols = Array(
+      col("id", LongType, nullable = true),
+      col("name", StringType, nullable = true))
+
+    val throwingTable = TestTableThatThrowsOnMetadataAccess("test", dataCols)
+
+    val dataAttrs = dataCols.map(c => AttributeReference(c.name, c.dataType, c.nullable)())
+    val relation = DataSourceV2Relation(
+      throwingTable,
+      dataAttrs.toImmutableArraySeq,
+      None,
+      None,
+      CaseInsensitiveStringMap.empty())
+
+    val extractedMetaColumns = V2TableUtil.extractMetadataColumns(relation)
+    assert(extractedMetaColumns.isEmpty)
+  }
+
   test("validateCapturedColumns - array element type changed") {
     val originCols = Array(
       col("id", LongType, nullable = true),
@@ -625,6 +644,17 @@ class V2TableUtilSuite extends SparkFunSuite {
       override val metadataColumns: Array[MetadataColumn] = Array.empty)
       extends Table with SupportsMetadataColumns {
     override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
+  }
+
+  // table that throws when metadataColumns is accessed
+  private case class TestTableThatThrowsOnMetadataAccess(
+      override val name: String,
+      override val columns: Array[Column])
+      extends Table with SupportsMetadataColumns {
+    override def capabilities: util.Set[TableCapability] = util.Set.of(BATCH_READ)
+    override lazy val metadataColumns: Array[MetadataColumn] = {
+      throw new RuntimeException("metadataColumns should not be accessed")
+    }
   }
 
   private case class TestMetadataColumn(

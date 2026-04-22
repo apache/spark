@@ -21,6 +21,7 @@ import inspect
 import pandas as pd
 import numpy as np
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.namespace import _get_index_map, read_delta
@@ -206,13 +207,13 @@ class NamespaceTestsMixin:
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="ME"),
         )
 
         self.assert_eq(
-            ps.date_range(start="1/1/2018", periods=5, freq="3M"),
-            pd.date_range(start="1/1/2018", periods=5, freq="3M"),
+            ps.date_range(start="1/1/2018", periods=5, freq="3ME"),
+            pd.date_range(start="1/1/2018", periods=5, freq="3ME"),
         )
 
         self.assert_eq(
@@ -273,12 +274,12 @@ class NamespaceTestsMixin:
             pd.to_timedelta(np.arange(5), unit="s"),
         )
         self.assert_eq(
-            ps.to_timedelta(ps.Series([1, 2]), unit="d"),
-            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+            ps.to_timedelta(ps.Series([1, 2]), unit="D"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="D"),
         )
         self.assert_eq(
-            ps.to_timedelta(pd.Series([1, 2]), unit="d"),
-            pd.to_timedelta(pd.Series([1, 2]), unit="d"),
+            ps.to_timedelta(pd.Series([1, 2]), unit="D"),
+            pd.to_timedelta(pd.Series([1, 2]), unit="D"),
         )
 
     def test_timedelta_range(self):
@@ -299,8 +300,8 @@ class NamespaceTestsMixin:
             pd.timedelta_range(end="3 days", periods=3, closed="right"),
         )
         self.assert_eq(
-            ps.timedelta_range(start="1 day", end="3 days", freq="6H"),
-            pd.timedelta_range(start="1 day", end="3 days", freq="6H"),
+            ps.timedelta_range(start="1 day", end="3 days", freq="6h"),
+            pd.timedelta_range(start="1 day", end="3 days", freq="6h"),
         )
         self.assert_eq(
             ps.timedelta_range(start="1 day", end="3 days", periods=4),
@@ -360,17 +361,21 @@ class NamespaceTestsMixin:
             ([psdf, psdf["C"]], [pdf, pdf["C"]]),
             ([psdf["C"], psdf], [pdf["C"], pdf]),
         ]
-        for psdfs, pdfs in series_objs:
-            for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
-                self.assert_eq(
-                    ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
-                    pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
-                )
+
+        for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
+            for i, (psdfs, pdfs) in enumerate(series_objs):
+                with self.subTest(
+                    ignore_index=ignore_index, join=join, sort=sort, pair=i, index="single"
+                ):
+                    self.assert_eq(
+                        ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
+                        pd.concat(pdfs, ignore_index=ignore_index, join=join, sort=sort),
+                    )
 
         for ignore_index, join, sort in itertools.product(ignore_indexes, joins, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(
-                    ignore_index=ignore_index, join=join, sort=sort, pdfs=pdfs, pair=i
+                    ignore_index=ignore_index, join=join, sort=sort, pair=i, index="single"
                 ):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join=join, sort=sort),
@@ -412,7 +417,7 @@ class NamespaceTestsMixin:
         for ignore_index, sort in itertools.product(ignore_indexes, sorts):
             for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(
-                    ignore_index=ignore_index, join="outer", sort=sort, pdfs=pdfs, pair=i
+                    ignore_index=ignore_index, join="outer", sort=sort, pair=i, index="multi"
                 ):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join="outer", sort=sort),
@@ -423,7 +428,7 @@ class NamespaceTestsMixin:
         for ignore_index in ignore_indexes:
             for i, (psdfs, pdfs) in enumerate(objs):
                 with self.subTest(
-                    ignore_index=ignore_index, join="inner", sort=True, pdfs=pdfs, pair=i
+                    ignore_index=ignore_index, join="inner", sort=True, pair=i, index="multi"
                 ):
                     self.assert_eq(
                         ps.concat(psdfs, ignore_index=ignore_index, join="inner", sort=True),
@@ -579,7 +584,13 @@ class NamespaceTestsMixin:
         # "coerce", "ignore" and "raise" with non-Series.
         data = ["1", "2", None, "4", "hello"]
         self.assert_eq(pd.to_numeric(data, errors="coerce"), ps.to_numeric(data, errors="coerce"))
-        self.assert_eq(pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore"))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                pd.to_numeric(data, errors="ignore"), ps.to_numeric(data, errors="ignore")
+            )
+        else:
+            with self.assertRaisesRegex(ValueError, "invalid error value specified"):
+                ps.to_numeric(data, errors="ignore")
 
         self.assertRaisesRegex(
             ValueError,
@@ -606,6 +617,11 @@ class NamespaceTestsMixin:
             "'ignore' is not implemented yet, when the `arg` is Series.",
             lambda: ps.to_numeric(psser, errors="ignore"),
         )
+
+        # SPARK-54666: Series with numeric dtype should be returned as-is.
+        pser = pd.Series([-1554478299, 2])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pd.to_numeric(pser), ps.to_numeric(psser))
 
     def test_json_normalize(self):
         # Basic test case with a simple JSON structure

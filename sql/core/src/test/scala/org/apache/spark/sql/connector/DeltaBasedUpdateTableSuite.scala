@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.InSubquery
 import org.apache.spark.sql.types.StructType
 
 class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
@@ -90,5 +91,31 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
       checkLastWriteLog(
         updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(1, -1, "hr")))
     }
+  }
+
+  test("update does not double plan table") {
+    createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+      """{ "pk": 1, "id": 1, "salary": 300, "dep": 'hr' }
+        |{ "pk": 2, "id": 2, "salary": 150, "dep": 'software' }
+        |{ "pk": 3, "id": 3, "salary": 120, "dep": 'hr' }
+        |""".stripMargin)
+
+    val (cond, groupFilterCond) = executeAndKeepConditions {
+      sql(
+        s"""UPDATE $tableNameAsString SET salary = -1
+           |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+           |""".stripMargin)
+    }
+
+    cond match {
+      case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+      case _ => fail(s"unexpected condition: $cond")
+    }
+
+    assert(groupFilterCond.isEmpty, "delta operations must not have group filter")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, -1, "hr") :: Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
   }
 }

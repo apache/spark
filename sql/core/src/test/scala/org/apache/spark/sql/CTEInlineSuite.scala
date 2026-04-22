@@ -847,6 +847,33 @@ abstract class CTEInlineSuiteBase
       case _ => false
     })
   }
+
+  test("SPARK-52818: MergeSubplans should not create nested WithCTE with cross-scope refs") {
+    // A non-deterministic CTE referenced in multiple scalar subqueries is not inlined, leaving
+    // a WithCTE. .show() adds a Limit, so the top node is not WithCTE and MergeSubplans runs,
+    // merging scalar subqueries into a new outer WithCTE whose CTE defs reference the inner
+    // WithCTE's defs. ReplaceCTERefWithRepartition then crashes processing the outer defs
+    // before the inner ones are in the map.
+    withTempView("t") {
+      Seq(("a", "b"), ("c", "d")).toDF("c1", "c2").createOrReplaceTempView("t")
+      sql(
+        """WITH cte AS (
+          |  SELECT c1, c2, monotonically_increasing_id() AS id FROM t
+          |),
+          |agg1 AS (
+          |  SELECT c1, count(*) / (SELECT count(c1) FROM cte) AS r
+          |  FROM cte WHERE c1 IS NOT NULL GROUP BY c1
+          |),
+          |agg2 AS (
+          |  SELECT c2, count(*) / (SELECT count(c2) FROM cte) AS r
+          |  FROM cte WHERE c2 IS NOT NULL GROUP BY c2
+          |)
+          |SELECT b.c1, a1.r, a2.r FROM cte b
+          |LEFT JOIN agg1 a1 ON b.c1 = a1.c1
+          |LEFT JOIN agg2 a2 ON b.c2 = a2.c2
+          |""".stripMargin).show()
+    }
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

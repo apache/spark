@@ -20,9 +20,8 @@ package org.apache.spark.sql
 import org.apache.spark.{MapOutputTrackerMaster, SparkFunSuite}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
-class MapStatusEndToEndSuite extends SparkFunSuite with SQLTestUtils {
+class MapStatusEndToEndSuite extends SparkFunSuite with QueryTest {
     override def spark: SparkSession = SparkSession.builder()
       .master("local")
       .config(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key, value = 5)

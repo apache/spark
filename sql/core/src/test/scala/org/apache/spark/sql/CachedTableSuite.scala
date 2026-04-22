@@ -106,7 +106,7 @@ class CachedTableSuite extends QueryTest
     maybeBlock.nonEmpty && isExpectLevel
   }
 
-  private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
+  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {
@@ -2660,6 +2660,24 @@ class CachedTableSuite extends QueryTest
       }
       assert(subqueryInMemoryTableScan.size == 1)
       checkAnswer(cteInSubquery, Row(1) :: Nil)
+    }
+  }
+
+  test("ALTER TABLE invalidates cached table") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      sql(s"ALTER TABLE $t ADD COLUMN new_col int")
+
+      val result = sql(s"SELECT * FROM $t ORDER BY id")
+      assertCached(result)
+      checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", null)))
     }
   }
 

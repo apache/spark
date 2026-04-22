@@ -17,6 +17,7 @@
 """
 User-defined table function related classes and functions
 """
+
 import pickle
 from dataclasses import dataclass, field
 import inspect
@@ -561,7 +562,7 @@ def _test() -> None:
     globs = pyspark.sql.udtf.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.udtf tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.udtf, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()

@@ -46,6 +46,13 @@ class MultiStatefulOperatorsSuite
     StateStore.stop()
   }
 
+  private def testWithAppendAndUpdate(testName: String)(
+      testBody: OutputMode => Any): Unit = {
+    Seq(OutputMode.Append(), OutputMode.Update()).foreach { outputMode =>
+      test(s"$testName - $outputMode")(testBody(outputMode))
+    }
+  }
+
   test("window agg -> window agg, append mode") {
     val inputData = MemoryStream[Int]
 
@@ -931,6 +938,68 @@ class MultiStatefulOperatorsSuite
       ),
       // watermark: 100 - 5 = 95 (windows for [0, 20) are completed)
       CheckNewAnswer((20L, 65L, 85L))
+    )
+  }
+
+  testWithAppendAndUpdate("dedup on both sides -> stream-stream inner join") { outputMode =>
+    val input1 = MemoryStream[Int]
+    val inputDF1 = input1.toDF()
+      .select($"value".as("value1"), timestamp_seconds($"value").as("eventTime1"))
+      .withWatermark("eventTime1", "10 seconds")
+      .dropDuplicates("value1", "eventTime1")
+
+    val input2 = MemoryStream[Int]
+    val inputDF2 = input2.toDF()
+      .select($"value".as("value2"), timestamp_seconds($"value").as("eventTime2"))
+      .withWatermark("eventTime2", "10 seconds")
+      .dropDuplicates("value2", "eventTime2")
+
+    val stream = inputDF1.join(inputDF2, expr("eventTime1 = eventTime2"), "inner")
+      .select($"value1", $"value2")
+
+    testStream(stream, outputMode)(
+      MultiAddData(input1, 1, 2, 3, 1)(input2, 1, 2, 3, 2),
+      CheckNewAnswer((1, 1), (2, 2), (3, 3)),
+
+      MultiAddData(input1, 1, 2, 4)(input2, 2, 3, 4),
+      CheckNewAnswer((4, 4))
+    )
+  }
+
+  test("stream-stream inner join -> window agg, update mode") {
+    val input1 = MemoryStream[Int]
+    val inputDF1 = input1.toDF()
+      .select($"value".as("value1"), timestamp_seconds($"value").as("eventTime1"))
+      .withWatermark("eventTime1", "0 seconds")
+
+    val input2 = MemoryStream[Int]
+    val inputDF2 = input2.toDF()
+      .select($"value".as("value2"), timestamp_seconds($"value").as("eventTime2"))
+      .withWatermark("eventTime2", "0 seconds")
+
+    val stream = inputDF1.join(inputDF2, expr("eventTime1 = eventTime2"), "inner")
+      .groupBy(window($"eventTime1", "5 seconds").as("window"))
+      .agg(count("*").as("count"))
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    testStream(stream, OutputMode.Update())(
+      MultiAddData(input1, 1, 2)(input2, 1, 2),
+      // join output: (1, 1), (2, 2)
+      // agg: [0, 5) count = 2
+      CheckNewAnswer((0, 2)),
+
+      // Add more data to the same window [0, 5)
+      MultiAddData(input1, 3, 4)(input2, 3, 4),
+      // join output: (3, 3), (4, 4)
+      // agg: [0, 5) count = 2 + 2 = 4
+      // Update mode re-emits the window with updated count
+      CheckNewAnswer((0, 4)),
+
+      MultiAddData(input1, 5 to 8: _*)(input2, 5 to 8: _*),
+      // join output: (5, 5), (6, 6), (7, 7), (8, 8)
+      // agg: [5, 10) count = 4
+      // Only the new/updated window is emitted
+      CheckNewAnswer((5, 4))
     )
   }
 

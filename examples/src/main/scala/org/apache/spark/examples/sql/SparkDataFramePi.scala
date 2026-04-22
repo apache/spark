@@ -31,7 +31,7 @@ object SparkDataFramePi {
     import spark.implicits._
     val slices = if (args.length > 0) args(0).toInt else 2
     val n = math.min(100000L * slices, Int.MaxValue).toInt // avoid overflow
-    val count = spark.range(0, n, 1, slices)
+    val count = spark.range(1, n, 1, slices)
       .select((pow(rand() * 2 - 1, lit(2)) + pow(rand() * 2 - 1, lit(2))).as("v"))
       .where($"v" <= 1)
       .count()

@@ -28,9 +28,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mysql:9.2.0):
+ * To run this test suite for a specific version (e.g., mysql:9.6.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.2.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:9.6.0
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLNamespaceSuite"
  * }}}
  */
@@ -38,11 +38,14 @@ import org.apache.spark.tags.DockerTest
 class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new MySQLDatabaseOnDocker
 
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "com.mysql.cj.jdbc.Driver").asJava)
 
-  catalog.initialize("mysql", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("mysql", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

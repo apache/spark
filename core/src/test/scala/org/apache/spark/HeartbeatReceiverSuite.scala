@@ -305,7 +305,7 @@ class HeartbeatReceiverSuite
     // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
-      filter { case (k, _) => k != SparkContext.DRIVER_IDENTIFIER }
+      filter { case (k, _) => !SparkContext.isDriver(k) }
   }
 }
 

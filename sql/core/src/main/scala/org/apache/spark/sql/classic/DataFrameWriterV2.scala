@@ -194,7 +194,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def appendCommand(): LogicalPlan = {
     AppendData.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT)),
+      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT)),
       logicalPlan, options.toMap)
   }
 
@@ -206,7 +206,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def overwriteCommand(condition: Column): LogicalPlan = {
     OverwriteByExpression.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
+      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
       logicalPlan, expression(condition), options.toMap)
   }
 
@@ -218,7 +218,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def overwritePartitionsCommand(): LogicalPlan = {
     OverwritePartitionsDynamic.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
+      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
       logicalPlan, options.toMap)
   }
 
@@ -228,8 +228,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
    */
   private def runCommand(command: LogicalPlan): Unit = {
     val qe = new QueryExecution(sparkSession, command, df.queryExecution.tracker,
-      shuffleCleanupMode =
-        QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf))
+      shuffleCleanupModeOpt =
+        Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)))
     qe.assertCommandExecuted()
   }
 
@@ -253,7 +253,7 @@ private object PartitionTransform {
     private val NAMES = Seq(name)
 
     def unapply(e: Expression): Option[Seq[Expression]] = e match {
-      case UnresolvedFunction(NAMES, children, false, None, false, Nil, true) => Option(children)
+      case UnresolvedFunction(NAMES, children, false, None, None, Nil, true) => Option(children)
       case _ => None
     }
   }

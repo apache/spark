@@ -20,6 +20,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -340,8 +341,15 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def identity(df) -> ps.DataFrame[zip(psdf.columns, psdf.dtypes)]:
-            return df
+        if LooseVersion(pd.__version__) < "3.0.0":
+
+            def identity(df) -> ps.DataFrame[zip(psdf.columns, psdf.dtypes)]:
+                return df
+
+        else:
+
+            def identity(df) -> ps.DataFrame[zip(psdf.columns[1:], psdf.dtypes[1:])]:
+                return df
 
         self.assert_eq(
             psdf.groupby("a").apply(identity).sort_values(["b"]).reset_index(drop=True),

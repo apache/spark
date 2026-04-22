@@ -17,8 +17,8 @@
 
 import unittest
 import logging
-from typing import cast
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as sf
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import (
@@ -32,14 +32,14 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.window import Window
 from pyspark.errors import IllegalArgumentException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pandas:
@@ -52,7 +52,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class CogroupedApplyInPandasTestsMixin:
     @property
@@ -208,8 +208,8 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=merge_pandas,
             errorClass=PythonException,
-            error_message_regex="Column names of the returned pandas.DataFrame "
-            "do not match specified schema. Unexpected: add, more.\n",
+            error_message_regex="Column names of the returned data "
+            "do not match specified schema. Unexpected: add, more.",
         )
 
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
@@ -229,8 +229,8 @@ class CogroupedApplyInPandasTestsMixin:
         self._test_merge_error(
             fn=merge_pandas,
             errorClass=PythonException,
-            error_message_regex="Number of columns of the returned pandas.DataFrame "
-            "doesn't match specified schema. Expected: 4 Actual: 6\n",
+            error_message_regex="Number of columns of the returned data "
+            "doesn't match specified schema. Expected: 4 Actual: 6",
         )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
@@ -249,20 +249,22 @@ class CogroupedApplyInPandasTestsMixin:
 
     def check_apply_in_pandas_returning_incompatible_type(self):
         for safely in [True, False]:
-            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
-                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            with (
+                self.subTest(convertToArrowArraySafely=safely),
+                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
+                    pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        r"ValueError: Exception thrown when converting pandas.Series \(object\) "
-                        r"with name 'k' to Arrow Array \(double\)."
+                        rf"ValueError: Failed to convert the value of the column 'k' "
+                        rf"with type '{pandas_type_name}' to Arrow type 'double'\."
                     )
                     if safely:
                         expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     self._test_merge_error(
@@ -275,8 +277,9 @@ class CogroupedApplyInPandasTestsMixin:
                 # sometimes we see TypeErrors
                 with self.subTest(convert="double to string"):
                     expected = (
-                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'k' to Arrow Array \(string\).\n"
+                        r"TypeError: Cannot convert the output value of the column 'k' "
+                        r"with type 'float64' to the specified return type of the column: "
+                        r"'string'\. Please check if the data types match and try again\."
                     )
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
@@ -320,9 +323,7 @@ class CogroupedApplyInPandasTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(
-                PythonException, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(PythonException, "Failed to convert the value"):
                 (
                     left.groupby("id")
                     .cogroup(right.groupby("id"))
@@ -479,12 +480,16 @@ class CogroupedApplyInPandasTestsMixin:
             return pd.DataFrame(
                 [
                     {
-                        "id": left["id"][0]
-                        if not left.empty
-                        else (right["id"][0] if not right.empty else None),
-                        "day": left["day"][0]
-                        if not left.empty
-                        else (right["day"][0] if not right.empty else None),
+                        "id": (
+                            left["id"][0]
+                            if not left.empty
+                            else (right["id"][0] if not right.empty else None)
+                        ),
+                        "day": (
+                            left["day"][0]
+                            if not left.empty
+                            else (right["day"][0] if not right.empty else None)
+                        ),
                         "lefts": len(left.index),
                         "rights": len(right.index),
                     }

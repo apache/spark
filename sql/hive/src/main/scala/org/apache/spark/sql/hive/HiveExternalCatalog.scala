@@ -535,7 +535,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withClient {
-    requireDbExists(db)
     client.dropTable(db, table, ignoreIfNotExists, purge)
   }
 

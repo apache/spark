@@ -223,7 +223,11 @@ def context_provider() -> dict[str, str]:
             - class_name: Name of the class that initiated the logging if available
     """
 
-    def is_pyspark_module(module_name: str) -> bool:
+    def is_pyspark_module(frame: FrameType) -> bool:
+        module_name = frame.f_globals.get("__name__", "")
+        if module_name == "__main__":
+            if (mod := sys.modules.get("__main__", None)) and mod.__spec__:
+                module_name = mod.__spec__.name
         return module_name.startswith("pyspark.") and ".tests." not in module_name
 
     bottom: Optional[FrameType] = None
@@ -236,9 +240,8 @@ def context_provider() -> dict[str, str]:
         if frame:
             while frame.f_back:
                 f_back = frame.f_back
-                module_name = f_back.f_globals.get("__name__", "")
 
-                if is_pyspark_module(module_name):
+                if is_pyspark_module(f_back):
                     if not is_in_pyspark_module:
                         bottom = frame
                         is_in_pyspark_module = True
@@ -263,7 +266,7 @@ def context_provider() -> dict[str, str]:
 
 @contextmanager
 def capture_outputs(
-    context_provider: Callable[[], dict[str, str]] = context_provider
+    context_provider: Callable[[], dict[str, str]] = context_provider,
 ) -> Generator[None, None, None]:
     if "PYSPARK_SPARK_SESSION_UUID" in os.environ:
         marker: str = "PYTHON_WORKER_LOGGING"

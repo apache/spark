@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -203,7 +204,22 @@ class SeriesIndexMixin:
         psser = ps.Series(pser)
 
         self.assertEqual(psser.idxmax(), pser.idxmax())
-        self.assertEqual(repr(psser.idxmax(skipna=False)), repr(pser.idxmax(skipna=False)))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(repr(psser.idxmax(skipna=False)), repr(pser.idxmax(skipna=False)))
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser.idxmax(skipna=False)
+
+        pser = pd.Series([None, None, None], index=[10, 3, 5])
+        psser = ps.Series(pser)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(repr(psser.idxmax()), repr(pser.idxmax()))
+            self.assertEqual(repr(psser.idxmax(skipna=False)), repr(pser.idxmax(skipna=False)))
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered all NA values$"):
+                psser.idxmax()
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser.idxmax(skipna=False)
 
     def test_idxmin(self):
         pser = pd.Series(data=[1, 4, 5], index=["A", "B", "C"])
@@ -229,7 +245,22 @@ class SeriesIndexMixin:
         psser = ps.Series(pser)
 
         self.assertEqual(psser.idxmin(), pser.idxmin())
-        self.assertEqual(repr(psser.idxmin(skipna=False)), repr(pser.idxmin(skipna=False)))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(repr(psser.idxmin(skipna=False)), repr(pser.idxmin(skipna=False)))
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser.idxmin(skipna=False)
+
+        pser = pd.Series([None, None, None], index=[10, 3, 5])
+        psser = ps.Series(pser)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(repr(psser.idxmin()), repr(pser.idxmin()))
+            self.assertEqual(repr(psser.idxmin(skipna=False)), repr(pser.idxmin(skipna=False)))
+        else:
+            with self.assertRaisesRegex(ValueError, "Encountered all NA values$"):
+                psser.idxmin()
+            with self.assertRaisesRegex(ValueError, "Encountered an NA value with skipna=False"):
+                psser.idxmin(skipna=False)
 
     def test_index(self):
         # to check setting name of Index properly.
@@ -296,13 +327,17 @@ class SeriesIndexMixin:
         pser = pd.Series([1, 2, 3], index=["x", "y", "z"], name="ser")
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(psser.swapaxes(0, 0), pser.swapaxes(0, 0))
-        self.assert_eq(psser.swapaxes("index", "index"), pser.swapaxes("index", "index"))
-        self.assert_eq((psser + 1).swapaxes(0, 0), (pser + 1).swapaxes(0, 0))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(psser.swapaxes(0, 0), pser.swapaxes(0, 0))
+            self.assert_eq(psser.swapaxes("index", "index"), pser.swapaxes("index", "index"))
+            self.assert_eq((psser + 1).swapaxes(0, 0), (pser + 1).swapaxes(0, 0))
 
-        self.assertRaises(AssertionError, lambda: psser.swapaxes(0, 1, copy=False))
-        self.assertRaises(ValueError, lambda: psser.swapaxes(0, 1))
-        self.assertRaises(ValueError, lambda: psser.swapaxes("index", "columns"))
+            self.assertRaises(AssertionError, lambda: psser.swapaxes(0, 1, copy=False))
+            self.assertRaises(ValueError, lambda: psser.swapaxes(0, 1))
+            self.assertRaises(ValueError, lambda: psser.swapaxes("index", "columns"))
+        else:
+            with self.assertRaises(AttributeError):
+                psser.swapaxes(0, 0)
 
     def test_droplevel(self):
         pser = pd.Series(
@@ -343,14 +378,12 @@ class SeriesIndexMixin:
             psser.droplevel(-10)
         with self.assertRaisesRegex(
             ValueError,
-            "Cannot remove 3 levels from an index with 3 levels: "
-            "at least one level must be left.",
+            "Cannot remove 3 levels from an index with 3 levels: at least one level must be left.",
         ):
             psser.droplevel([0, 1, 2])
         with self.assertRaisesRegex(
             ValueError,
-            "Cannot remove 5 levels from an index with 3 levels: "
-            "at least one level must be left.",
+            "Cannot remove 5 levels from an index with 3 levels: at least one level must be left.",
         ):
             psser.droplevel([1, 1, 1, 1, 1])
 

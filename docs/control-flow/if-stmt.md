@@ -47,7 +47,6 @@ IF condition  THEN { stmt ; } [...]
 ```SQL
 > BEGIN
     DECLARE choice DOUBLE DEFAULT 3.9;
-    DECLARE result STRING;
     IF choice < 2 THEN
       VALUES ('one fish');
     ELSEIF choice < 3 THEN

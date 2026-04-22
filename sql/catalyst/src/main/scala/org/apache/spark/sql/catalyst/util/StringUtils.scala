@@ -46,13 +46,13 @@ object StringUtils extends Logging {
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
-    val in = pattern.iterator
+    val in = pattern.codePoints().iterator()
     val out = new StringBuilder()
 
     while (in.hasNext) {
-      in.next() match {
+      in.nextInt() match {
         case c1 if c1 == escapeChar && in.hasNext =>
-          val c = in.next()
+          val c = in.nextInt()
           c match {
             case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
             case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))

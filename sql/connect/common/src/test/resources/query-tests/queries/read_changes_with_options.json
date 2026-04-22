@@ -1,0 +1,13 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "relationChanges": {
+    "unparsedIdentifier": "myTable",
+    "options": {
+      "startingTimestamp": "2026-01-01",
+      "deduplicationMode": "netChanges",
+      "computeUpdates": "true"
+    }
+  }
+}

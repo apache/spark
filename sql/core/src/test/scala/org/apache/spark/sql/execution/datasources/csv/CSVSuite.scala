@@ -3822,6 +3822,18 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-55866: CSV option value exceeds one character") {
+    Seq("quote", "escape", "comment", "charToEscapeQuoteEscaping").foreach { paramName =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.read.option(paramName, "<<").csv(testFile(carsFile))
+        },
+        condition = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
+        parameters = Map("paramName" -> paramName, "actualValue" -> "<<")
+      )
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {

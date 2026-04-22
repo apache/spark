@@ -352,6 +352,78 @@ class FrameCombineMixin:
             pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
         )
 
+    def test_merge_cross(self):
+        # Test basic cross merge
+        left_pdf = pd.DataFrame({"A": [1, 2], "B": ["a", "b"]})
+        right_pdf = pd.DataFrame({"C": [3, 4], "D": ["c", "d"]})
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        psdf = left_psdf.merge(right_psdf, how="cross")
+        pdf = left_pdf.merge(right_pdf, how="cross")
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+        # Test cross merge with duplicate column names (should add suffixes)
+        left_pdf = pd.DataFrame({"A": [1, 2], "B": ["a", "b"]})
+        right_pdf = pd.DataFrame({"A": [3, 4], "C": ["c", "d"]})
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        psdf = left_psdf.merge(right_psdf, how="cross")
+        pdf = left_pdf.merge(right_pdf, how="cross")
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+        # Test cross merge with custom suffixes
+        psdf = left_psdf.merge(right_psdf, how="cross", suffixes=("_left", "_right"))
+        pdf = left_pdf.merge(right_pdf, how="cross", suffixes=("_left", "_right"))
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+        # Test cross merge with ps.merge function
+        psdf = ps.merge(left_psdf, right_psdf, how="cross")
+        pdf = pd.merge(left_pdf, right_pdf, how="cross")
+        self.assert_eq(
+            psdf.sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+
+    def test_merge_cross_raises(self):
+        left = ps.DataFrame({"A": [1, 2], "B": ["a", "b"]})
+        right = ps.DataFrame({"C": [3, 4], "D": ["c", "d"]})
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", on="A")
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", left_on="A", right_on="C")
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass on, left_on, or right_on to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", right_on="C")
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass left_index=True or right_index=True to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", left_index=True)
+
+        with self.assertRaisesRegex(
+            ValueError, "Can not pass left_index=True or right_index=True to merge with how='cross'"
+        ):
+            left.merge(right, how="cross", right_index=True)
+
     def test_merge_raises(self):
         left = ps.DataFrame(
             {"value": [1, 2, 3, 5, 6], "x": list("abcde")},
@@ -392,7 +464,7 @@ class FrameCombineMixin:
         ):
             left.merge(right, left_on=["value", "x"], right_on="value")
 
-        with self.assertRaisesRegex(ValueError, "['inner', 'left', 'right', 'full', 'outer']"):
+        with self.assertRaisesRegex(ValueError, r"\['inner', 'left', 'right', 'outer', 'cross'\]"):
             left.merge(right, left_index=True, right_index=True, how="foo")
 
         with self.assertRaisesRegex(KeyError, "id"):
@@ -585,6 +657,113 @@ class FrameCombineMixin:
             left_pdf.sort_values(by=[("X", "A"), ("X", "B")]),
             left_psdf.sort_values(by=[("X", "A"), ("X", "B")]),
         )
+
+    def test_update_with_filter_func(self):
+        # Test filter_func parameter
+        left_pdf = pd.DataFrame({"A": [1, 2, 3, 4], "B": [10, 20, 30, 40]})
+        right_pdf = pd.DataFrame({"B": [100, 200, 300, 400]})
+
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        # Only update values > 25
+        left_pdf.update(right_pdf, filter_func=lambda x: x > 25)
+        left_psdf.update(right_psdf, filter_func=lambda x: x > 25)
+
+        self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
+
+    def test_update_filter_func_overwrite_false(self):
+        # Test filter_func with overwrite=False
+        left_pdf = pd.DataFrame({"A": [1, 2, 3], "B": [None, 20, None]})
+        right_pdf = pd.DataFrame({"B": [100, 200, 300]})
+
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        # Only update where new value > 150 (and old is null)
+        left_pdf.update(right_pdf, overwrite=False, filter_func=lambda x: x > 150)
+        left_psdf.update(right_psdf, overwrite=False, filter_func=lambda x: x > 150)
+
+        self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
+
+    def test_update_errors_raise_with_overlap(self):
+        # Test that errors='raise' raises ValueError on overlap
+        left_psdf = ps.DataFrame({"A": [1, 2, 3], "B": [10, 20, 30]})
+        right_psdf = ps.DataFrame({"B": [100, 200, 300]})
+
+        # Should raise because both have non-null values
+        with self.assertRaisesRegex(ValueError, "Data overlaps."):
+            left_psdf.update(right_psdf, errors="raise")
+
+    def test_update_errors_raise_no_overlap(self):
+        # Test that errors='raise' works when no overlap
+        left_pdf = pd.DataFrame({"A": [1, 2, 3], "B": [None, None, 30]})
+        right_pdf = pd.DataFrame({"B": [100, 200, None]})
+
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        left_pdf.update(right_pdf, errors="raise")
+        left_psdf.update(right_psdf, errors="raise")
+
+        self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
+
+    def test_update_errors_invalid_value(self):
+        # Test that invalid errors parameter raises ValueError
+        left_psdf = ps.DataFrame({"A": [1, 2, 3]})
+        right_psdf = ps.DataFrame({"A": [4, 5, 6]})
+
+        with self.assertRaisesRegex(ValueError, "errors must be either 'ignore' or 'raise'"):
+            left_psdf.update(right_psdf, errors="invalid")
+
+    def test_update_filter_func_and_errors_raise(self):
+        # Test combination of filter_func and errors='raise'
+        left_psdf = ps.DataFrame({"A": [1, 2, 3], "B": [10, 20, 30]})
+        right_psdf = ps.DataFrame({"B": [100, 200, 300]})
+
+        # Filter only values < 25 - should find overlaps at positions 0 and 1
+        with self.assertRaisesRegex(ValueError, "Data overlaps."):
+            left_psdf.update(right_psdf, filter_func=lambda x: x < 25, errors="raise")
+
+        # Filter only values > 100 - no overlaps since no original values > 100
+        left_psdf2 = ps.DataFrame({"A": [1, 2, 3], "B": [10, 20, 30]})
+        right_psdf2 = ps.DataFrame({"B": [100, 200, 300]})
+
+        # Should not raise - no values in original DataFrame match filter
+        left_psdf2.update(right_psdf2, filter_func=lambda x: x > 100, errors="raise")
+
+    def test_update_filter_func_all_false(self):
+        # Test filter_func that returns all False
+        left_pdf = pd.DataFrame({"A": [1, 2, 3], "B": [10, 20, 30]})
+        right_pdf = pd.DataFrame({"B": [100, 200, 300]})
+
+        left_psdf = ps.from_pandas(left_pdf.copy())
+        right_psdf = ps.from_pandas(right_pdf)
+
+        # Filter that matches nothing
+        original_left_pdf = left_pdf.copy()
+        original_left_psdf = left_psdf.copy()
+
+        left_pdf.update(right_pdf, filter_func=lambda x: x > 1000)
+        left_psdf.update(right_psdf, filter_func=lambda x: x > 1000)
+
+        # DataFrame should be unchanged
+        self.assert_eq(left_pdf.sort_index(), original_left_pdf.sort_index())
+        self.assert_eq(left_psdf.sort_index(), original_left_psdf.sort_index())
+
+    def test_update_filter_func_with_nulls(self):
+        # Test filter_func handling of null values
+        left_pdf = pd.DataFrame({"A": [1, 2, 3], "B": [None, 20, None]})
+        right_pdf = pd.DataFrame({"B": [100, 200, 300]})
+
+        left_psdf = ps.from_pandas(left_pdf)
+        right_psdf = ps.from_pandas(right_pdf)
+
+        # Filter values > 10 (nulls will not match)
+        left_pdf.update(right_pdf, filter_func=lambda x: x > 10)
+        left_psdf.update(right_psdf, filter_func=lambda x: x > 10)
+
+        self.assert_eq(left_pdf.sort_index(), left_psdf.sort_index())
 
 
 class FrameCombineTests(

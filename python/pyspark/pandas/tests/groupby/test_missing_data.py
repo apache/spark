@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -36,95 +37,111 @@ class GroupbyMissingDataMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(
-            psdf.groupby("A").fillna(0).sort_index(), pdf.groupby("A").fillna(0).sort_index()
-        )
-        self.assert_eq(
-            psdf.groupby("A")["C"].fillna(0).sort_index(),
-            pdf.groupby("A")["C"].fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A")[["C"]].fillna(0).sort_index(),
-            pdf.groupby("A")[["C"]].fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A").fillna(method="bfill").sort_index(),
-            pdf.groupby("A").fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A")["C"].fillna(method="bfill").sort_index(),
-            pdf.groupby("A")["C"].fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A")[["C"]].fillna(method="bfill").sort_index(),
-            pdf.groupby("A")[["C"]].fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A").fillna(method="ffill").sort_index(),
-            pdf.groupby("A").fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A")["C"].fillna(method="ffill").sort_index(),
-            pdf.groupby("A")["C"].fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby("A")[["C"]].fillna(method="ffill").sort_index(),
-            pdf.groupby("A")[["C"]].fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(psdf.A // 5).fillna(method="bfill").sort_index(),
-            pdf.groupby(pdf.A // 5).fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(psdf.A // 5)["C"].fillna(method="bfill").sort_index(),
-            pdf.groupby(pdf.A // 5)["C"].fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(psdf.A // 5)[["C"]].fillna(method="bfill").sort_index(),
-            pdf.groupby(pdf.A // 5)[["C"]].fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(psdf.A // 5).fillna(method="ffill").sort_index(),
-            pdf.groupby(pdf.A // 5).fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(psdf.A // 5)["C"].fillna(method="ffill").sort_index(),
-            pdf.groupby(pdf.A // 5)["C"].fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(psdf.A // 5)[["C"]].fillna(method="ffill").sort_index(),
-            pdf.groupby(pdf.A // 5)[["C"]].fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.C.rename().groupby(psdf.A).fillna(0).sort_index(),
-            pdf.C.rename().groupby(pdf.A).fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.C.groupby(psdf.A.rename()).fillna(0).sort_index(),
-            pdf.C.groupby(pdf.A.rename()).fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.C.rename().groupby(psdf.A.rename()).fillna(0).sort_index(),
-            pdf.C.rename().groupby(pdf.A.rename()).fillna(0).sort_index(),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                psdf.groupby("A").fillna(0).sort_index(), pdf.groupby("A").fillna(0).sort_index()
+            )
+            self.assert_eq(
+                psdf.groupby("A")["C"].fillna(0).sort_index(),
+                pdf.groupby("A")["C"].fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A")[["C"]].fillna(0).sort_index(),
+                pdf.groupby("A")[["C"]].fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A").fillna(method="bfill").sort_index(),
+                pdf.groupby("A").fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A")["C"].fillna(method="bfill").sort_index(),
+                pdf.groupby("A")["C"].fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A")[["C"]].fillna(method="bfill").sort_index(),
+                pdf.groupby("A")[["C"]].fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A").fillna(method="ffill").sort_index(),
+                pdf.groupby("A").fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A")["C"].fillna(method="ffill").sort_index(),
+                pdf.groupby("A")["C"].fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby("A")[["C"]].fillna(method="ffill").sort_index(),
+                pdf.groupby("A")[["C"]].fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(psdf.A // 5).fillna(method="bfill").sort_index(),
+                pdf.groupby(pdf.A // 5).fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(psdf.A // 5)["C"].fillna(method="bfill").sort_index(),
+                pdf.groupby(pdf.A // 5)["C"].fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(psdf.A // 5)[["C"]].fillna(method="bfill").sort_index(),
+                pdf.groupby(pdf.A // 5)[["C"]].fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(psdf.A // 5).fillna(method="ffill").sort_index(),
+                pdf.groupby(pdf.A // 5).fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(psdf.A // 5)["C"].fillna(method="ffill").sort_index(),
+                pdf.groupby(pdf.A // 5)["C"].fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(psdf.A // 5)[["C"]].fillna(method="ffill").sort_index(),
+                pdf.groupby(pdf.A // 5)[["C"]].fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.C.rename().groupby(psdf.A).fillna(0).sort_index(),
+                pdf.C.rename().groupby(pdf.A).fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.C.groupby(psdf.A.rename()).fillna(0).sort_index(),
+                pdf.C.groupby(pdf.A.rename()).fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.C.rename().groupby(psdf.A.rename()).fillna(0).sort_index(),
+                pdf.C.rename().groupby(pdf.A.rename()).fillna(0).sort_index(),
+            )
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.groupby("A").fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby("A")["C"].fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby("A")[["C"]].fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby("A").fillna(method="bfill")
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Z", "D")])
         pdf.columns = columns
         psdf.columns = columns
 
-        self.assert_eq(
-            psdf.groupby(("X", "A")).fillna(0).sort_index(),
-            pdf.groupby(("X", "A")).fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(("X", "A")).fillna(method="bfill").sort_index(),
-            pdf.groupby(("X", "A")).fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(("X", "A")).fillna(method="ffill").sort_index(),
-            pdf.groupby(("X", "A")).fillna(method="ffill").sort_index(),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                psdf.groupby(("X", "A")).fillna(0).sort_index(),
+                pdf.groupby(("X", "A")).fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(("X", "A")).fillna(method="bfill").sort_index(),
+                pdf.groupby(("X", "A")).fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(("X", "A")).fillna(method="ffill").sort_index(),
+                pdf.groupby(("X", "A")).fillna(method="ffill").sort_index(),
+            )
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.groupby(("X", "A")).fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby(("X", "A")).fillna(method="bfill")
 
     def test_ffill(self):
         idx = np.random.rand(4 * 3)

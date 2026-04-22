@@ -49,8 +49,8 @@ function disableMoreButton() {
 
 function noNewAlert() {
   var alert = $(".no-new-alert");
-  alert.css("display", "block");
-  window.setTimeout(function () {alert.css("display", "none");}, 4000);
+  alert.removeClass("d-none");
+  window.setTimeout(function () {alert.addClass("d-none");}, 4000);
 }
 
 

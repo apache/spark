@@ -18,6 +18,7 @@
 """
 Public testing utility functions.
 """
+
 from typing import Literal, Union
 import pyspark.pandas as ps
 
@@ -146,8 +147,8 @@ def assert_frame_equal(
         left,
         right,
         check_dtype=check_dtype,
-        check_index_type=check_index_type,  # type: ignore[arg-type]
-        check_column_type=check_column_type,  # type: ignore[arg-type]
+        check_index_type=check_index_type,
+        check_column_type=check_column_type,
         check_frame_type=check_frame_type,
         check_names=check_names,
         by_blocks=by_blocks,
@@ -238,11 +239,11 @@ def assert_series_equal(
     if isinstance(right, ps.Series):
         right = right.to_pandas()
 
-    pd.testing.assert_series_equal(  # type: ignore[call-arg]
+    pd.testing.assert_series_equal(  # type: ignore[call-overload]
         left,
         right,
         check_dtype=check_dtype,
-        check_index_type=check_index_type,  # type: ignore[arg-type]
+        check_index_type=check_index_type,
         check_series_type=check_series_type,
         check_names=check_names,
         check_exact=check_exact,
@@ -251,8 +252,8 @@ def assert_series_equal(
         check_category_order=check_category_order,
         check_freq=check_freq,
         check_flags=check_flags,
-        rtol=rtol,  # type: ignore[arg-type]
-        atol=atol,  # type: ignore[arg-type]
+        rtol=rtol,
+        atol=atol,
         obj=obj,
         check_index=check_index,
         check_like=check_like,
@@ -314,7 +315,7 @@ def assert_index_equal(
     if isinstance(right, ps.Index):
         right = right.to_pandas()
 
-    pd.testing.assert_index_equal(  # type: ignore[call-arg]
+    pd.testing.assert_index_equal(
         left,
         right,
         exact=exact,

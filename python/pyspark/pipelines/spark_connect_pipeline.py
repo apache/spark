@@ -42,7 +42,7 @@ def create_dataflow_graph(
     command.pipeline_command.create_dataflow_graph.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to
     # SPARK-47544.
-    (_, properties, _) = cast(Any, spark).client.execute_command(command)
+    _, properties, _ = cast(Any, spark).client.execute_command(command)
     return properties["pipeline_command_result"].create_dataflow_graph_result.dataflow_graph_id
 
 

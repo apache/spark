@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -116,11 +117,14 @@ class SqlGraphRegistrationContext(
       sqlFileText = sqlText,
       sqlFilePath = sqlFilePath
     ).foreach { case SqlQueryPlanWithOrigin(logicalPlan, queryOrigin) =>
-      processSqlQuery(logicalPlan, queryOrigin)
+      processSqlQuery(logicalPlan, queryOrigin, spark)
     }
   }
 
-  private def processSqlQuery(queryPlan: LogicalPlan, queryOrigin: QueryOrigin): Unit = {
+  private def processSqlQuery(
+      queryPlan: LogicalPlan,
+      queryOrigin: QueryOrigin,
+      spark: SparkSession): Unit = {
     queryPlan match {
       case setCommand: SetCommand =>
         // SET [ key | 'key' ] [ value | 'value' ]
@@ -139,7 +143,7 @@ class SqlGraphRegistrationContext(
         // objects such as tables are resolved from said catalog, until overwritten, within this
         // SQL processor scope. Note that the schema is cleared when the catalog is set, and must
         // be explicitly set again in order to implicitly qualify identifiers.
-        SetCatalogCommandHandler.handle(setCatalogCommand)
+        SetCatalogCommandHandler.handle(setCatalogCommand, queryOrigin, spark)
       case createPersistedViewCommand: CreateView =>
         // CREATE VIEW [ persisted_view_name ] [ options ] AS [ query ]
         CreatePersistedViewCommandHandler.handle(createPersistedViewCommand, queryOrigin)
@@ -529,8 +533,24 @@ class SqlGraphRegistrationContext(
   }
 
   private object SetCatalogCommandHandler {
-    def handle(setCatalogCommand: SetCatalogCommand): Unit = {
-      context.setCurrentCatalog(setCatalogCommand.catalogName)
+    def handle(
+        setCatalogCommand: SetCatalogCommand,
+        queryOrigin: QueryOrigin,
+        spark: SparkSession): Unit = {
+      try {
+        // Analyze unresolved references before handling the command.
+        val analyzed = spark.sessionState.analyzer.executeAndCheck(
+          setCatalogCommand,
+          new QueryPlanningTracker
+        ).asInstanceOf[SetCatalogCommand]
+        context.setCurrentCatalog(analyzed.getCatalogName())
+      } catch {
+        case e: AnalysisException =>
+          throw SqlGraphElementRegistrationException(
+            msg = s"Failed to resolve catalog expression: ${e.getMessage}",
+            queryOrigin = queryOrigin
+          )
+      }
       context.clearCurrentDatabase()
     }
   }

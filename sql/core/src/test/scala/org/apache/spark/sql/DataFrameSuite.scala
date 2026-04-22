@@ -555,20 +555,20 @@ class DataFrameSuite extends QueryTest
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
 
     checkAnswer(
-      arrayData.toDF().orderBy($"data".getItem(0).asc),
-      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
+      arrayData.orderBy($"data".getItem(0).asc),
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
-      arrayData.toDF().orderBy($"data".getItem(0).desc),
-      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
+      arrayData.orderBy($"data".getItem(0).desc),
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      arrayData.toDF().orderBy($"data".getItem(1).asc),
-      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
+      arrayData.orderBy($"data".getItem(1).asc),
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      arrayData.toDF().orderBy($"data".getItem(1).desc),
-      arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
+      arrayData.orderBy($"data".getItem(1).desc),
+      arrayData.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("limit") {
@@ -577,12 +577,12 @@ class DataFrameSuite extends QueryTest
       testData.take(10).toSeq)
 
     checkAnswer(
-      arrayData.toDF().limit(1),
-      arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      arrayData.limit(1),
+      arrayData.take(1))
 
     checkAnswer(
-      mapData.toDF().limit(1),
-      mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      mapData.limit(1),
+      mapData.take(1))
 
     // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
     checkAnswer(
@@ -597,12 +597,12 @@ class DataFrameSuite extends QueryTest
       testData.collect().drop(90).toSeq)
 
     checkAnswer(
-      arrayData.toDF().offset(99),
-      arrayData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      arrayData.offset(99),
+      arrayData.collect().drop(99))
 
     checkAnswer(
-      mapData.toDF().offset(99),
-      mapData.collect().drop(99).map(r => Row.fromSeq(r.productIterator.toSeq)))
+      mapData.offset(99),
+      mapData.collect().drop(99))
   }
 
   test("limit with offset") {
@@ -2406,7 +2406,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
+  test("SPARK-36338: AttachDistributedSequence should append unique sequence IDs") {
     val ids = spark.range(10).repartition(5).select(
       Column.internalFn("distributed_sequence_id").alias("default_index"), col("id"))
     assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)

@@ -30,10 +30,10 @@ USER 0
 
 RUN mkdir ${SPARK_HOME}/python
 RUN apt-get update && \
-    apt install -y python3 python3-pip && \
-    pip3 install --upgrade pip setuptools && \
-    # Removed the .cache to save space
-    rm -rf /root/.cache && rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
+    apt install -y --no-install-recommends python3 python3-pip && \
+    pip3 install --no-cache-dir --upgrade pip setuptools && \
+    apt-get clean && \
+    rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
 COPY python/pyspark ${SPARK_HOME}/python/pyspark
 COPY python/lib ${SPARK_HOME}/python/lib

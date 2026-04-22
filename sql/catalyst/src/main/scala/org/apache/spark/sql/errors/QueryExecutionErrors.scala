@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{sideBySide, CharsetProvider, DateTimeUtils, FailFastMode, IntervalUtils, MapData}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -547,8 +548,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unexpectedOperatorInCorrelatedSubquery(
       op: LogicalPlan, pos: String = ""): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2027",
-      messageParameters = Map("op" -> op.toString(), "pos" -> pos))
+      errorClass = "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY",
+      messageParameters = Map("operator" -> op.toString(), "positionHint" -> pos))
   }
 
   def resolveCannotHandleNestedSchema(plan: LogicalPlan): SparkRuntimeException = {
@@ -676,6 +677,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     stInvalidSridValueError(srid.toString)
   }
 
+  def wkbParseError(msg: String, pos: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(errorClass = "WKB_PARSE_ERROR",
+      messageParameters = Map("parseError" -> msg, "pos" -> pos))
+  }
+
+  def wkbParseError(msg: String, pos: Long): SparkIllegalArgumentException = {
+    wkbParseError(msg, pos.toString)
+  }
+
   def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
@@ -709,7 +719,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def unsupportedTableChangeError(e: IllegalArgumentException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2045",
+      errorClass = "UNSUPPORTED_TABLE_CHANGE",
       messageParameters = Map("message" -> e.getMessage),
       cause = e)
   }
@@ -1113,7 +1123,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToMergeIncompatibleSchemasError(
-      left: StructType, right: StructType, e: Throwable): Throwable = {
+      left: StructType, right: StructType, e: Throwable = null): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2095",
       messageParameters = Map("left" -> left.toString(), "right" -> right.toString()),
@@ -1338,11 +1348,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def paramExceedOneCharError(paramName: String): SparkRuntimeException = {
+  def paramExceedOneCharError(paramName: String, actualValue: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2145",
+      errorClass = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
       messageParameters = Map(
-        "paramName" -> paramName))
+        "paramName" -> paramName,
+        "actualValue" -> actualValue))
   }
 
   def paramIsNotIntegerError(paramName: String, value: String): SparkRuntimeException = {
@@ -2261,6 +2272,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
+  def unfinishedRepartitionDetectedError(batchId: Long, lastCommittedBatchId: Long): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
+      messageParameters = Map(
+        "batchId" -> batchId.toString,
+        "lastCommittedBatchId" -> lastCommittedBatchId.toString),
+      cause = null)
+  }
+
   def cannotPurgeAsBreakInternalStateError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(errorClass = "_LEGACY_ERROR_TEMP_2260")
   }
@@ -3069,6 +3089,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def emptyPartitionColumnNameError(columnSpec: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMPTY_PARTITION_COLUMN_NAME",
+      messageParameters = Map("columnSpec" -> columnSpec)
+    )
+  }
+
+  def emptyPartitionColumnValueError(columnSpec: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "EMPTY_PARTITION_COLUMN_VALUE",
+      messageParameters = Map("columnSpec" -> columnSpec)
+    )
+  }
+
   def conflictingDirectoryStructuresError(
       discoveredBasePaths: Seq[String]): SparkRuntimeException = {
     new SparkRuntimeException(
@@ -3108,6 +3142,30 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "NULL_DATA_SOURCE_OPTION",
       messageParameters = Map("option" -> option)
     )
+  }
+
+  def storagePartitionJoinIncompatibleReducedTypesError(
+      leftReducers: Option[Seq[Option[Reducer[_, _]]]],
+      leftReducedDataTypes: Seq[DataType],
+      rightReducers: Option[Seq[Option[Reducer[_, _]]]],
+      rightReducedDataTypes: Seq[DataType]): Throwable = {
+    def reducersNames(reducers: Option[Seq[Option[Reducer[_, _]]]]) = {
+      reducers.toSeq.flatMap(_.map(_.map(_.displayName()).getOrElse("identity")))
+        .mkString("[", ", ", "]")
+    }
+
+    def dataTypeNames(dataTypes: Seq[DataType]) = {
+      dataTypes.map(toSQLType).mkString("[", ", ", "]")
+    }
+
+    new SparkException(
+      errorClass = "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES",
+      messageParameters = Map(
+        "leftReducers" -> reducersNames(leftReducers),
+        "leftReducedDataTypes" -> dataTypeNames(leftReducedDataTypes),
+        "rightReducers" -> reducersNames(rightReducers),
+        "rightReducedDataTypes" -> dataTypeNames(rightReducedDataTypes)),
+      cause = null)
   }
 
   def notAbsolutePathError(path: Path): SparkException = {
@@ -3176,9 +3234,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+  def sketchInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      errorClass = "SKETCH_INVALID_LG_NOM_ENTRIES",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
@@ -3223,5 +3281,54 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(function),
         "leftDim" -> leftDim.toString,
         "rightDim" -> rightDim.toString))
+  }
+
+  def invalidVectorNormDegreeError(
+    function: String,
+    degree: Float): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VECTOR_NORM_DEGREE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "degree" -> degree.toString))
+  }
+
+  def tupleInvalidInputSketchBuffer(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
+  def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_MODE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "mode" -> mode,
+        "validModes" -> validModes.mkString(", ")))
+  }
+
+  def tupleInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
+  }
+
+  def thetaInvalidInputSketchBufferFamily(
+      function: String,
+      expectedFamily: String,
+      actualFamily: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "expectedFamily" -> expectedFamily,
+        "actualFamily" -> actualFamily))
   }
 }

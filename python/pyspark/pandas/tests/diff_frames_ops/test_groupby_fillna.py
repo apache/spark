@@ -18,6 +18,7 @@
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -47,41 +48,53 @@ class GroupByFillNAMixin:
         psdf = ps.from_pandas(pdf)
         kkey = ps.from_pandas(pkey)
 
-        self.assert_eq(
-            psdf.groupby(kkey).fillna(0).sort_index(), pdf.groupby(pkey).fillna(0).sort_index()
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)["C"].fillna(0).sort_index(),
-            pdf.groupby(pkey)["C"].fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)[["C"]].fillna(0).sort_index(),
-            pdf.groupby(pkey)[["C"]].fillna(0).sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey).fillna(method="bfill").sort_index(),
-            pdf.groupby(pkey).fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)["C"].fillna(method="bfill").sort_index(),
-            pdf.groupby(pkey)["C"].fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)[["C"]].fillna(method="bfill").sort_index(),
-            pdf.groupby(pkey)[["C"]].fillna(method="bfill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey).fillna(method="ffill").sort_index(),
-            pdf.groupby(pkey).fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)["C"].fillna(method="ffill").sort_index(),
-            pdf.groupby(pkey)["C"].fillna(method="ffill").sort_index(),
-        )
-        self.assert_eq(
-            psdf.groupby(kkey)[["C"]].fillna(method="ffill").sort_index(),
-            pdf.groupby(pkey)[["C"]].fillna(method="ffill").sort_index(),
-        )
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                psdf.groupby(kkey).fillna(0).sort_index(), pdf.groupby(pkey).fillna(0).sort_index()
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)["C"].fillna(0).sort_index(),
+                pdf.groupby(pkey)["C"].fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)[["C"]].fillna(0).sort_index(),
+                pdf.groupby(pkey)[["C"]].fillna(0).sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey).fillna(method="bfill").sort_index(),
+                pdf.groupby(pkey).fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)["C"].fillna(method="bfill").sort_index(),
+                pdf.groupby(pkey)["C"].fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)[["C"]].fillna(method="bfill").sort_index(),
+                pdf.groupby(pkey)[["C"]].fillna(method="bfill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey).fillna(method="ffill").sort_index(),
+                pdf.groupby(pkey).fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)["C"].fillna(method="ffill").sort_index(),
+                pdf.groupby(pkey)["C"].fillna(method="ffill").sort_index(),
+            )
+            self.assert_eq(
+                psdf.groupby(kkey)[["C"]].fillna(method="ffill").sort_index(),
+                pdf.groupby(pkey)[["C"]].fillna(method="ffill").sort_index(),
+            )
+        else:
+            with self.assertRaises(AttributeError):
+                psdf.groupby(kkey).fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby(kkey)["C"].fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby(kkey)[["C"]].fillna(0)
+            with self.assertRaises(AttributeError):
+                psdf.groupby(kkey).fillna(method="bfill")
+            with self.assertRaises(AttributeError):
+                psdf.groupby(kkey)["C"].fillna(method="bfill")
 
 
 class GroupByFillNATests(

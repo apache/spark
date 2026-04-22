@@ -60,7 +60,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2ScanInfo, ExtractV2Table, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -121,7 +121,7 @@ private[sql] object Dataset {
       shuffleCleanupMode: ShuffleCleanupMode): DataFrame =
     sparkSession.withActive {
       val qe = new QueryExecution(
-        sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
+        sparkSession, logicalPlan, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
       if (!qe.isLazyAnalysis) qe.assertAnalyzed()
       new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
@@ -134,7 +134,7 @@ private[sql] object Dataset {
       shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup)
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
-      sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
+      sparkSession, logicalPlan, tracker, shuffleCleanupModeOpt = Some(shuffleCleanupMode))
     if (!qe.isLazyAnalysis) qe.assertAnalyzed()
     new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }
@@ -1306,7 +1306,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  protected[spark] def withColumnsRenamed(
+  override protected[spark] def withColumnsRenamed(
       colNames: Seq[String],
       newColNames: Seq[String]): DataFrame = {
     require(colNames.size == newColNames.size,
@@ -1732,7 +1732,7 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2ScanRelation(ExtractV2Table(table: FileTable), _, _, _, _) =>
+      case ExtractV2ScanInfo(ExtractV2Table(table: FileTable), _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray
@@ -1943,11 +1943,18 @@ class Dataset[T] private[sql](
   override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)
 
   /** @inheritdoc */
-  override def sample(fraction: Double): Dataset[T] = super.sample(fraction)
+  override def sample(fraction: Double): Dataset[T] = {
+    withSameTypedPlan {
+      Sample(0.0, fraction, withReplacement = false, None, logicalPlan)
+    }
+  }
 
   /** @inheritdoc */
-  override def sample(withReplacement: Boolean, fraction: Double): Dataset[T] =
-    super.sample(withReplacement, fraction)
+  override def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
+    withSameTypedPlan {
+      Sample(0.0, fraction, withReplacement, None, logicalPlan)
+    }
+  }
 
   /** @inheritdoc */
   override def dropDuplicates(colNames: Array[String]): Dataset[T] = super.dropDuplicates(colNames)
@@ -2056,14 +2063,6 @@ class Dataset[T] private[sql](
   ////////////////////////////////////////////////////////////////////////////
   // For Python API
   ////////////////////////////////////////////////////////////////////////////
-
-  /**
-   * It adds a new long column with the name `name` that increases one by one.
-   * This is for 'distributed-sequence' default index in pandas API on Spark.
-   */
-  private[sql] def withSequenceColumn(name: String) = {
-    select(Column(DistributedSequenceID()).alias(name), col("*"))
-  }
 
   /**
    * Converts a JavaRDD to a PythonRDD.

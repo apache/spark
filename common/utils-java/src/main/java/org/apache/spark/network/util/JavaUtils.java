@@ -31,6 +31,8 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -401,15 +403,25 @@ public class JavaUtils {
     byteSuffixes = Map.ofEntries(
       Map.entry("b", ByteUnit.BYTE),
       Map.entry("k", ByteUnit.KiB),
+      Map.entry("ki", ByteUnit.KiB),
       Map.entry("kb", ByteUnit.KiB),
+      Map.entry("kib", ByteUnit.KiB),
       Map.entry("m", ByteUnit.MiB),
+      Map.entry("mi", ByteUnit.MiB),
       Map.entry("mb", ByteUnit.MiB),
+      Map.entry("mib", ByteUnit.MiB),
       Map.entry("g", ByteUnit.GiB),
+      Map.entry("gi", ByteUnit.GiB),
       Map.entry("gb", ByteUnit.GiB),
+      Map.entry("gib", ByteUnit.GiB),
       Map.entry("t", ByteUnit.TiB),
+      Map.entry("ti", ByteUnit.TiB),
       Map.entry("tb", ByteUnit.TiB),
+      Map.entry("tib", ByteUnit.TiB),
       Map.entry("p", ByteUnit.PiB),
-      Map.entry("pb", ByteUnit.PiB));
+      Map.entry("pi", ByteUnit.PiB),
+      Map.entry("pb", ByteUnit.PiB),
+      Map.entry("pib", ByteUnit.PiB));
   }
 
   private static final Pattern TIME_STRING_PATTERN = Pattern.compile("(-?[0-9]+)([a-z]+)?");
@@ -756,5 +768,59 @@ public class JavaUtils {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
     }
+  }
+
+  private static final HexFormat LOWERCASE_HEX = HexFormat.of();
+
+  /**
+   * Computes the digest of the input bytes using the given algorithm
+   * and returns the result as a lowercase hex string.
+   */
+  public static String digestToHexString(String algorithm, byte[] input) {
+    try {
+      return LOWERCASE_HEX.formatHex(MessageDigest.getInstance(algorithm).digest(input));
+    } catch (NoSuchAlgorithmException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Computes the digest of the input string using the given algorithm
+   * and returns the result as a lowercase hex string.
+   */
+  public static String digestToHexString(String algorithm, String input) {
+    return digestToHexString(algorithm, input.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * Computes the MD5 digest of the input bytes
+   * and returns the result as a lowercase hex string.
+   */
+  public static String md5Hex(byte[] input) {
+    return digestToHexString("MD5", input);
+  }
+
+  /**
+   * Computes the MD5 digest of the input string
+   * and returns the result as a lowercase hex string.
+   */
+  public static String md5Hex(String input) {
+    return digestToHexString("MD5", input);
+  }
+
+  /**
+   * Computes the SHA-256 digest of the input bytes
+   * and returns the result as a lowercase hex string.
+   */
+  public static String sha256Hex(byte[] input) {
+    return digestToHexString("SHA-256", input);
+  }
+
+  /**
+   * Computes the SHA-256 digest of the input string
+   * and returns the result as a lowercase hex string.
+   */
+  public static String sha256Hex(String input) {
+    return digestToHexString("SHA-256", input);
   }
 }

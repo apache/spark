@@ -34,6 +34,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_query_execution_unsupported_in_classic(self):
         pass
 
+    @unittest.skip("This test is dedicated for classic mode.")
+    def test_to_json(self):
+        pass
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

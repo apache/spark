@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
@@ -159,7 +158,6 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      implicit val sparkSession: SparkSession = spark
       val ints = MemoryStream[Int]
       ints.addData(1, 2, 3, 4)
       registerPersistedView("a", query = dfFlowFunc(ints.toDF()))
@@ -201,7 +199,6 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      implicit val sparkSession: SparkSession = spark
       val ints1 = MemoryStream[Int]
       ints1.addData(1, 2, 3, 4)
       val ints2 = MemoryStream[Int]
@@ -362,7 +359,6 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     class P extends TestGraphRegistrationContext(spark) {
-      implicit val sparkSession: SparkSession = spark
       val mem = MemoryStream[Int]
       registerPersistedView("a", query = dfFlowFunc(mem.toDF()))
       registerTable("b")
@@ -406,7 +402,6 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
-      implicit val sparkSession: SparkSession = spark
       val mem = MemoryStream[Int]
       mem.addData(1, 2)
       registerPersistedView("complete-view", query = dfFlowFunc(Seq(1, 2).toDF("x")))
@@ -499,7 +494,6 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     import session.implicits._
 
     val P = new TestGraphRegistrationContext(spark) {
-      implicit val sparkSession: SparkSession = spark
       val mem = MemoryStream[Int]
       mem.addData(1, 2)
       registerTemporaryView("a", query = dfFlowFunc(mem.toDF().select($"value" as "x")))

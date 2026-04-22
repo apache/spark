@@ -18,6 +18,7 @@
 """
 A wrapper for GroupedData to behave like pandas GroupBy.
 """
+
 from abc import ABCMeta, abstractmethod
 import inspect
 from collections import defaultdict, namedtuple
@@ -44,8 +45,7 @@ from typing import (
 import warnings
 
 import pandas as pd
-from pandas.api.types import is_number, is_hashable, is_list_like  # type: ignore[attr-defined]
-from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
+from pandas.api.types import is_number, is_hashable, is_list_like
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.internal import InternalFunction as SF
@@ -59,6 +59,8 @@ from pyspark.sql.types import (
     StringType,
 )
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas._typing import Axis, FrameLike, Label, Name
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
@@ -323,9 +325,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if not self._as_index:
             index_cols = psdf._internal.column_labels
-            should_drop_index = set(
-                i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
+                )
+            else:
+                column_names = set(func_or_funcs)
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
+                )
             if len(should_drop_index) > 0:
                 drop = not any(
                     [
@@ -492,6 +500,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  1.0  True  3.0
         b  NaN  None  NaN
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -562,6 +573,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  2.0  True  4.0
         b  NaN  None  NaN
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -626,6 +640,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  2.0  True  4.0
         b  NaN  None  NaN
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -672,6 +689,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  3.0  1.333333  0.333333
         2  4.0  1.500000  1.000000
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
         return self._reduce_for_stat_function(
@@ -734,12 +754,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not 0 <= q <= 1:
             raise ValueError("'q' must be between 0 and 1. Got '%s' instead" % q)
         if any(isinstance(_agg_col.spark.data_type, BooleanType) for _agg_col in self._agg_columns):
-            warnings.warn(
-                f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
-                "and will raise in a future version, matching the Series/DataFrame behavior. "
-                "Cast to uint8 dtype before calling quantile instead.",
-                FutureWarning,
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                warnings.warn(
+                    f"Allowing bool dtype in {self.__class__.__name__}.quantile is deprecated "
+                    "and will raise in a future version, matching the Series/DataFrame behavior. "
+                    "Cast to uint8 dtype before calling quantile instead.",
+                    FutureWarning,
+                )
+            else:
+                raise TypeError("Cannot use quantile with bool dtype")
 
         return self._reduce_for_stat_function(
             lambda col: F.percentile_approx(col.cast(DoubleType()), q, accuracy),
@@ -802,6 +825,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         a  1.0  False  3.0
         b  NaN   None  NaN
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -919,6 +945,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if numeric_only is not None and not isinstance(numeric_only, bool):
             raise TypeError("numeric_only must be None or bool")
         if not isinstance(min_count, int):
@@ -980,6 +1009,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(ddof, int):
             raise TypeError("ddof must be integer")
 
@@ -1248,6 +1280,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  NaN  2.0  0.0
         2  NaN NaN  NaN
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(min_count, int):
             raise TypeError("min_count must be integer")
 
@@ -1778,7 +1813,13 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             numeric_only=True,
         )
 
-    def apply(self, func: Callable, *args: Any, **kwargs: Any) -> Union[DataFrame, Series]:
+    def apply(
+        self,
+        func: Callable,
+        *args: Any,
+        include_groups: Union[bool, _NoValueType] = _NoValue,
+        **kwargs: Any,
+    ) -> Union[DataFrame, Series]:
         """
         Apply function `func` group-wise and combine the results together.
 
@@ -1933,8 +1974,29 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if not callable(func):
             raise TypeError("%s object is not callable" % type(func).__name__)
 
-        spec = inspect.getfullargspec(func)
-        return_sig = spec.annotations.get("return", None)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if include_groups is _NoValue:
+                include_groups = True
+            if include_groups:
+                warnings.warn(
+                    "DataFrameGroupBy.apply operated on the grouping columns. "
+                    "This behavior is deprecated, and in a future version of pandas "
+                    "the grouping columns will be excluded from the operation. "
+                    "Either pass `include_groups=False` to exclude the groupings or "
+                    "explicitly select the grouping columns after groupby to silence this warning.",
+                    FutureWarning,
+                )
+        else:
+            if include_groups is _NoValue:
+                include_groups = False
+            if include_groups:
+                raise ValueError("include_groups=True is no longer allowed.")
+
+        try:
+            spec = inspect.getfullargspec(func)
+            return_sig = spec.annotations.get("return", None)
+        except TypeError:
+            return_sig = None
         should_infer_schema = return_sig is None
         should_retain_index = should_infer_schema
 
@@ -1950,16 +2012,27 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 for label in psdf._internal.column_labels
                 if label not in self._column_labels_to_exclude
             ]
+            if not include_groups:
+                agg_columns = [
+                    col for col in agg_columns if all(col is not gkey for gkey in self._groupkeys)
+                ]
 
         psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
             psdf, self._groupkeys, agg_columns
         )
+        groupkey_psser_names = [psser.name for psser in self._groupkeys]
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            from pandas.core.common import is_builtin_func  # type: ignore[import-not-found]
+
+            f = is_builtin_func(func)
+        else:
+            f = func
 
         if is_series_groupby:
             name = psdf.columns[-1]
-            pandas_apply = _builtin_table.get(func, func)
+            pandas_apply = f
         else:
-            f = _builtin_table.get(func, func)
 
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
                 return f(pdf.drop(groupkey_names, axis=1), *a, **k)
@@ -1978,8 +2051,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             sample_limit = limit + 1 if limit else 2
             pdf = psdf.head(sample_limit)._to_internal_pandas()
             groupkeys = [
-                pdf[groupkey_name].rename(psser.name)
-                for groupkey_name, psser in zip(groupkey_names, self._groupkeys)
+                pdf[groupkey_name].rename(name)
+                for groupkey_name, name in zip(groupkey_names, groupkey_psser_names)
             ]
             grouped = pdf.groupby(groupkeys)
             if is_series_groupby:
@@ -2050,10 +2123,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return_schema = StructType([field.struct_field for field in data_fields])
 
         def pandas_groupby_apply(pdf: pd.DataFrame) -> pd.DataFrame:
+            groupkeys = [
+                pdf[groupkey_name].rename(name)
+                for groupkey_name, name in zip(groupkey_names, groupkey_psser_names)
+            ]
+            grouped = pdf.groupby(groupkeys)
             if is_series_groupby:
-                pdf_or_ser = pdf.groupby(groupkey_names)[name].apply(pandas_apply, *args, **kwargs)
+                pdf_or_ser = grouped[name].apply(pandas_apply, *args, **kwargs)
             else:
-                pdf_or_ser = pdf.groupby(groupkey_names).apply(pandas_apply, *args, **kwargs)
+                pdf_or_ser = grouped.apply(pandas_apply, *args, **kwargs)
                 if should_return_series and isinstance(pdf_or_ser, pd.DataFrame):
                     pdf_or_ser = pdf_or_ser.stack()
 
@@ -2179,10 +2257,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         if is_series_groupby:
 
             def pandas_filter(pdf: pd.DataFrame) -> pd.DataFrame:
-                return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))
+                return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))  # type: ignore[arg-type]
 
         else:
-            f = _builtin_table.get(func, func)
+            if LooseVersion(pd.__version__) < "3.0.0":
+                from pandas.core.common import is_builtin_func
+
+                f = is_builtin_func(func)
+            else:
+                f = func
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 return f(pdf.drop(groupkey_names, axis=1))
@@ -2214,7 +2297,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ]
         psdf = psdf[[s.rename(label) for s, label in zip(groupkeys, groupkey_labels)] + agg_columns]
         groupkey_names = [label if len(label) > 1 else label[0] for label in groupkey_labels]
-        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names
+        return DataFrame(psdf._internal.resolved_copy), groupkey_labels, groupkey_names  # type: ignore[return-value]
 
     @staticmethod
     def _spark_group_map_apply(
@@ -2260,7 +2343,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
             # Just positionally map the column names to given schema's.
-            pdf.columns = return_schema.names
+            pdf.columns = pd.Index(return_schema.names)
 
             return pdf
 
@@ -2379,23 +2462,36 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         for s, name in zip(self._groupkeys, groupkey_names):
             sdf = sdf.withColumn(name, s.spark.column)
         index = self._psdf._internal.index_spark_column_names[0]
+        index_spark_type = self._psdf._internal.index_fields[0].spark_type
+
+        pd_version = LooseVersion(pd.__version__)
 
         stat_exprs = []
         for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
-            if skipna:
+            if pd_version < "3.0.0" or skipna:
                 order_column = scol.desc_nulls_last()
-            else:
-                order_column = scol.desc_nulls_first()
 
-            window = Window.partitionBy(*groupkey_names).orderBy(
-                order_column, NATURAL_ORDER_COLUMN_NAME
-            )
-            sdf = sdf.withColumn(
-                name, F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None)
-            )
-            stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+                window = Window.partitionBy(*groupkey_names).orderBy(
+                    order_column, NATURAL_ORDER_COLUMN_NAME
+                )
+
+                sdf = sdf.withColumn(
+                    name,
+                    F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
+                )
+                stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+            else:
+                # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
+                stat_exprs.append(
+                    F.last(
+                        F.when(
+                            scol.isNull(),
+                            F.raise_error("idxmax with skipna=False encountered an NA value."),
+                        ).otherwise(F.lit(None).cast(index_spark_type))
+                    ).alias(name)
+                )
 
         sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
@@ -2461,23 +2557,36 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         for s, name in zip(self._groupkeys, groupkey_names):
             sdf = sdf.withColumn(name, s.spark.column)
         index = self._psdf._internal.index_spark_column_names[0]
+        index_spark_type = self._psdf._internal.index_fields[0].spark_type
+
+        pd_version = LooseVersion(pd.__version__)
 
         stat_exprs = []
         for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
-            if skipna:
+            if pd_version < "3.0.0" or skipna:
                 order_column = scol.asc_nulls_last()
-            else:
-                order_column = scol.asc_nulls_first()
 
-            window = Window.partitionBy(*groupkey_names).orderBy(
-                order_column, NATURAL_ORDER_COLUMN_NAME
-            )
-            sdf = sdf.withColumn(
-                name, F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None)
-            )
-            stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+                window = Window.partitionBy(*groupkey_names).orderBy(
+                    order_column, NATURAL_ORDER_COLUMN_NAME
+                )
+
+                sdf = sdf.withColumn(
+                    name,
+                    F.when(F.row_number().over(window) == 1, scol_for(sdf, index)).otherwise(None),
+                )
+                stat_exprs.append(F.max(scol_for(sdf, name)).alias(name))
+            else:
+                # pandas 3 skipna=False: raise on any NA, otherwise return all-missing labels
+                stat_exprs.append(
+                    F.last(
+                        F.when(
+                            scol.isNull(),
+                            F.raise_error("idxmin with skipna=False encountered an NA value."),
+                        ).otherwise(F.lit(None).cast(index_spark_type))
+                    ).alias(name)
+                )
 
         sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
 
@@ -2562,20 +2671,37 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         We can also propagate non-null values forward or backward in group.
 
-        >>> df.groupby(['A'])['B'].fillna(method='ffill').sort_index()
+        >>> df.groupby(['A'])['B'].fillna(method='ffill').sort_index()  # doctest: +SKIP
         0    2.0
         1    4.0
         2    NaN
         3    3.0
         Name: B, dtype: float64
 
-        >>> df.groupby(['A']).fillna(method='bfill').sort_index()
+        >>> df.groupby(['A']).fillna(method='bfill').sort_index()  # doctest: +SKIP
              B    C  D
         0  2.0  NaN  0
         1  4.0  NaN  1
         2  3.0  1.0  5
         3  3.0  1.0  4
         """
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self._fillna(value=value, method=method, axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `fillna` method is not supported in pandas 3.0.0 and later. "
+                "Use obj.ffill() or obj.bfill() for forward or backward filling instead. "
+                "If you want to fill with a single value, use DataFrame.fillna instead"
+            )
+
+    def _fillna(
+        self,
+        value: Optional[Any] = None,
+        method: Optional[str] = None,
+        axis: Optional[Axis] = None,
+        inplace: bool = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
         should_resolve = method is not None
         if should_resolve:
             warnings.warn(
@@ -2638,7 +2764,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  3.0  1.0  5
         3  3.0  1.0  4
         """
-        return self.fillna(method="bfill", limit=limit)
+        return self._fillna(method="bfill", limit=limit)
 
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
@@ -2687,7 +2813,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  NaN  NaN  5
         3  3.0  1.0  4
         """
-        return self.fillna(method="ffill", limit=limit)
+        return self._fillna(method="ffill", limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """
@@ -3171,7 +3297,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         dropna : boolean, default True
-            Don’t include NaN in the counts.
+            Don't include NaN in the counts.
 
         Returns
         -------
@@ -3484,6 +3610,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         3.0    7.0
         Name: b, dtype: float64
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if not isinstance(accuracy, int):
             raise TypeError(
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
@@ -3599,18 +3728,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
         if not self._as_index:
             column_names = [column.name for column in self._agg_columns]
-            for groupkey in self._groupkeys:
-                if groupkey.name not in column_names:
-                    warnings.warn(
-                        "A grouping was used that is not in the columns of the DataFrame and so "
-                        "was excluded from the result. "
-                        "This grouping will be included in a future version. "
-                        "Add the grouping as a column of the DataFrame to silence this warning.",
-                        FutureWarning,
-                    )
-            should_drop_index = set(
-                i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
-            )
+            if LooseVersion(pd.__version__) < "3.0.0":
+                for groupkey in self._groupkeys:
+                    if groupkey.name not in column_names:
+                        warnings.warn(
+                            "A grouping was used that is not in the columns of the DataFrame and so "
+                            "was excluded from the result. "
+                            "This grouping will be included in a future version. "
+                            "Add the grouping as a column of the DataFrame to silence this warning.",
+                            FutureWarning,
+                        )
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
+                )
+            else:
+                should_drop_index = set(
+                    i for i, gkey in enumerate(self._groupkeys) if gkey.name in column_names
+                )
             if len(should_drop_index) > 0:
                 psdf = psdf.reset_index(level=should_drop_index, drop=True)
             if len(should_drop_index) < len(self._groupkeys):
@@ -3708,6 +3842,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         for col_or_s, label in zip(by, column_labels):
             if label in tmp_column_labels:
+                assert isinstance(col_or_s, Series)
                 psser = col_or_s
                 psdf = align_diff_frames(
                     assign_columns,
@@ -3723,6 +3858,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         new_by_series = []
         for col_or_s, label in zip(by, column_labels):
             if label in tmp_column_labels:
+                assert isinstance(col_or_s, Series)
                 psser = col_or_s
                 new_by_series.append(psdf._psser_for(label).rename(psser.name))
             else:
@@ -4042,6 +4178,9 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         2 B  1.000000       NaN
           C       NaN  1.000000
         """
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            if not isinstance(numeric_only, bool):
+                raise ValueError("numeric_only accepts only Boolean values")
         if method not in ["pearson", "spearman", "kendall"]:
             raise ValueError(f"Invalid method {method}")
 
@@ -4139,7 +4278,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
 
-        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])  # type: ignore[arg-type]
+        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])
 
         sdf = sdf.select(
             *[F.col(col) for col in groupkey_names + numeric_col_names],
@@ -4622,7 +4761,7 @@ def _test() -> None:
         .appName("pyspark.pandas.groupby tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

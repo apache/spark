@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connect.client
 
 import java.net.URI
-import java.util.{Locale, UUID}
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.{Base64, Locale, UUID}
 import java.util.concurrent.Executor
 
 import scala.collection.mutable
@@ -32,7 +33,7 @@ import io.grpc._
 
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.SparkThrowable
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
 import org.apache.spark.internal.Logging
@@ -493,6 +494,43 @@ private[sql] class SparkConnectClient(
       .setSessionId(sessionId)
       .setClientType(userAgent)
     bstub.releaseSession(request.build())
+  }
+
+  /**
+   * Get status of operations in the session.
+   *
+   * @param operationIds
+   *   Optional sequence of operation IDs to get status for. If empty, returns status of all
+   *   operations in the session.
+   * @param operationExtensions
+   *   Optional per-operation extensions to include in the OperationStatusRequest.
+   * @param requestExtensions
+   *   Optional request-level extensions to include in the GetStatusRequest.
+   * @return
+   *   The [[proto.GetStatusResponse]] for the requested operations, including any extensions.
+   */
+  @Experimental
+  def getOperationStatuses(
+      operationIds: Seq[String] = Seq.empty,
+      operationExtensions: Seq[protobuf.Any] = Seq.empty,
+      requestExtensions: Seq[protobuf.Any] = Seq.empty): proto.GetStatusResponse = {
+    val requestBuilder = proto.GetStatusRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+
+    serverSideSessionId.foreach(session =>
+      requestBuilder.setClientObservedServerSideSessionId(session))
+
+    val opStatusRequest = proto.GetStatusRequest.OperationStatusRequest.newBuilder()
+    operationIds.foreach(opStatusRequest.addOperationIds)
+    operationExtensions.foreach(opStatusRequest.addExtensions)
+    requestBuilder.setOperationStatus(opStatusRequest)
+
+    requestExtensions.foreach(requestBuilder.addExtensions)
+
+    bstub.getStatus(requestBuilder.build())
   }
 
   private[this] val tags = new InheritableThreadLocal[mutable.Set[String]] {
@@ -1093,6 +1131,24 @@ object SparkConnectClient {
    */
   private[client] class MetadataHeaderClientInterceptor(metadata: Map[String, String])
       extends ClientInterceptor {
+
+    // Sealed trait for pre-processed metadata entries
+    private sealed trait MetadataEntry
+    private case class AsciiEntry(key: Metadata.Key[String], value: String) extends MetadataEntry
+    private case class BinaryEntry(key: Metadata.Key[Array[Byte]], value: Array[Byte])
+        extends MetadataEntry
+
+    // Pre-process metadata at construction time
+    private val entries: Seq[MetadataEntry] = metadata.map { case (key, value) =>
+      assert(key != null && value != null)
+      if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        val valueByteArray = Base64.getDecoder.decode(value.getBytes(UTF_8))
+        BinaryEntry(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER), valueByteArray)
+      } else {
+        AsciiEntry(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+      }
+    }.toSeq
+
     override def interceptCall[ReqT, RespT](
         method: MethodDescriptor[ReqT, RespT],
         callOptions: CallOptions,
@@ -1102,8 +1158,9 @@ object SparkConnectClient {
         override def start(
             responseListener: ClientCall.Listener[RespT],
             headers: Metadata): Unit = {
-          metadata.foreach { case (key, value) =>
-            headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value)
+          entries.foreach {
+            case AsciiEntry(key, value) => headers.put(key, value)
+            case BinaryEntry(key, value) => headers.put(key, value)
           }
           super.start(responseListener, headers)
         }

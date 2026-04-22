@@ -22,7 +22,8 @@ from pyspark.errors import PySparkAttributeError
 from pyspark.errors import PythonException
 from pyspark.sql.functions import arrow_udtf, lit
 from pyspark.sql.types import Row, StructType, StructField, IntegerType
-from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pyarrow, pyarrow_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
 from pyspark.testing import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
@@ -33,6 +34,23 @@ if have_pyarrow:
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowUDTFTestsMixin:
+    def test_arrow_udtf_data_conversion_error(self):
+        from pyspark.sql.functions import udtf
+
+        @udtf(returnType="x int, y int")
+        class DataConversionErrorUDTF:
+            def eval(self):
+                # Return a non-tuple value when multiple return values are expected.
+                # This will cause LocalDataToArrowConversion.convert to fail with TypeError (len() on int),
+                # which should be wrapped in UDTF_ARROW_DATA_CONVERSION_ERROR.
+                yield 1
+
+        # Enable Arrow optimization for regular UDTFs
+        with self.sql_conf({"spark.sql.execution.pythonUDTF.arrow.enabled": "true"}):
+            with self.assertRaisesRegex(PythonException, "UDTF_ARROW_DATA_CONVERSION_ERROR"):
+                result_df = DataConversionErrorUDTF()
+                result_df.collect()
+
     def test_arrow_udtf_zero_args(self):
         @arrow_udtf(returnType="id int, value string")
         class TestUDTF:
@@ -94,9 +112,9 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="batch_id int, name string, count int")
         class RecordBatchUDTF:
             def eval(self, batch_size: "pa.Array") -> Iterator["pa.RecordBatch"]:
-                assert isinstance(
-                    batch_size, pa.Array
-                ), f"Expected pa.Array, got {type(batch_size)}"
+                assert isinstance(batch_size, pa.Array), (
+                    f"Expected pa.Array, got {type(batch_size)}"
+                )
 
                 size = batch_size[0].as_py()
 
@@ -193,7 +211,9 @@ class ArrowUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "Target schema's field names are not matching the record batch's field names",
+            r"(?s)Result column 'x' does not exist in the output\. "
+            r"Expected schema: x: int32\ny: string, "
+            r"got: wrong_col: int32\nanother_wrong_col: double\.",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
@@ -355,9 +375,8 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF\\] "
-            "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match "
-            "specified schema. Expected: int32 Actual: string",
+            "Result type of column 'id' does not match "
+            "the expected type. Expected: int32, got: string.",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()
@@ -501,9 +520,9 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="filtered_id bigint")  # Use bigint to match int64
         class TableArgUDTF:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch, got {type(table_data)}"
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch, got {type(table_data)}"
+                )
 
                 # Convert record batch to table to work with it more easily
                 table = pa.table(table_data)
@@ -538,12 +557,12 @@ class ArrowUDTFTestsMixin:
             def eval(
                 self, table_data: "pa.RecordBatch", threshold: "pa.Array"
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    threshold, pa.Array
-                ), f"Expected pa.Array for threshold, got {type(threshold)}"
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                assert isinstance(threshold, pa.Array), (
+                    f"Expected pa.Array for threshold, got {type(threshold)}"
+                )
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
 
                 threshold_val = threshold[0].as_py()
 
@@ -591,12 +610,10 @@ class ArrowUDTFTestsMixin:
         test_df.createOrReplaceTempView("test_table")
 
         with self.assertRaisesRegex(Exception, "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED"):
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 SELECT t.id, f.x, f.result
                 FROM test_table t, LATERAL simple_arrow_udtf(t.id) f
-                """
-            )
+                """)
 
     def test_arrow_udtf_lateral_join_with_table_argument_disallowed(self):
         @arrow_udtf(returnType="filtered_id bigint")
@@ -622,12 +639,10 @@ class ArrowUDTFTestsMixin:
             Exception,
             "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
         ):
-            self.spark.sql(
-                """
+            self.spark.sql("""
                 SELECT t1.id, f.filtered_id
                 FROM test_table1 t1, LATERAL mixed_args_udtf(table(SELECT * FROM test_table2)) f
-                """
-            )
+                """)
 
     def test_arrow_udtf_with_table_argument_then_lateral_join_allowed(self):
         @arrow_udtf(returnType="processed_id bigint")
@@ -645,14 +660,12 @@ class ArrowUDTFTestsMixin:
         join_df = self.spark.createDataFrame([("A",), ("B",), ("C",)], "label string")
         join_df.createOrReplaceTempView("join_table")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT f.processed_id, j.label
             FROM table_arg_udtf(table(SELECT * FROM source_table)) f,
                 join_table j
             ORDER BY f.processed_id, j.label
-            """
-        )
+            """)
 
         expected_data = [
             (101, "A"),
@@ -690,13 +703,11 @@ class ArrowUDTFTestsMixin:
         values_df = self.spark.createDataFrame([(10,), (20,), (30,)], "value int")
         values_df.createOrReplaceTempView("values_table")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT c.computed_value, m.multiplied
             FROM compute_udtf(table(SELECT * FROM values_table) WITH SINGLE PARTITION) c,
                 LATERAL multiply_udtf(c.computed_value) m
-            """
-        )
+            """)
 
         expected_df = self.spark.createDataFrame([(60, 180)], "computed_value int, multiplied int")
         assertDataFrameEqual(result_df, expected_df)
@@ -742,9 +753,9 @@ class ArrowUDTFTestsMixin:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
                 table = pa.table(table_data)
                 partition_key = pc.unique(table["partition_key"]).to_pylist()
-                assert (
-                    len(partition_key) == 1
-                ), f"Expected exactly one partition key, got {partition_key}"
+                assert len(partition_key) == 1, (
+                    f"Expected exactly one partition key, got {partition_key}"
+                )
                 self._partition_key = partition_key[0]
                 self._sum += pc.sum(table["value"]).as_py()
                 # Don't yield here - accumulate and yield in terminate
@@ -773,11 +784,9 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("sum_udtf", SumUDTF)
         input_df.createOrReplaceTempView("test_data")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM sum_udtf(TABLE(test_data) PARTITION BY partition_key)
-        """
-        )
+        """)
 
         expected_data = [
             (1, 60),
@@ -834,12 +843,10 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("terminate_udtf", TerminateUDTF)
         input_df.createOrReplaceTempView("test_data_terminate")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM terminate_udtf(TABLE(test_data_terminate) PARTITION BY partition_key)
             ORDER BY partition_key
-            """
-        )
+            """)
 
         expected_data = [
             (1, 2, 30),  # partition 1: 2 rows, sum = 30
@@ -900,16 +907,14 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("order_by_udtf", OrderByUDTF)
         input_df.createOrReplaceTempView("test_data_order")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM order_by_udtf(
                 TABLE(test_data_order)
                 PARTITION BY partition_key
                 ORDER BY value
             )
             ORDER BY partition_key
-            """
-        )
+            """)
 
         expected_data = [
             (1, 10, 30),  # partition 1: first=10 (min), last=30 (max) after ordering
@@ -980,15 +985,13 @@ class ArrowUDTFTestsMixin:
         input_df.createOrReplaceTempView("test_partition_removal")
 
         # Partition by col1 + col2 expression
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM partition_column_test_udtf(
                 TABLE(test_partition_removal)
                 PARTITION BY col1 + col2
             )
             ORDER BY col1_sum, col2_sum
-            """
-        )
+            """)
 
         expected_data = [
             (3, 1),  # partition 2: sum of col1s (1+2), sum of col2s (1+0)
@@ -1024,9 +1027,9 @@ class ArrowUDTFTestsMixin:
                 if self._product is None:
                     self._product = product
                 else:
-                    assert (
-                        self._product == product
-                    ), f"Mixed products {self._product} and {product} in partition"
+                    assert self._product == product, (
+                        f"Mixed products {self._product} and {product} in partition"
+                    )
 
                 self._batches.append(table)
                 self._seen += table.num_rows
@@ -1066,16 +1069,14 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("top_reviews_udtf", TopReviewsPerProduct)
         df.createOrReplaceTempView("product_reviews")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM top_reviews_udtf(
                 TABLE(product_reviews)
                 PARTITION BY (product_id)
                 ORDER BY (rating DESC, review_id)
             )
             ORDER BY product_id, rating DESC, review_id
-            """
-        )
+            """)
 
         expected_df = self.spark.createDataFrame(
             [
@@ -1125,20 +1126,19 @@ class ArrowUDTFTestsMixin:
         # Create DataFrame with 5 input partitions but all data will map to partition_key=1
         # range(1, 10, 1, 5) creates ids from 1 to 9 with 5 partitions
         input_df = self.spark.range(1, 10, 1, 5).selectExpr(
-            "1 as partition_key", "id"  # constant partition key
+            "1 as partition_key",
+            "id",  # constant partition key
         )
 
         self.spark.udtf.register("single_partition_udtf", SinglePartitionUDTF)
         input_df.createOrReplaceTempView("test_single_partition")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM single_partition_udtf(
                 TABLE(test_single_partition)
                 PARTITION BY partition_key
             )
-            """
-        )
+            """)
 
         # All 9 rows (1 through 9) should be in a single partition with key=1
         expected_data = [(1, 9, 45)]
@@ -1209,16 +1209,14 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("skip_rest_udtf", SkipRestUDTF)
         input_df.createOrReplaceTempView("test_skip_rest")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM skip_rest_udtf(
                 TABLE(test_skip_rest)
                 PARTITION BY partition_key
                 ORDER BY value
             )
             ORDER BY partition_key
-            """
-        )
+            """)
 
         # Each partition should only process 2 rows before skipping the rest
         expected_data = [
@@ -1250,14 +1248,12 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("empty_batch_udtf", EmptyBatchUDTF)
         empty_df.createOrReplaceTempView("empty_partition_by")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM empty_batch_udtf(
                 TABLE(empty_partition_by)
                 PARTITION BY partition_key
             )
-            """
-        )
+            """)
 
         expected_df = self.spark.createDataFrame([], "count int")
         assertDataFrameEqual(result_df, expected_df)
@@ -1318,16 +1314,14 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("null_partition_udtf", NullPartitionUDTF)
         input_df.createOrReplaceTempView("test_null_partitions")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM null_partition_udtf(
                 TABLE(test_null_partitions)
                 PARTITION BY partition_key
                 ORDER BY value
             )
             ORDER BY partition_key NULLS FIRST
-            """
-        )
+            """)
 
         # Expected: null partition gets grouped together, nulls in values are handled
         expected_data = [
@@ -1361,11 +1355,9 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("empty_table_udtf", EmptyTableUDTF)
         empty_df.createOrReplaceTempView("empty_table")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM empty_table_udtf(TABLE(empty_table))
-            """
-        )
+            """)
 
         # For empty input, UDTF is not called, resulting in empty output
         # This is consistent with regular UDTFs
@@ -1398,14 +1390,12 @@ class ArrowUDTFTestsMixin:
         self.spark.udtf.register("type_check_udtf", TypeCheckUDTF)
         self.spark.range(3).createOrReplaceTempView("test_table")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM type_check_udtf(
                 TABLE(test_table),
                 named_struct('a', 10, 'b', 15)
             )
-        """
-        )
+        """)
 
         # All rows should show correct types
         for row in result_df.collect():
@@ -1446,13 +1436,11 @@ class ArrowUDTFTestsMixin:
         test_df = self.spark.createDataFrame(test_data, "category string, value int")
         test_df.createOrReplaceTempView("partition_test_data")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM partition_sum_udtf(
                 TABLE(partition_test_data) PARTITION BY category
             ) ORDER BY partition_key
-        """
-        )
+        """)
 
         expected_df = self.spark.createDataFrame(
             [("A", 30), ("B", 70), ("C", 50)], "partition_key string, total_value bigint"
@@ -1501,14 +1489,12 @@ class ArrowUDTFTestsMixin:
         test_df = self.spark.createDataFrame(test_data, "department string, status string")
         test_df.createOrReplaceTempView("employee_data")
 
-        result_df = self.spark.sql(
-            """
+        result_df = self.spark.sql("""
             SELECT * FROM dept_status_count_udtf(
                 TABLE(SELECT * FROM employee_data)
                 PARTITION BY (department, status)
             ) ORDER BY dept, status
-        """
-        )
+        """)
 
         expected_df = self.spark.createDataFrame(
             [
@@ -1528,12 +1514,12 @@ class ArrowUDTFTestsMixin:
             def eval(
                 self, threshold: "pa.Array", table_data: "pa.RecordBatch"
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    threshold, pa.Array
-                ), f"Expected pa.Array for threshold, got {type(threshold)}"
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                assert isinstance(threshold, pa.Array), (
+                    f"Expected pa.Array for threshold, got {type(threshold)}"
+                )
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
 
                 threshold_val = threshold[0].as_py()
 
@@ -1574,15 +1560,15 @@ class ArrowUDTFTestsMixin:
                 table_data: "pa.RecordBatch",
                 max_threshold: "pa.Array",
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    min_threshold, pa.Array
-                ), f"Expected pa.Array for min_threshold, got {type(min_threshold)}"
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
-                assert isinstance(
-                    max_threshold, pa.Array
-                ), f"Expected pa.Array for max_threshold, got {type(max_threshold)}"
+                assert isinstance(min_threshold, pa.Array), (
+                    f"Expected pa.Array for min_threshold, got {type(min_threshold)}"
+                )
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
+                assert isinstance(max_threshold, pa.Array), (
+                    f"Expected pa.Array for max_threshold, got {type(max_threshold)}"
+                )
 
                 min_val = min_threshold[0].as_py()
                 max_val = max_threshold[0].as_py()
@@ -1623,12 +1609,12 @@ class ArrowUDTFTestsMixin:
             def eval(
                 self, table_data: "pa.RecordBatch", multiplier: "pa.Array"
             ) -> Iterator["pa.Table"]:
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
-                assert isinstance(
-                    multiplier, pa.Array
-                ), f"Expected pa.Array for multiplier, got {type(multiplier)}"
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch for table_data, got {type(table_data)}"
+                )
+                assert isinstance(multiplier, pa.Array), (
+                    f"Expected pa.Array for multiplier, got {type(multiplier)}"
+                )
 
                 multiplier_val = multiplier[0].as_py()
 
@@ -1667,24 +1653,20 @@ class ArrowUDTFTestsMixin:
         # Test SQL registration and usage with named arguments
         self.spark.udtf.register("test_named_args_udtf", NamedArgsUDTF)
 
-        sql_result_df = self.spark.sql(
-            """
+        sql_result_df = self.spark.sql("""
             SELECT * FROM test_named_args_udtf(
                 table_data => TABLE(SELECT id FROM range(0, 3)),
                 multiplier => 5
             )
-        """
-        )
+        """)
         assertDataFrameEqual(sql_result_df, expected_df)
 
-        sql_result_df2 = self.spark.sql(
-            """
+        sql_result_df2 = self.spark.sql("""
             SELECT * FROM test_named_args_udtf(
                 multiplier => 3,
                 table_data => TABLE(SELECT id FROM range(0, 3))
             )
-        """
-        )
+        """)
         assertDataFrameEqual(sql_result_df2, expected_df2)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
@@ -1694,9 +1676,9 @@ class ArrowUDTFTestsMixin:
         @arrow_udtf(returnType="id bigint, doubled bigint")
         class TestArrowUDTFWithLogging:
             def eval(self, table_data: "pa.RecordBatch") -> Iterator["pa.Table"]:
-                assert isinstance(
-                    table_data, pa.RecordBatch
-                ), f"Expected pa.RecordBatch, got {type(table_data)}"
+                assert isinstance(table_data, pa.RecordBatch), (
+                    f"Expected pa.RecordBatch, got {type(table_data)}"
+                )
 
                 logger = logging.getLogger("test_arrow_udtf")
                 logger.warning(f"arrow udtf: {table_data.to_pydict()}")

@@ -260,7 +260,7 @@ object ExecutorLifecycleTestUtils {
         .endMetadata()
       .withNewSpec()
         .withStorageClassName(storageClass)
-        .withAccessModes("ReadWriteOnce")
+        .withAccessModes(DEFAULT_PVC_ACCESS_MODE)
         .withResources(new VolumeResourceRequirementsBuilder()
           .withRequests(Map("storage" -> new Quantity(size)).asJava).build())
         .endSpec()

@@ -141,7 +141,7 @@ object NormalizePlan extends PredicateHelper {
           child
         )
       case sample: Sample =>
-        sample.copy(seed = 0L)
+        sample.copy(seed = sample.seed.map(_ => 0L))
       case Join(left, right, joinType, condition, hint) if condition.isDefined =>
         val newJoinType = joinType match {
           case ExistenceJoin(a: Attribute) =>

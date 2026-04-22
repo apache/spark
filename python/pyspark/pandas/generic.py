@@ -18,6 +18,7 @@
 """
 A base class of DataFrame/Column to behave like pandas DataFrame/Series.
 """
+
 from abc import ABCMeta, abstractmethod
 from functools import reduce
 from typing import (
@@ -37,8 +38,10 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like  # type: ignore[attr-defined]
+from pandas.api.types import is_list_like
 
+from pyspark._globals import _NoValue, _NoValueType
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
@@ -483,7 +486,7 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(func, tuple):
             func, target = func
             if target in kwargs:
-                raise ValueError("%s is both the pipe target and a keyword " "argument" % target)
+                raise ValueError("%s is both the pipe target and a keyword argument" % target)
             kwargs[target] = self
             return func(*args, **kwargs)
         else:
@@ -865,8 +868,8 @@ class Frame(object, metaclass=ABCMeta):
             File path. If not specified, the result is returned as
             a string.
         lines: bool, default True
-            If ‘orient’ is ‘records’ write out line delimited JSON format.
-            Will throw ValueError if incorrect ‘orient’ since others are not
+            If 'orient' is 'records' write out line delimited JSON format.
+            Will throw ValueError if incorrect 'orient' since others are not
             list like. It should be always True for now.
         orient: str, default 'records'
              It should be always 'records' for now.
@@ -946,7 +949,7 @@ class Frame(object, metaclass=ABCMeta):
             psdf_or_ser = self
             pdf = psdf_or_ser._to_pandas()
             if isinstance(self, ps.Series):
-                pdf = pdf.to_frame()
+                pdf = pdf.to_frame()  # type: ignore[operator]
             # To make the format consistent and readable by `read_json`, convert it to pandas' and
             # use 'records' orient for now.
             return pdf.to_json(orient="records")
@@ -1096,9 +1099,7 @@ class Frame(object, metaclass=ABCMeta):
         elif isinstance(self, ps.Series):
             f = pd.Series.to_excel
         else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+            raise TypeError("Constructor expects DataFrame or Series; however, got [%s]" % (self,))
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_excel, f, args
         )
@@ -1216,9 +1217,7 @@ class Frame(object, metaclass=ABCMeta):
         elif isinstance(self, ps.Series):
             f = pd.Series.to_hdf
         else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+            raise TypeError("Constructor expects DataFrame or Series; however, got [%s]" % (self,))
         return validate_arguments_and_invoke_function(
             psdf._to_internal_pandas(), self.to_hdf, f, args
         )
@@ -1588,7 +1587,7 @@ class Frame(object, metaclass=ABCMeta):
         self, axis: Optional[Axis] = None, skipna: bool = True, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
-        Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
+        Return unbiased kurtosis using Fisher's definition of kurtosis (kurtosis of normal == 0.0).
         Normalized by N-1.
 
         Parameters
@@ -1793,8 +1792,8 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        axis: {0 or ‘index’, 1 or ‘columns’}, default 0
-            If 0 or ‘index’ counts are generated for each column. If 1 or ‘columns’ counts are
+        axis: {0 or 'index', 1 or 'columns'}, default 0
+            If 0 or 'index' counts are generated for each column. If 1 or 'columns' counts are
             generated for each row.
         numeric_only: bool, default False
             If True, include only float, int, boolean columns. This parameter is mainly for
@@ -2395,7 +2394,7 @@ class Frame(object, metaclass=ABCMeta):
     def groupby(
         self: FrameLike,
         by: Union[Name, "Series", List[Union[Name, "Series"]]],
-        axis: Axis = 0,
+        axis: Union[Axis, _NoValueType] = _NoValue,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
@@ -2516,9 +2515,16 @@ class Frame(object, metaclass=ABCMeta):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         if not len(new_by):
             raise ValueError("No group keys passed!")
-        axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
+
+        if LooseVersion(pd.__version__) < "3.0.0":
+            if axis is _NoValue:
+                axis = 0
+            axis = validate_axis(axis)  # type: ignore[arg-type]
+            if axis != 0:
+                raise NotImplementedError('axis should be either 0 or "index" currently.')
+        else:
+            if axis is not _NoValue:
+                raise TypeError("The 'axis' keyword is not supported in pandas 3.0.0 and later.")
 
         return self._build_groupby(by=new_by, as_index=as_index, dropna=dropna)
 
@@ -2665,7 +2671,7 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = (
+            first_valid_row_df = (
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
@@ -2673,10 +2679,10 @@ class Frame(object, metaclass=ABCMeta):
             )
 
         # For Empty Series or DataFrame, returns None.
-        if len(first_valid_row) == 0:
+        if len(first_valid_row_df) == 0:
             return None
 
-        first_valid_row = first_valid_row.iloc[0]
+        first_valid_row = first_valid_row_df.iloc[0]
         if len(first_valid_row) == 1:
             return first_valid_row.iloc[0]
         else:
@@ -3085,7 +3091,7 @@ class Frame(object, metaclass=ABCMeta):
             # If DataFrame has only a single value, use pandas API directly.
             if has_single_value:
                 result = self._to_internal_pandas().squeeze(axis)
-                return ps.Series(result) if isinstance(result, pd.Series) else result
+                return ps.Series(result) if isinstance(result, pd.Series) else result  # type: ignore[return-value]
             elif axis == 0:
                 return self
             else:
@@ -3096,7 +3102,9 @@ class Frame(object, metaclass=ABCMeta):
             # Otherwise, there is no change.
             self_top_two = cast("Series", self).head(2)
             has_single_value = len(self_top_two) == 1
-            return cast(Union[Scalar, ps.Series], self_top_two[0] if has_single_value else self)
+            return cast(
+                Union[Scalar, ps.Series], self_top_two.iloc[0] if has_single_value else self
+            )
 
     def truncate(
         self,
@@ -3312,6 +3320,17 @@ class Frame(object, metaclass=ABCMeta):
     def fillna(
         self: FrameLike,
         value: Optional[Any] = None,
+        method: Union[Optional[str], _NoValueType] = _NoValue,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        pass
+
+    @abstractmethod
+    def _fillna_with_method(
+        self: FrameLike,
+        value: Optional[Any] = None,
         method: Optional[str] = None,
         axis: Optional[Axis] = None,
         inplace: bool_type = False,
@@ -3394,9 +3413,23 @@ class Frame(object, metaclass=ABCMeta):
         3    1.0
         dtype: float64
         """
-        return self.fillna(method="bfill", axis=axis, inplace=inplace, limit=limit)
+        return self._fillna_with_method(method="bfill", axis=axis, inplace=inplace, limit=limit)
 
-    backfill = bfill
+    def backfill(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self.bfill(axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `backfill` method is not supported in pandas 3.0.0 and later. Use `bfill` instead."
+            )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        backfill.__doc__ = bfill.__doc__
 
     # TODO: add 'downcast' when value parameter exists
     def ffill(
@@ -3473,9 +3506,23 @@ class Frame(object, metaclass=ABCMeta):
         3    3.0
         dtype: float64
         """
-        return self.fillna(method="ffill", axis=axis, inplace=inplace, limit=limit)
+        return self._fillna_with_method(method="ffill", axis=axis, inplace=inplace, limit=limit)
 
-    pad = ffill
+    def pad(
+        self: FrameLike,
+        axis: Optional[Axis] = None,
+        inplace: bool_type = False,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return self.ffill(axis=axis, inplace=inplace, limit=limit)
+        else:
+            raise AttributeError(
+                "The `pad` method is not supported in pandas 3.0.0 and later. Use `ffill` instead."
+            )
+
+    if LooseVersion(pd.__version__) < "3.0.0":
+        pad.__doc__ = ffill.__doc__
 
     # TODO: add 'axis', 'inplace', 'downcast'
     def interpolate(
@@ -3633,7 +3680,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.generic,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

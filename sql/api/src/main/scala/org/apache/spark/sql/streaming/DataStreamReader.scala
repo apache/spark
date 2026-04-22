@@ -17,9 +17,10 @@
 package org.apache.spark.sql.streaming
 
 import scala.jdk.CollectionConverters._
+import scala.util.matching.Regex
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.{DataFrame, Dataset, Encoders}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -117,6 +118,24 @@ abstract class DataStreamReader {
    * @since 2.0.0
    */
   def load(path: String): DataFrame
+
+  /**
+   * Returns the row-level changes (Change Data Capture) from the specified table as a streaming
+   * `DataFrame`. Currently this API is only supported for Data Source V2 tables whose catalog
+   * implements `TableCatalog.loadChangelog()`.
+   *
+   * Use `.option()` to specify the starting version/timestamp and processing options:
+   * {{{
+   *   spark.readStream
+   *     .option("startingVersion", "10")
+   *     .changes("my_table")
+   * }}}
+   *
+   * @param tableName
+   *   a qualified or unqualified name that designates a table.
+   * @since 4.2.0
+   */
+  def changes(tableName: String): DataFrame
 
   /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.
@@ -291,5 +310,25 @@ abstract class DataStreamReader {
   protected def validateJsonSchema(): Unit = ()
 
   protected def validateXmlSchema(): Unit = ()
+
+  /**
+   * Validates that a streaming source name only contains alphanumeric characters and underscores.
+   *
+   * @param sourceName
+   *   the source name to validate
+   * @throws IllegalArgumentException
+   *   if the source name is null, empty, or contains invalid characters
+   */
+  private[sql] def validateSourceName(sourceName: String): Unit = {
+    require(sourceName != null, "Source name cannot be null")
+    require(sourceName.nonEmpty, "Source name cannot be empty")
+
+    val validNamePattern: Regex = "^[a-zA-Z0-9_]+$".r
+    if (!validNamePattern.pattern.matcher(sourceName).matches()) {
+      throw new AnalysisException(
+        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+        messageParameters = Map("sourceName" -> sourceName))
+    }
+  }
 
 }

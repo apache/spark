@@ -26,6 +26,7 @@ import re
 import unittest
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
+from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
@@ -235,8 +236,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "col",
+                "arg_type": "int",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -244,8 +249,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DICT",
-            messageParameters={"arg_name": "fractions", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "dict",
+                "arg_name": "fractions",
+                "arg_type": "list",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -272,8 +281,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "col1", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "col1", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -281,8 +290,8 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "col2", "arg_type": "bool"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "col2", "arg_type": "bool"},
         )
 
     def test_crosstab(self):
@@ -915,8 +924,9 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "Column or int",
                 "arg_name": "startPos",
                 "arg_type": "str",
             },
@@ -940,13 +950,13 @@ class FunctionsTestsMixin:
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
-        df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
+        df = self.spark.createDataFrame([("cat",), ("\U0001f408",)], ["cat"])
         actual = df.select(F.octet_length("cat"))
         assertDataFrameEqual([Row(3), Row(4)], actual)
 
     def test_bit_length_function(self):
         # SPARK-36751: add bit length api for python
-        df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
+        df = self.spark.createDataFrame([("cat",), ("\U0001f408",)], ["cat"])
         actual = df.select(F.bit_length("cat"))
         assertDataFrameEqual([Row(24), Row(32)], actual)
 
@@ -1708,8 +1718,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "pos", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "pos",
+                "arg_type": "float",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1717,8 +1731,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "len", "arg_type": "float"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "len",
+                "arg_type": "float",
+            },
         )
 
     def test_percentile(self):
@@ -2361,6 +2379,739 @@ class FunctionsTestsMixin:
         # Should have 5 values (1,2,3,4,6 - null is ignored)
         self.assertEqual(n, 5)
 
+    def test_tuple_sketch_agg_double_basic(self):
+        """Test tuple_sketch_agg_double basic functionality"""
+        df = self.spark.createDataFrame(
+            [(1, 1.5), (2, 2.5), (3, 3.5), (1, 0.5), (2, 1.0)], ["key", "summary"]
+        )
+
+        # Test with default parameters
+        sketch1 = df.agg(F.tuple_sketch_agg_double("key", "summary")).first()[0]
+        self.assertIsNotNone(sketch1)
+        self.assertIsInstance(sketch1, (bytes, bytearray))
+
+        # Test with explicit lgNomEntries
+        sketch2 = df.agg(F.tuple_sketch_agg_double("key", "summary", 10)).first()[0]
+        self.assertIsNotNone(sketch2)
+
+        # Test with lgNomEntries and mode
+        sketch3 = df.agg(F.tuple_sketch_agg_double("key", "summary", 10, "sum")).first()[0]
+        self.assertIsNotNone(sketch3)
+
+        # Test with Column objects
+        sketch4 = df.agg(F.tuple_sketch_agg_double(F.col("key"), F.col("summary"))).first()[0]
+        self.assertIsNotNone(sketch4)
+
+    def test_tuple_sketch_agg_integer_basic(self):
+        """Test tuple_sketch_agg_integer basic functionality"""
+        df = self.spark.createDataFrame(
+            [(1, 10), (2, 20), (3, 30), (1, 5), (2, 15)], ["key", "summary"]
+        )
+
+        # Test with default parameters
+        sketch1 = df.agg(F.tuple_sketch_agg_integer("key", "summary")).first()[0]
+        self.assertIsNotNone(sketch1)
+        self.assertIsInstance(sketch1, (bytes, bytearray))
+
+        # Test with explicit lgNomEntries
+        sketch2 = df.agg(F.tuple_sketch_agg_integer("key", "summary", 10)).first()[0]
+        self.assertIsNotNone(sketch2)
+
+        # Test with lgNomEntries and mode
+        sketch3 = df.agg(F.tuple_sketch_agg_integer("key", "summary", 10, "max")).first()[0]
+        self.assertIsNotNone(sketch3)
+
+        # Test with different mode
+        sketch4 = df.agg(F.tuple_sketch_agg_integer("key", "summary", 10, "min")).first()[0]
+        self.assertIsNotNone(sketch4)
+
+    def test_tuple_sketch_estimate_and_summary_double(self):
+        """Test tuple_sketch_estimate and summary functions - double"""
+        df = self.spark.createDataFrame(
+            [(1, 1.5), (2, 2.5), (3, 3.5), (1, 0.5), (2, 1.0)], ["key", "summary"]
+        )
+        sketch_df = df.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+
+        # Test estimate
+        estimate = sketch_df.select(F.tuple_sketch_estimate_double("sketch")).first()[0]
+        self.assertEqual(estimate, 3.0)
+
+        # Test summary with default mode (sum)
+        summary1 = sketch_df.select(F.tuple_sketch_summary_double("sketch")).first()[0]
+        self.assertEqual(summary1, 9.0)
+
+        # Test summary with explicit mode
+        summary2 = sketch_df.select(F.tuple_sketch_summary_double("sketch", "min")).first()[0]
+        self.assertEqual(summary2, 2.0)
+
+        # Test theta
+        theta = sketch_df.select(F.tuple_sketch_theta_double("sketch")).first()[0]
+        self.assertIsNotNone(theta)
+        self.assertGreater(theta, 0.0)
+        self.assertLessEqual(theta, 1.0)
+
+        # Test with Column objects
+        estimate2 = sketch_df.select(F.tuple_sketch_estimate_double(F.col("sketch"))).first()[0]
+        self.assertIsNotNone(estimate2)
+
+    def test_tuple_sketch_estimate_and_summary_integer(self):
+        """Test tuple_sketch_estimate and summary functions - integer"""
+        df = self.spark.createDataFrame(
+            [(1, 10), (2, 20), (3, 30), (1, 5), (2, 15)], ["key", "summary"]
+        )
+        sketch_df = df.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+
+        # Test estimate
+        estimate = sketch_df.select(F.tuple_sketch_estimate_integer("sketch")).first()[0]
+        self.assertEqual(estimate, 3.0)
+
+        # Test summary with default mode (sum)
+        summary1 = sketch_df.select(F.tuple_sketch_summary_integer("sketch")).first()[0]
+        self.assertEqual(summary1, 80)
+
+        # Test summary with explicit mode
+        summary2 = sketch_df.select(F.tuple_sketch_summary_integer("sketch", "max")).first()[0]
+        self.assertEqual(summary2, 35)
+
+        # Test theta
+        theta = sketch_df.select(F.tuple_sketch_theta_integer("sketch")).first()[0]
+        self.assertIsNotNone(theta)
+        self.assertGreater(theta, 0.0)
+        self.assertLessEqual(theta, 1.0)
+
+        # Test with min mode
+        summary3 = sketch_df.select(F.tuple_sketch_summary_integer("sketch", "min")).first()[0]
+        self.assertEqual(summary3, 15)
+
+    def test_tuple_union_double_basic(self):
+        """Test tuple_union_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([(3, 3.5), (4, 4.5)], ["key", "summary"])
+
+        sketch1_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+        sketch2_df = df2.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+
+        joined = sketch1_df.crossJoin(sketch2_df.withColumnRenamed("sketch", "sketch2"))
+
+        # Test union with default parameters
+        union1 = joined.select(F.tuple_union_double("sketch", "sketch2")).first()[0]
+        self.assertIsNotNone(union1)
+        self.assertIsInstance(union1, (bytes, bytearray))
+
+        # Test union with lgNomEntries
+        union2 = joined.select(F.tuple_union_double("sketch", "sketch2", 10)).first()[0]
+        self.assertIsNotNone(union2)
+
+        # Test union with lgNomEntries and mode
+        union3 = joined.select(F.tuple_union_double("sketch", "sketch2", 10, "sum")).first()[0]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(F.tuple_union_double("sketch", "sketch2"))
+        ).first()[0]
+        self.assertEqual(estimate, 4.0)
+
+    def test_tuple_union_integer_basic(self):
+        """Test tuple_union_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([(3, 30), (4, 40)], ["key", "summary"])
+
+        sketch1_df = df1.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+        sketch2_df = df2.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+
+        joined = sketch1_df.crossJoin(sketch2_df.withColumnRenamed("sketch", "sketch2"))
+
+        # Test union with default parameters
+        union1 = joined.select(F.tuple_union_integer("sketch", "sketch2")).first()[0]
+        self.assertIsNotNone(union1)
+
+        # Test union with lgNomEntries and mode
+        union2 = joined.select(F.tuple_union_integer("sketch", "sketch2", 10, "max")).first()[0]
+        self.assertIsNotNone(union2)
+
+        # Test with column names
+        union3 = joined.select(F.tuple_union_integer("sketch", "sketch2", 10)).first()[0]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(F.tuple_union_integer("sketch", "sketch2"))
+        ).first()[0]
+        self.assertEqual(estimate, 4.0)
+
+    def test_tuple_intersection_double_basic(self):
+        """Test tuple_intersection_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5), (3, 3.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([(2, 1.0), (3, 2.0), (4, 3.0)], ["key", "summary"])
+
+        sketch1_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+        sketch2_df = df2.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+
+        joined = sketch1_df.crossJoin(sketch2_df.withColumnRenamed("sketch", "sketch2"))
+
+        # Test intersection with default mode
+        intersection1 = joined.select(F.tuple_intersection_double("sketch", "sketch2")).first()[0]
+        self.assertIsNotNone(intersection1)
+        self.assertIsInstance(intersection1, (bytes, bytearray))
+
+        # Test intersection with mode
+        intersection2 = joined.select(
+            F.tuple_intersection_double("sketch", "sketch2", "sum")
+        ).first()[0]
+        self.assertIsNotNone(intersection2)
+
+        # Test with min mode
+        intersection3 = joined.select(
+            F.tuple_intersection_double("sketch", "sketch2", "min")
+        ).first()[0]
+        self.assertIsNotNone(intersection3)
+
+        # Verify estimate from intersection (keys 2 and 3 are common)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(F.tuple_intersection_double("sketch", "sketch2"))
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_intersection_integer_basic(self):
+        """Test tuple_intersection_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([(2, 15), (3, 25), (4, 35)], ["key", "summary"])
+
+        sketch1_df = df1.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+        sketch2_df = df2.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+
+        joined = sketch1_df.crossJoin(sketch2_df.withColumnRenamed("sketch", "sketch2"))
+
+        # Test intersection with default mode
+        intersection1 = joined.select(F.tuple_intersection_integer("sketch", "sketch2")).first()[0]
+        self.assertIsNotNone(intersection1)
+
+        # Test intersection with mode
+        intersection2 = joined.select(
+            F.tuple_intersection_integer("sketch", "sketch2", "max")
+        ).first()[0]
+        self.assertIsNotNone(intersection2)
+
+        # Verify estimate from intersection (keys 2 and 3 are common)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(F.tuple_intersection_integer("sketch", "sketch2"))
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_difference_double_basic(self):
+        """Test tuple_difference_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5), (3, 3.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([(2, 1.0), (3, 2.0)], ["key", "summary"])
+
+        sketch1_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+        sketch2_df = df2.agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+
+        joined = sketch1_df.crossJoin(sketch2_df.withColumnRenamed("sketch", "sketch2"))
+
+        # Test difference
+        difference = joined.select(F.tuple_difference_double("sketch", "sketch2")).first()[0]
+        self.assertIsNotNone(difference)
+        self.assertIsInstance(difference, (bytes, bytearray))
+
+        # Verify estimate from difference (only key 1 is unique to df1)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(F.tuple_difference_double("sketch", "sketch2"))
+        ).first()[0]
+        self.assertEqual(estimate, 1.0)
+
+    def test_tuple_difference_integer_basic(self):
+        """Test tuple_difference_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([(2, 15), (3, 25)], ["key", "summary"])
+
+        sketch1_df = df1.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+        sketch2_df = df2.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+
+        joined = sketch1_df.crossJoin(sketch2_df.withColumnRenamed("sketch", "sketch2"))
+
+        # Test difference
+        difference = joined.select(F.tuple_difference_integer("sketch", "sketch2")).first()[0]
+        self.assertIsNotNone(difference)
+
+        # Verify estimate from difference (only key 1 is unique to df1)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(F.tuple_difference_integer("sketch", "sketch2"))
+        ).first()[0]
+        self.assertEqual(estimate, 1.0)
+
+    def test_tuple_difference_theta_double_basic(self):
+        """Test tuple_difference_theta_double basic functionality"""
+        df1 = self.spark.createDataFrame(
+            [(1, 1.5), (2, 2.5), (3, 3.5), (5, 5.5)], ["key", "summary"]
+        )
+        df2 = self.spark.createDataFrame([1, 2, 4], "int")
+
+        tuple_sketch_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("tuple_sketch"))
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+        difference = joined.select(
+            F.tuple_difference_theta_double("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(difference)
+        self.assertIsInstance(difference, (bytes, bytearray))
+
+        # Verify estimate from difference
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(
+                F.tuple_difference_theta_double("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_difference_theta_integer_basic(self):
+        """Test tuple_difference_theta_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30), (5, 50)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([1, 2, 4], "int")
+
+        tuple_sketch_df = df1.agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("tuple_sketch")
+        )
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test difference (keys in tuple_sketch but not in theta_sketch: 3 and 5)
+        difference = joined.select(
+            F.tuple_difference_theta_integer("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(difference)
+
+        # Verify estimate from difference
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(
+                F.tuple_difference_theta_integer("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_intersection_theta_double_basic(self):
+        """Test tuple_intersection_theta_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5), (3, 3.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([2, 3, 4], "int")
+
+        tuple_sketch_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("tuple_sketch"))
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test intersection with default mode
+        intersection1 = joined.select(
+            F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(intersection1)
+        self.assertIsInstance(intersection1, (bytes, bytearray))
+
+        # Test intersection with mode
+        intersection2 = joined.select(
+            F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch", "sum")
+        ).first()[0]
+        self.assertIsNotNone(intersection2)
+
+        # Test with min mode
+        intersection3 = joined.select(
+            F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch", "min")
+        ).first()[0]
+        self.assertIsNotNone(intersection3)
+
+        # Verify estimate from intersection (keys 2 and 3 are common)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(
+                F.tuple_intersection_theta_double("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_intersection_theta_integer_basic(self):
+        """Test tuple_intersection_theta_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([2, 3, 4], "int")
+
+        tuple_sketch_df = df1.agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("tuple_sketch")
+        )
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test intersection with default mode
+        intersection1 = joined.select(
+            F.tuple_intersection_theta_integer("tuple_sketch", "theta_sketch")
+        ).first()[0]
+        self.assertIsNotNone(intersection1)
+
+        # Test intersection with mode
+        intersection2 = joined.select(
+            F.tuple_intersection_theta_integer("tuple_sketch", "theta_sketch", "max")
+        ).first()[0]
+        self.assertIsNotNone(intersection2)
+
+        # Verify estimate from intersection (keys 2 and 3 are common)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(
+                F.tuple_intersection_theta_integer("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_union_theta_double_basic(self):
+        """Test tuple_union_theta_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1.5), (2, 2.5)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([3, 4], "int")
+
+        tuple_sketch_df = df1.agg(F.tuple_sketch_agg_double("key", "summary").alias("tuple_sketch"))
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test union with default parameters
+        union1 = joined.select(F.tuple_union_theta_double("tuple_sketch", "theta_sketch")).first()[
+            0
+        ]
+        self.assertIsNotNone(union1)
+        self.assertIsInstance(union1, (bytes, bytearray))
+
+        # Test union with lgNomEntries
+        union2 = joined.select(
+            F.tuple_union_theta_double("tuple_sketch", "theta_sketch", 10)
+        ).first()[0]
+        self.assertIsNotNone(union2)
+
+        # Test union with lgNomEntries and mode
+        union3 = joined.select(
+            F.tuple_union_theta_double("tuple_sketch", "theta_sketch", 10, "sum")
+        ).first()[0]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union (all 4 keys)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_double(
+                F.tuple_union_theta_double("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 4.0)
+
+    def test_tuple_union_theta_integer_basic(self):
+        """Test tuple_union_theta_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 10), (2, 20)], ["key", "summary"])
+        df2 = self.spark.createDataFrame([3, 4], "int")
+
+        tuple_sketch_df = df1.agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("tuple_sketch")
+        )
+        theta_sketch_df = df2.agg(F.theta_sketch_agg(F.col("value")).alias("theta_sketch"))
+
+        joined = tuple_sketch_df.crossJoin(theta_sketch_df)
+
+        # Test union with default parameters
+        union1 = joined.select(F.tuple_union_theta_integer("tuple_sketch", "theta_sketch")).first()[
+            0
+        ]
+        self.assertIsNotNone(union1)
+
+        # Test union with lgNomEntries and mode
+        union2 = joined.select(
+            F.tuple_union_theta_integer("tuple_sketch", "theta_sketch", 10, "max")
+        ).first()[0]
+        self.assertIsNotNone(union2)
+
+        # Test with lgNomEntries only
+        union3 = joined.select(
+            F.tuple_union_theta_integer("tuple_sketch", "theta_sketch", 10)
+        ).first()[0]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union (all 4 keys)
+        estimate = joined.select(
+            F.tuple_sketch_estimate_integer(
+                F.tuple_union_theta_integer("tuple_sketch", "theta_sketch")
+            )
+        ).first()[0]
+        self.assertEqual(estimate, 4.0)
+
+    def test_tuple_union_agg_double_basic(self):
+        """Test tuple_union_agg_double basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1, 1.5), (1, 2, 2.5)], ["id", "key", "summary"])
+        df2 = self.spark.createDataFrame([(1, 3, 3.5), (1, 4, 4.5)], ["id", "key", "summary"])
+
+        sketch1_df = df1.groupBy("id").agg(
+            F.tuple_sketch_agg_double("key", "summary").alias("sketch")
+        )
+        sketch2_df = df2.groupBy("id").agg(
+            F.tuple_sketch_agg_double("key", "summary").alias("sketch")
+        )
+
+        combined = sketch1_df.union(sketch2_df)
+
+        # Test union_agg with default parameters
+        union1 = combined.groupBy("id").agg(F.tuple_union_agg_double("sketch")).first()[1]
+        self.assertIsNotNone(union1)
+        self.assertIsInstance(union1, (bytes, bytearray))
+
+        # Test union_agg with lgNomEntries
+        union2 = combined.groupBy("id").agg(F.tuple_union_agg_double("sketch", 10)).first()[1]
+        self.assertIsNotNone(union2)
+
+        # Test union_agg with lgNomEntries and mode
+        union3 = (
+            combined.groupBy("id").agg(F.tuple_union_agg_double("sketch", 10, "sum")).first()[1]
+        )
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union_agg (keys 1, 2, 3, 4 should all be present)
+        estimate_result = (
+            combined.groupBy("id")
+            .agg(F.tuple_union_agg_double("sketch").alias("union_sketch"))
+            .select(F.tuple_sketch_estimate_double("union_sketch"))
+            .first()[0]
+        )
+        self.assertEqual(estimate_result, 4.0)
+
+    def test_tuple_union_agg_integer_basic(self):
+        """Test tuple_union_agg_integer basic functionality"""
+        df1 = self.spark.createDataFrame([(1, 1, 10), (1, 2, 20)], ["id", "key", "summary"])
+        df2 = self.spark.createDataFrame([(1, 3, 30), (1, 4, 40)], ["id", "key", "summary"])
+
+        sketch1_df = df1.groupBy("id").agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("sketch")
+        )
+        sketch2_df = df2.groupBy("id").agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("sketch")
+        )
+
+        combined = sketch1_df.union(sketch2_df)
+
+        # Test union_agg with default parameters
+        union1 = combined.groupBy("id").agg(F.tuple_union_agg_integer("sketch")).first()[1]
+        self.assertIsNotNone(union1)
+
+        # Test union_agg with lgNomEntries and mode
+        union2 = (
+            combined.groupBy("id").agg(F.tuple_union_agg_integer("sketch", 10, "max")).first()[1]
+        )
+        self.assertIsNotNone(union2)
+
+        # Test with lgNomEntries
+        union3 = combined.groupBy("id").agg(F.tuple_union_agg_integer("sketch", 10)).first()[1]
+        self.assertIsNotNone(union3)
+
+        # Verify estimate from union_agg (keys 1, 2, 3, 4 should all be present)
+        estimate_result = (
+            combined.groupBy("id")
+            .agg(F.tuple_union_agg_integer("sketch").alias("union_sketch"))
+            .select(F.tuple_sketch_estimate_integer("union_sketch"))
+            .first()[0]
+        )
+        self.assertEqual(estimate_result, 4.0)
+
+    def test_tuple_intersection_agg_double_basic(self):
+        """Test tuple_intersection_agg_double basic functionality"""
+        df1 = self.spark.createDataFrame(
+            [(1, 1, 1.5), (1, 2, 2.5), (1, 3, 3.5)], ["id", "key", "summary"]
+        )
+        df2 = self.spark.createDataFrame(
+            [(1, 2, 1.0), (1, 3, 2.0), (1, 4, 3.0)], ["id", "key", "summary"]
+        )
+
+        sketch1_df = df1.groupBy("id").agg(
+            F.tuple_sketch_agg_double("key", "summary").alias("sketch")
+        )
+        sketch2_df = df2.groupBy("id").agg(
+            F.tuple_sketch_agg_double("key", "summary").alias("sketch")
+        )
+
+        combined = sketch1_df.union(sketch2_df)
+
+        # Test intersection_agg with default mode
+        intersection1 = (
+            combined.groupBy("id").agg(F.tuple_intersection_agg_double("sketch")).first()[1]
+        )
+        self.assertIsNotNone(intersection1)
+        self.assertIsInstance(intersection1, (bytes, bytearray))
+
+        # Test intersection_agg with mode
+        intersection2 = (
+            combined.groupBy("id").agg(F.tuple_intersection_agg_double("sketch", "sum")).first()[1]
+        )
+        self.assertIsNotNone(intersection2)
+
+        # Test with min mode
+        intersection3 = (
+            combined.groupBy("id").agg(F.tuple_intersection_agg_double("sketch", "min")).first()[1]
+        )
+        self.assertIsNotNone(intersection3)
+
+        # Verify estimate from intersection_agg (keys 2 and 3 are common)
+        estimate_result = (
+            combined.groupBy("id")
+            .agg(F.tuple_intersection_agg_double("sketch").alias("intersection_sketch"))
+            .select(F.tuple_sketch_estimate_double("intersection_sketch"))
+            .first()[0]
+        )
+        self.assertEqual(estimate_result, 2.0)
+
+    def test_tuple_intersection_agg_integer_basic(self):
+        """Test tuple_intersection_agg_integer basic functionality"""
+        df1 = self.spark.createDataFrame(
+            [(1, 1, 10), (1, 2, 20), (1, 3, 30)], ["id", "key", "summary"]
+        )
+        df2 = self.spark.createDataFrame(
+            [(1, 2, 15), (1, 3, 25), (1, 4, 35)], ["id", "key", "summary"]
+        )
+
+        sketch1_df = df1.groupBy("id").agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("sketch")
+        )
+        sketch2_df = df2.groupBy("id").agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("sketch")
+        )
+
+        combined = sketch1_df.union(sketch2_df)
+
+        # Test intersection_agg with default mode
+        intersection1 = (
+            combined.groupBy("id").agg(F.tuple_intersection_agg_integer("sketch")).first()[1]
+        )
+        self.assertIsNotNone(intersection1)
+
+        # Test intersection_agg with mode
+        intersection2 = (
+            combined.groupBy("id").agg(F.tuple_intersection_agg_integer("sketch", "max")).first()[1]
+        )
+        self.assertIsNotNone(intersection2)
+
+        # Verify estimate from intersection_agg (keys 2 and 3 are common)
+        estimate_result = (
+            combined.groupBy("id")
+            .agg(F.tuple_intersection_agg_integer("sketch").alias("intersection_sketch"))
+            .select(F.tuple_sketch_estimate_integer("intersection_sketch"))
+            .first()[0]
+        )
+        self.assertEqual(estimate_result, 2.0)
+
+    def test_tuple_sketch_with_nulls(self):
+        """Test tuple sketch with null values"""
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, None)], ["key", "summary"])
+
+        # Null summaries should be handled
+        sketch = df.agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+        estimate = sketch.select(F.tuple_sketch_estimate_integer("sketch")).first()[0]
+        self.assertIsNotNone(estimate)
+        self.assertEqual(estimate, 2.0)
+
+    def test_tuple_sketch_comprehensive_double(self):
+        """Test tuple_sketch_agg + operations + estimate comprehensive test - double"""
+        df1 = self.spark.createDataFrame(
+            [(1, "a", 1.0), (1, "a", 2.0), (1, "b", 3.0), (1, "c", 4.0)],
+            ["id", "key", "summary"],
+        )
+
+        df2 = self.spark.createDataFrame(
+            [(1, "a", 0.5), (1, "c", 1.5), (1, "d", 2.5), (1, "e", 3.5)],
+            ["id", "key", "summary"],
+        )
+
+        # Test tuple_sketch_agg and estimate
+        res1 = (
+            df1.groupBy("id")
+            .agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+            .withColumn("estimate", F.tuple_sketch_estimate_double("sketch"))
+            .withColumn("summary_total", F.tuple_sketch_summary_double("sketch"))
+        )
+
+        row1 = res1.first()
+        self.assertGreaterEqual(row1["estimate"], 3.0)
+        self.assertGreater(row1["summary_total"], 0.0)
+
+        # Test union operations
+        sketch1 = df1.groupBy("id").agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+        sketch2 = df2.groupBy("id").agg(F.tuple_sketch_agg_double("key", "summary").alias("sketch"))
+
+        union_result = (
+            sketch1.union(sketch2)
+            .groupBy("id")
+            .agg(F.tuple_union_agg_double("sketch").alias("union_sketch"))
+            .withColumn("union_estimate", F.tuple_sketch_estimate_double("union_sketch"))
+        )
+
+        union_row = union_result.first()
+        self.assertGreaterEqual(union_row["union_estimate"], 5.0)
+
+        # Test intersection
+        joined = sketch1.crossJoin(sketch2.withColumnRenamed("sketch", "sketch2"))
+        intersection_result = joined.withColumn(
+            "intersection_sketch", F.tuple_intersection_double("sketch", "sketch2")
+        ).withColumn("intersection_estimate", F.tuple_sketch_estimate_double("intersection_sketch"))
+
+        intersection_row = intersection_result.first()
+        self.assertGreaterEqual(intersection_row["intersection_estimate"], 2.0)
+
+        # Test difference
+        difference_result = joined.withColumn(
+            "difference_sketch", F.tuple_difference_double("sketch", "sketch2")
+        ).withColumn("difference_estimate", F.tuple_sketch_estimate_double("difference_sketch"))
+
+        difference_row = difference_result.first()
+        self.assertGreaterEqual(difference_row["difference_estimate"], 1.0)
+
+    def test_tuple_sketch_comprehensive_integer(self):
+        """Test tuple_sketch_agg + operations + estimate comprehensive test - integer"""
+        df1 = self.spark.createDataFrame(
+            [(1, "a", 10), (1, "a", 20), (1, "b", 30), (1, "c", 40)], ["id", "key", "summary"]
+        )
+
+        df2 = self.spark.createDataFrame(
+            [(1, "a", 5), (1, "c", 15), (1, "d", 25), (1, "e", 35)], ["id", "key", "summary"]
+        )
+
+        # Test tuple_sketch_agg and estimate
+        res1 = (
+            df1.groupBy("id")
+            .agg(F.tuple_sketch_agg_integer("key", "summary").alias("sketch"))
+            .withColumn("estimate", F.tuple_sketch_estimate_integer("sketch"))
+            .withColumn("summary_total", F.tuple_sketch_summary_integer("sketch"))
+        )
+
+        row1 = res1.first()
+        self.assertGreaterEqual(row1["estimate"], 3.0)
+        self.assertGreater(row1["summary_total"], 0)
+
+        # Test with different modes
+        res_max = (
+            df1.groupBy("id")
+            .agg(F.tuple_sketch_agg_integer("key", "summary", 12, "max").alias("sketch"))
+            .withColumn("summary_max", F.tuple_sketch_summary_integer("sketch", "max"))
+        )
+
+        row_max = res_max.first()
+        self.assertGreater(row_max["summary_max"], 0)
+
+        # Test union with mode
+        sketch1 = df1.groupBy("id").agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("sketch")
+        )
+        sketch2 = df2.groupBy("id").agg(
+            F.tuple_sketch_agg_integer("key", "summary").alias("sketch")
+        )
+
+        union_result = (
+            sketch1.union(sketch2)
+            .groupBy("id")
+            .agg(F.tuple_union_agg_integer("sketch", 12, "sum").alias("union_sketch"))
+            .withColumn("union_estimate", F.tuple_sketch_estimate_integer("union_sketch"))
+        )
+
+        union_row = union_result.first()
+        self.assertGreaterEqual(union_row["union_estimate"], 5.0)
+
     def test_datetime_functions(self):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
@@ -2393,8 +3144,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "errMsg",
+                "arg_type": "int",
+            },
         )
 
     def test_raise_error(self):
@@ -2414,8 +3169,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "errMsg",
+                "arg_type": "NoneType",
+            },
         )
 
     def test_sum_distinct(self):
@@ -2703,8 +3462,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "json", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "json",
+                "arg_type": "int",
+            },
         )
 
     def test_try_parse_json(self):
@@ -2757,8 +3520,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "csv", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "csv",
+                "arg_type": "int",
+            },
         )
 
     def test_from_csv(self):
@@ -2768,8 +3535,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "schema",
+                "arg_type": "int",
+            },
         )
 
     def test_schema_of_xml(self):
@@ -2778,8 +3549,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "xml", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "xml",
+                "arg_type": "int",
+            },
         )
 
     def test_from_xml(self):
@@ -2789,8 +3564,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "StructType, Column or str",
+                "arg_name": "schema",
+                "arg_type": "int",
+            },
         )
 
     def test_greatest(self):
@@ -2810,8 +3589,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "condition", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column",
+                "arg_name": "condition",
+                "arg_type": "str",
+            },
         )
 
     def test_window(self):
@@ -2820,8 +3603,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "windowDuration", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "windowDuration",
+                "arg_type": "int",
+            },
         )
 
     def test_session_window(self):
@@ -2830,8 +3617,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "gapDuration", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "gapDuration",
+                "arg_type": "int",
+            },
         )
 
     def test_current_user(self):
@@ -2849,8 +3640,12 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT",
-            messageParameters={"arg_name": "numBuckets", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or int",
+                "arg_name": "numBuckets",
+                "arg_type": "str",
+            },
         )
 
     def test_to_time(self):
@@ -3065,6 +3860,48 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(results, [expected])
 
+    def test_st_geogfromwkb(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
+            ["wkb"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+        # ST_GeogFromWKB with invalid WKB.
+        df = self.spark.createDataFrame([(bytearray(b"\x6f"),)], ["wkb"])
+        with self.assertRaises(IllegalArgumentException) as error_context:
+            df.select(F.st_geogfromwkb("wkb")).collect()
+        self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
+        self.assertIn("Unexpected end of WKB buffer", str(error_context.exception))
+
+    def test_st_geomfromwkb(self):
+        df = self.spark.createDataFrame(
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
+            ["wkb", "srid"],
+        )
+        results = df.select(
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb", "srid"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb", 4326))),
+        ).collect()
+        expected = Row(
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+        )
+        self.assertEqual(results, [expected])
+        # ST_GeomFromWKB with invalid WKB.
+        df = self.spark.createDataFrame([(bytearray(b"\x6f"),)], ["wkb"])
+        with self.assertRaises(IllegalArgumentException) as error_context:
+            df.select(F.st_geomfromwkb("wkb")).collect()
+        self.assertIn("[WKB_PARSE_ERROR]", str(error_context.exception))
+        self.assertIn("Unexpected end of WKB buffer", str(error_context.exception))
+
     def test_st_setsrid(self):
         df = self.spark.createDataFrame(
             [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), 4326)],
@@ -3092,12 +3929,56 @@ class FunctionsTestsMixin:
         results = df.select(
             F.st_srid(F.st_geogfromwkb("wkb")),
             F.st_srid(F.st_geomfromwkb("wkb")),
+            F.st_srid(F.st_geomfromwkb("wkb", 4326)),
         ).collect()
         expected = Row(
             4326,
             0,
+            4326,
         )
         self.assertEqual(results, [expected])
+
+    def test_max_by_min_by_with_k(self):
+        """Test max_by and min_by aggregate functions with k parameter"""
+        df = self.spark.createDataFrame(
+            [("a", 10), ("b", 50), ("c", 20), ("d", 40), ("e", 30)],
+            schema=("x", "y"),
+        )
+
+        # Test max_by with k
+        result = df.select(F.max_by("x", "y", 3)).collect()[0][0]
+        self.assertEqual(result, ["b", "d", "e"])
+
+        # Test min_by with k
+        result = df.select(F.min_by("x", "y", 3)).collect()[0][0]
+        self.assertEqual(result, ["a", "c", "e"])
+
+        # Test k = 1
+        result = df.select(F.max_by("x", "y", 1)).collect()[0][0]
+        self.assertEqual(result, ["b"])
+
+        result = df.select(F.min_by("x", "y", 1)).collect()[0][0]
+        self.assertEqual(result, ["a"])
+
+        # Test k larger than row count
+        result = df.select(F.max_by("x", "y", 10)).collect()[0][0]
+        self.assertEqual(sorted(result), ["a", "b", "c", "d", "e"])
+
+        # Test with groupBy
+        df2 = self.spark.createDataFrame(
+            [
+                ("Eng", "Alice", 120000),
+                ("Eng", "Bob", 95000),
+                ("Eng", "Carol", 110000),
+                ("Sales", "Dave", 80000),
+                ("Sales", "Eve", 75000),
+                ("Sales", "Frank", 85000),
+            ],
+            schema=("dept", "emp", "salary"),
+        )
+        result = df2.groupBy("dept").agg(F.max_by("emp", "salary", 2)).orderBy("dept").collect()
+        self.assertEqual(result[0][1], ["Alice", "Carol"])  # Eng
+        self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

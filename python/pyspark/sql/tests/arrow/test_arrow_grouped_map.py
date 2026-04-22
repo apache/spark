@@ -25,12 +25,8 @@ from pyspark.errors import PythonException
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -59,7 +55,7 @@ def function_variations(func):
 
 @unittest.skipIf(
     not have_pyarrow,
-    pyarrow_requirement_message,  # type: ignore[arg-type]
+    pyarrow_requirement_message,
 )
 class ApplyInArrowTestsMixin:
     @property
@@ -223,8 +219,8 @@ class ApplyInArrowTestsMixin:
             for func_variation in function_variations(stats):
                 with self.assertRaisesRegex(
                     PythonException,
-                    "Column names of the returned pyarrow.Table do not match specified schema. "
-                    "Missing: m. Unexpected: v, v2.\n",
+                    "Column names of the returned data do not match specified schema. "
+                    "Missing: m. Unexpected: v, v2.",
                 ):
                     # stats returns three columns while here we set schema with two columns
                     df.groupby("id").applyInArrow(
@@ -264,8 +260,7 @@ class ApplyInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m.\n",
+                "Column names of the returned data do not match specified schema. Missing: m.",
             ):
                 # stats returns one column for even keys while here we set schema with two columns
                 df.groupby("id").applyInArrow(odd_means, schema="id long, m double").collect()
@@ -423,7 +418,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )
@@ -463,7 +458,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )

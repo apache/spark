@@ -33,8 +33,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
@@ -109,7 +109,6 @@ class ArrowUDFTestsMixin:
             "America/Los_Angeles",
             "Pacific/Honolulu",
             "Europe/Amsterdam",
-            "US/Pacific",
         ]:
             with self.sql_conf({"spark.sql.session.timeZone": tz}):
                 # There is a time-zone conversion in df.collect:

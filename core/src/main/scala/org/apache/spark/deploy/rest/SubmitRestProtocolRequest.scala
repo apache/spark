@@ -54,9 +54,6 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     assertPropertyIsMemory(config.EXECUTOR_MEMORY.key)
   }
 
-  private def assertPropertyIsSet(key: String): Unit =
-    assertFieldIsSet(sparkProperties.getOrElse(key, null), key)
-
   private def assertPropertyIsBoolean(key: String): Unit =
     assertProperty[Boolean](key, "boolean", _.toBoolean)
 

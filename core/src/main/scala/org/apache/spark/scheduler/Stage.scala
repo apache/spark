@@ -21,7 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
 /**
@@ -155,18 +155,4 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
-
-  def isIndeterminate: Boolean = {
-    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
-  }
-
-  // Returns true if any parents of this stage are indeterminate.
-  def isParentIndeterminate: Boolean = {
-    parents.exists(_.isStageIndeterminate)
-  }
-
-  // Returns true if the stage itself is indeterminate.
-  def isStageIndeterminate: Boolean = {
-    !rdd.isReliablyCheckpointed && isChecksumMismatched
-  }
 }

@@ -143,7 +143,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   }
 
   private def test(name: String)(f: => Dataset[_]): Unit = super.test(name) {
-    val actual = trimJvmOriginFields(f.plan.getRoot)
+    val actual = normalizeProtoForComparison(f.plan.getRoot)
     val goldenFile = queryFilePath.resolve(name.replace(' ', '_') + ".proto.bin")
     Try(readRelation(goldenFile)) match {
       case Success(expected) if expected == actual =>
@@ -195,7 +195,12 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     }
   }
 
-  private def trimJvmOriginFields[T <: protobuf.Message](message: T): T = {
+  /**
+   * Normalize proto messages for stable comparison:
+   *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
+   *   - Populate default StringType collation when missing (UTF8_BINARY)
+   */
+  private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
       builder
         .clearLine()
@@ -216,6 +221,17 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = message.toBuilder
 
     builder match {
+      // For comparison only, we add UTF8_BINARY when StringType collation is missing
+      // to ensure deterministic plan equality across environments.
+      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
+        val sb = dt.getStringBuilder
+        if (sb.getCollation.isEmpty) {
+          val defaultCollationName =
+            CollationFactory
+              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
+              .collationName
+          sb.setCollation(defaultCollationName)
+        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
@@ -227,10 +243,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
     builder.getAllFields.asScala.foreach {
       case (desc, msg: protobuf.Message) =>
-        builder.setField(desc, trimJvmOriginFields(msg))
+        builder.setField(desc, normalizeProtoForComparison(msg))
       case (desc, list: java.util.List[_]) =>
         val newList = list.asScala.map {
-          case msg: protobuf.Message => trimJvmOriginFields(msg)
+          case msg: protobuf.Message => normalizeProtoForComparison(msg)
           case other => other // Primitive types
         }
         builder.setField(desc, newList.asJava)
@@ -375,6 +391,21 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   test("table") {
     session.table("myTable")
+  }
+
+  test("read changes") {
+    session.read
+      .option("startingVersion", "1")
+      .option("endingVersion", "5")
+      .changes("myTable")
+  }
+
+  test("read changes with options") {
+    session.read
+      .option("startingTimestamp", "2026-01-01")
+      .option("deduplicationMode", "netChanges")
+      .option("computeUpdates", "true")
+      .changes("myTable")
   }
 
   test("read text") {
@@ -682,6 +713,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = new MetadataBuilder
     builder.putString("description", "unique identifier")
     simple.withMetadata("id", builder.build())
+  }
+
+  test("zipWithIndex") {
+    simple.zipWithIndex()
+  }
+
+  test("zipWithIndex custom column") {
+    simple.zipWithIndex("my_index")
   }
 
   test("drop single string") {
@@ -3520,6 +3559,13 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   /* Stream Reader API  */
   test("streaming table API with options") {
     session.readStream.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myStreamingTable")
+  }
+
+  test("streaming changes API with options") {
+    session.readStream
+      .option("startingVersion", "1")
+      .option("deduplicationMode", "dropCarryovers")
+      .changes("tempdb.myStreamingTable")
   }
 
   /* Avro functions */

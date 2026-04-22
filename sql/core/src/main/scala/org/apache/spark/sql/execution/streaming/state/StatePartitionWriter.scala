@@ -25,10 +25,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
-import org.apache.spark.sql.internal.SQLConf
 
 case class StatePartitionWriterColumnFamilyInfo(
   schema: StateStoreColFamilySchema,
@@ -55,24 +53,18 @@ class StatePartitionAllColumnFamiliesWriter(
     storeName: String,
     currentBatchId: Long,
     colFamilyToWriterInfoMap: Map[String, StatePartitionWriterColumnFamilyInfo],
-    operatorName: String,
-    schemaProviderOpt: Option[StateSchemaProvider],
-    sqlConf: SQLConf) {
+    schemaProviderOpt: Option[StateSchemaProvider]) {
 
-  private def isJoinV3Operator(
-      operatorName: String, sqlConf: SQLConf): Boolean = {
-    operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME &&
-      sqlConf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) == 3
-  }
-
+  // Using the heuristic that all operators that enable column families
+  // have a non-default column family
+  private val useColumnFamilies = colFamilyToWriterInfoMap.keys.toSeq
+    .exists(_ != StateStore.DEFAULT_COL_FAMILY_NAME)
   private val defaultSchema = {
     colFamilyToWriterInfoMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
       case Some(info) => info.schema
       case None =>
-        // joinV3 operator doesn't have default column family schema
-        assert(isJoinV3Operator(operatorName, sqlConf),
-          s"Please provide the schema of 'default' column family in StateStoreColFamilySchema" +
-            s"for operator $operatorName")
+        assert(useColumnFamilies, "useColumnFamilies should be true when there is no " +
+          "StatePartitionWriterColumnFamilyInfo for DEFAULT column family")
         // Return a dummy StateStoreColFamilySchema if not found
         val placeholderSchema = colFamilyToWriterInfoMap.head._2.schema
         StateStoreColFamilySchema(
@@ -85,7 +77,6 @@ class StatePartitionAllColumnFamiliesWriter(
     }
   }
 
-  private val useColumnFamilies = colFamilyToWriterInfoMap.size > 1
   private val columnFamilyToKeySchemaLenMap: MapView[String, Int] =
     colFamilyToWriterInfoMap.view.mapValues(_.schema.keySchema.length)
   private val columnFamilyToValueSchemaLenMap: MapView[String, Int] =
@@ -106,7 +97,6 @@ class StatePartitionAllColumnFamiliesWriter(
   }
 
   private lazy val stateStore: StateStore = {
-    // TODO[SPARK-54590]: Support checkpoint V2 in StatePartitionAllColumnFamiliesWriter
     // Create empty store to avoid loading old partition data since we are rewriting the
     // store e.g. during repartitioning
     // Use loadEmpty=true to create a fresh state store without loading previous versions

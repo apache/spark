@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     try:
         import psutil
-        from pystack.__main__ import main as pystack_main  # type: ignore
+        from pystack.__main__ import main as pystack_main
     except ImportError:
         print("pystack and psutil are not installed")
         return 5

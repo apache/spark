@@ -34,6 +34,10 @@ class ByteType private () extends IntegralType {
 
   override def simpleString: String = "tinyint"
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[ByteType]
+
+  override def hashCode(): Int = classOf[ByteType].getSimpleName.hashCode
+
   private[spark] override def asNullable: ByteType = this
 }
 

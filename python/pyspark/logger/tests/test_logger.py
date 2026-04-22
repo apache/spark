@@ -71,8 +71,8 @@ class LoggerTestsMixin:
         self.assertTrue("msg" in log_json["exception"])
         self.assertTrue("stacktrace" in log_json["exception"])
 
-    def test_log_warn(self):
-        self.logger.warn("This is an warn log", user="test_user_warn", action="test_action_warn")
+    def test_log_warning(self):
+        self.logger.warning("This is an warn log", user="test_user_warn", action="test_action_warn")
         log_json = json.loads(self.handler.stream.getvalue().strip())
 
         self.assertEqual(log_json["msg"], "This is an warn log")

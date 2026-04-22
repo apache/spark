@@ -16,9 +16,9 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.hadoop.util.StringUtils
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 
 import org.apache.spark.{SparkConf, SparkMasterRegex}
 import org.apache.spark.deploy.SparkDiagnosticsSetter
@@ -52,21 +52,22 @@ private[spark] class SparkKubernetesDiagnosticsSetter(clientProvider: Kubernetes
   extends SparkDiagnosticsSetter with Logging {
 
   private val KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES = 64 * 1024 // 64 KiB
+  private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
   def this() = {
     this(new DefaultKubernetesClientProvider)
   }
 
   override def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit = {
-    val diagnostics = SparkStringUtils.abbreviate(StringUtils.stringifyException(throwable),
+    val diagnostics = SparkStringUtils.abbreviate(Utils.stringifyException(throwable),
       KUBERNETES_EXIT_EXCEPTION_MESSAGE_LIMIT_BYTES)
     Utils.tryWithResource(clientProvider.create(conf)) { client =>
       conf.get(KUBERNETES_DRIVER_POD_NAME).foreach { podName =>
         client.pods()
           .inNamespace(conf.get(KUBERNETES_NAMESPACE))
           .withName(podName)
-          .edit((p: Pod) => new PodBuilder(p)
-            .editOrNewMetadata()
+          .patch(PATCH_CONTEXT, new PodBuilder()
+            .withNewMetadata()
             .addToAnnotations(EXIT_EXCEPTION_ANNOTATION, diagnostics)
             .endMetadata()
             .build());

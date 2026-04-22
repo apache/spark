@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.streaming.StreamingSourceIdentifyingName
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -147,7 +146,8 @@ case class CatalogStorageFormat(
     outputFormat: Option[String],
     serde: Option[String],
     compressed: Boolean,
-    properties: Map[String, String]) extends MetadataMapSupport {
+    properties: Map[String, String],
+    serdeName: Option[String] = None) extends MetadataMapSupport {
 
   override def toString: String = {
     toLinkedHashMap.map { case (key, value) =>
@@ -159,6 +159,7 @@ case class CatalogStorageFormat(
     val map = mutable.LinkedHashMap[String, JValue]()
 
     locationUri.foreach(l => map += ("Location" -> JString(CatalogUtils.URIToString(l))))
+    serdeName.foreach(s => map += ("Serde Name" -> JString(s)))
     serde.foreach(s => map += ("Serde Library" -> JString(s)))
     inputFormat.foreach(format => map += ("InputFormat" -> JString(format)))
     outputFormat.foreach(format => map += ("OutputFormat" -> JString(format)))
@@ -179,8 +180,8 @@ case class CatalogStorageFormat(
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
-    outputFormat = None, serde = None, compressed = false, properties = Map.empty)
+  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None, outputFormat = None,
+    serde = None, compressed = false, properties = Map.empty)
 }
 
 /**
@@ -443,8 +444,7 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None,
-    streamingSourceIdentifyingName: Option[StreamingSourceIdentifyingName] = None)
+    viewOriginalText: Option[String] = None)
   extends MetadataMapSupport {
 
   import CatalogTable._
@@ -617,9 +617,10 @@ case class CatalogTable(
       outputFormat: Option[String] = storage.outputFormat,
       compressed: Boolean = false,
       serde: Option[String] = storage.serde,
-      properties: Map[String, String] = storage.properties): CatalogTable = {
+      properties: Map[String, String] = storage.properties,
+      serdeName: Option[String] = storage.serdeName): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, compressed, properties))
+      locationUri, inputFormat, outputFormat, serde, compressed, properties, serdeName))
   }
 
   def toJsonLinkedHashMap: mutable.LinkedHashMap[String, JValue] = {

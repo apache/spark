@@ -21,7 +21,8 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.format.converter.ParquetMetadataConverter
-import org.apache.parquet.hadoop.{ParquetFileReader, ParquetOutputFormat}
+import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.util.HadoopInputFile
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
@@ -145,10 +146,10 @@ class ParquetTypeWideningSuite
    */
   private def assertAllParquetFilesDictionaryEncoded(dir: File): Unit = {
     dir.listFiles(_.getName.endsWith(".parquet")).foreach { file =>
-      val parquetMetadata = ParquetFileReader.readFooter(
-        spark.sessionState.newHadoopConf(),
-        new Path(dir.toString, file.getName),
-        ParquetMetadataConverter.NO_FILTER)
+      val inputFile = HadoopInputFile.fromPath(
+        new Path(dir.toString, file.getName), spark.sessionState.newHadoopConf())
+      val parquetMetadata =
+        ParquetFooterReader.readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
       parquetMetadata.getBlocks.forEach { block =>
         block.getColumns.forEach { col =>
           assert(
@@ -166,10 +167,10 @@ class ParquetTypeWideningSuite
    */
   private def assertParquetV2Encoding(dir: File, expected_encoding: Encoding): Unit = {
     dir.listFiles(_.getName.endsWith(".parquet")).foreach { file =>
-      val parquetMetadata = ParquetFileReader.readFooter(
-        spark.sessionState.newHadoopConf(),
-        new Path(dir.toString, file.getName),
-        ParquetMetadataConverter.NO_FILTER)
+      val inputFile = HadoopInputFile.fromPath(
+        new Path(dir.toString, file.getName), spark.sessionState.newHadoopConf())
+      val parquetMetadata =
+        ParquetFooterReader.readFooter(inputFile, ParquetMetadataConverter.NO_FILTER)
       parquetMetadata.getBlocks.forEach { block =>
         block.getColumns.forEach { col =>
           assert(

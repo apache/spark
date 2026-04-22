@@ -67,6 +67,9 @@ case class CallMethodViaReflection(
   with CodegenFallback
   with QueryErrorsBase {
 
+  // This could be pretty much anything.
+  override def expensive: Boolean = true
+
   def this(children: Seq[Expression]) =
     this(children, true)
 

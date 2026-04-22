@@ -163,8 +163,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
-        parts, _, query, overwrite, false, _, _)
-        if parts.isEmpty =>
+        parts, _, query, overwrite, false, _, replaceCriteriaOpt, _)
+        if parts.isEmpty && replaceCriteriaOpt.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -176,8 +176,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
-        parts, _, query, overwrite, _, _, _)
-        if query.resolved =>
+        parts, _, query, overwrite, _, _, replaceCriteriaOpt, _)
+        if query.resolved && replaceCriteriaOpt.isEmpty =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -298,31 +298,29 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     extraOptions: CaseInsensitiveStringMap,
     sourceIdentifyingName: StreamingSourceIdentifyingName
   ): StreamingRelation = {
-    // Set the source identifying name on the CatalogTable so it propagates to StreamingRelation
-    val tableWithSourceName = table.copy(
-      streamingSourceIdentifyingName = Some(sourceIdentifyingName))
-    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, tableWithSourceName)
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     val dataSource = DataSource(
       SparkSession.active,
-      className = tableWithSourceName.provider.get,
-      userSpecifiedSchema = Some(tableWithSourceName.schema),
+      className = table.provider.get,
+      userSpecifiedSchema = Some(table.schema),
       options = dsOptions,
-      catalogTable = Some(tableWithSourceName))
+      catalogTable = Some(table),
+      userSpecifiedStreamingSourceName = sourceIdentifyingName.toUserProvided)
     StreamingRelation(dataSource)
   }
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+        _, _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
-        _, _, _, _, _, _, _) =>
+        _, _, _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case append @ AppendData(
-        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _) if !append.isByName =>
+        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _, _) if !append.isByName =>
       InsertIntoStatement(UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)
@@ -344,29 +342,23 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     // to preserve the source identifying name. With resolveOperators (bottom-up), the child
     // is processed first but doesn't match the case above due to the !isStreaming guard,
     // so the NamedStreamingRelation case here can match.
-    // We set the sourceIdentifyingName on the CatalogTable so it propagates to StreamingRelation.
+    // We pass the sourceIdentifyingName directly to getStreamingRelation.
     case NamedStreamingRelation(u: UnresolvedCatalogRelation, sourceIdentifyingName) =>
-      val tableWithSourceName = u.tableMeta.copy(
-        streamingSourceIdentifyingName = Some(sourceIdentifyingName))
-      resolveUnresolvedCatalogRelation(u.copy(tableMeta = tableWithSourceName))
+      getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
 
     // Handle NamedStreamingRelation wrapping SubqueryAlias(UnresolvedCatalogRelation)
     // - this happens when resolving streaming tables from catalogs where the table lookup
     // creates a SubqueryAlias wrapper around the UnresolvedCatalogRelation.
     case NamedStreamingRelation(
         SubqueryAlias(alias, u: UnresolvedCatalogRelation), sourceIdentifyingName) =>
-      val tableWithSourceName = u.tableMeta.copy(
-        streamingSourceIdentifyingName = Some(sourceIdentifyingName))
-      val resolved = resolveUnresolvedCatalogRelation(u.copy(tableMeta = tableWithSourceName))
+      val resolved = getStreamingRelation(u.tableMeta, u.options, sourceIdentifyingName)
       SubqueryAlias(alias, resolved)
 
     // Fallback for streaming UnresolvedCatalogRelation that is NOT wrapped in
     // NamedStreamingRelation (e.g., from .readStream.table() API path).
-    // The sourceIdentifyingName defaults to Unassigned via
-    // tableMeta.streamingSourceIdentifyingName.getOrElse(Unassigned)
-    // in resolveUnresolvedCatalogRelation.
+    // The sourceIdentifyingName defaults to Unassigned.
     case u: UnresolvedCatalogRelation if u.isStreaming =>
-      resolveUnresolvedCatalogRelation(u)
+      getStreamingRelation(u.tableMeta, u.options, Unassigned)
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _,
@@ -392,11 +384,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       case UnresolvedCatalogRelation(tableMeta, _, false) =>
         DDLUtils.readHiveTable(tableMeta)
 
-      // For streaming, the sourceIdentifyingName is read from
-      // tableMeta.streamingSourceIdentifyingName which was set by the caller.
+      // For streaming, the sourceIdentifyingName defaults to Unassigned.
+      // Callers that have a specific sourceIdentifyingName should call
+      // getStreamingRelation directly instead of this method.
       case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-        val sourceIdentifyingName = tableMeta.streamingSourceIdentifyingName.getOrElse(Unassigned)
-        getStreamingRelation(tableMeta, extraOptions, sourceIdentifyingName)
+        getStreamingRelation(tableMeta, extraOptions, Unassigned)
     }
   }
 }

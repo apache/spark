@@ -125,7 +125,7 @@ class OfflineStateRepartitionSuite extends StreamTest
         val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
         val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
         // Shouldn't be seen as a repartition batch
-        assert(!isRepartitionBatch(batchId, checkpointMetadata.offsetLog, dir.getAbsolutePath))
+        assert(!isRepartitionBatch(batchId, checkpointMetadata.offsetLog))
 
         // Trying to repartition to the same number should fail
         val ex = intercept[StateRepartitionShufflePartitionsAlreadyMatchError] {
@@ -314,7 +314,7 @@ object OfflineStateRepartitionTestUtils {
       spark: SparkSession,
       baseBatchId: Option[Long] = None): Unit = {
     // Should be seen as a repartition batch
-    assert(isRepartitionBatch(batchId, checkpointMetadata.offsetLog, checkpointLocation))
+    assert(isRepartitionBatch(batchId, checkpointMetadata.offsetLog))
 
     // When failed batches are skipped, then repartition can be based
     // on an older batch and not batchId - 1.

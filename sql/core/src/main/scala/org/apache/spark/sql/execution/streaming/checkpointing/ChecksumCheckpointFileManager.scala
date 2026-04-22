@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{CheckedInputStream, CheckedOutputStream, CRC32C}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.concurrent.duration.Duration
 import scala.io.Source
 
@@ -79,7 +79,7 @@ object Checksum {
   /** Used to convert between class and JSON. */
   lazy val mapper = {
     val _mapper = new ObjectMapper with ClassTagExtensions
-    _mapper.setSerializationInclusion(Include.NON_ABSENT)
+    _mapper.setDefaultPropertyInclusion(Include.NON_ABSENT)
     _mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     _mapper.registerModule(DefaultScalaModule)
     _mapper
@@ -127,7 +127,9 @@ case class ChecksumFile(path: Path) {
  *                              orphan checksum files. If using this, it is your responsibility
  *                              to clean up the potential orphan checksum files.
  * @param numThreads This is the number of threads to use for the thread pool, for reading/writing
- *                   files. To avoid blocking, if the file manager instance is being used by a
+ *                   files. Must be a non-negative integer. Setting this to 0 disables the thread
+ *                   pool and runs all operations sequentially on the calling thread.
+ *                   To avoid blocking, if the file manager instance is being used by a
  *                   single thread, then you can set this to 2 (one thread for main file, another
  *                   for checksum file).
  *                   If file manager is shared by multiple threads, you can set it to
@@ -150,14 +152,29 @@ class ChecksumCheckpointFileManager(
     val numThreads: Int,
     val skipCreationIfFileMissingChecksum: Boolean)
   extends CheckpointFileManager with Logging {
-  assert(numThreads % 2 == 0, "numThreads must be a multiple of 2, we need 1 for the main file" +
-    "and another for the checksum file")
+  assert(numThreads >= 0, "numThreads must be a non-negative integer")
 
   import ChecksumCheckpointFileManager._
 
   // This allows us to concurrently read/write the main file and checksum file
-  private val threadPool = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread"))
+  private val threadPoolOpt: Option[ExecutionContextExecutorService] =
+    if (numThreads == 0) {
+      None
+    } else {
+      Some(ExecutionContext.fromExecutorService(
+        ThreadUtils.newDaemonFixedThreadPool(numThreads, s"${this.getClass.getSimpleName}-Thread")))
+    }
+
+  // ExecutionContext used for I/O operations on ChecksumFSDataInputStream and
+  // ChecksumCancellableFSDataOutputStream: uses the thread pool when numThreads > 0, or
+  // runs operations synchronously on the calling thread when numThreads == 0.
+  private val executionContext: ExecutionContext = threadPoolOpt.getOrElse(
+    // This will execute the runnable synchronously on the calling thread
+    new ExecutionContext {
+      override def execute(runnable: Runnable): Unit = runnable.run()
+      override def reportFailure(cause: Throwable): Unit = throw cause
+    }
+  )
 
   override def list(path: Path, filter: PathFilter): Array[FileStatus] = {
     underlyingFileMgr.list(path, filter)
@@ -191,17 +208,17 @@ class ChecksumCheckpointFileManager(
 
     val mainFileFuture = Future {
       createFunc(path)
-    }(threadPool)
+    }(executionContext)
 
     val checksumFileFuture = Future {
       createFunc(getChecksumPath(path))
-    }(threadPool)
+    }(executionContext)
 
     new ChecksumCancellableFSDataOutputStream(
       awaitResult(mainFileFuture, Duration.Inf),
       path,
       awaitResult(checksumFileFuture, Duration.Inf),
-      threadPool
+      executionContext
     )
   }
 
@@ -219,17 +236,17 @@ class ChecksumCheckpointFileManager(
             log"hence no checksum verification.")
           None
       }
-    }(threadPool)
+    }(executionContext)
 
     val mainInputStreamFuture = Future {
       underlyingFileMgr.open(path)
-    }(threadPool)
+    }(executionContext)
 
     val mainStream = awaitResult(mainInputStreamFuture, Duration.Inf)
     val checksumStream = awaitResult(checksumInputStreamFuture, Duration.Inf)
 
     checksumStream.map { chkStream =>
-      new ChecksumFSDataInputStream(mainStream, path, chkStream, threadPool)
+      new ChecksumFSDataInputStream(mainStream, path, chkStream, executionContext)
     }.getOrElse(mainStream)
   }
 
@@ -249,11 +266,11 @@ class ChecksumCheckpointFileManager(
       // if it happens.
       val checksumInputStreamFuture = Future {
         deleteChecksumFile(getChecksumPath(path))
-      }(threadPool)
+      }(executionContext)
 
       val mainInputStreamFuture = Future {
         underlyingFileMgr.delete(path)
-      }(threadPool)
+      }(executionContext)
 
       awaitResult(mainInputStreamFuture, Duration.Inf)
       awaitResult(checksumInputStreamFuture, Duration.Inf)
@@ -279,18 +296,20 @@ class ChecksumCheckpointFileManager(
   }
 
   override def close(): Unit = {
-    threadPool.shutdown()
-    // Wait a bit for it to finish up in case there is any ongoing work
-    // Can consider making this timeout configurable, if needed
-    val timeoutMs = 500
-    if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-      logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
-        log" forcing shutdown")
-      threadPool.shutdownNow() // stop the executing tasks
+    threadPoolOpt.foreach { pool =>
+      pool.shutdown()
+      // Wait a bit for it to finish up in case there is any ongoing work
+      // Can consider making this timeout configurable, if needed
+      val timeoutMs = 500
+      if (!pool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+        logWarning(log"Thread pool did not shutdown after ${MDC(TIMEOUT, timeoutMs)} ms," +
+          log" forcing shutdown")
+        pool.shutdownNow() // stop the executing tasks
 
-      // Wait a bit for the threads to respond
-      if (!threadPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-        logError(log"Thread pool did not terminate")
+        // Wait a bit for the threads to respond
+        if (!pool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+          logError(log"Thread pool did not terminate")
+        }
       }
     }
   }
@@ -298,6 +317,7 @@ class ChecksumCheckpointFileManager(
 
 private[streaming] object ChecksumCheckpointFileManager {
   val CHECKSUM_FILE_SUFFIX = ".crc"
+  val DEFAULT_THREAD_POOL_SIZE = 4
 
   def awaitResult[T](future: Future[T], atMost: Duration): T = {
     try {

@@ -164,7 +164,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val table = loadTable(ident).asInstanceOf[InMemoryTable]
+    val table = loadTable(ident).asInstanceOf[InMemoryBaseTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       table.schema,
@@ -181,14 +181,27 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     table.increaseVersion()
     val currentVersion = table.version()
-    val newTable = new InMemoryTable(
-      name = table.name,
-      columns = CatalogV2Util.structTypeToV2Columns(schema),
-      partitioning = finalPartitioning,
-      properties = properties,
-      constraints = constraints,
-      id = table.id)
-      .alterTableWithData(table.data, schema)
+    val newTable = table match {
+      case _: InMemoryTable =>
+        new InMemoryTable(
+          name = table.name,
+          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          partitioning = finalPartitioning,
+          properties = properties,
+          constraints = constraints,
+          id = table.id)
+          .alterTableWithData(table.data, schema)
+      case _: InMemoryTableWithV2Filter =>
+        new InMemoryTableWithV2Filter(
+          name = table.name,
+          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          partitioning = finalPartitioning,
+          properties = properties)
+          .alterTableWithData(table.data, schema)
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
+    }
     newTable.setVersion(currentVersion)
     changes.foreach {
       case a: TableChange.AddConstraint =>
@@ -227,6 +240,19 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces
   with ProcedureCatalog {
+
+  override def createTableLike(
+      ident: Identifier,
+      tableInfo: TableInfo,
+      sourceTable: Table): Table = {
+    // columns, partitioning, constraints, explicit properties, and owner are all provided in
+    // tableInfo by Spark. Merge source properties so that connector-specific custom state
+    // (e.g. format.version, format.feature) is cloned; tableInfo properties win on conflict.
+    val mergedProps =
+      (sourceTable.properties().asScala ++ tableInfo.properties().asScala).asJava
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), mergedProps,
+      Distributions.unspecified(), Array.empty, None, None, tableInfo.constraints())
+  }
 
   override def capabilities: java.util.Set[TableCatalogCapability] = {
     Set(

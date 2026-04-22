@@ -76,6 +76,7 @@ class KubernetesDriverBuilder {
       new BasicDriverFeatureStep(conf),
       new DriverKubernetesCredentialsFeatureStep(conf),
       new DriverServiceFeatureStep(conf),
+      new NetworkPolicyFeatureStep(conf),
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
       new MountVolumesFeatureStep(conf),

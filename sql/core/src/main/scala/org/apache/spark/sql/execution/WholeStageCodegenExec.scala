@@ -501,7 +501,8 @@ trait InputRDDCodegen extends CodegenSupport {
  * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
  * that consumes an RDD iterator of InternalRow.
  */
-case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCodegen {
+case class InputAdapter(child: SparkPlan)
+    extends UnaryExecNode with InputRDDCodegen with SafeForKWayMerge {
 
   override def output: Seq[Attribute] = child.output
 
@@ -633,7 +634,7 @@ object WholeStageCodegenExec {
  * used to generated code for [[BoundReference]].
  */
 case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
-    extends UnaryExecNode with CodegenSupport {
+    extends UnaryExecNode with CodegenSupport with SafeForKWayMerge {
 
   override def output: Seq[Attribute] = child.output
 

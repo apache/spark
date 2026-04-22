@@ -275,6 +275,8 @@ io.jsonwebtoken:jjwt-jackson
 io.netty:netty-all
 io.netty:netty-buffer
 io.netty:netty-codec
+io.netty:netty-codec-base
+io.netty:netty-codec-compression
 io.netty:netty-codec-dns
 io.netty:netty-codec-http
 io.netty:netty-codec-http2

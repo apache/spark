@@ -69,6 +69,7 @@ from pyspark.sql.types import (
     NullType,
     VariantType,
     VariantVal,
+    _create_row,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -141,8 +142,12 @@ class TypesTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list, None or StructType",
+                "arg_name": "schema",
+                "arg_type": "int",
+            },
         )
 
         df = self.spark.createDataFrame(rdd)
@@ -2300,7 +2305,7 @@ class TypesTestsMixin:
         ]
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
 
-        df = self.spark.createDataFrame([({"json": json_str})])
+        df = self.spark.createDataFrame([{"json": json_str}])
         row = df.select(
             F.parse_json(df.json).alias("v"),
             F.array([F.parse_json(F.lit('{"a": 1}'))]).alias("a"),
@@ -2499,7 +2504,7 @@ class TypesTestsMixin:
             ("short_str", '"abc"', "abc"),
         ]
         json_str = "{%s}" % ",".join(['"%s": %s' % (t[0], t[1]) for t in expected_values])
-        df = self.spark.createDataFrame([({"json": json_str})])
+        df = self.spark.createDataFrame([{"json": json_str}])
         df_variant = df.select(F.parse_json(df.json).alias("v"))
         pandas = df_variant.toPandas()
         test_record = json.loads(pandas["v"].iloc[0].toJson())
@@ -2808,11 +2813,9 @@ class TypesTestsMixin:
     def test_geospatial_result_encoding(self):
         point_wkb = "010100000000000000000031400000000000001c40"
         point_bytes = bytes.fromhex(point_wkb)
-        df = self.spark.sql(
-            f"""
+        df = self.spark.sql(f"""
             SELECT ST_GeomFromWKB(X'{point_wkb}') AS geom,
-            ST_GeogFromWKB(X'{point_wkb}') AS geog"""
-        )
+            ST_GeogFromWKB(X'{point_wkb}') AS geog""")
         GeospatialRow = Row("geom", "geog")
         self.assertEqual(
             df.collect(),
@@ -3013,6 +3016,25 @@ class DataTypeTests(unittest.TestCase):
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
+
+    def test_row_with_duplicated_fields(self):
+        for fields, values, expected in [
+            (["a", "a"], [1, 1], "Row(a=1, a=1)"),
+            (["a", "a", "a", "b", "b"], [1, 2, 3, 4, 5], "Row(a=1, a=2, a=3, b=4, b=5)"),
+            (["a", "a"], [1, _create_row(["a", "a"], [2, 3])], "Row(a=1, a=Row(a=2, a=3))"),
+            (["a", "a"], [1, _create_row(["b", "b"], [2, 2])], "Row(a=1, a=Row(b=2, b=2))"),
+        ]:
+            row = _create_row(fields, values)
+            self.assertEqual(str(row), expected)
+
+        r = _create_row(["a", "a", "a"], [1, 2, 3])
+        self.assertEqual(r.a, 1)
+        self.assertEqual(r["a"], 1)
+        self.assertEqual(r[0], 1)
+        self.assertEqual(r[1], 2)
+        self.assertEqual(r[2], 3)
+        self.assertEqual(list(r), [1, 2, 3])
+        self.assertEqual([v for v in r], [1, 2, 3])
 
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):

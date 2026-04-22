@@ -19,7 +19,10 @@ import sys
 import unittest
 
 
-def main(module="__main__", output="target/test-reports"):
+def main(module=None, output="target/test-reports"):
+    if module is None:
+        module = _real_module_name()
+
     try:
         import xmlrunner
 
@@ -41,3 +44,12 @@ def main(module="__main__", output="target/test-reports"):
             sys.exit(0)
     else:
         unittest.main(module=module, testRunner=testRunner, verbosity=2)
+
+
+def _real_module_name():
+    mod = sys.modules["__main__"]
+    # When invoked with `-m`, __spec__.name has the real module name.
+    spec = getattr(mod, "__spec__", None)
+    if spec and spec.name:
+        return spec.name
+    return "__main__"

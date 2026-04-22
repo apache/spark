@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import gc
 import os
 import time
 import unittest
@@ -22,7 +23,7 @@ from unittest.mock import patch
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
-from pyspark.util import _parse_memory
+from pyspark.util import _parse_memory, disable_gc
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import PySparkTestCase, eventually, timeout
 from pyspark.find_spark_home import _find_spark_home
@@ -147,6 +148,12 @@ class UtilTests(PySparkTestCase):
         self.assertEqual(_parse_memory("1g"), 1024)
         with self.assertRaisesRegex(ValueError, "invalid format"):
             _parse_memory("2gs")
+
+    def test_disable_gc(self):
+        self.assertTrue(gc.isenabled())
+        with disable_gc():
+            self.assertFalse(gc.isenabled())
+        self.assertTrue(gc.isenabled())
 
     @eventually(timeout=180, catch_timeout=True)
     @timeout(timeout=1)

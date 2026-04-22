@@ -259,7 +259,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     var line = reader.readLine(currentPrompt + "> ")
 
     while (line != null) {
-      if (!line.startsWith("--")) {
+      // SPARK-55198: call line.trim to also skip comment line with leading whitespaces,
+      // this keeps the behavior align with HIVE-8396
+      if (!line.trim.startsWith("--")) {
         if (prefix.nonEmpty) {
           prefix += '\n'
         }
@@ -527,6 +529,22 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       }
       ret
     }
+  }
+
+  // Adapted processReader from Hive 2.3's CliDriver.processReader.
+  // SPARK-55198: call line.trim to also skip comment line with leading whitespaces,
+  // this keeps the spark-sql's behavior align with beeline.
+  override def processReader(r: BufferedReader): Int = {
+    val qsb = new StringBuilder
+    var line = r.readLine
+    while (line != null) {
+      // Skipping through comments
+      if (!line.trim.startsWith("--")) {
+        qsb.append(line + "\n")
+      }
+      line = r.readLine
+    }
+    processLine(qsb.toString)
   }
 
   // Adapted processLine from Hive 2.3's CliDriver.processLine.

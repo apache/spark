@@ -712,15 +712,24 @@ class QueryCompilationErrorsSuite
     )
   }
 
-  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+  test("INVALID_TEMP_OBJ_QUALIFIER: " +
     "create temp view doesn't support identifiers consisting of more than 2 parts") {
+    val sqlText =
+      "CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column"
     checkError(
       exception = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
+        sql(sqlText)
       },
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      sqlState = "42601",
-      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`", "limit" -> "2")
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
+      parameters = Map(
+        "objectType" -> "VIEW",
+        "objectName" -> "`view_name`",
+        "qualifier" -> "`db_name`.`schema_name`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
     )
   }
 
@@ -1105,6 +1114,24 @@ class QueryCompilationErrorsSuite
       context =
         ExpectedContext(fragment = "aggregate(array(1,2,3), x -> x + 1, 0)", start = 7, stop = 44)
     )
+  }
+
+  test("UNABLE_TO_INFER_SCHEMA: empty data source at path") {
+    withTempDir { dir =>
+      // Create _spark_metadata with a valid empty log entry (version header only, no files)
+      val metadataDir = new java.io.File(dir, "_spark_metadata")
+      metadataDir.mkdir()
+      java.nio.file.Files.write(
+        new java.io.File(metadataDir, "0").toPath, "v1".getBytes)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").load(dir.getCanonicalPath).collect()
+        },
+        condition = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "JSON")
+      )
+    }
   }
 }
 

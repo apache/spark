@@ -126,6 +126,44 @@ class CatalogManager(
     _currentNamespace = Some(namespace)
   }
 
+  import CatalogManager.SessionPathEntry
+
+  private var _sessionPath: Option[Seq[SessionPathEntry]] = None
+
+  /** Returns the raw stored session path entries, or None if no path is set. */
+  def sessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized { _sessionPath }
+
+  def setSessionPath(entries: Seq[SessionPathEntry]): Unit = synchronized {
+    _sessionPath = Some(entries)
+  }
+
+  def clearSessionPath(): Unit = synchronized {
+    _sessionPath = None
+  }
+
+  private[sql] def copySessionPathFrom(other: CatalogManager): Unit = synchronized {
+    _sessionPath = other.sessionPathEntries
+  }
+
+  /**
+   * String form of the current resolution path for CURRENT_PATH().
+   * When PATH is enabled and a session path is stored, formats the effective path entries
+   * with markers expanded. Otherwise falls back to the legacy resolutionSearchPath.
+   */
+  def currentPathString: String = synchronized {
+    import CatalogV2Implicits._
+    val stored = if (conf.pathEnabled) _sessionPath else None
+    stored match {
+      case Some(entries) =>
+        val resolved = CatalogManager.resolvePathEntries(
+          entries, currentCatalog.name(), currentNamespace.toSeq)
+        resolved.map(_.quoted).mkString(",")
+      case None =>
+        val catalogPath = (currentCatalog.name() +: currentNamespace).toSeq
+        conf.resolutionSearchPath(catalogPath).map(_.quoted).mkString(",")
+    }
+  }
+
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
@@ -154,13 +192,84 @@ class CatalogManager(
     catalogs.clear()
     _currentNamespace = None
     _currentCatalogName = None
+    _sessionPath = None
     v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 }
 
 private[sql] object CatalogManager {
+
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
   val SESSION_NAMESPACE = "session"
   val BUILTIN_NAMESPACE = "builtin"
+
+  /**
+   * For a view identifier's namespace (e.g. from Identifier.namespace()), returns the database
+   * name to use with v1 TableIdentifier when the view is a session temp view.
+   * - system.session (2 parts) -> Some("session") so SessionCatalog finds the local temp view
+   * - session (1 part) -> Some("session")
+   * - other non-empty namespace -> Some(namespace.head)
+   * - empty -> None
+   */
+  def databaseForSessionQualifiedViewIdentifier(namespace: Seq[String]): Option[String] = {
+    if (namespace.isEmpty) {
+      None
+    } else if (namespace.length == 2 &&
+        namespace(0).equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+        namespace(1).equalsIgnoreCase(SESSION_NAMESPACE)) {
+      Some(SESSION_NAMESPACE)
+    } else {
+      Some(namespace.head)
+    }
+  }
+
+  /**
+   * True only for fully qualified `system.session.view` (3 parts). Persistent catalog is never
+   * consulted for this form; see [[isSessionQualifiedViewName]] for 2-part `session.view`.
+   */
+  def isFullyQualifiedSystemSessionViewName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(SESSION_NAMESPACE)
+  }
+
+  /**
+   * True if the multipart name uses the session temp view namespace: two-part `session.view`
+   * or three-part `system.session.view`. The two-part form can also denote a persistent relation
+   * in schema `session`; resolution order is controlled by [[SQLConf.prioritizeSystemCatalog]].
+   */
+  def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
+    (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)) ||
+      isFullyQualifiedSystemSessionViewName(nameParts)
+  }
+
+  /**
+   * A single entry in the session SQL path: either a literal schema
+   * or the current-schema marker.
+   */
+  sealed trait SessionPathEntry {
+    /** Resolve to concrete catalog + namespace parts. */
+    def resolve(
+        currentCatalog: String,
+        currentNamespace: Seq[String]): Seq[String] = this match {
+      case CurrentSchemaEntry =>
+        if (currentNamespace.isEmpty) Seq(currentCatalog)
+        else currentCatalog +: currentNamespace
+      case LiteralPathEntry(parts) => parts
+    }
+  }
+
+  /** Marker for CURRENT_SCHEMA / CURRENT_DATABASE: expands dynamically with USE SCHEMA. */
+  case object CurrentSchemaEntry extends SessionPathEntry
+
+  /** A fully qualified schema reference (catalog.namespace...). */
+  case class LiteralPathEntry(parts: Seq[String]) extends SessionPathEntry
+
+  /** Resolve all entries in a session path to concrete catalog + namespace parts. */
+  def resolvePathEntries(
+      entries: Seq[SessionPathEntry],
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    entries.map(_.resolve(currentCatalog, currentNamespace))
 }

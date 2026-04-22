@@ -22,7 +22,6 @@ import shutil
 import tempfile
 import warnings
 import unittest
-from typing import cast
 import io
 from contextlib import redirect_stdout
 
@@ -57,6 +56,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     SPARK_HOME,
+)
+from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
@@ -78,8 +79,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "tableName", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "tableName",
+                "arg_type": "NoneType",
+            },
         )
 
     def test_dataframe_star(self):
@@ -159,6 +164,13 @@ class DataFrameTestsMixin:
         df3 = df1.join(df2, df1.id == df2.id, "right")
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
         self.assertTrue(df3.count() == 20)
+
+    def test_select_join_keys(self):
+        df1 = self.spark.range(10).withColumn("v1", lit(1))
+        df2 = self.spark.range(10).withColumn("v2", lit(2))
+        for how in ["inner", "left", "right", "full", "cross"]:
+            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
+            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
 
     def test_lateral_column_alias(self):
         df1 = self.spark.range(10).select(
@@ -303,8 +315,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DICT",
-            messageParameters={"arg_name": "colsMap", "arg_type": "tuple"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "dict", "arg_name": "colsMap", "arg_type": "tuple"},
         )
 
     def test_with_columns_renamed_with_duplicated_names(self):
@@ -354,8 +366,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OR_TUPLE",
-            messageParameters={"arg_name": "subset", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list or tuple",
+                "arg_name": "subset",
+                "arg_type": "str",
+            },
         )
 
         # Should raise proper error when taking non-string values
@@ -364,8 +380,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "subset",
+                "arg_type": "NoneType",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -373,8 +393,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "subset", "arg_type": "int"},
         )
 
     def test_drop_duplicates_with_ambiguous_reference(self):
@@ -521,8 +541,9 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+            errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
+                "expected_type": "bool, float or int",
                 "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
                 "arg_type": "NoneType, NoneType, NoneType",
             },
@@ -554,8 +575,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_LIST_OF_STR",
-            messageParameters={"arg_name": "cols", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "list[str]",
+                "arg_name": "cols",
+                "arg_type": "NoneType",
+            },
         )
 
     def test_toDF_with_schema_string(self):
@@ -792,8 +817,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATAFRAME",
-            messageParameters={"arg_name": "other", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataFrame",
+                "arg_name": "other",
+                "arg_type": "int",
+            },
         )
 
     def test_input_files(self):
@@ -828,8 +857,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "n", "arg_type": "bool"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "int", "arg_name": "n", "arg_type": "bool"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -837,8 +866,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL",
-            messageParameters={"arg_name": "vertical", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "bool", "arg_name": "vertical", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -846,8 +875,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_BOOL",
-            messageParameters={"arg_name": "truncate", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "bool", "arg_name": "truncate", "arg_type": "str"},
         )
 
     def test_df_merge_into(self):
@@ -877,9 +906,7 @@ class DataFrameTestsMixin:
                         [(1, "Alice"), (2, "Bob")], ["id", "name"]
                     ).write.mode("overwrite").saveAsTable("testcat.ns1.target")
 
-                source = self.spark.createDataFrame(
-                    [(1, "Charlie"), (3, "David")], ["id", "name"]
-                )  # type: DataFrame
+                source = self.spark.createDataFrame([(1, "Charlie"), (3, "David")], ["id", "name"])  # type: DataFrame
 
                 from pyspark.sql.functions import col
 
@@ -935,7 +962,7 @@ class DataFrameTestsMixin:
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
-        cast(str, pandas_requirement_message or pyarrow_requirement_message),
+        pandas_requirement_message or pyarrow_requirement_message,
     )
     def test_pandas_api(self):
         import pandas as pd
@@ -989,8 +1016,8 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "colName", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "str", "arg_name": "colName", "arg_type": "int"},
         )
 
     def test_where(self):
@@ -999,8 +1026,12 @@ class DataFrameTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "condition", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "condition",
+                "arg_type": "int",
+            },
         )
 
     def test_duplicate_field_names(self):
@@ -1143,12 +1174,10 @@ class DataFrameTestsMixin:
         ):
             tbl = "testcat.t"
             with self.table(tbl):
-                self.spark.sql(
-                    f"""
+                self.spark.sql(f"""
                     CREATE TABLE {tbl} (index bigint, data string)
                     PARTITIONED BY (bucket(4, index), index)
-                    """
-                )
+                    """)
                 self.spark.sql(f"""INSERT INTO {tbl} VALUES (1, 'a'), (2, 'b'), (3, 'c')""")
 
                 df = self.spark.sql(f"""SELECT * FROM {tbl}""")
@@ -1192,6 +1221,51 @@ class DataFrameTestsMixin:
             errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
             messageParameters={"member": "queryExecution"},
         )
+
+    def test_to_json(self):
+        df = self.spark.range(10)
+
+        with self.sql_conf({"spark.sql.pyspark.toJSON.returnDataFrame": False}):
+            from pyspark import RDD
+
+            rdd = df.toJSON()
+            self.assertIsInstance(rdd, RDD)
+            self.assertEqual(rdd.count(), 10)
+
+        with self.sql_conf({"spark.sql.pyspark.toJSON.returnDataFrame": True}):
+            df = df.toJSON()
+            self.assertIsInstance(df, DataFrame)
+            self.assertEqual(df.select("value").count(), 10)
+
+    def test_zip_with_index(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c", 3)], ["letter", "number"])
+
+        # Default column name "index"
+        result = df.zipWithIndex()
+        self.assertEqual(result.columns, ["letter", "number", "index"])
+        rows = result.collect()
+        self.assertEqual(len(rows), 3)
+        indices = [row["index"] for row in rows]
+        self.assertEqual(sorted(indices), [0, 1, 2])
+
+        # Custom column name
+        result = df.zipWithIndex("row_id")
+        self.assertEqual(result.columns, ["letter", "number", "row_id"])
+        rows = result.collect()
+        indices = [row["row_id"] for row in rows]
+        self.assertEqual(sorted(indices), [0, 1, 2])
+
+        # Duplicate column name causes AMBIGUOUS_REFERENCE on select
+        result = df.zipWithIndex("letter")
+        with self.assertRaises(AnalysisException) as ctx:
+            result.select("letter").collect()
+        self.assertEqual(ctx.exception.getCondition(), "AMBIGUOUS_REFERENCE")
+
+        # Duplicate column name causes COLUMN_ALREADY_EXISTS on write
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(AnalysisException) as ctx:
+                result.write.parquet(d)
+            self.assertEqual(ctx.exception.getCondition(), "COLUMN_ALREADY_EXISTS")
 
 
 class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):

@@ -278,4 +278,14 @@ case class AQEShuffleReadExec private(
 
   override protected def withNewChildInternal(newChild: SparkPlan): AQEShuffleReadExec =
     copy(child = newChild)
+
+  override def simpleStringWithNodeId(): String = {
+    val args = stringArgs.mkString(", ")
+    if (args.nonEmpty) {
+      super.simpleStringWithNodeId() + ", " + args
+    } else {
+      super.simpleStringWithNodeId()
+    }
+  }
+
 }

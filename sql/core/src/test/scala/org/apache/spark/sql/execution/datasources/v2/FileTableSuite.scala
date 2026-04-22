@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.{Collections => JCollections}
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.FileStatus
@@ -92,6 +94,23 @@ class FileTableSuite extends QueryTest with SharedSparkSession {
       val table =
         new DummyFileTable(spark, options, Seq(pathName), expectedDataSchema, userSpecifiedSchema)
       assert(table.dataSchema == expectedDataSchema)
+    }
+  }
+
+  test("SPARK-56457: V2 FileTable.formatName matches V1 FileFormat.toString") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      allFileBasedDataSources.foreach { format =>
+        val v2Provider = DataSource.lookupDataSourceV2(format, spark.sessionState.conf)
+        assert(v2Provider.isDefined, s"Expected V2 provider for $format")
+        val dsV2 = v2Provider.get.asInstanceOf[FileDataSourceV2]
+        val v1Format = dsV2.fallbackFileFormat.getDeclaredConstructor().newInstance()
+        val emptyProps = JCollections.emptyMap[String, String]()
+        val v2Table = dsV2.getTable(
+          new StructType(), Array.empty, emptyProps).asInstanceOf[FileTable]
+        assert(v2Table.formatName == v1Format.toString,
+          s"V2 formatName '${v2Table.formatName}' != " +
+            s"V1 toString '${v1Format.toString}' for format '$format'")
+      }
     }
   }
 

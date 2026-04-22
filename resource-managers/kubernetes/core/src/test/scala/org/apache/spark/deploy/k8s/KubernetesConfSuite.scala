@@ -109,6 +109,27 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.sparkConf.get(MEMORY_OVERHEAD_FACTOR) === 0.3)
   }
 
+  test("SPARK-56490: Java-friendly createDriverConf with nullable proxyUser") {
+    val sparkConf = new SparkConf(false)
+    val conf = KubernetesConf.createDriverConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      JavaMainAppResource(None),
+      KubernetesTestConf.MAIN_CLASS,
+      APP_ARGS,
+      null: String)
+    assert(conf.proxyUser === None)
+
+    val confWithProxy = KubernetesConf.createDriverConf(
+      sparkConf,
+      KubernetesTestConf.APP_ID,
+      JavaMainAppResource(None),
+      KubernetesTestConf.MAIN_CLASS,
+      APP_ARGS,
+      "proxy")
+    assert(confWithProxy.proxyUser === Some("proxy"))
+  }
+
   test("Basic executor translated fields.") {
     val conf = KubernetesConf.createExecutorConf(
       new SparkConf(false),

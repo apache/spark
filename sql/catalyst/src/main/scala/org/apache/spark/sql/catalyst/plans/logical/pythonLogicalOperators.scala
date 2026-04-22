@@ -367,12 +367,14 @@ case class ArrowEvalPythonUDTF(
 
 /**
  * A logical plan that adds a new long column with the name `name` that
- * increases one by one. This is for 'distributed-sequence' default index
- * in pandas API on Spark.
+ * increases one by one.
+ * This is used in both 'distributed-sequence' index in pandas API on Spark
+ * and 'DataFrame.zipWithIndex'.
  */
 case class AttachDistributedSequence(
     sequenceAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    cache: Boolean = false) extends UnaryNode {
 
   override val producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
 

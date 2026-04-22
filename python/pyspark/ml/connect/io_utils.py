@@ -28,7 +28,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
 from pyspark import __version__ as pyspark_version
 
-
 _META_DATA_FILE_NAME = "metadata.json"
 
 

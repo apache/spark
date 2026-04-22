@@ -29,7 +29,14 @@ from pyspark.errors import (
     SparkUpgradeException,
     PySparkTypeError,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    assertSchemaEqual,
+    _context_diff,
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
@@ -47,7 +54,6 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:
@@ -1372,8 +1378,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "struct type",
+                "arg_name": "actual",
+                "arg_type": "str",
+            },
         )
 
     def test_spark_sql(self):

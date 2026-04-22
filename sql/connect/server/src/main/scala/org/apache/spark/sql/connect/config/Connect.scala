@@ -218,6 +218,18 @@ object Connect {
       .toSequence
       .createWithDefault(Nil)
 
+  val CONNECT_EXTENSIONS_GET_STATUS_CLASSES =
+    buildStaticConf("spark.connect.extensions.getStatus.classes")
+      .doc("""
+             |Comma separated list of classes that implement the trait
+             |org.apache.spark.sql.connect.plugin.GetStatusPlugin to support custom
+             |GetStatus extensions in proto.
+             |""".stripMargin)
+      .version("4.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val CONNECT_ML_BACKEND_CLASSES =
     buildConf("spark.connect.ml.backend.classes")
       .doc("""

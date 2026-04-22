@@ -27,7 +27,7 @@
   },
   "AXIS_LENGTH_MISMATCH": {
     "message": [
-      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+      "Length mismatch: Expected axis has <expected_length> elements, new values have <actual_length> elements."
     ]
   },
   "BROADCAST_VARIABLE_NOT_LOADED": {
@@ -37,12 +37,7 @@
   },
   "CALL_BEFORE_INITIALIZE": {
     "message": [
-      "Not supported to call `<func_name>` before initialize <object>."
-    ]
-  },
-  "CANNOT_ACCEPT_OBJECT_IN_TYPE": {
-    "message": [
-      "`<data_type>` can not accept object `<obj_name>` in type `<obj_type>`."
+      "Not supported to call `<func_name>` before initializing <object>."
     ]
   },
   "CANNOT_ACCESS_TO_DUNDER": {
@@ -97,7 +92,7 @@
   },
   "CANNOT_INFER_ARRAY_ELEMENT_TYPE": {
     "message": [
-      "Can not infer the element data type, an non-empty list starting with an non-None value is required."
+      "Can not infer the element data type, a non-empty list starting with a non-None value is required."
     ]
   },
   "CANNOT_INFER_EMPTY_SCHEMA": {
@@ -182,11 +177,6 @@
       "so specifying individual datasets with <conflicting_option> is not allowed."
     ]
   },
-  "CONNECT_URL_ALREADY_DEFINED": {
-    "message": [
-      "Only one Spark Connect client URL can be set; however, got a different URL [<new_url>] from the existing [<existing_url>]."
-    ]
-  },
   "CONNECT_URL_NOT_SET": {
     "message": [
       "Cannot create a Spark Connect session because the Spark Connect remote URL has not been set. Please define the remote URL by setting either the 'spark.remote' option or the 'SPARK_REMOTE' environment variable."
@@ -194,7 +184,7 @@
   },
   "CONTEXT_ONLY_VALID_ON_DRIVER": {
     "message": [
-      "It appears that you are attempting to reference SparkContext from a broadcast variable, action, or transformation. SparkContext can only be used on the driver, not in code that it run on workers. For more information, see SPARK-5063."
+      "It appears that you are attempting to reference SparkContext from a broadcast variable, action, or transformation. SparkContext can only be used on the driver, not in code that runs on workers. For more information, see SPARK-5063."
     ]
   },
   "CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT": {
@@ -225,11 +215,6 @@
   "DATA_SOURCE_TYPE_MISMATCH": {
     "message": [
       "Expected <expected>, but got <actual>."
-    ]
-  },
-  "DATA_SOURCE_UNSUPPORTED_FILTER": {
-    "message": [
-      "Unexpected filter <name>."
     ]
   },
   "DECORATOR_ARGUMENT_NOT_CALLABLE": {
@@ -380,6 +365,11 @@
       "<arg_name> index out of range, got '<index>'."
     ]
   },
+  "INPUT_NOT_FULLY_CONSUMED": {
+    "message": [
+      "The input iterator must be fully consumed."
+    ]
+  },
   "INVALID_ARROW_UDTF_RETURN_TYPE": {
     "message": [
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
@@ -465,6 +455,11 @@
       "Parameter value <arg_name> must be a valid UUID format: <origin>"
     ]
   },
+  "INVALID_STREAMING_SOURCE_NAME": {
+    "message": [
+      "Invalid streaming source name '<source_name>'. Source names must contain only ASCII letters, digits, and underscores."
+    ]
+  },
   "INVALID_TIMEOUT_TIMESTAMP": {
     "message": [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
@@ -538,7 +533,7 @@
   },
   "KEY_NOT_EXISTS": {
     "message": [
-      "Key `<key>` is not exists."
+      "Key `<key>` does not exist."
     ]
   },
   "KEY_VALUE_PAIR_REQUIRED": {
@@ -550,6 +545,12 @@
     "message": [
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
+  },
+  "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED": {
+    "message": [
+      "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
+    ],
+    "sqlState": "54000"
   },
   "MALFORMED_GEOGRAPHY": {
     "message": [
@@ -606,147 +607,9 @@
       "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
     ]
   },
-  "NOT_BOOL": {
+  "NOT_EXPECTED_TYPE": {
     "message": [
-      "Argument `<arg_name>` should be a bool, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a bool, dict, float, int, str or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a bool, dict, float, int or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_FLOAT_OR_INT": {
-    "message": [
-      "Argument `<arg_name>` should be a bool, float or int, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a bool, float, int, list, None, str or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_FLOAT_OR_INT_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a bool, float, int or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_LIST": {
-    "message": [
-      "Argument `<arg_name>` should be a bool or list, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_BOOL_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a bool or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_CALLABLE": {
-    "message": [
-      "Argument `<arg_name>` should be a callable, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_DATATYPE_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, str or DataType, but got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_FLOAT_OR_INT_OR_LIST_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, float, integer, list or string, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_INT": {
-    "message": [
-      "Argument `<arg_name>` should be a Column or int, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, int, list, str or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_INT_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_LIST_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column, list or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a Column or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_COLUMN_OR_STR_OR_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a StructType, Column or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_DATAFRAME": {
-    "message": [
-      "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_DATATYPE_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a DataType or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_DICT": {
-    "message": [
-      "Argument `<arg_name>` should be a dict, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_EXPRESSION": {
-    "message": [
-      "Argument `<arg_name>` should be an Expression, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_FLOAT_OR_INT": {
-    "message": [
-      "Argument `<arg_name>` should be a float or int, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_FLOAT_OR_INT_OR_LIST_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
+      "Argument `<arg_name>` should be <expected_type>, got <arg_type>."
     ],
     "sqlState": "42K09"
   },
@@ -755,18 +618,6 @@
       "<feature> is not implemented."
     ],
     "sqlState": "0A000"
-  },
-  "NOT_INT": {
-    "message": [
-      "Argument `<arg_name>` should be an int, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_INT_OR_SLICE_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
   },
   "NOT_IN_BARRIER_STAGE": {
     "message": [
@@ -779,99 +630,15 @@
     ],
     "sqlState": "42K09"
   },
-  "NOT_LIST": {
-    "message": [
-      "Argument `<arg_name>` should be a list, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_COLUMN": {
-    "message": [
-      "Argument `<arg_name>` should be a list[Column]."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_COLUMN_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a list[Column]."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_FLOAT_OR_INT": {
-    "message": [
-      "Argument `<arg_name>` should be a list[float, int], got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OF_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a list[str], got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OR_NONE_OR_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OR_STR_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_LIST_OR_TUPLE": {
-    "message": [
-      "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_NUMERIC_COLUMNS": {
     "message": [
       "Numeric aggregation function can only be applied on numeric columns, got <invalid_columns>."
     ],
     "sqlState": "42K09"
   },
-  "NOT_OBSERVATION_OR_STR": {
-    "message": [
-      "Argument `<arg_name>` should be an Observation or str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
   "NOT_SAME_TYPE": {
     "message": [
       "Argument `<arg_name1>` and `<arg_name2>` should be the same type, got <arg_type1> and <arg_type2>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STR": {
-    "message": [
-      "Argument `<arg_name>` should be a str, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a struct type, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STR_OR_LIST_OF_RDD": {
-    "message": [
-      "Argument `<arg_name>` should be a str or list[RDD], got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_STR_OR_STRUCT": {
-    "message": [
-      "Argument `<arg_name>` should be a str or struct type, got <arg_type>."
-    ],
-    "sqlState": "42K09"
-  },
-  "NOT_WINDOWSPEC": {
-    "message": [
-      "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ],
     "sqlState": "42K09"
   },
@@ -918,6 +685,11 @@
     ],
     "sqlState": "0A000"
   },
+  "OUTPUT_EXCEEDS_INPUT_ROWS": {
+    "message": [
+      "The number of output rows must not exceed the number of input rows."
+    ]
+  },
   "PACKAGE_NOT_INSTALLED": {
     "message": [
       "<package_name> >= <minimum_version> must be installed; however, it was not found."
@@ -928,11 +700,6 @@
       "Pandas API on Spark does not properly work on ANSI mode.",
       "Please set a Spark config 'spark.sql.ansi.enabled' to `false`.",
       "Alternatively set a pandas-on-spark option 'compute.fail_on_ansi_mode' to `False` to force it to work, although it can cause unexpected behavior."
-    ]
-  },
-  "PANDAS_UDF_OUTPUT_EXCEEDS_INPUT_ROWS": {
-    "message": [
-      "The Pandas SCALAR_ITER UDF outputs more rows than input rows."
     ]
   },
   "PIPELINE_SPEC_DICT_KEY_NOT_STRING": {
@@ -990,11 +757,6 @@
       "Column <col_name> must be one of <valid_types> for plotting, got <col_type>."
     ]
   },
-  "PLOT_NOT_NUMERIC_COLUMN_ARGUMENT": {
-    "message": [
-      "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
-    ]
-  },
   "PROTOCOL_ERROR": {
     "message": [
       "<failure>. This usually indicates that the message does not conform to the protocol."
@@ -1036,29 +798,19 @@
       "<error_type> on the server but responses were already received from it."
     ]
   },
-  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
+  "RESULT_COLUMN_NAMES_MISMATCH": {
     "message": [
-      "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
+      "Column names of the returned data do not match specified schema.<missing><extra>"
     ]
   },
-  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF": {
+  "RESULT_COLUMN_SCHEMA_MISMATCH": {
     "message": [
-      "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match specified schema. Expected: <expected> Actual: <actual>"
+      "Number of columns of the returned data doesn't match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
-  "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {
+  "RESULT_ROWS_MISMATCH": {
     "message": [
-      "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>"
-    ]
-  },
-  "RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF": {
-    "message": [
-      "Number of columns of the returned pandas.DataFrame doesn't match specified schema. Expected: <expected> Actual: <actual>"
-    ]
-  },
-  "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF": {
-    "message": [
-      "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
+      "The number of output rows (<output_length>) must match the number of input rows (<input_length>)."
     ]
   },
   "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF": {
@@ -1174,6 +926,11 @@
       "SparkContext or SparkSession should be created first."
     ]
   },
+  "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE": {
+    "message": [
+      "SimpleDataSourceStreamReader.read() returned a non-empty batch but the end offset: <end_offset> did not advance past the start offset: <start_offset>. The end offset must represent the position after the last record returned."
+    ]
+  },
   "SLICE_WITH_STEP": {
     "message": [
       "Slice with step is not supported."
@@ -1187,11 +944,6 @@
   "STOP_ITERATION_OCCURRED": {
     "message": [
       "Caught StopIteration thrown from user's code; failing the task: <exc>"
-    ]
-  },
-  "STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF": {
-    "message": [
-      "pandas iterator UDF should exhaust the input iterator."
     ]
   },
   "STREAMING_CONNECT_SERIALIZATION_ERROR": {
@@ -1237,12 +989,12 @@
       "Return type of the user-defined function should be <expected>, but is <actual>."
     ]
   },
-  "UDTF_ARROW_TYPE_CAST_ERROR": {
+  "UDTF_ARROW_DATA_CONVERSION_ERROR": {
     "message": [
-      "Cannot convert the output value of the column '<col_name>' with type '<col_type>' to the specified return type of the column: '<arrow_type>'. Please check if the data types match and try again."
+      "Cannot convert UDTF output to Arrow. Data: <data>. Schema: <schema>. Arrow Schema: <arrow_schema>."
     ]
   },
-  "UDTF_ARROW_TYPE_CONVERSION_ERROR": {
+"UDTF_ARROW_TYPE_CONVERSION_ERROR": {
     "message": [
       "PyArrow UDTF must return an iterator of pyarrow.Table or pyarrow.RecordBatch objects."
     ]
@@ -1337,11 +1089,6 @@
       "<data_type> is not supported in conversion to Arrow."
     ]
   },
-  "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION": {
-    "message": [
-      "<data_type> is only supported with pyarrow 2.0.0 and above."
-    ]
-  },
   "UNSUPPORTED_JOIN_TYPE": {
     "message": [
       "Unsupported join type: '<typ>'. Supported join types include: <supported>."
@@ -1407,11 +1154,6 @@
       "Unsupported signature: <signature>."
     ]
   },
-  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION": {
-    "message": [
-      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround."
-    ]
-  },
   "VALUE_ALLOWED": {
     "message": [
       "Value for `<arg_name>` does not allow <disallowed_value>."
@@ -1444,7 +1186,7 @@
   },
   "VALUE_NOT_PEARSON": {
     "message": [
-      "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+      "Value for `<arg_name>` only supports 'pearson', got '<arg_value>'."
     ]
   },
   "VALUE_NOT_PLAIN_COLUMN_REFERENCE": {
@@ -1466,6 +1208,12 @@
     "message": [
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
     ]
+  },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION": {
     "message": [

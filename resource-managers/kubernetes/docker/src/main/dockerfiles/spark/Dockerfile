@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 ARG java_image_name=azul/zulu-openjdk
-ARG java_image_tag=21
+ARG java_image_tag=21-jre
 
 FROM ${java_image_name}:${java_image_tag}
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
@@ -34,9 +34,16 @@ ARG spark_uid=185
 # docker build -t spark:latest -f kubernetes/dockerfiles/spark/Dockerfile .
 
 RUN set -ex && \
+    if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+      printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+      grep -q 'archive.ubuntu.com' /etc/apt/sources.list 2>/dev/null && \
+      sed 's|archive.ubuntu.com|mirrors.edge.kernel.org|g;s|security.ubuntu.com|mirrors.edge.kernel.org|g' \
+        /etc/apt/sources.list > /etc/apt/sources.list.d/mirror.list || true; \
+    fi && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
+    apt install -y --no-install-recommends bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
@@ -45,7 +52,8 @@ RUN set -ex && \
     ln -sv /bin/bash /bin/sh && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd && \
-    rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
+    apt-get clean && \
+    rm -rf /var/cache/apt/* /var/lib/apt/lists/*
 
 COPY jars /opt/spark/jars
 # Copy RELEASE file if exists

@@ -212,18 +212,24 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
     def checkResult(rs: ResultSet, functionNames: Seq[String]): Unit = {
-      functionNames.foreach { func =>
-        val exprInfo = FunctionRegistry.expressions(func)._1
-        assert(rs.next())
-        assert(rs.getString("FUNCTION_SCHEM") === "default")
-        assert(rs.getString("FUNCTION_NAME") === exprInfo.getName)
-        assert(rs.getString("REMARKS") ===
-          s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
-        assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-        assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
+      val rows = scala.collection.mutable.ArrayBuffer[(String, String, String, Int, String)]()
+      while (rs.next()) {
+        rows += ((rs.getString("FUNCTION_SCHEM"), rs.getString("FUNCTION_NAME"),
+          rs.getString("REMARKS"), rs.getInt("FUNCTION_TYPE"), rs.getString("SPECIFIC_NAME")))
       }
-      // Make sure there are no more elements
-      assert(!rs.next())
+      val sortedRows = rows.sortBy(_._2) // by FUNCTION_NAME
+      val sortedExpected = functionNames.sorted
+      assert(sortedRows.size === sortedExpected.size,
+        s"Expected ${sortedExpected.size} functions but got ${sortedRows.size}")
+      sortedExpected.zip(sortedRows).foreach {
+        case (func, (schem, name, remarks, funcType, specificName)) =>
+          val exprInfo = FunctionRegistry.expressions(func)._1
+          assert(schem === "default")
+          assert(name === exprInfo.getName)
+          assert(remarks === s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
+          assert(funcType === DatabaseMetaData.functionResultUnknown)
+          assert(specificName === exprInfo.getClassName)
+      }
     }
 
     withJdbcStatement() { statement =>
@@ -374,7 +380,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
         assert(rowSet.getInt("ORDINAL_POSITION") === 1)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -402,7 +408,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
         assert(rowSet.getInt("ORDINAL_POSITION") === 1)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -428,7 +434,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
         assert(rowSet.getInt("ORDINAL_POSITION") === 1)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }

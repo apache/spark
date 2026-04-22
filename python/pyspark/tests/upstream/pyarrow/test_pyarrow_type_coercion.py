@@ -35,12 +35,18 @@ import math
 import unittest
 from typing import Any, List, Tuple
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+
+if have_pyarrow:
+    import pyarrow as pa
+
+    pyarrow_19_or_greater = LooseVersion(pa.__version__) >= LooseVersion("19.0.0")
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -319,9 +325,9 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
             # Same timezone
             ([dt_utc], pa.timestamp("us", tz="UTC"), [dt_utc]),
             ([dt_sg], pa.timestamp("us", tz="Asia/Singapore"), [dt_sg]),
-            # Cross timezone conversion (SG +8 → UTC, so 20:00 SG = 12:00 UTC)
+            # Cross timezone conversion (SG +8 -> UTC, so 20:00 SG = 12:00 UTC)
             ([dt_sg], pa.timestamp("us", tz="UTC"), [dt_utc]),
-            # LA -8 → UTC, so 4:00 LA = 12:00 UTC
+            # LA -8 -> UTC, so 4:00 LA = 12:00 UTC
             ([dt_la], pa.timestamp("us", tz="UTC"), [dt_utc]),
             # Naive to tz-aware (treated as UTC)
             ([dt_naive], pa.timestamp("us", tz="UTC"), [dt_utc]),
@@ -330,7 +336,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         ]
         self._run_coercion_tests_with_values(tz_cases)
 
-        # Mixed timezones → same instant
+        # Mixed timezones -> same instant
         ts_mixed = [
             datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=utc_tz),
             datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),
@@ -340,7 +346,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         self.assertEqual(values[0], values[1])
         self.assertEqual(values[1], values[2])
 
-        # Positive/negative UTC offsets → same instant
+        # Positive/negative UTC offsets -> same instant
         ts_tokyo = pa.array(
             [datetime.datetime(2024, 1, 1, 21, 0, tzinfo=tokyo_tz)],
             type=pa.timestamp("us", tz="UTC"),
@@ -355,9 +361,9 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
         # (data, target_type, expected_values)
         cross_type_ok_with_values = [
-            # int → date (epoch days)
+            # int -> date (epoch days)
             ([19723], pa.date32(), [datetime.date(2024, 1, 1)]),
-            # binary ↔ string (UTF-8)
+            # binary <-> string (UTF-8)
             ([b"hello", b"world"], pa.string(), ["hello", "world"]),
             (["hello", "world"], pa.binary(), [b"hello", b"world"]),
         ]
@@ -365,7 +371,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
         # (data, target_type, expected_values)
         cross_type_ok = [
-            # int → timestamp (epoch seconds: 1704067200 = 2024-01-01 00:00:00 UTC)
+            # int -> timestamp (epoch seconds: 1704067200 = 2024-01-01 00:00:00 UTC)
             ([1704067200], pa.timestamp("s"), [datetime.datetime(2024, 1, 1, 0, 0, 0)]),
         ]
         self._run_coercion_tests_with_values(cross_type_ok)
@@ -374,27 +380,27 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
         # (data, target_type)
         cross_type_fail = [
-            # numeric → string
+            # numeric -> string
             ([1, 2, 3], pa.string()),
             ([1.5, 2.5], pa.string()),
             ([True, False], pa.string()),
-            # string → numeric
+            # string -> numeric
             (["1", "2"], pa.int64()),
             (["1.5", "2.5"], pa.float64()),
             (["true"], pa.bool_()),
-            # bool ↔ int
+            # bool <-> int
             ([True, False], pa.int64()),
             ([1, 0, 1], pa.bool_()),
-            # temporal → numeric
+            # temporal -> numeric
             ([datetime.date(2024, 1, 1)], pa.int64()),
             ([datetime.datetime(2024, 1, 1)], pa.int64()),
             ([datetime.time(12, 0)], pa.int64()),
             ([datetime.timedelta(days=1)], pa.int64()),
-            # date → timestamp
+            # date -> timestamp
             ([datetime.date(2024, 1, 1)], pa.timestamp("us")),
-            # binary → numeric
+            # binary -> numeric
             ([b"hello"], pa.int64()),
-            # nested → scalar
+            # nested -> scalar
             ([[1, 2, 3]], pa.int64()),
             ([{"a": 1}], pa.int64()),
         ]
@@ -406,10 +412,10 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
         # (data, target_type, expected_values)
         precision_loss = [
-            # float → int (truncation, not rounding)
+            # float -> int (truncation, not rounding)
             ([1.9, 2.1, 3.7], pa.int64(), [1, 2, 3]),
             ([-1.9, -2.1], pa.int64(), [-1, -2]),
-            # decimal → int (truncation)
+            # decimal -> int (truncation)
             ([Decimal("1.9"), Decimal("2.1")], pa.int64(), [1, 2]),
         ]
         self._run_coercion_tests_with_values(precision_loss)
@@ -425,7 +431,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         self.assertEqual(pa.array([t], type=pa.time32("ms")).to_pylist()[0].microsecond, 123000)
         self.assertEqual(pa.array([t], type=pa.time32("s")).to_pylist()[0].microsecond, 0)
 
-        # float64 → float32 precision loss
+        # float64 -> float32 precision loss
         large_float = 1.23456789012345678
         result = pa.array([large_float], type=pa.float32()).to_pylist()[0]
         self.assertNotEqual(result, large_float)
@@ -435,6 +441,10 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
     # =========================================================================
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(
+        have_pyarrow and not pyarrow_19_or_greater,
+        "PyArrow < 19 has different type coercion behavior for ArrowDtype-backed Series",
+    )
     def test_pandas_instances_coercion(self):
         """Test type coercion from pandas Series with various backend types."""
         import numpy as np
@@ -453,7 +463,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         # ==== 3.1 Numpy-backed Series ====
         # (data, target_type, expected_values)
         numpy_cases = [
-            # Int types → float
+            # Int types -> float
             (pd.Series([1, 2, 3], dtype="int8"), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype="int16"), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype="int32"), pa.float64(), [1.0, 2.0, 3.0]),
@@ -462,10 +472,10 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
             (pd.Series([1, 2, 3], dtype="uint16"), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype="uint32"), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype="uint64"), pa.float64(), [1.0, 2.0, 3.0]),
-            # Float types → int
+            # Float types -> int
             (pd.Series([1.0, 2.0, 3.0], dtype="float32"), pa.int64(), [1, 2, 3]),
             (pd.Series([1.0, 2.0, 3.0], dtype="float64"), pa.int64(), [1, 2, 3]),
-            # Float ↔ float
+            # Float <-> float
             (pd.Series([1.0, 2.0], dtype="float32"), pa.float64(), [1.0, 2.0]),
             (pd.Series([1.0, 2.0], dtype="float64"), pa.float32(), [1.0, 2.0]),
             # Narrowing
@@ -497,12 +507,12 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
             ),
             (pd.Series([int64_min, int64_max], dtype="int64"), pa.int64(), [int64_min, int64_max]),
             (pd.Series([int8_min, 0, int8_max], dtype="int8"), pa.int64(), [int8_min, 0, int8_max]),
-            # NaN to int → None (pandas-specific behavior)
+            # NaN to int -> None (pandas-specific behavior)
             (pd.Series([nan, 1.0], dtype="float64"), pa.int64(), [None, 1]),
         ]
         self._run_coercion_tests_with_values(numpy_cases)
 
-        # Special float values (NaN/Inf) - type only
+        # Special float values (NaN/Inf) -> type only
         for data, target in [
             (pd.Series([nan, 1.0], dtype="float64"), pa.float64()),
             (pd.Series([inf, neg_inf], dtype="float64"), pa.float64()),
@@ -510,14 +520,14 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         ]:
             self.assertEqual(pa.array(data, type=target).type, target)
 
-        # numpy int → decimal128 does NOT work
+        # numpy int -> decimal128 does NOT work
         with self.assertRaises(pa.ArrowInvalid):
             pa.array(pd.Series([1, 2, 3], dtype="int64"), type=pa.decimal128(10, 0))
 
         # ==== 3.2 Nullable Extension Types ====
         # (data, target_type, expected_values)
         nullable_cases = [
-            # Int types → float
+            # Int types -> float
             (pd.Series([1, 2, 3], dtype=pd.Int8Dtype()), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype=pd.Int16Dtype()), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype=pd.Int32Dtype()), pa.float64(), [1.0, 2.0, 3.0]),
@@ -581,7 +591,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         # ==== 3.3 ArrowDtype-backed Series ====
         # (data, target_type, expected_values)
         arrow_cases = [
-            # Int types → float
+            # Int types -> float
             (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int8())), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int16())), pa.float64(), [1.0, 2.0, 3.0]),
             (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int32())), pa.float64(), [1.0, 2.0, 3.0]),
@@ -655,7 +665,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         ]:
             self.assertEqual(pa.array(data, type=target).type, target)
 
-        # ArrowDtype int64 → decimal128 requires sufficient precision (19 digits)
+        # ArrowDtype int64 -> decimal128 requires sufficient precision (19 digits)
         s = pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64()))
         self.assertEqual(
             pa.array(s, type=pa.decimal128(19, 0)).to_pylist(),
@@ -667,7 +677,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         # ==== 3.4 Datetime Types ====
         # (data, target_type, expected_values)
         datetime_cases = [
-            # datetime64[ns] (numpy-backed) → various resolutions
+            # datetime64[ns] (numpy-backed) -> various resolutions
             (
                 pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])),
                 pa.timestamp("us"),
@@ -754,6 +764,48 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         ]
         self._run_coercion_tests_with_values(datetime_cases)
 
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    @unittest.skipIf(
+        have_pyarrow and pyarrow_19_or_greater,
+        "PyArrow >= 19 has different type coercion behavior for ArrowDtype-backed Series",
+    )
+    def test_pandas_arrow_dtype_no_coercion_pyarrow18(self):
+        """Test PyArrow < 19 type coercion behavior for ArrowDtype-backed Series.
+
+        In PyArrow < 19, pa.array() with ArrowDtype-backed Series ignores the target type
+        parameter and keeps the original Arrow type from the Series.
+        """
+        import pandas as pd
+        import pyarrow as pa
+
+        # In PyArrow < 19, ArrowDtype-backed Series keeps original type
+        # (data, target_type, expected_type_in_pyarrow18)
+        no_coercion_cases = [
+            # Int types with float target -> keeps original int type
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int8())), pa.float64(), pa.int8()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int16())), pa.float64(), pa.int16()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int32())), pa.float64(), pa.int32()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.float64(), pa.int64()),
+            # Float types with int target -> keeps original float type
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float32())), pa.int64(), pa.float32()),
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float64())), pa.int64(), pa.float64()),
+            # Float with different float target -> keeps original float type
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float32())), pa.float64(), pa.float32()),
+            (pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float64())), pa.float32(), pa.float64()),
+            # Int with narrower int target -> keeps original int type
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.int8(), pa.int64()),
+            (pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.int16(), pa.int64()),
+        ]
+
+        for data, target_type, expected_type in no_coercion_cases:
+            arr = pa.array(data, type=target_type)
+            self.assertEqual(
+                arr.type,
+                expected_type,
+                f"PyArrow < 19 keeps original type {expected_type}, "
+                f"PyArrow >= 19 coerces to {target_type}",
+            )
+
     # =========================================================================
     # SECTION 4: NumPy Array Coercion
     # =========================================================================
@@ -773,7 +825,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         # ==== 4.1 All Int/Float Types ====
         # (data, target_type, expected_values)
         numeric_cases = [
-            # Int types → float64
+            # Int types -> float64
             (np.array([1, 2, 3], dtype=np.int8), pa.float64(), [1.0, 2.0, 3.0]),
             (np.array([1, 2, 3], dtype=np.int16), pa.float64(), [1.0, 2.0, 3.0]),
             (np.array([1, 2, 3], dtype=np.int32), pa.float64(), [1.0, 2.0, 3.0]),
@@ -782,11 +834,11 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
             (np.array([1, 2, 3], dtype=np.uint16), pa.float64(), [1.0, 2.0, 3.0]),
             (np.array([1, 2, 3], dtype=np.uint32), pa.float64(), [1.0, 2.0, 3.0]),
             (np.array([1, 2, 3], dtype=np.uint64), pa.float64(), [1.0, 2.0, 3.0]),
-            # Float types → int64
+            # Float types -> int64
             (np.array([1.0, 2.0, 3.0], dtype=np.float16), pa.int64(), [1, 2, 3]),
             (np.array([1.0, 2.0, 3.0], dtype=np.float32), pa.int64(), [1, 2, 3]),
             (np.array([1.0, 2.0, 3.0], dtype=np.float64), pa.int64(), [1, 2, 3]),
-            # Float ↔ float
+            # Float <-> float
             (np.array([1.0, 2.0], dtype=np.float32), pa.float64(), [1.0, 2.0]),
             (np.array([1.0, 2.0], dtype=np.float64), pa.float32(), [1.0, 2.0]),
             # Widening
@@ -806,19 +858,19 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         ]
         self._run_coercion_tests_with_values(numeric_cases)
 
-        # numpy int64 → decimal128 does NOT work
+        # numpy int64 -> decimal128 does NOT work
         with self.assertRaises(pa.ArrowInvalid):
             pa.array(np.array([1, 2, 3], dtype=np.int64), type=pa.decimal128(10, 0))
 
         # ==== 4.2 Boundary Values ====
         # (data, target_type, expected_values)
         boundary_cases = [
-            # Int min/max → same type
+            # Int min/max -> same type
             (np.array([int8_min, int8_max], dtype=np.int8), pa.int8(), [int8_min, int8_max]),
             (np.array([int16_min, int16_max], dtype=np.int16), pa.int16(), [int16_min, int16_max]),
             (np.array([int32_min, int32_max], dtype=np.int32), pa.int32(), [int32_min, int32_max]),
             (np.array([int64_min, int64_max], dtype=np.int64), pa.int64(), [int64_min, int64_max]),
-            # Int min/max → float64 (exact for smaller types)
+            # Int min/max -> float64 (exact for smaller types)
             (
                 np.array([int8_min, int8_max], dtype=np.int8),
                 pa.float64(),
@@ -841,7 +893,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         self._run_coercion_tests_with_values(boundary_cases)
 
         # ==== 4.3 Special Float Values ====
-        # NaN/Inf → float (type check only, NaN equality is tricky)
+        # NaN/Inf -> float (type check only, NaN equality is tricky)
         for data, target in [
             (np.array([nan, 1.0, nan], dtype=np.float64), pa.float64()),
             (np.array([inf, neg_inf], dtype=np.float64), pa.float64()),
@@ -963,7 +1015,7 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
         # (data, target_type, expected_values)
         struct_cases = [
-            # Field type coercion (int → float)
+            # Field type coercion (int -> float)
             (
                 [{"x": 1, "y": 2}, {"x": 3, "y": 4}],
                 pa.struct([("x", pa.float64()), ("y", pa.float64())]),

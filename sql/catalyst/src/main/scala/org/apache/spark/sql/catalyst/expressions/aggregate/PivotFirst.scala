@@ -86,11 +86,22 @@ case class PivotFirst(
 
   override val dataType: DataType = ArrayType(valueDataType)
 
-  val pivotIndex: Map[Any, Int] = if (pivotColumn.dataType.isInstanceOf[AtomicType]) {
-    HashMap(pivotColumnValues.zipWithIndex: _*)
-  } else {
+  private val usesTreeMap: Boolean = !TypeUtils.typeWithProperEquals(pivotColumn.dataType)
+
+  val pivotIndex: Map[Any, Int] = if (usesTreeMap) {
     TreeMap(pivotColumnValues.zipWithIndex: _*)(
       TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
+  } else {
+    HashMap(pivotColumnValues.zipWithIndex: _*)
+  }
+
+  // Null-safe lookup into pivotIndex. When pivotIndex is a TreeMap, its comparison-based lookup
+  // throws NPE on null keys. Returning -1 for null is safe on the TreeMap path because null can
+  // never be a TreeMap key (insertion would also NPE), so it can never match any pivot value.
+  // Otherwise, pivotIndex is a HashMap that handles null keys safely via hash-based lookup.
+  private def findPivotIndex(key: Any): Int = key match {
+    case null if usesTreeMap => -1
+    case _ => pivotIndex.getOrElse(key, -1)
   }
 
   val indexSize = pivotIndex.size
@@ -100,7 +111,7 @@ case class PivotFirst(
   override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     // We ignore rows whose pivot column value is not in the list of pivot column values.
-    val index = pivotIndex.getOrElse(pivotColValue, -1)
+    val index = findPivotIndex(pivotColValue)
     if (index >= 0) {
       val value = valueColumn.eval(inputRow)
       if (value != null) {
