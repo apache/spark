@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
@@ -587,11 +588,15 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 
           dataWriter.commit()
         } else {
-          val commitDeniedException = QueryExecutionErrors.commitDeniedError(
-            partId, taskId, attemptId, stageId, stageAttempt)
-          logInfo(log"${MDC(LogKeys.ERROR, commitDeniedException.getMessage)}")
-          // throwing CommitDeniedException will trigger the catch block for abort
-          throw commitDeniedException
+          val message = s"Commit denied for partition $partId " +
+            s"(task $taskId, attempt $attemptId, stage $stageId.$stageAttempt)."
+          logInfo(log"${MDC(LogKeys.ERROR, message)}")
+          // Throw CommitDeniedException (not a plain SparkException) so that the executor
+          // recognizes this as a commit denial and reports TaskCommitDenied to the driver.
+          // TaskCommitDenied has countTowardsTaskFailures=false, which prevents speculative
+          // task attempts from being counted as real failures and aborting the stage.
+          // This matches the V1 write path behavior in SparkHadoopMapRedUtil.commitTask().
+          throw new CommitDeniedException(message, stageId, partId, attemptId)
         }
 
       } else {
