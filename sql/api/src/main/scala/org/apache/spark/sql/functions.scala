@@ -8487,6 +8487,26 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
+   * aligned to the epoch (1970-01-01 00:00:00). All computation is in UTC.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketSize: Column, ts: Column): Column =
+    Column.fn("time_bucket", bucketSize, ts)
+
+  /**
+   * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
+   * aligned to `origin`. All computation is in UTC.
+   *
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketSize: Column, ts: Column, origin: Column): Column =
+    Column.fn("time_bucket", bucketSize, ts, origin)
+
+  /**
    * Returns the difference between two times, measured in specified units. Throws a
    * SparkIllegalArgumentException, in case the specified unit is not supported.
    *

@@ -29,7 +29,9 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -2312,5 +2314,187 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ),
       null
     )
+  }
+
+  test("time_bucket: day-time interval") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
+      // 15-minute bucket with epoch origin
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofMinutes(15)),
+          timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        timestampAnswer("2024-01-01 11:15:00.000", sdf, dt))
+      // 1-hour bucket with custom origin (:05 alignment)
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofHours(1)),
+          timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:05:00.000", sdf, dt)),
+        timestampAnswer("2024-01-01 11:05:00.000", sdf, dt))
+      // Pre-epoch ts
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofDays(1)),
+          timestampLiteral("1969-12-31 23:30:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        timestampAnswer("1969-12-31 00:00:00.000", sdf, dt))
+      // NULL ts -> NULL
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofHours(1)),
+          Literal.create(null, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        null)
+      // NULL bucketSize -> NULL
+      checkEvaluation(
+        TimeBucket(
+          Literal.create(null, DayTimeIntervalType()),
+          timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        null)
+      // NULL origin -> NULL
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofHours(1)),
+          timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+          Literal.create(null, dt)),
+        null)
+    }
+  }
+
+  test("time_bucket: year-month interval") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
+      // 1-month bucket
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(1)),
+          timestampLiteral("2024-03-15 11:27:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        timestampAnswer("2024-03-01 00:00:00.000", sdf, dt))
+      // 3-month (quarterly) bucket
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(3)),
+          timestampLiteral("2024-05-15 10:00:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        timestampAnswer("2024-04-01 00:00:00.000", sdf, dt))
+      // End-of-month capping with step-back: origin on 1970-01-31, 1-month bucket,
+      // ts in early March of a leap year -> 2024-02-29.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(1)),
+          timestampLiteral("2024-03-01 12:00:00.000", sdf, dt),
+          timestampLiteral("1970-01-31 00:00:00.000", sdf, dt)),
+        timestampAnswer("2024-02-29 00:00:00.000", sdf, dt))
+      // NULL bucketSize (YM) -> NULL
+      checkEvaluation(
+        TimeBucket(
+          Literal.create(null, YearMonthIntervalType()),
+          timestampLiteral("2024-03-15 11:27:00.000", sdf, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        null)
+      // NULL ts (YM) -> NULL
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(1)),
+          Literal.create(null, dt),
+          timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+        null)
+      // NULL origin (YM) -> NULL
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(1)),
+          timestampLiteral("2024-03-15 11:27:00.000", sdf, dt),
+          Literal.create(null, dt)),
+        null)
+    }
+  }
+
+  test("time_bucket: checkInputDataTypes") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+    val tsLit = timestampLiteral("2024-01-01 00:00:00.000", sdf, TimestampType)
+    val originLit = tsLit
+    val hour = Literal(Duration.ofHours(1))
+
+    // Non-foldable bucketSize
+    val nonFoldableBucket = AttributeReference("bs", DayTimeIntervalType())()
+    val expr1 = TimeBucket(nonFoldableBucket, tsLit, originLit)
+    val r1 = expr1.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r1.errorSubClass == "NON_FOLDABLE_INPUT")
+    assert(r1.messageParameters("inputName") == "`bucketSize`")
+
+    // Non-foldable origin
+    val nonFoldableOrigin = AttributeReference("o", TimestampType)()
+    val expr2 = TimeBucket(hour, tsLit, nonFoldableOrigin)
+    val r2 = expr2.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r2.errorSubClass == "NON_FOLDABLE_INPUT")
+    assert(r2.messageParameters("inputName") == "`origin`")
+
+    // Non-positive DT bucketSize
+    val expr3 = TimeBucket(Literal(Duration.ofMinutes(0)), tsLit, originLit)
+    val r3 = expr3.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r3.errorSubClass == "VALUE_OUT_OF_RANGE")
+
+    // Non-positive YM bucketSize
+    val expr4 = TimeBucket(Literal(Period.ofMonths(-1)), tsLit, originLit)
+    val r4 = expr4.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r4.errorSubClass == "VALUE_OUT_OF_RANGE")
+
+    // ts/origin type mismatch: TIMESTAMP ts vs TIMESTAMP_NTZ origin
+    val ntzOrigin = Literal(LocalDateTime.of(1970, 1, 1, 0, 0, 0))
+    val expr5 = TimeBucket(hour, tsLit, ntzOrigin)
+    val r5 = expr5.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r5.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+  }
+
+  test("time_bucket: ExpressionBuilder") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+    val hour = Literal(Duration.ofHours(1))
+    val ts = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampType)
+    val tsNtz = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampNTZType)
+    val ntzOrigin = timestampLiteral("1970-01-01 00:00:00.000", sdf, TimestampNTZType)
+
+    // 2-arg: default origin is epoch with ts's type (TIMESTAMP)
+    val built1 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts))
+      .asInstanceOf[TimeBucket]
+    assert(built1.originTs == Literal(0L, TimestampType))
+
+    // 2-arg with TIMESTAMP_NTZ ts: default origin is epoch with TIMESTAMP_NTZ
+    val built2 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, tsNtz))
+      .asInstanceOf[TimeBucket]
+    assert(built2.originTs == Literal(0L, TimestampNTZType))
+
+    // NULL ts + TIMESTAMP_NTZ origin: ts retyped to TIMESTAMP_NTZ to match origin
+    val built3 = TimeBucketExpressionBuilder.build(
+      "time_bucket", Seq(hour, Literal(null, NullType), ntzOrigin))
+      .asInstanceOf[TimeBucket]
+    assert(built3.ts.dataType == TimestampNTZType)
+
+    // NULL origin + TIMESTAMP_NTZ ts: origin retyped to TIMESTAMP_NTZ to match ts
+    val built4 = TimeBucketExpressionBuilder.build(
+      "time_bucket", Seq(hour, tsNtz, Literal(null, NullType)))
+      .asInstanceOf[TimeBucket]
+    assert(built4.originTs.dataType == TimestampNTZType)
+
+    // Bare NULL as bucketSize: retyped to DayTimeIntervalType
+    val built5 = TimeBucketExpressionBuilder.build(
+      "time_bucket", Seq(Literal(null, NullType), ts))
+      .asInstanceOf[TimeBucket]
+    assert(built5.bucketSize.dataType == DayTimeIntervalType())
+
+    // Wrong arg count
+    intercept[AnalysisException] {
+      TimeBucketExpressionBuilder.build("time_bucket", Seq(hour))
+    }
+    intercept[AnalysisException] {
+      TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts, ts, ts))
+    }
   }
 }

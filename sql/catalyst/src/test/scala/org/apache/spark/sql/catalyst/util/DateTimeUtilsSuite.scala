@@ -1525,4 +1525,87 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         assert(result === expected)
       }
     }
+
+  test("timeBucketDTInterval") {
+    // 15-minute bucket with default (epoch) origin
+    assert(timeBucketDTInterval(15 * MICROS_PER_MINUTE,
+      date(2024, 1, 1, 11, 27, 0), 0L) === date(2024, 1, 1, 11, 15, 0))
+    // 1-hour bucket
+    assert(timeBucketDTInterval(MICROS_PER_HOUR,
+      date(2024, 1, 1, 11, 27, 0), 0L) === date(2024, 1, 1, 11, 0, 0))
+    // Custom origin shifts alignment: grid anchored at :05
+    assert(timeBucketDTInterval(MICROS_PER_HOUR,
+      date(2024, 1, 1, 11, 27, 0), date(1970, 1, 1, 0, 5, 0))
+      === date(2024, 1, 1, 11, 5, 0))
+    // 7-day weekly bucket (epoch = Thursday, so buckets run Thu-Wed)
+    assert(timeBucketDTInterval(7 * MICROS_PER_DAY,
+      date(2024, 1, 10, 11, 27, 0), 0L) === date(2024, 1, 4, 0, 0, 0))
+    // ts exactly on boundary returns same instant
+    assert(timeBucketDTInterval(15 * MICROS_PER_MINUTE,
+      date(2024, 1, 1, 11, 15, 0), 0L) === date(2024, 1, 1, 11, 15, 0))
+    // Origin AFTER ts: floorDiv must handle negative diff correctly
+    assert(timeBucketDTInterval(MICROS_PER_HOUR,
+      date(2024, 1, 1, 11, 27, 0), date(2025, 1, 1, 0, 30, 0))
+      === date(2024, 1, 1, 10, 30, 0))
+    // Pre-epoch ts
+    assert(timeBucketDTInterval(MICROS_PER_DAY,
+      date(1969, 12, 31, 23, 30, 0), 0L) === date(1969, 12, 31, 0, 0, 0))
+    // 1-microsecond bucket preserves exact value
+    assert(timeBucketDTInterval(1L,
+      date(2024, 6, 20, 10, 0, 0, 123456), 0L)
+      === date(2024, 6, 20, 10, 0, 0, 123456))
+    // Overflow in subtractExact (ts - origin underflows below Long.MinValue)
+    intercept[ArithmeticException] {
+      timeBucketDTInterval(1L, Long.MinValue, Long.MaxValue)
+    }
+    // Overflow in subtractExact (ts - origin overflows above Long.MaxValue)
+    intercept[ArithmeticException] {
+      timeBucketDTInterval(1L, Long.MaxValue, -1L)
+    }
+    // Overflow in multiplyExact (floorDiv * bucketMicros)
+    intercept[ArithmeticException] {
+      timeBucketDTInterval(3L, Long.MinValue, 0L)
+    }
+    // Overflow in addExact (origin + bucketOffset)
+    intercept[ArithmeticException] {
+      timeBucketDTInterval(Long.MaxValue, -6L, -5L)
+    }
+  }
+
+  test("timeBucketYMInterval") {
+    // 1-month bucket default origin
+    assert(timeBucketYMInterval(1,
+      date(2024, 3, 15, 11, 27, 0), 0L) === date(2024, 3, 1, 0, 0, 0))
+    // 3-month (quarterly) bucket
+    assert(timeBucketYMInterval(3,
+      date(2024, 5, 15, 10, 0, 0), 0L) === date(2024, 4, 1, 0, 0, 0))
+    // 12-month (yearly) bucket
+    assert(timeBucketYMInterval(12,
+      date(2024, 5, 15, 10, 0, 0), 0L) === date(2024, 1, 1, 0, 0, 0))
+    // Monthly with origin on 15th: grid anchored at day-of-month = 15
+    assert(timeBucketYMInterval(1,
+      date(2024, 3, 20, 9, 0, 0), date(1970, 1, 15, 0, 0, 0))
+      === date(2024, 3, 15, 0, 0, 0))
+    // End-of-month capping with step-back: origin on 1970-01-31, 1-month bucket.
+    // AddMonths(1970-01-31, k) caps to 2024-03-31 for large k (> ts); step back to
+    // 2024-02-29 (leap year).
+    assert(timeBucketYMInterval(1,
+      date(2024, 3, 1, 12, 0, 0), date(1970, 1, 31, 0, 0, 0))
+      === date(2024, 2, 29, 0, 0, 0))
+    // Leap-year capping: origin on Feb 29, 1-year bucket, non-leap target.
+    assert(timeBucketYMInterval(12,
+      date(2025, 3, 1, 0, 0, 0), date(2024, 2, 29, 0, 0, 0))
+      === date(2025, 2, 28, 0, 0, 0))
+    // Pre-epoch ts
+    assert(timeBucketYMInterval(1,
+      date(1968, 7, 15, 10, 0, 0), 0L) === date(1968, 7, 1, 0, 0, 0))
+    // Extreme ts: daysToMicros on the resulting day count overflows via multiplyExact.
+    intercept[ArithmeticException] {
+      timeBucketYMInterval(1, Long.MinValue, 0L)
+    }
+    // Extreme origin: daysToMicros on originMicros's day count overflows via multiplyExact.
+    intercept[ArithmeticException] {
+      timeBucketYMInterval(1, 0L, Long.MinValue)
+    }
+  }
 }

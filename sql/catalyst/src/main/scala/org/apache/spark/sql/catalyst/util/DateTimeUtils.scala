@@ -1059,4 +1059,59 @@ object DateTimeUtils extends SparkDateTimeUtils {
         time, timePrecision, interval, intervalEndField)
     }
   }
+
+  /**
+   * DayTimeInterval bucketing: microsecond floor division against `originMicros`.
+   * Returns `originMicros + floorDiv(tsMicros - originMicros, bucketMicros) * bucketMicros`.
+   *
+   * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces
+   * this at analysis time.
+   *
+   * @param bucketMicros bucket size in microseconds.
+   * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   */
+  def timeBucketDTInterval(bucketMicros: Long, tsMicros: Long, originMicros: Long): Long = {
+    val diff = Math.subtractExact(tsMicros, originMicros)
+    val bucketOffset = Math.multiplyExact(Math.floorDiv(diff, bucketMicros), bucketMicros)
+    Math.addExact(originMicros, bucketOffset)
+  }
+
+  /**
+   * YearMonthInterval bucketing: month arithmetic with end-of-month capping and step-back.
+   * The origin's day-of-month and time-of-day determine the bucket boundaries.
+   *
+   * `bucketMonths` must be positive; `TimeBucket.checkInputDataTypes` enforces
+   * this at analysis time.
+   *
+   * @param bucketMonths bucket size in months.
+   * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   */
+  def timeBucketYMInterval(bucketMonths: Int, tsMicros: Long, originMicros: Long): Long = {
+    val tsDays = microsToDays(tsMicros, ZoneOffset.UTC)
+    val originDays = microsToDays(originMicros, ZoneOffset.UTC)
+    val originTodMicros =
+      Math.subtractExact(originMicros, daysToMicros(originDays, ZoneOffset.UTC))
+
+    val tsDate = daysToLocalDate(tsDays)
+    val originDate = daysToLocalDate(originDays)
+    val rawMonthDiff = (tsDate.getYear.toLong * 12 + tsDate.getMonthValue) -
+      (originDate.getYear.toLong * 12 + originDate.getMonthValue)
+
+    var k = Math.floorDiv(rawMonthDiff, bucketMonths.toLong)
+    var candidateDays = dateAddMonths(originDays,
+      Math.toIntExact(Math.multiplyExact(k, bucketMonths.toLong)))
+    var candidate = Math.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
+
+    // End-of-month capping in dateAddMonths can overshoot; step back one bucket if so.
+    if (candidate > tsMicros) {
+      k -= 1
+      candidateDays = dateAddMonths(originDays,
+        Math.toIntExact(Math.multiplyExact(k, bucketMonths.toLong)))
+      candidate = Math.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
+    }
+
+    candidate
+  }
 }
