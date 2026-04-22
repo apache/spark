@@ -177,7 +177,7 @@
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scala-maven-plugin.version>4.9.9</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
-    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.21.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
