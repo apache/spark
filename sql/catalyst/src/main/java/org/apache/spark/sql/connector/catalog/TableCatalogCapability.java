@@ -92,5 +92,20 @@ public enum TableCatalogCapability {
    * {@link TableCatalog#createTable}.
    * See {@link Column#identityColumnSpec()}.
    */
-  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+
+  /**
+   * Signals that the TableCatalog supports creating views via {@link TableCatalog#createTable}
+   * by accepting a {@link TableInfo} whose properties include {@link TableCatalog#PROP_VIEW_TEXT}
+   * (and related view keys: {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG},
+   * {@link TableCatalog#PROP_VIEW_CURRENT_NAMESPACE}, and
+   * {@link TableCatalog#VIEW_CONF_PREFIX}-prefixed SQL configs).
+   * <p>
+   * Catalogs declaring this capability must round-trip those properties and return a
+   * {@link MetadataOnlyTable} from {@link TableCatalog#loadTable} so Spark's view resolution
+   * path can expand the view text. Without this capability, Spark rejects {@code CREATE VIEW}
+   * statements targeting the catalog up front rather than letting the catalog silently persist
+   * a table entry that cannot be read as a view.
+   */
+  SUPPORTS_CREATE_VIEW
 }

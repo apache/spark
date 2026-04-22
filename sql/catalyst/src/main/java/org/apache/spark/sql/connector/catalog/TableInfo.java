@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
@@ -71,8 +72,13 @@ public class TableInfo {
       return this;
     }
 
+    public Builder withSchema(StructType schema) {
+      this.columns = CatalogV2Util.structTypeToV2Columns(schema);
+      return this;
+    }
+
     public Builder withProperties(Map<String, String> properties) {
-      this.properties = properties;
+      this.properties = new HashMap<>(properties);
       return this;
     }
 
@@ -83,6 +89,68 @@ public class TableInfo {
 
     public Builder withConstraints(Constraint[] constraints) {
       this.constraints = constraints;
+      return this;
+    }
+
+    // Convenience setters that write reserved keys into `properties`. These mutate the current
+    // properties map, so call them after any `withProperties(...)` that replaces the map.
+
+    public Builder withProvider(String provider) {
+      properties.put(TableCatalog.PROP_PROVIDER, provider);
+      return this;
+    }
+
+    public Builder withLocation(String location) {
+      properties.put(TableCatalog.PROP_LOCATION, location);
+      return this;
+    }
+
+    public Builder withComment(String comment) {
+      properties.put(TableCatalog.PROP_COMMENT, comment);
+      return this;
+    }
+
+    public Builder withCollation(String collation) {
+      properties.put(TableCatalog.PROP_COLLATION, collation);
+      return this;
+    }
+
+    public Builder withOwner(String owner) {
+      properties.put(TableCatalog.PROP_OWNER, owner);
+      return this;
+    }
+
+    public Builder withTableType(String tableType) {
+      properties.put(TableCatalog.PROP_TABLE_TYPE, tableType);
+      return this;
+    }
+
+    /**
+     * Sets the view SQL text and marks this TableInfo as a view by setting
+     * {@link TableCatalog#PROP_TABLE_TYPE} to {@link TableSummary#VIEW_TABLE_TYPE}.
+     */
+    public Builder withViewText(String viewText) {
+      properties.put(TableCatalog.PROP_VIEW_TEXT, viewText);
+      properties.put(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
+      return this;
+    }
+
+    public Builder withCurrentCatalog(String currentCatalog) {
+      properties.put(TableCatalog.PROP_VIEW_CURRENT_CATALOG, currentCatalog);
+      return this;
+    }
+
+    /**
+     * Sets the current namespace of a view, encoded as a quoted multi-part identifier string
+     * (see {@link TableCatalog#PROP_VIEW_CURRENT_NAMESPACE}). An empty array clears the property.
+     */
+    public Builder withCurrentNamespace(String[] currentNamespace) {
+      if (currentNamespace != null && currentNamespace.length > 0) {
+        properties.put(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE,
+            QuotingUtils.quoted(currentNamespace));
+      } else {
+        properties.remove(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE);
+      }
       return this;
     }
 

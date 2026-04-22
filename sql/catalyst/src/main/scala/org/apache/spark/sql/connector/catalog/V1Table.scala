@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
@@ -110,26 +111,46 @@ private[sql] object V1Table {
     }
   }
 
+  // Reserved keys that are promoted to first-class fields on CatalogTable and must be stripped
+  // from the user-visible properties map so they're not double-persisted.
+  private val METADATA_ONLY_RESERVED_KEYS = Set(
+    TableCatalog.PROP_PROVIDER,
+    TableCatalog.PROP_LOCATION,
+    TableCatalog.PROP_TABLE_TYPE,
+    TableCatalog.PROP_OWNER,
+    TableCatalog.PROP_COMMENT,
+    TableCatalog.PROP_COLLATION,
+    TableCatalog.PROP_VIEW_TEXT,
+    TableCatalog.PROP_VIEW_CURRENT_CATALOG,
+    TableCatalog.PROP_VIEW_CURRENT_NAMESPACE
+  )
+
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
       t: MetadataOnlyTable): CatalogTable = {
-    val tableType = t.getTableType() match {
-      case TableSummary.VIEW_TABLE_TYPE => CatalogTableType.VIEW
-      case TableSummary.MANAGED_TABLE_TYPE => CatalogTableType.MANAGED
+    val info = t.getTableInfo
+    val props = info.properties.asScala.toMap
+    val tableType = props.get(TableCatalog.PROP_TABLE_TYPE) match {
+      case Some(TableSummary.VIEW_TABLE_TYPE) => CatalogTableType.VIEW
+      case Some(TableSummary.MANAGED_TABLE_TYPE) => CatalogTableType.MANAGED
       case _ => CatalogTableType.EXTERNAL
     }
-    val viewText = Option(t.getViewText())
-    val (serdeProps, tableProps) = t.getTableProps().asScala.toSeq
+    val viewText = props.get(TableCatalog.PROP_VIEW_TEXT)
+    val userProps = props -- METADATA_ONLY_RESERVED_KEYS
+    val (serdeProps, tableProps) = userProps.toSeq
       .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
     val tablePropsMap = tableProps.toMap
-    val (partCols, bucketSpec, clusterBySpec) = t.partitioning().toSeq.convertTransforms
+    val (partCols, bucketSpec, clusterBySpec) = info.partitions.toSeq.convertTransforms
     // For views, translate the V2 view context (currentCatalog / currentNamespace) into V1's
     // viewCatalogAndNamespace properties so the V1 view resolution path can expand unqualified
     // identifiers in the view text.
     val viewContextProps = if (tableType == CatalogTableType.VIEW) {
-      val currentCatalog = Option(t.getCurrentCatalog())
-      val currentNamespace = Option(t.getCurrentNamespace()).map(_.toSeq).getOrElse(Seq.empty)
+      val currentCatalog = props.get(TableCatalog.PROP_VIEW_CURRENT_CATALOG)
+      val currentNamespace = props.get(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE) match {
+        case Some(s) if s.nonEmpty => CatalystSqlParser.parseMultipartIdentifier(s)
+        case _ => Seq.empty[String]
+      }
       if (currentCatalog.isDefined || currentNamespace.nonEmpty) {
         CatalogTable.catalogAndNamespaceToProps(
           currentCatalog.getOrElse(catalog.name()),
@@ -147,24 +168,22 @@ private[sql] object V1Table {
         catalog = Some(catalog.name())),
       tableType = tableType,
       storage = CatalogStorageFormat.empty.copy(
-        locationUri = Option(t.getLocation()).map(CatalogUtils.stringToURI),
+        locationUri = props.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI),
         // v2 table properties should be put into the serde properties as well in case
         // it contains data source options.
         properties = tablePropsMap ++ serdeProps.map {
           case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
         }
       ),
-      schema = CatalogV2Util.v2ColumnsToStructType(t.columns()),
-      provider = Option(t.getProvider),
+      schema = CatalogV2Util.v2ColumnsToStructType(info.columns),
+      provider = props.get(TableCatalog.PROP_PROVIDER),
       partitionColumnNames = partCols,
       bucketSpec = bucketSpec,
-      owner = Option(t.getOwner()).getOrElse("unknown"),
-      createTime = t.getCreateTime(),
-      createVersion = t.getCreateVersion(),
+      owner = props.getOrElse(TableCatalog.PROP_OWNER, "unknown"),
       viewText = viewText,
       viewOriginalText = viewText,
-      comment = Option(t.getComment()),
-      collation = Option(t.getCollation()),
+      comment = props.get(TableCatalog.PROP_COMMENT),
+      collation = props.get(TableCatalog.PROP_COLLATION),
       properties = tablePropsMap ++
         clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation) ++
         viewContextProps

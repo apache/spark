@@ -21,224 +21,60 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.Transform;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * A concrete {@code Table} implementation that only contains the table metadata without
  * implementing read/write directly. It represents a general Spark data source table or
  * a Spark view, and relies on Spark to interpret the table metadata, resolve the table
  * provider into a data source, or read it as a view.
+ * <p>
+ * Catalogs build the metadata via {@link TableInfo.Builder} (which provides convenience
+ * setters for reserved properties such as {@link TableCatalog#PROP_PROVIDER},
+ * {@link TableCatalog#PROP_LOCATION}, {@link TableCatalog#PROP_VIEW_TEXT}, etc.) and wrap
+ * the resulting {@link TableInfo} in a {@code MetadataOnlyTable} to return from
+ * {@link TableCatalog#loadTable(Identifier)}.
  *
  * @since 4.1.0
  */
 @Evolving
 public class MetadataOnlyTable implements Table {
-  private final Builder builder;
+  private static final String DEFAULT_NAME = "data_source_table_or_view";
 
-  private MetadataOnlyTable(Builder builder) {
-    this.builder = builder;
+  private final TableInfo info;
+  private final String name;
+
+  public MetadataOnlyTable(TableInfo info) {
+    this(info, DEFAULT_NAME);
   }
 
-  public static class Builder {
-    private final Column[] columns;
-    private String name = "data_source_table_or_view";
-    private String provider = null;
-    private String location = null;
-    private String tableType = null;
-    private String owner = null;
-    private String comment = null;
-    private String collation = null;
-    private String viewText = null;
-    private String currentCatalog = null;
-    private String[] currentNamespace = null;
-    private String createVersion = "";
-    private long createTime = 0;
-    private Map<String, String> tableProps = Map.ofEntries();
-    private Transform[] partitioning = new Transform[0];
-
-    public Builder(Column[] columns) {
-      assert columns != null;
-      this.columns = columns;
-    }
-
-    public Builder(StructType schema) {
-      assert schema != null;
-      this.columns = CatalogV2Util.structTypeToV2Columns(schema);
-    }
-
-    public Builder withName(String name) {
-      this.name = name;
-      return this;
-    }
-
-    public Builder withProvider(String provider) {
-      this.provider = provider;
-      return this;
-    }
-
-    public Builder withLocation(String location) {
-      this.location = location;
-      return this;
-    }
-
-    public Builder withTableType(String tableType) {
-      this.tableType = tableType;
-      return this;
-    }
-
-    public Builder withOwner(String owner) {
-      this.owner = owner;
-      return this;
-    }
-
-    public Builder withComment(String comment) {
-      this.comment = comment;
-      return this;
-    }
-
-    public Builder withCollation(String collation) {
-      this.collation = collation;
-      return this;
-    }
-
-    public Builder withViewText(String viewText) {
-      this.viewText = viewText;
-      this.tableType = TableSummary.VIEW_TABLE_TYPE;
-      return this;
-    }
-
-    public Builder withCurrentCatalog(String currentCatalog) {
-      this.currentCatalog = currentCatalog;
-      return this;
-    }
-
-    public Builder withCurrentNamespace(String[] currentNamespace) {
-      this.currentNamespace = currentNamespace;
-      return this;
-    }
-
-    public Builder withCreateVersion(String createVersion) {
-      this.createVersion = createVersion;
-      return this;
-    }
-
-    public Builder withCreateTime(long createTime) {
-      this.createTime = createTime;
-      return this;
-    }
-
-    public Builder withTableProps(Map<String, String> tableProps) {
-      this.tableProps = tableProps;
-      return this;
-    }
-
-    public Builder withPartitioning(Transform[] partitioning) {
-      this.partitioning = partitioning;
-      return this;
-    }
-
-    public MetadataOnlyTable build() {
-      return new MetadataOnlyTable(this);
-    }
+  public MetadataOnlyTable(TableInfo info, String name) {
+    this.info = info;
+    this.name = name;
   }
 
-  public String getProvider() {
-    return builder.provider;
-  }
-
-  public String getLocation() {
-    return builder.location;
-  }
-
-  public String getTableType() {
-    return builder.tableType;
-  }
-
-  public String getOwner() {
-    return builder.owner;
-  }
-
-  public String getComment() {
-    return builder.comment;
-  }
-
-  public String getCollation() {
-    return builder.collation;
-  }
-
-  public String getViewText() {
-    return builder.viewText;
-  }
-
-  public String getCurrentCatalog() {
-    return builder.currentCatalog;
-  }
-
-  public String[] getCurrentNamespace() {
-    return builder.currentNamespace;
-  }
-
-  public String getCreateVersion() {
-    return builder.createVersion;
-  }
-
-  public long getCreateTime() {
-    return builder.createTime;
-  }
-
-  public Map<String, String> getTableProps() {
-    return builder.tableProps;
+  public TableInfo getTableInfo() {
+    return info;
   }
 
   @Override
   public Column[] columns() {
-    return builder.columns;
+    return info.columns();
   }
 
   @Override
   public Map<String, String> properties() {
-    Map<String, String> props = new java.util.HashMap<>(builder.tableProps);
-    if (getProvider() != null) {
-      props.put(TableCatalog.PROP_PROVIDER, getProvider());
-    }
-    if (getLocation() != null) {
-      props.put(TableCatalog.PROP_LOCATION, getLocation());
-    }
-    if (getTableType() != null) {
-      props.put(TableCatalog.PROP_TABLE_TYPE, getTableType());
-    }
-    if (getOwner() != null) {
-      props.put(TableCatalog.PROP_OWNER, getOwner());
-    }
-    if (getComment() != null) {
-      props.put(TableCatalog.PROP_COMMENT, getComment());
-    }
-    if (getCollation() != null) {
-      props.put(TableCatalog.PROP_COLLATION, getCollation());
-    }
-    if (getViewText() != null) {
-      props.put(TableCatalog.PROP_VIEW_TEXT, getViewText());
-    }
-    if (getCurrentCatalog() != null) {
-      props.put(TableCatalog.PROP_VIEW_CURRENT_CATALOG, getCurrentCatalog());
-    }
-    if (getCurrentNamespace() != null && getCurrentNamespace().length > 0) {
-      props.put(TableCatalog.PROP_VIEW_CURRENT_NAMESPACE,
-          QuotingUtils.quoted(getCurrentNamespace()));
-    }
-    return props;
+    return info.properties();
   }
 
   @Override
   public Transform[] partitioning() {
-    return builder.partitioning;
+    return info.partitions();
   }
 
   @Override
   public String name() {
-    return builder.name;
+    return name;
   }
 
   @Override
