@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.connect
 
-
 /**
  * Design doc Section [3] in Connect: Incrementally constructed queries.
  *
- * In Connect, both sides of a join re-analyze. ALL modifications succeed
- * because each side gets a fresh plan with the latest schema and data.
+ * In Connect, both sides of a join re-analyze. ALL modifications succeed because each side gets a
+ * fresh plan with the latest schema and data.
  */
 class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
 
