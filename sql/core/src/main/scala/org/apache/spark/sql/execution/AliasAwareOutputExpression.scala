@@ -18,9 +18,9 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.plans.{AliasAwareOutputExpression, AliasAwareQueryOutputOrdering}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 
 /**
  * A trait that handles aliases in the `outputExpressions` to produce `outputPartitioning` that
@@ -28,9 +28,59 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningC
  */
 trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
+  /**
+   * Builds an ExprId -> Attribute map for direct remapping of KeyedPartitioning expressions
+   * through column aliases (e.g. `id AS new_id`). This is needed because KeyedPartitioning
+   * carries @transient partitionKeys that must be preserved while only the expressions are
+   * remapped. See SPARK-46367.
+   */
+  private def buildExprIdAliasMap: Map[Long, Attribute] =
+    outputExpressions.flatMap {
+      case a @ Alias(child: Attribute, _) => Some(child.exprId.id -> a.toAttribute)
+      case _ => None
+    }.toMap
+
+  /**
+   * Remaps the partition expressions in a KeyedPartitioning through the alias map built from
+   * `outputExpressions`, replacing old AttributeReferences with their aliased counterparts
+   * by ExprId. Non-aliased attributes that are absent from the current output are pruned,
+   * causing the partitioning to be dropped (returns None). See SPARK-46367.
+   */
+  private def remapKeyedPartitioning(
+      kp: KeyedPartitioning,
+      exprIdAliasMap: Map[Long, Attribute]): Option[KeyedPartitioning] = {
+    val outputSet = AttributeSet(outputExpressions.map(_.toAttribute))
+    def remap(expr: Expression): Option[Expression] = expr match {
+      case attr: Attribute =>
+        exprIdAliasMap.get(attr.exprId.id)
+          .orElse(if (outputSet.contains(attr)) Some(attr) else None)
+      case other =>
+        // For transform expressions (e.g. years(ts)), remap children recursively.
+        val newChildren = other.children.map(remap)
+        if (newChildren.forall(_.isDefined)) {
+          Some(other.withNewChildren(newChildren.map(_.get)))
+        } else {
+          None
+        }
+    }
+    val newExpressions = kp.expressions.map(remap)
+    if (newExpressions.forall(_.isDefined)) {
+      Some(kp.copy(expressions = newExpressions.map(_.get)))
+    } else {
+      None
+    }
+  }
+
   final override def outputPartitioning: Partitioning = {
     val partitionings: Seq[Partitioning] = if (hasAlias) {
+      val exprIdAliasMap = buildExprIdAliasMap
       flattenPartitioning(child.outputPartitioning).iterator.flatMap {
+        case k: KeyedPartitioning =>
+          // SPARK-46367: KeyedPartitioning must be remapped via direct ExprId substitution
+          // rather than the generic projectExpression/multiTransformDown path, because
+          // multiTransformDown may not correctly propagate remappings through KeyedPartitioning's
+          // @transient partitionKeys field.
+          remapKeyedPartitioning(k, exprIdAliasMap).toSeq
         case e: Expression =>
           // We need unique partitionings but if the input partitioning is
           // `HashPartitioning(Seq(id + id))` and we have `id -> a` and `id -> b` aliases then after

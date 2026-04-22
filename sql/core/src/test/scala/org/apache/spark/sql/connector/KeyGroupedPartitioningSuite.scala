@@ -3913,4 +3913,51 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       }
     }
   }
+
+  test("SPARK-46367: KeyedPartitioning should be remapped through column aliases in ProjectExec") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // ProjectExec renames i.id -> new_id, introducing a new ExprId.
+      // The downstream GROUP BY on new_id requires ClusteredDistribution on new_id.
+      // If KeyedPartitioning is not remapped through the alias, EnsureRequirements
+      // will insert a spurious Exchange shuffle before the aggregation (SPARK-46367).
+      val df = sql(
+        s"""
+           |SELECT new_id, SUM(price)
+           |FROM (
+           |  SELECT i.id AS new_id, i.price
+           |  FROM testcat.ns.$items i
+           |  JOIN testcat.ns.$purchases p ON i.id = p.item_id
+           |) t
+           |GROUP BY new_id
+           |""".stripMargin)
+
+      val executedPlan = df.queryExecution.executedPlan
+      val shuffles = collectAllShuffles(executedPlan)
+      assert(shuffles.isEmpty,
+        "SPARK-46367: KeyedPartitioning was not remapped through the alias in ProjectExec, " +
+          "causing EnsureRequirements to insert an unnecessary Exchange before GROUP BY. " +
+          s"Found ${shuffles.size} shuffle(s):\n" +
+          executedPlan)
+
+      // SUM(i.price) per item: items prices are 40.0f, 10.0f, 15.5f (float -> double for SUM)
+      checkAnswer(df.sort("new_id"),
+        Seq(Row(1L, 40.0), Row(2L, 10.0), Row(3L, 15.5)))
+    }
+  }
 }
