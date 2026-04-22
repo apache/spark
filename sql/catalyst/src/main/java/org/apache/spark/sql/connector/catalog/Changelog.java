@@ -101,7 +101,7 @@ public interface Changelog {
    * The default implementation throws {@link UnsupportedOperationException}. Connectors must
    * override this method when any of {@link #containsCarryoverRows()},
    * {@link #representsUpdateAsDeleteAndInsert()}, or {@link #containsIntermediateChanges()}
-   * returns {@code true}.
+   * returns {@code true}. Each referenced column must be non-nullable.
    */
   default NamedReference[] rowId() {
     throw new UnsupportedOperationException("rowId is not supported.");
@@ -119,16 +119,17 @@ public interface Changelog {
    * The row version is distinct from {@code _commit_version}. {@code _commit_version}
    * identifies the commit that emitted this change row; the row version identifies the commit
    * that last wrote the row's content. For a delete+insert pair produced within a single
-   * commit, both halves share the same row version if the pair is a copy-on-write carry-over, and have different
-   * row versions (old on the delete, new on the insert) if the pair is a true update.
+   * commit, both halves share the same row version if the pair is a copy-on-write
+   * carry-over, and have different row versions (old on the delete, new on the insert) if
+   * the pair is a true update.
    * <p>
-   * Spark uses the row version to distinguish copy-on-write carry-over from update without scanning data columns,
-   * for both carry-over removal and update detection.
+   * Spark uses the row version to distinguish copy-on-write carry-over from update without
+   * scanning data columns, for both carry-over removal and update detection.
    * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors must
    * override this method when {@link #containsCarryoverRows()} or
    * {@link #representsUpdateAsDeleteAndInsert()} returns {@code true}. The referenced
-   * column must be a top-level column of {@link #columns()} and must be non-nullable.
+   * column must be non-nullable.
    */
   default NamedReference rowVersion() {
     throw new UnsupportedOperationException("rowVersion is not supported.");
