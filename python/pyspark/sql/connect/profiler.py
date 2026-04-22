@@ -16,7 +16,7 @@
 #
 from typing import TYPE_CHECKING
 
-from pyspark.sql.profiler import ProfilerCollector, ProfileResultsParam
+from pyspark.sql.profiler import ProfilerCollector, ProfileResultsParamV2
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults
@@ -29,7 +29,7 @@ class ConnectProfilerCollector(ProfilerCollector):
 
     def __init__(self) -> None:
         super().__init__()
-        self._value = ProfileResultsParam.zero({})
+        self._value = ProfileResultsParamV2.zero({})
 
     @property
     def _profile_results(self) -> "ProfileResults":
@@ -38,4 +38,4 @@ class ConnectProfilerCollector(ProfilerCollector):
 
     def _update(self, update: "ProfileResults") -> None:
         with self._lock:
-            self._value = ProfileResultsParam.addInPlace(self._profile_results, update)
+            self._value = ProfileResultsParamV2.addInPlace(self._profile_results, update)

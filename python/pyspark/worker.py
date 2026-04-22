@@ -1013,10 +1013,13 @@ def _is_iter_based(eval_type: int) -> bool:
 
 
 def wrap_perf_profiler(f, eval_type, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler
+    from pyspark.sql.profiler import ProfileResultsParam, ProfileResultsParamV2, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+    accumulator_v2 = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
     if _is_iter_based(eval_type):
@@ -1025,7 +1028,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
             iterator = iter(f(*args, **kwargs))
             while True:
                 try:
-                    with WorkerPerfProfiler(accumulator, result_id):
+                    with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
                         item = next(iterator)
                     yield item
                 except StopIteration:
@@ -1034,7 +1037,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
     else:
 
         def profiling_func(*args, **kwargs):
-            with WorkerPerfProfiler(accumulator, result_id):
+            with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
                 ret = f(*args, **kwargs)
             return ret
 
@@ -1042,7 +1045,11 @@ def wrap_perf_profiler(f, eval_type, result_id):
 
 
 def wrap_memory_profiler(f, eval_type, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam, WorkerMemoryProfiler
+    from pyspark.sql.profiler import (
+        ProfileResultsParam,
+        ProfileResultsParamV2,
+        WorkerMemoryProfiler,
+    )
 
     import pyspark.memory_profiler_ext
 
@@ -1050,7 +1057,11 @@ def wrap_memory_profiler(f, eval_type, result_id):
         return f
 
     accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+
+    accumulator_v2 = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
     if _is_iter_based(eval_type):
@@ -1061,7 +1072,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
 
             while True:
                 try:
-                    with WorkerMemoryProfiler(accumulator, result_id, g.gi_code):
+                    with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, g.gi_code):
                         item = next(iterator)
                     yield item
                 except StopIteration:
@@ -1070,7 +1081,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
     else:
 
         def profiling_func(*args, **kwargs):
-            with WorkerMemoryProfiler(accumulator, result_id, f):
+            with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, f):
                 ret = f(*args, **kwargs)
             return ret
 
