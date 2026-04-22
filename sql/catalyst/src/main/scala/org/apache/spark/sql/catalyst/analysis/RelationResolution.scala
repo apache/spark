@@ -324,7 +324,7 @@ class RelationResolution(
           )
         }
         SubqueryAlias(
-          catalog.name +: ident.asMultipartIdentifier,
+          v1Table.fullIdent,
           UnresolvedCatalogRelation(v1Table, options, isStreaming = true)
         )
       } else {

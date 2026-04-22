@@ -82,6 +82,31 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
     val tableName = "table_catalog.default.test_v2"
     checkAnswer(spark.table(tableName), 0.until(10).map(i => Row(i, -i)))
   }
+
+  test("fully-qualified column reference uses the real catalog name") {
+    withTempPath { path =>
+      val loc = path.getCanonicalPath
+      val tableName = s"table_catalog.`$loc`.test_json"
+
+      spark.range(3).select($"id".cast("string").as("col")).write.json(loc)
+
+      // 1-part and 2-part references resolve via last-part suffix matching.
+      checkAnswer(
+        sql(s"SELECT test_json.col FROM $tableName"),
+        Seq(Row("0"), Row("1"), Row("2")))
+      checkAnswer(
+        sql(s"SELECT `$loc`.test_json.col FROM $tableName"),
+        Seq(Row("0"), Row("1"), Row("2")))
+
+      // 3-part reference must use `table_catalog`. The v1 `SessionCatalog.getRelation` that
+      // `RelationResolution.createRelation` delegates to hardcodes `spark_catalog` in the
+      // SubqueryAlias qualifier, so the attribute qualifier becomes
+      // `[spark_catalog, <loc>, test_json]` -- the reference below fails to resolve.
+      checkAnswer(
+        sql(s"SELECT $tableName.col FROM $tableName"),
+        Seq(Row("0"), Row("1"), Row("2")))
+    }
+  }
 }
 
 /**

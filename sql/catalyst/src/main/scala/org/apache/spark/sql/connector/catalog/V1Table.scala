@@ -147,10 +147,9 @@ private[sql] object V1Table {
     }
     CatalogTable(
       // CatalogTable.identifier uses a single-string database; for multi-part namespaces we
-      // preserve only the last part. The view-expansion path does not rely on this — it reads
-      // the captured catalog+namespace from PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE (translated
-      // below into V1's numbered keys) — so the narrowing only affects identifier rendering in
-      // error messages.
+      // preserve only the last part here and record the full multi-part form in `fullIdentOpt`
+      // below. Callers needing the real fully-qualified name (e.g. cyclic view detection)
+      // should read `CatalogTable.fullIdent`.
       identifier = TableIdentifier(
         table = ident.name(),
         database = ident.namespace().lastOption,
@@ -175,7 +174,8 @@ private[sql] object V1Table {
       collation = props.get(TableCatalog.PROP_COLLATION),
       properties = tablePropsMap ++
         clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation) ++
-        viewContextProps
+        viewContextProps,
+      fullIdentOpt = Some(catalog.name() +: ident.asMultipartIdentifier)
     )
   }
 }

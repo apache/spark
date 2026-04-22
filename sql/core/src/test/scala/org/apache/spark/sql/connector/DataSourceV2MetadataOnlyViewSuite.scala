@@ -32,6 +32,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * (`CreateV2ViewExec` / `AlterV2ViewExec` and their atomic staging variants).
  * Data-source-table read paths live in
  * [[org.apache.spark.sql.connector.DataSourceV2MetadataOnlyTableSuite]].
+ *
+ * TODO: once the remaining v2 view DDL is implemented (SET/UNSET TBLPROPERTIES, SHOW CREATE
+ * VIEW, RENAME TO, SCHEMA BINDING, DESCRIBE / SHOW TBLPROPERTIES on v2 views), register a
+ * `MetadataOnlyTable`-backed `DelegatingCatalogExtension` as `spark.sql.catalog.spark_catalog`
+ * and run the shared [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against
+ * the v2 path for full parity with the v1 persisted-view coverage.
  */
 class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -371,6 +377,59 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       intercept[AnalysisException] {
         sql("ALTER VIEW no_view_catalog.default.v AS SELECT 1")
       }
+    }
+  }
+
+  test("cyclic detection distinguishes views across multi-level namespaces") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+
+      // Two views whose last namespace segment collides (`inner`) but whose full multi-part
+      // identifiers differ. Before the `fullIdent` change both collapsed to
+      // `TableIdentifier(v, Some("inner"), Some("view_catalog"))` and cyclic detection would
+      // false-positive on a legitimate cross-namespace REPLACE.
+      sql("CREATE VIEW view_catalog.ns1.inner.v AS SELECT x FROM spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.ns2.inner.v AS " +
+        "SELECT x FROM view_catalog.ns1.inner.v")
+      // Legitimate non-cyclic REPLACE -- new body references a different view that happens to
+      // share the last namespace segment. Must not false-positive.
+      sql("CREATE OR REPLACE VIEW view_catalog.ns1.inner.v AS " +
+        "SELECT x FROM spark_catalog.default.t WHERE x > 1")
+      checkAnswer(spark.table("view_catalog.ns1.inner.v"), Seq(Row(2), Row(3)))
+
+      // Real cycle across the two namespaces must still be caught.
+      val ex = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE VIEW view_catalog.ns1.inner.v AS " +
+          "SELECT x FROM view_catalog.ns2.inner.v")
+      }
+      assert(ex.getCondition == "RECURSIVE_VIEW")
+    }
+  }
+
+  test("ALTER VIEW cyclic detection distinguishes views across multi-level namespaces") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+
+      sql("CREATE VIEW view_catalog.ns1.inner.v_alter AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.ns2.inner.v_alter AS " +
+        "SELECT x FROM view_catalog.ns1.inner.v_alter")
+
+      // Legitimate non-cyclic ALTER -- new body does not reference the altered view. Before
+      // `fullIdent` this false-positived because the two views collapsed to the same
+      // TableIdentifier(v_alter, Some("inner"), Some("view_catalog")).
+      sql("ALTER VIEW view_catalog.ns1.inner.v_alter AS " +
+        "SELECT x FROM spark_catalog.default.t WHERE x > 1")
+      checkAnswer(
+        spark.table("view_catalog.ns1.inner.v_alter"),
+        Seq(Row(2), Row(3)))
+
+      // Real cycle across the two namespaces must still be caught.
+      val ex = intercept[AnalysisException] {
+        sql("ALTER VIEW view_catalog.ns1.inner.v_alter AS " +
+          "SELECT x FROM view_catalog.ns2.inner.v_alter")
+      }
+      assert(ex.getCondition == "RECURSIVE_VIEW")
     }
   }
 

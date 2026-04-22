@@ -444,10 +444,21 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None)
+    viewOriginalText: Option[String] = None,
+    // Optional full multi-part identifier [catalog, namespace..., name]. Set when the v1
+    // `identifier: TableIdentifier` (single-string database) cannot losslessly carry the real
+    // multi-level namespace -- e.g. a CatalogTable synthesized from a v2 MetadataOnlyTable
+    // whose v2 identifier has more than one namespace part. `None` for v1-native tables.
+    fullIdentOpt: Option[Seq[String]] = None)
   extends MetadataMapSupport {
 
   import CatalogTable._
+
+  /**
+   * The fully-qualified multi-part identifier. Prefers `fullIdentOpt` when set (v2-sourced
+   * tables with multi-level namespaces); otherwise reconstructs from `identifier.nameParts`.
+   */
+  def fullIdent: Seq[String] = fullIdentOpt.getOrElse(identifier.nameParts)
 
   /**
    * schema of this table's partition columns

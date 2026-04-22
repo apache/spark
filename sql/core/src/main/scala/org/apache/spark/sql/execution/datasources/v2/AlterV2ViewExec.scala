@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.util.Utils
 
@@ -101,7 +101,7 @@ case class AlterV2ViewExec(
     // we do any other work.
     val _ = existingTable
     val info = buildTableInfo()
-    ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
+    // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     catalog.dropTable(identifier)
     try {
@@ -131,7 +131,7 @@ case class AtomicAlterV2ViewExec(
   override protected def run(): Seq[InternalRow] = {
     val _ = existingTable
     val info = buildTableInfo()
-    ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
+    // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     val staged: StagedTable = try {
       catalog.stageReplace(identifier, info)

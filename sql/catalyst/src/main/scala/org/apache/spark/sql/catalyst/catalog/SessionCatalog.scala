@@ -1054,10 +1054,14 @@ class SessionCatalog(
   def getRelation(
       metadata: CatalogTable,
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): LogicalPlan = {
-    val qualifiedIdent = qualifyIdentifier(metadata.identifier)
-    val db = qualifiedIdent.database.get
-    val table = qualifiedIdent.table
-    val multiParts = Seq(CatalogManager.SESSION_CATALOG_NAME, db, table)
+    // Prefer `fullIdentOpt` (set by non-session v2 catalogs via `V1Table.toCatalogTable`) so
+    // the SubqueryAlias qualifier reflects the real catalog + multi-part namespace.
+    // Fall back to `qualifyIdentifier` for v1 session-catalog tables: it defaults catalog to
+    // `SESSION_CATALOG_NAME` and database to the current database when either is missing.
+    val multiParts = metadata.fullIdentOpt.getOrElse {
+      val qualifiedIdent = qualifyIdentifier(metadata.identifier)
+      qualifiedIdent.nameParts
+    }
 
     if (CatalogTable.isMetricView(metadata)) {
       parseMetricViewDefinition(metadata)

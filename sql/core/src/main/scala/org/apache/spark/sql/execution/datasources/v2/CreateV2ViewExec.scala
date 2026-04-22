@@ -143,7 +143,7 @@ case class CreateV2ViewExec(
         return Seq.empty
       }
       if (!replace) throw viewAlreadyExists()
-      ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
+      // Cyclic reference detection is done at analysis time in CheckViewReferences.
       CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       catalog.dropTable(identifier)
     }
@@ -189,8 +189,8 @@ case class AtomicCreateV2ViewExec(
       return Seq.empty
     }
     val staged: StagedTable = if (replace) {
+      // Cyclic reference detection is done at analysis time in CheckViewReferences.
       if (catalog.tableExists(identifier)) {
-        ViewHelper.checkCyclicViewReference(query, Seq(legacyName), legacyName)
         CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       }
       catalog.stageCreateOrReplace(identifier, info)
