@@ -788,7 +788,7 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
       fileSchema: MessageType,
       readStore: PageReadStore,
       expected: Seq[Row],
-      batchSize: Int = NUM_VALUES): Unit = {
+      batchSize: Int): Unit = {
     import scala.jdk.CollectionConverters._
 
     val recordReader = new VectorizedParquetRecordReader(
