@@ -2858,22 +2858,6 @@ class CollectionExpressionsSuite
       Seq(3, null, null, null, null, null, null, 1, 2, 4)
     )
 
-    // SPARK-56567: pos = Int.MinValue must throw COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION.
-    checkErrorInExpression[SparkRuntimeException](
-      ArrayInsert(a1, Literal(Int.MinValue), Literal(3), legacyNegativeIndex = false),
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> (-BigInt(Int.MinValue)).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> "`array_insert`"))
-    checkErrorInExpression[SparkRuntimeException](
-      ArrayInsert(a1, Literal(Int.MinValue), Literal(3), legacyNegativeIndex = true),
-      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
-      parameters = Map(
-        "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
-        "functionName" -> "`array_insert`"))
-
     // null handling
     checkEvaluation(
       ArrayInsert(
@@ -3294,5 +3278,23 @@ class CollectionExpressionsSuite
     checkEvaluation(new ArrayInsert(
       a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
     )
+  }
+
+  test("SPARK-56567: Array insert with pos = Int.MinValue") {
+    val a = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayInsert(a, Literal(Int.MinValue), Literal(3), legacyNegativeIndex = false),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> (-BigInt(Int.MinValue)).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> "`array_insert`"))
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayInsert(a, Literal(Int.MinValue), Literal(3), legacyNegativeIndex = true),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> "`array_insert`"))
   }
 }
