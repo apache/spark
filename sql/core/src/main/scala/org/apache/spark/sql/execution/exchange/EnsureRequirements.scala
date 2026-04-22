@@ -287,35 +287,39 @@ case class EnsureRequirements(
         child
       } else {
         // Before adding a SortExec, check whether a GroupPartitionsExec anywhere in the child
-        // subtree can self-satisfy via k-way merge.
-        var sortedMergeEnabled = false
-        var stop = false
-        val withKWayMerge = child.transformDownWithPruning(_ => !stop) {
-          case gpe: GroupPartitionsExec =>
-            stop = true
-            gpe.tryEnableSortedMerge() match {
-              case Some(updated) =>
-                sortedMergeEnabled = true
-                updated
-              case None => gpe
-            }
-          case node if !node.isInstanceOf[OrderPreservingUnaryExecNode] =>
-            // Stop traversal at nodes that do not preserve child ordering (binary nodes, leaf
-            // nodes, SortExec, exchanges, etc.) -- a GroupPartitionsExec below them cannot
-            // satisfy this parent's ordering requirement.
-            stop = true
-            node
-        }
-        if (sortedMergeEnabled &&
-            SortOrder.orderingSatisfies(withKWayMerge.outputOrdering, requiredOrdering)) {
-          withKWayMerge
-        } else {
-          SortExec(requiredOrdering, global = false, child = child)
+        // subtree can self-satisfy via sorted merge.
+        tryEnableSortedMerge(child) match {
+          case Some(newChild)
+              if SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering) =>
+            newChild
+          case _ => SortExec(requiredOrdering, global = false, child = child)
         }
       }
     }
 
     children
+  }
+
+  private def tryEnableSortedMerge(plan: SparkPlan): Option[SparkPlan] = {
+    var sortedMergeEnabled = false
+    var stop = false
+    val updated = plan.transformDownWithPruning(_ => !stop) {
+      case gpe: GroupPartitionsExec =>
+        stop = true
+        gpe.tryEnableSortedMerge() match {
+          case Some(u) =>
+            sortedMergeEnabled = true
+            u
+          case None => gpe
+        }
+      case node if !node.isInstanceOf[OrderPreservingUnaryExecNode] =>
+        // Stop traversal at nodes that do not preserve child ordering (binary nodes, leaf
+        // nodes, SortExec, exchanges, etc.) -- a GroupPartitionsExec below them cannot
+        // satisfy this parent's ordering requirement.
+        stop = true
+        node
+    }
+    Option.when(sortedMergeEnabled)(updated)
   }
 
   private def reorder(

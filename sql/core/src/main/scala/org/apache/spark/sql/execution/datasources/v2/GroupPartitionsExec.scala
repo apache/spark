@@ -232,7 +232,7 @@ case class GroupPartitionsExec(
 
   /**
    * Returns a copy of this node with k-way merge enabled if the config permits it.
-   * */
+   */
   def tryEnableSortedMerge(): Option[GroupPartitionsExec] =
     Option.when(hasCoalescing && canUseSortedMerge)(copy(enableSortedMerge = true))
 
