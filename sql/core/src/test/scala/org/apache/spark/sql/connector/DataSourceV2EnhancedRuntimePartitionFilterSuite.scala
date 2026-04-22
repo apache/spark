@@ -50,7 +50,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *  8. DPP, translated, accepted in 1st pass -> no PartitionPredicate
  *  9. Scalar, translatable, accepted in 1st pass -> no PartitionPredicate
  * 10. Scalar on data column -> no PartitionPredicate
- * 11. supportsIterativeFiltering is false -> no PartitionPredicate
+ * 11. supportsIterativePushdown is false -> no PartitionPredicate
  * 12. Partition col not in filterAttributes -> no PartitionPredicate
  */
 class DataSourceV2EnhancedRuntimePartitionFilterSuite
@@ -400,7 +400,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }
   }
 
-  test("case 11: supportsIterativeFiltering is false -> no PartitionPredicate") {
+  test("case 11: supportsIterativePushdown is false -> no PartitionPredicate") {
     val noIterCatalog = "testNoIterativeFiltering"
     withSQLConf(s"spark.sql.catalog.$noIterCatalog" ->
       classOf[InMemoryTableEnhancedRuntimePartitionFilterCatalog].getName) {
@@ -409,7 +409,7 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
       withTable(tbl, dim) {
         sql(s"CREATE TABLE $tbl (id INT, part INT) " +
           s"USING $v2Source PARTITIONED BY (part) " +
-          s"TBLPROPERTIES('supports-iterative-filtering' = 'false')")
+          s"TBLPROPERTIES('supports-iterative-pushdown' = 'false')")
         for (i <- 0 until 5) {
           sql(s"INSERT INTO $tbl VALUES ($i, $i)")
         }
@@ -452,9 +452,9 @@ class DataSourceV2EnhancedRuntimePartitionFilterSuite
     }
   }
 
-  // Regression test for a buggy connector that supports iterative filtering but
+  // Test for a buggy connector that supports iterative filtering but
   // does not correctly report first-pass filters in pushedPredicates().
-  // The second round should still push a PartitionPredicate and prune partitions.
+  // The second round will push duplicate PartitionPredicate.
   test("pushedPredicates() omits first-pass filters -> second round still prunes") {
     val tbl = s"$catalogName.tbl_nopushed"
     val dim = s"$catalogName.dim_nopushed"

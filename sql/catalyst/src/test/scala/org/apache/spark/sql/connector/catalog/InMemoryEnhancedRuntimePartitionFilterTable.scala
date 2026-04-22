@@ -84,8 +84,8 @@ class InMemoryEnhancedRuntimePartitionFilterTable(
 
     override def pushedPredicates(): Array[Predicate] = _allPushedPredicates.toArray
 
-    override def supportsIterativeFiltering(): Boolean =
-      props.getOrDefault(SupportsIterativeFilteringKey, "true").toBoolean
+    override def supportsIterativePushdown(): Boolean =
+      props.getOrDefault(SupportsIterativePushdownKey, "true").toBoolean
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
@@ -120,8 +120,8 @@ object InMemoryEnhancedRuntimePartitionFilterTable {
   private[catalog] val FilterAttributesKey = "filter-attributes"
 
   /**
-   * Table property: when "false", supportsIterativeFiltering() returns false.
+   * Table property: when "false", supportsIterativePushdown() returns false.
    * Default: "true".
    */
-  private[catalog] val SupportsIterativeFilteringKey = "supports-iterative-filtering"
+  private[catalog] val SupportsIterativePushdownKey = "supports-iterative-pushdown"
 }

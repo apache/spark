@@ -163,7 +163,7 @@ object PushDownUtils extends Logging {
         // If the scan supports iterative filtering, derive PartitionPredicates from runtime
         // filters whose translation was not already accepted in the first pass.  (See SPARK-55596)
         // Only candidates whose referenced columns are declared in filterAttributes() are eligible.
-        val partPredicatesPushed = filterableScan.supportsIterativeFiltering() && {
+        val partPredicatesPushed = filterableScan.supportsIterativePushdown() && {
           val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
             filterableScan.filterAttributes(), output)
           val pushed = filterableScan.pushedPredicates().toSet

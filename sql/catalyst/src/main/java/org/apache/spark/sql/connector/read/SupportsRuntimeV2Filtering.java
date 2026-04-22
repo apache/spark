@@ -31,7 +31,7 @@ import org.apache.spark.sql.sources.Filter;
  * {@link SupportsRuntimeV2Filtering} is preferred over {@link SupportsRuntimeFiltering}
  * and only one of them should be implemented by the data sources.
  * <p>
- * <b>Iterative filtering:</b> When {@link #supportsIterativeFiltering()} returns true,
+ * <b>Iterative filtering:</b> When {@link #supportsIterativePushdown()} returns true,
  * {@link #filter(Predicate[])} may be called <i>multiple times</i> on the same
  * {@link Scan} instance. The first call pushes translated V2 predicates; the second call
  * pushes {@link PartitionPredicate} instances derived from runtime filters whose translated
@@ -68,7 +68,7 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    * scan must not report new partition values that were not present in the original partitioning.
    * <p>
    * This method may be called multiple times with additional predicates (e.g.
-   * {@link PartitionPredicate}) when {@link #supportsIterativeFiltering()} returns true.
+   * {@link PartitionPredicate}) when {@link #supportsIterativePushdown()} returns true.
    * The implementation must accumulate state across all calls so that
    * {@link #pushedPredicates()} can return predicates from all of them.
    * <p>
@@ -107,7 +107,7 @@ public interface SupportsRuntimeV2Filtering extends Scan {
    *
    * @since 4.2.0
    */
-  default boolean supportsIterativeFiltering() {
+  default boolean supportsIterativePushdown() {
     return false;
   }
 }
