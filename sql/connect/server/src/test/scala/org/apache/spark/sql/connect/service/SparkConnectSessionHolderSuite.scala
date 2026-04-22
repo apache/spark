@@ -301,7 +301,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     // scalastyle:on assume
 
     retry(n = 2) {
-      failAfter(2.minutes) {
+      failAfter(1.minute) {
         runPythonForeachBatchTerminationTestBody()
       }
     }
