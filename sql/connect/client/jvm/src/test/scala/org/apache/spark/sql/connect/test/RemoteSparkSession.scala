@@ -125,6 +125,10 @@ object SparkConnectServerUtils {
     Seq(
       // Use InMemoryTableCatalog for V2 writer tests
       "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
+      // Use SharedInMemoryTableCatalog for cross-session cache tests
+      "spark.sql.catalog.sharedcat=" +
+        "org.apache.spark.sql.connector.catalog.SharedInMemoryTableCatalog",
+      "spark.sql.catalog.sharedcat.copyOnLoad=true",
       // Try to use the hive catalog, fallback to in-memory if it is not there.
       "spark.sql.catalogImplementation=" + catalogImplementation,
       // Make the server terminate reattachable streams every 1 second and 123 bytes,
