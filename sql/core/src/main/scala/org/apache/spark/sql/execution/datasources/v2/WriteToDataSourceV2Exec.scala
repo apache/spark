@@ -490,9 +490,6 @@ trait V2TableWriteExec
   override def output: Seq[Attribute] = Nil
 
   override def customMetrics: Map[String, SQLMetric] = Map.empty
-  protected def operationMetrics: Map[String, SQLMetric] = Map.empty
-
-  override lazy val metrics = customMetrics ++ operationMetrics
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
