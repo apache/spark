@@ -7217,6 +7217,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val SHOW_ALL_PARTITION_PARAMETERS_ENABLED =
+    buildConf("spark.sql.hive.showAllPartitionParameters")
+      .doc("When true, Spark does not hide internal `spark.sql.*` entries from " +
+        "partition parameters returned by HiveExternalCatalog. " +
+        "When false, these internal entries are filtered out.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -8516,6 +8525,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
 
   def listaggAllowDistinctCastWithOrder: Boolean = getConf(LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER)
+
+  def showAllPartitionParameters: Boolean = getConf(SQLConf.SHOW_ALL_PARTITION_PARAMETERS_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

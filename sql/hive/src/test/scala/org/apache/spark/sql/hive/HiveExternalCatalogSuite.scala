@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.internal.SQLConf.SHOW_ALL_PARTITION_PARAMETERS_ENABLED
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -241,6 +243,53 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
     val alteredTable = externalCatalog.getTable("db1", tableName)
     assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
+  }
+
+  test("partition parameters should not be filtered by config") {
+    def createCatalog(showAllPartitionParameters: Boolean): (HiveExternalCatalog, String) = {
+      val sparkConf = new SparkConf()
+        .set(SHOW_ALL_PARTITION_PARAMETERS_ENABLED.key, showAllPartitionParameters.toString)
+      val hadoopConf = new Configuration
+      val metastorePath = Utils.createTempDir()
+      metastorePath.delete()
+      hadoopConf.set(
+        "javax.jdo.option.ConnectionURL",
+        s"jdbc:derby:;databaseName=${metastorePath.getCanonicalPath};create=true")
+      hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().getCanonicalPath)
+      val catalog = new HiveExternalCatalog(sparkConf, hadoopConf)
+      val db = if (showAllPartitionParameters) "db_show_part_params_all" else "db_show_part_params"
+      catalog.client.reset()
+      catalog.createDatabase(newDb(db), ignoreIfExists = false)
+      catalog.createTable(newTable("tbl", db), ignoreIfExists = false)
+
+      val partSpec = Map("a" -> "1", "b" -> "2")
+      val part = CatalogTablePartition(partSpec, storageFormat)
+      catalog.createPartitions(db, "tbl", Seq(part), ignoreIfExists = false)
+
+      val sparkSqlParamKey = HiveExternalCatalog.SPARK_SQL_PREFIX + "test"
+      val updatedPart = catalog.getPartition(db, "tbl", partSpec).copy(
+        parameters = Map("k1" -> "v1", sparkSqlParamKey -> "v2"),
+        stats = Some(CatalogStatistics(sizeInBytes = 1, rowCount = Some(1))))
+      catalog.alterPartitions(db, "tbl", Seq(updatedPart))
+      (catalog, db)
+    }
+
+    val (hiddenParamsCatalog, hiddenParamsDb) = createCatalog(showAllPartitionParameters = false)
+    val hiddenParamsPart =
+      hiddenParamsCatalog.getPartition(hiddenParamsDb, "tbl", Map("a" -> "1", "b" -> "2"))
+    assert(hiddenParamsPart.stats.nonEmpty)
+    assert(hiddenParamsPart.parameters.getOrElse("k1", "").equals("v1"))
+    assert(
+      hiddenParamsPart.parameters.keys.forall(!_.startsWith(HiveExternalCatalog.SPARK_SQL_PREFIX)))
+
+    val (allParamsCatalog, allParamsDb) = createCatalog(showAllPartitionParameters = true)
+    val allParamsPart =
+      allParamsCatalog.getPartition(allParamsDb, "tbl", Map("a" -> "1", "b" -> "2"))
+    assert(allParamsPart.stats.nonEmpty)
+    assert(allParamsPart.parameters.getOrElse("k1", "").equals("v1"))
+    assert(
+      allParamsPart.parameters.getOrElse(
+        HiveExternalCatalog.SPARK_SQL_PREFIX + "test", "").equals("v2"))
   }
 
   test("SPARK-50137: Avoid fallback to Hive-incompatible ways on thrift exception") {
