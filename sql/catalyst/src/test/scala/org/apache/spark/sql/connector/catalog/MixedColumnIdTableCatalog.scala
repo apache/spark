@@ -34,8 +34,8 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  *
  * Tests manipulate [[MixedColumnIdTableCatalog.nullIdColumnNames]] between
  * operations to control which columns have null IDs at any given point.
- * The set is snapshotted each time a table is created, altered, or copied,
- * so changes to the set after that point do not affect existing table instances.
+ * The set is snapshotted each time a table is created, altered, or copied.
+ * Therefore, changes to the set after that point do not affect existing table instances.
  */
 class MixedColumnIdTableCatalog extends InMemoryTableCatalog {
 
@@ -86,10 +86,8 @@ class MixedColumnIdInMemoryTable(
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: java.util.Map[String, String],
-    constraints: Array[Constraint] =
-      Array.empty,
-    override val id: String =
-      java.util.UUID.randomUUID().toString,
+    constraints: Array[Constraint] = Array.empty,
+    override val id: String = java.util.UUID.randomUUID().toString,
     nullIdNames: Set[String] = Set.empty)
   extends InMemoryTable(
     name = name,

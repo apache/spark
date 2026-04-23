@@ -2051,7 +2051,7 @@ class DataSourceV2DataFrameSuite
   // Column ID tests: Type change in standard catalog
   //
   // The standard InMemoryTableCatalog assigns new column IDs when the
-  // data type changes (preserveOldIDsAndAssignNewIDs matches by name
+  // data type changes (assignMissingIds matches by name
   // AND type). This is different from TypeChangePreservesColIdTableCatalog.
 
   test("type widening in standard catalog triggers column ID mismatch") {

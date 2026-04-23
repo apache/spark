@@ -29,7 +29,7 @@ package org.apache.spark.sql.connector.catalog
  * This is to test the scenario where connectors do not implement
  * table IDs but do implement column IDs. In this scenario, column
  * IDs assigned by [[InMemoryBaseTable]] still differ after recreate,
- * so [[validateCapturedColumnIds]] catches the schema change.
+ * so [[V2TableUtil.validateColumnIds]] catches the schema change.
  */
 class NullTableIdInMemoryTableCatalog extends InMemoryTableCatalog {
 

@@ -75,7 +75,7 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  // Assign column IDs to columns that don't already have one.
+  // Assign column IDs to columns that do not have one.
   // This simulates connectors that support column identity tracking.
   private var tableColumns: Array[Column] = initialColumns.map { c =>
     if (c.id() == null) {
@@ -712,7 +712,7 @@ abstract class InMemoryBaseTable(
           oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
           newType = newSchema)
         val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
-        tableColumns = InMemoryBaseTable.preserveOldIDsAndAssignNewIDs(
+        tableColumns = InMemoryBaseTable.assignMissingIds(
           oldColumns = columns(),
           newColumns = newColumns)
         writer
@@ -837,7 +837,17 @@ object InMemoryBaseTable {
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
-  def preserveOldIDsAndAssignNewIDs(
+  /**
+   * Preserves column IDs from `oldColumns` when the column name and data type match,
+   * and assigns new IDs to columns that do not already have one.
+   *
+   * Only the data type is compared (not nullability or other properties) because a type change
+   * represents a fundamental change to the column's nature and should produce a new ID, while
+   * nullability or comment changes are property changes that preserve column identity.
+   * [[TypeChangePreservesColIdTableCatalog]] overrides this behavior for connectors that
+   * preserve IDs even across type changes.
+   */
+  def assignMissingIds(
       oldColumns: Array[Column],
       newColumns: Array[Column]): Array[Column] = {
     newColumns.map { newCol =>

@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  * override [[columns]] to strip IDs. Data is copied from the table
  * created by the parent [[InMemoryTableCatalog]].
  *
- * When column IDs are null, [[validateCapturedColumnIds]]
+ * When column IDs are null, [[V2TableUtil.validateColumnIds]]
  * skips validation entirely, meaning drop/re-add of a column is NOT
  * detected via column IDs.
  */
@@ -75,10 +75,8 @@ class NullColumnIdInMemoryTable(
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: java.util.Map[String, String],
-    constraints: Array[Constraint] =
-      Array.empty,
-    override val id: String =
-      java.util.UUID.randomUUID().toString)
+    constraints: Array[Constraint] = Array.empty,
+    override val id: String = java.util.UUID.randomUUID().toString)
   extends InMemoryTable(
     name = name,
     columns = columns,

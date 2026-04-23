@@ -171,12 +171,16 @@ public interface Column {
   String metadataInJSON();
 
   /**
-   * An ID of the column that can be used to reliably track column identity across schema
-   * changes such as renames. If a column is dropped and re-added with the same name, the
-   * new column ID must be different. This method must return null if connectors don't
+   * Returns the ID of this table column. Can be used to reliably track column identity across
+   * schema changes. For example, if a column is dropped and re-added with the same name, the
+   * new column ID must be different. This method must return null if the connector does not
    * support the notion of column ID.
    * <p>
-   * When column IDs are null, Spark skips column identity validation.
+   * Spark skips column identity validation for null column IDs.
+   * <p>
+   * Column ID is not part of a column's structural identity: two columns with different IDs but
+   * identical schema properties (name, type, nullability, etc.) are considered equal by
+   * {@link Object#equals(Object)} in the standard implementation.
    */
   @Nullable
   default String id() {

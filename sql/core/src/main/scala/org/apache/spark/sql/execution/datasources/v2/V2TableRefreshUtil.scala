@@ -36,7 +36,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
-   *  - Column IDs: Validates captured column IDs match the current table's column IDs
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -63,7 +63,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
-   *  - Column IDs: Validates captured column IDs match the current table's column IDs
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -128,7 +128,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   private def validateColumnIds(
       currentTable: Table,
       relation: DataSourceV2Relation): Unit = {
-    val errors = V2TableUtil.validateCapturedColumnIds(currentTable, relation)
+    val errors = V2TableUtil.validateColumnIds(currentTable, relation)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.columnIdMismatchAfterAnalysis(relation.name, errors)
     }

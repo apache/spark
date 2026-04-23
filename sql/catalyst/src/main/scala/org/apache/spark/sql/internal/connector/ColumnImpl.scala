@@ -34,7 +34,11 @@ case class ColumnImpl(
     metadataInJSON: String,
     override val id: String = null) extends Column {
 
-  // [[id]] is excluded from [[equals]] and [[hashCode]].
+  // [[id]] is excluded from [[equals]] and [[hashCode]] because it is an auxiliary tracking
+  // identifier, not part of the column's structural identity. Including it would break existing
+  // equality comparisons that rely on schema properties (name, type, nullability, etc.) and
+  // would cause spurious mismatches when the same logical column is constructed with different IDs.
+  // Column ID validation is performed separately by [[V2TableUtil.validateColumnIds]].
   override def equals(other: Any): Boolean = other match {
     case that: ColumnImpl =>
       name == that.name &&
