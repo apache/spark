@@ -180,6 +180,9 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
+    // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
+    // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
+    // Any change to this algorithm must be mirrored there (and vice versa).
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
@@ -255,7 +258,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // Apply CSE to otherPreds, mirroring the non-CSE branch's ordering so we preserve
-    // short-circuit semantics. Three invariants:
+    // short-circuit semantics. The non-CSE branch lives in `generatePredicateCode`
+    // above; any future change to that algorithm should be reflected here (and vice
+    // versa) -- the two paths must stay in lockstep on notNullPreds/otherPreds
+    // interleaving. Three invariants:
     //   (a) Between otherPreds: emit each common subexpression's precompute *just
     //       before* the first otherPred that references it, not at the top of the
     //       `do { }` block. A later otherPred still reuses the cached value -- it just
@@ -306,6 +312,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         // Emit an IsNotNull check, binding against child.output so the inner expression
         // is evaluated with its original nullability (the tightened-nullability `output`
         // is only appropriate inside otherPreds, where the required checks have fired).
+        // The `bound.nullable` gate below is defensive -- `IsNotNull` always produces a
+        // non-nullable Boolean, so this branch is structurally unreachable today; it
+        // mirrors the non-CSE helper's shape to keep future refactors safe.
         def genNotNull(pred: Expression): String = {
           val bound = BindReferences.bindReference(pred, child.output)
           val evaluated = evaluateRequiredVariables(child.output, input, pred.references)
@@ -356,8 +365,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           parts.toString
         }
 
-        // Leftover notNullPreds: any IsNotNull that no otherPred's reference matched.
-        // These run after all otherPreds to match the non-CSE ordering.
+        // Leftover notNullPreds: any IsNotNull that no otherPred's reference matched by
+        // `semanticEquals`. These run after all otherPreds to match the non-CSE ordering.
+        // Note: a complex `IsNotNull(expr(r))` can still land here even when the (b) path
+        // already emitted a synthetic `IsNotNull(r)` ahead of some otherPred -- the
+        // synthetic check only guards the tightened-output binding; the inner expression
+        // itself may still need its null check (e.g. under non-ANSI `cast(s as int)` can
+        // return null for unparseable strings, so we must filter the resulting row).
         val leftoverNotNull = notNullPreds.zipWithIndex.collect {
           case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
         }.mkString("\n")
