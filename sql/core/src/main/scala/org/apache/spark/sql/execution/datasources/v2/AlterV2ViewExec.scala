@@ -76,6 +76,10 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   override def userSpecifiedColumns: Seq[(String, Option[String])] = Seq.empty
   override def comment: Option[String] = existingProp(TableCatalog.PROP_COMMENT)
   override def collation: Option[String] = existingProp(TableCatalog.PROP_COLLATION)
+  // Preserve the existing view's owner (v1-parity with AlterViewAsCommand's viewMeta.copy,
+  // which leaves `owner` untouched). If the existing view has no PROP_OWNER, pass it through
+  // as None so the replacement TableInfo also has no owner.
+  override def owner: Option[String] = existingProp(TableCatalog.PROP_OWNER)
   override def userProperties: Map[String, String] = existingProps
 
   // Read the schema binding mode directly from the properties map; shares decoding with

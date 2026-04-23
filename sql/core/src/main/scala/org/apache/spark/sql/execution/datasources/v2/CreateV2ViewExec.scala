@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, SchemaEvolution, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -49,13 +48,14 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   def userSpecifiedColumns: Seq[(String, Option[String])]
   def comment: Option[String]
   def collation: Option[String]
+  def owner: Option[String]
   def userProperties: Map[String, String]
   def originalText: String
   def query: LogicalPlan
   def viewSchemaMode: ViewSchemaMode
 
   // Build a synthetic v1 TableIdentifier for error messages and for ViewHelper methods that
-  // accept it purely for rendering. This carries no semantic weight - the v2 Identifier is the
+  // accept it purely for rendering. This carries no semantic weight -- the v2 Identifier is the
   // actual target.
   protected lazy val legacyName: TableIdentifier =
     identifier.asLegacyTableIdentifier(catalog.name())
@@ -104,10 +104,15 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
       viewSchemaMode = viewSchemaMode,
       catalogAndNamespaceEncoder = v2Encoder)
 
+    // CREATE stamps the current user into PROP_OWNER (matching v2 CREATE TABLE via
+    // CatalogV2Util.withDefaultOwnership and v1 CREATE VIEW via CatalogTable.owner's default);
+    // ALTER preserves the existing view's owner (v1-parity with AlterViewAsCommand's
+    // viewMeta.copy). Both cases are expressed via the `owner` hook provided by the subclass.
     val builder = new TableInfo.Builder()
       .withSchema(aliasedSchema)
       .withProperties(viewProps.asJava)
       .withViewText(originalText)
+    owner.foreach(builder.withOwner)
     comment.foreach(builder.withComment)
     collation.foreach(builder.withCollation)
     builder.build()
@@ -154,6 +159,8 @@ case class CreateV2ViewExec(
     allowExisting: Boolean,
     replace: Boolean,
     viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
+
+  override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
 
   override protected def run(): Seq[InternalRow] = {
     // Probe the catalog before preparing the view body so `IF NOT EXISTS` short-circuits
@@ -204,6 +211,8 @@ case class AtomicCreateV2ViewExec(
     allowExisting: Boolean,
     replace: Boolean,
     viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
+
+  override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
 
   override val metrics: Map[String, SQLMetric] =
     DataSourceV2Utils.commitMetrics(sparkContext, catalog)

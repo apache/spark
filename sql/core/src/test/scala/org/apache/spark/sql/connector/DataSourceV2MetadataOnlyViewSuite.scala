@@ -499,6 +499,24 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  test("CREATE VIEW stamps PROP_OWNER on the stored TableInfo") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.default.v_owner_create AS " +
+        "SELECT x FROM spark_catalog.default.t")
+
+      val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+        .asInstanceOf[TestingViewCatalog]
+      val info = catalog.getStoredView(Array("default"), "v_owner_create")
+      // v2 CREATE VIEW stamps the current user into PROP_OWNER, matching v2 CREATE TABLE
+      // (via CatalogV2Util.withDefaultOwnership) and v1 CREATE VIEW (via CatalogTable.owner's
+      // default). Without this, the ALTER VIEW preservation test above would have nothing to
+      // carry forward on a v2-created view.
+      val owner = info.properties().get(TableCatalog.PROP_OWNER)
+      assert(owner != null && owner.nonEmpty, s"expected a non-empty owner, got: $owner")
+    }
+  }
+
   test("ALTER VIEW preserves PROP_OWNER (v1-parity)") {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
       .asInstanceOf[TestingViewCatalog]
