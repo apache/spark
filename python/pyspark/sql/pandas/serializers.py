@@ -136,17 +136,24 @@ class ArrowStreamSerializer(Serializer):
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
+        import os
+
         iterator = iter(iterator)
         if self._write_start_stream:
             iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
 
+        pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
         writer = None
         try:
             for batch in iterator:
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
+                # In pipelined mode, flush after each batch so the JVM can read output
+                # while still sending input, rather than buffering all output.
+                if pipelined:
+                    stream.flush()
         finally:
             if writer is not None:
                 writer.close()

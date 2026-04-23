@@ -3686,12 +3686,60 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 
+        def pipelined_process():
+            """
+            Pipelined variant of process() that pre-fetches input batches in a background
+            reader thread while the main thread computes the UDF and writes output.
+            This allows input deserialization to overlap with UDF computation.
+            """
+            # Mark that pipelined mode is active so UDFs can verify the code path.
+            os.environ["SPARK_PIPELINED_UDF_ACTIVE"] = "1"
+            import queue
+            import threading
+
+            queue_depth = int(os.environ.get("SPARK_PIPELINED_UDF_QUEUE_DEPTH", "2"))
+            _SENTINEL = object()
+            input_queue = queue.Queue(maxsize=queue_depth)
+            reader_error = [None]
+
+            def _reader_thread():
+                try:
+                    for batch in deserializer.load_stream(infile):
+                        input_queue.put(batch)
+                except Exception as e:
+                    reader_error[0] = e
+                finally:
+                    input_queue.put(_SENTINEL)
+
+            t = threading.Thread(target=_reader_thread, name="pyspark-pipelined-reader", daemon=True)
+            t.start()
+
+            def _queued_iter():
+                while True:
+                    item = input_queue.get()
+                    if item is _SENTINEL:
+                        if reader_error[0] is not None:
+                            raise reader_error[0]
+                        return
+                    yield item
+
+            out_iter = func(split_index, _queued_iter())
+            try:
+                serializer.dump_stream(out_iter, outfile)
+            finally:
+                if hasattr(out_iter, "close"):
+                    out_iter.close()
+                t.join(timeout=5)
+
+        is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        run_process = pipelined_process if is_pipelined else process
+
         processing_start_time = time.time()
         with capture_outputs():
             if profiler:
-                profiler.profile(process)
+                profiler.profile(run_process)
             else:
-                process()
+                run_process()
         processing_time_ms = int(1000 * (time.time() - processing_start_time))
 
         # Cleanup

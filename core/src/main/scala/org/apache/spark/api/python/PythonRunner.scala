@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.nio.file.{Files => JavaFiles, Path}
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{ArrayBlockingQueue, ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
@@ -121,6 +121,21 @@ private[spark] object PythonEvalType {
 
 private[spark] object BasePythonRunner extends Logging {
 
+  /** Sentinel ByteBuffer used to signal end of input in the pipelined writer queue. */
+  private[python] val PIPELINED_QUEUE_POISON_PILL: ByteBuffer =
+    ByteBuffer.allocate(0)
+
+  /**
+   * A ByteArrayOutputStream that exposes its internal buffer without copying.
+   * Used by [[BasePythonRunner.PipelinedWriterThread]] to hand off serialized data
+   * to the send queue via zero-copy ByteBuffer.wrap().
+   */
+  private[python] class ExposedByteArrayOutputStream(size: Int)
+    extends ByteArrayOutputStream(size) {
+    /** Returns the internal buffer. Valid bytes are from index 0 to size()-1. */
+    def getBuffer: Array[Byte] = buf
+  }
+
   private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
   private[spark] def faultHandlerLogPath(pid: Int): Path = {
@@ -211,6 +226,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
   protected val killWorkerOnFlushFailure: Boolean =
      conf.get(PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
+  protected val pipelinedEnabled: Boolean = conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
+  protected val pipelinedQueueDepth: Int = conf.get(PYTHON_UDF_PIPELINED_QUEUE_DEPTH)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -325,6 +342,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
+    if (pipelinedEnabled) {
+      envVars.put("SPARK_PIPELINED_UDF", "1")
+      envVars.put("SPARK_PIPELINED_UDF_QUEUE_DEPTH", pipelinedQueueDepth.toString)
+    }
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)
@@ -359,10 +380,32 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val dataIn = new DataInputStream(new BufferedInputStream(
+    val inputStream = if (pipelinedEnabled) {
+      // Pipelined mode: a separate writer thread serializes input into ByteBuffers
+      // and enqueues them. The selector thread (PipelinedReaderInputStream) polls
+      // from the queue and writes to the socket, while simultaneously reading output.
+      // A return queue allows consumed direct ByteBuffers to be reused by the writer,
+      // avoiding repeated direct buffer allocation.
+      val sendQueue =
+        new ArrayBlockingQueue[DirectByteBufferOutputStream](pipelinedQueueDepth)
+      val returnQueue =
+        new ArrayBlockingQueue[DirectByteBufferOutputStream](pipelinedQueueDepth + 1)
+      val writerThread = new PipelinedWriterThread(
+        writer, sendQueue, returnQueue, bufferSize, context)
+      writerThread.start()
+
+      context.addTaskCompletionListener[Unit] { _ =>
+        writerThread.interrupt()
+      }
+
+      new PipelinedReaderInputStream(worker, writer, sendQueue, returnQueue, handle,
+        faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout, context)
+    } else {
       new ReaderInputStream(worker, writer, handle,
-        faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout, context),
-      bufferSize))
+        faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout, context)
+    }
+
+    val dataIn = new DataInputStream(new BufferedInputStream(inputStream, bufferSize))
     val stdoutIterator = newReaderIterator(
       dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
@@ -396,7 +439,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       partitionIndex: Int,
       context: TaskContext) {
 
-    @volatile private var _exception: Throwable = _
+    @volatile private[python] var _exception: Throwable = _
 
     private val pythonIncludes = funcs.flatMap(_.funcs.flatMap(_.pythonIncludes.asScala)).toSet
     private val broadcastVars = funcs.flatMap(_.funcs.flatMap(_.broadcastVars.asScala))
@@ -992,6 +1035,242 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // We no longer have any data to write to the socket.
         worker.selectionKey.interestOps(SelectionKey.OP_READ)
         bufferStream.close()
+      }
+    }
+  }
+
+  /**
+   * A dedicated thread that serializes input data into DirectByteBufferOutputStream instances
+   * and enqueues them for the selector thread via buffer swapping. Once a buffer is filled,
+   * the entire stream is handed off to the send queue, and the writer takes a fresh one from
+   * the return queue (or creates a new one). This eliminates memory copies -- the selector
+   * thread writes directly from the same direct buffer the writer serialized into.
+   *
+   * Unlike the old WriterThread design (removed in SPARK-44705), this thread never touches the
+   * socket -- all socket I/O is done by the selector thread. This eliminates the deadlock class
+   * that plagued the old design where both threads did blocking I/O on the same socket.
+   */
+  class PipelinedWriterThread(
+      writer: Writer,
+      sendQueue: ArrayBlockingQueue[DirectByteBufferOutputStream],
+      returnQueue: ArrayBlockingQueue[DirectByteBufferOutputStream],
+      bufferSize: Int,
+      context: TaskContext)
+    extends Thread(s"python-udf-pipelined-writer-${taskIdentifier(context)}") {
+
+    setDaemon(true)
+
+    override def run(): Unit = {
+      var bufferStream = new DirectByteBufferOutputStream(bufferSize)
+      var dataOut = new DataOutputStream(bufferStream)
+      try {
+        // Write command/metadata (partition index, task context, broadcasts, UDF definition).
+        writer.open(dataOut)
+        swapAndEnqueue()
+
+        // Write input data in a loop, batching into buffers of ~bufferSize.
+        var hasInput = true
+        var lastEnqueueTime = System.nanoTime()
+        while (hasInput && !Thread.currentThread().isInterrupted) {
+          hasInput = writer.writeNextInputToStream(dataOut)
+          val shouldFlush = (System.nanoTime() - lastEnqueueTime) > 10000000L // 10ms
+          if (bufferStream.size() >= bufferSize || !hasInput || shouldFlush) {
+            if (!hasInput) {
+              writer.close(dataOut)
+            }
+            if (bufferStream.size() > 0) {
+              swapAndEnqueue()
+              lastEnqueueTime = System.nanoTime()
+            }
+          }
+        }
+      } catch {
+        case _: InterruptedException =>
+          Thread.currentThread().interrupt()
+        case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
+          writer._exception = t
+      } finally {
+        try {
+          // Signal end of input. Use a special null value in the queue.
+          sendQueue.put(PipelinedWriterThread.POISON_PILL)
+        } catch {
+          case _: InterruptedException =>
+            Thread.currentThread().interrupt()
+        }
+        try {
+          bufferStream.close()
+        } catch {
+          case _: Exception => // ignore
+        }
+      }
+
+      /** Hand off the current buffer stream to the queue, get a fresh one (from pool or new). */
+      def swapAndEnqueue(): Unit = {
+        if (bufferStream.size() > 0) {
+          sendQueue.put(bufferStream) // blocks if full -- provides backpressure
+          // Get a recycled stream from the return queue, or create a new one.
+          val recycled = returnQueue.poll()
+          if (recycled != null) {
+            recycled.reset()
+            bufferStream = recycled
+          } else {
+            bufferStream = new DirectByteBufferOutputStream(bufferSize)
+          }
+          dataOut = new DataOutputStream(bufferStream)
+        }
+      }
+    }
+  }
+
+  private object PipelinedWriterThread {
+    // Sentinel value to signal end of input in the send queue.
+    val POISON_PILL: DirectByteBufferOutputStream = null
+  }
+
+  /**
+   * An InputStream that reads output from the Python worker while writing input data
+   * obtained from a [[PipelinedWriterThread]]'s queue.
+   *
+   * This is the pipelined replacement for [[ReaderInputStream]]. The key difference is that
+   * instead of calling writer.writeNextInputToStream() inline (which executes the upstream
+   * Spark plan in the selector thread), it polls pre-serialized ByteBuffers from the send queue.
+   */
+  class PipelinedReaderInputStream(
+      worker: PythonWorker,
+      writer: Writer,
+      sendQueue: ArrayBlockingQueue[DirectByteBufferOutputStream],
+      returnQueue: ArrayBlockingQueue[DirectByteBufferOutputStream],
+      handle: Option[ProcessHandle],
+      faultHandlerEnabled: Boolean,
+      idleTimeoutSeconds: Long,
+      killOnIdleTimeout: Boolean,
+      context: TaskContext) extends InputStream {
+
+    private[this] val temp = new Array[Byte](1)
+    private[this] val idleTimeoutMillis: Long = TimeUnit.SECONDS.toMillis(idleTimeoutSeconds)
+    private[this] var pythonWorkerKilled: Boolean = false
+    private[this] var currentStream: DirectByteBufferOutputStream = _
+    private[this] var currentBuffer: ByteBuffer = _
+    private[this] var inputDone: Boolean = false
+    private[this] var writeSuspended: Boolean = false
+
+    override def read(): Int = {
+      val n = read(temp)
+      if (n <= 0) {
+        -1
+      } else {
+        temp(0) & 0xff
+      }
+    }
+
+    override def read(b: Array[Byte], off: Int, len: Int): Int = {
+      val buf = ByteBuffer.wrap(b, off, len)
+      var n = 0
+      while (n == 0) {
+        // If OP_WRITE was temporarily disabled because the queue was empty,
+        // re-enable it once new data is available.
+        if (writeSuspended && (sendQueue.peek() != null || inputDone)) {
+          worker.selectionKey.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE)
+          writeSuspended = false
+        }
+
+        val start = System.currentTimeMillis()
+        val selected = worker.selector.select(
+          if (writeSuspended || inputDone) idleTimeoutMillis else 1L)
+        val end = System.currentTimeMillis()
+        if (selected == 0
+          && idleTimeoutMillis > 0 && (end - start) >= idleTimeoutMillis) {
+          if (pythonWorkerKilled) {
+            logWarning(
+              log"Waiting for Python worker process to terminate after idle timeout: " +
+              pythonWorkerStatusMessageWithContext(
+                handle, worker, !inputDone || hasBufferedData))
+          } else {
+            logWarning(
+              log"Idle timeout reached for Python worker (timeout: " +
+              log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+              log"No data received from the worker process - " +
+              pythonWorkerStatusMessageWithContext(
+                handle, worker, !inputDone || hasBufferedData) +
+              log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
+            if (killOnIdleTimeout) {
+              handle.foreach { handle =>
+                if (handle.isAlive) {
+                  logWarning(log"Terminating Python worker process due to idle timeout " +
+                    log"(timeout: ${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
+                    log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                  pythonWorkerKilled = handle.destroy()
+                }
+              }
+            }
+          }
+        }
+        if (worker.selectionKey.isReadable) {
+          n = worker.channel.read(buf)
+        }
+        if (!writeSuspended && worker.selectionKey.isWritable) {
+          writeQueuedDataToSocket()
+        }
+      }
+      if (n == -1 && pythonWorkerKilled) {
+        val base = "Python worker process terminated due to idle timeout " +
+          s"(timeout: $idleTimeoutSeconds seconds)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new PythonWorkerException(msg)
+      }
+      n
+    }
+
+    private def hasBufferedData: Boolean =
+      currentBuffer != null && currentBuffer.hasRemaining
+
+    /**
+     * Drains pre-serialized DirectByteBufferOutputStreams from the send queue to the
+     * Python worker socket. Fully consumed streams are returned to the returnQueue for
+     * reuse by the writer thread. Uses the stream's direct ByteBuffer view for zero-copy
+     * socket writes (direct buffer -> OS socket buffer, no heap-to-native copy).
+     */
+    private def writeQueuedDataToSocket(): Unit = {
+      var socketAcceptsInput = true
+      while (socketAcceptsInput && (!inputDone || hasBufferedData)) {
+        if (!hasBufferedData) {
+          // Return the previous stream to the pool for reuse.
+          if (currentStream != null) {
+            returnQueue.offer(currentStream)
+            currentStream = null
+            currentBuffer = null
+          }
+          currentStream = sendQueue.poll() // non-blocking
+          if (currentStream == null) {
+            // No data available yet. Suspend OP_WRITE to avoid spinning.
+            worker.selectionKey.interestOps(SelectionKey.OP_READ)
+            writeSuspended = true
+            return
+          }
+          if (currentStream eq PipelinedWriterThread.POISON_PILL) {
+            currentStream = null
+            currentBuffer = null
+            inputDone = true
+            if (writer.exception.isDefined) {
+              return
+            }
+          } else {
+            // Get a direct ByteBuffer view of the stream's content -- zero copy.
+            currentBuffer = currentStream.toByteBuffer
+          }
+        }
+
+        // Write directly from the direct ByteBuffer to the socket.
+        if (hasBufferedData) {
+          val written = worker.channel.write(currentBuffer)
+          socketAcceptsInput = written > 0
+        }
+      }
+
+      if (inputDone && !hasBufferedData) {
+        worker.selectionKey.interestOps(SelectionKey.OP_READ)
       }
     }
   }

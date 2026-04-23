@@ -150,4 +150,26 @@ private[spark] object Python {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val PYTHON_UDF_PIPELINED_EXECUTION =
+    ConfigBuilder("spark.python.udf.pipelined.enabled")
+      .doc("When true, enables pipelined (asynchronous) data transfer between JVM and Python " +
+        "UDF workers. In pipelined mode, input serialization runs in a separate writer thread " +
+        "while the main task thread reads output from the Python worker, allowing the two " +
+        "directions to overlap for improved throughput. " +
+        "This is particularly beneficial for compute-heavy UDFs (e.g., ML inference).")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val PYTHON_UDF_PIPELINED_QUEUE_DEPTH =
+    ConfigBuilder("spark.python.udf.pipelined.queueDepth")
+      .doc("The number of serialized data buffers to allow in the pipelined execution queue " +
+        "between the JVM writer thread and the NIO selector thread. A higher value allows " +
+        "more data to be buffered ahead, at the cost of increased memory usage. " +
+        "Only effective when spark.python.udf.pipelined.enabled is true.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "Queue depth must be positive.")
+      .createWithDefault(2)
 }
