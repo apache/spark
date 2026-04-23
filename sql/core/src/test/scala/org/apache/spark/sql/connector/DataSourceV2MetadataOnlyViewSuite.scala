@@ -703,6 +703,76 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       sql("DESCRIBE TABLE view_catalog.default.v_describe_col x"))
   }
 
+  // These plans reach `DataSourceV2Strategy` with a `ResolvedPersistentView` child on a
+  // non-session v2 view (because `ResolvedV1TableOrViewIdentifier` now skips non-session views).
+  // Without explicit pins they would hit `QueryPlanner`'s `assert(pruned.hasNext, "No plan for
+  // ...")` and surface a raw AssertionError. Pin each to UNSUPPORTED_FEATURE.TABLE_OPERATION.
+
+  test("REFRESH TABLE on a v2 view is rejected") {
+    seedV2View("v_refresh")
+    assertUnsupportedViewOp("REFRESH TABLE view_catalog.default.v_refresh")
+  }
+
+  test("ANALYZE TABLE on a v2 view is rejected") {
+    seedV2View("v_analyze")
+    assertUnsupportedViewOp(
+      "ANALYZE TABLE view_catalog.default.v_analyze COMPUTE STATISTICS")
+  }
+
+  test("ANALYZE TABLE ... FOR COLUMNS on a v2 view is rejected") {
+    seedV2View("v_analyze_cols")
+    assertUnsupportedViewOp(
+      "ANALYZE TABLE view_catalog.default.v_analyze_cols COMPUTE STATISTICS FOR COLUMNS x")
+  }
+
+  // --- DROP VIEW on a v2 catalog --------------------------------
+
+  test("DROP VIEW on a SUPPORTS_VIEW v2 catalog drops the view") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingViewCatalog]
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.default.v_drop AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      assert(catalog.tableExists(Identifier.of(Array("default"), "v_drop")))
+      sql("DROP VIEW view_catalog.default.v_drop")
+      assert(!catalog.tableExists(Identifier.of(Array("default"), "v_drop")))
+    }
+  }
+
+  test("DROP VIEW IF EXISTS on a v2 catalog is a no-op when the view is missing") {
+    // Exercises the `ifExists=true` path -- DropTableExec should not throw when the view
+    // doesn't exist on a SUPPORTS_VIEW catalog.
+    sql("DROP VIEW IF EXISTS view_catalog.default.v_never_existed")
+  }
+
+  test("DROP VIEW on a StagingTableCatalog drops the view") {
+    withSQLConf(
+      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("staging_catalog")
+        .asInstanceOf[TestingStagingCatalog]
+      withTable("spark_catalog.default.t") {
+        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+        sql("CREATE VIEW staging_catalog.default.v_drop_atomic AS " +
+          "SELECT x FROM spark_catalog.default.t")
+        assert(catalog.tableExists(Identifier.of(Array("default"), "v_drop_atomic")))
+        sql("DROP VIEW staging_catalog.default.v_drop_atomic")
+        assert(!catalog.tableExists(Identifier.of(Array("default"), "v_drop_atomic")))
+      }
+    }
+  }
+
+  test("DROP VIEW on a catalog without SUPPORTS_VIEW is rejected") {
+    withSQLConf(
+      "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
+      val ex = intercept[AnalysisException] {
+        sql("DROP VIEW no_view_catalog.default.v")
+      }
+      // Preserves the pre-PR error surface for non-SUPPORTS_VIEW catalogs.
+      assert(ex.getMessage.toLowerCase(java.util.Locale.ROOT).contains("views"))
+    }
+  }
+
   // --- SHOW TABLES / SHOW VIEWS on a v2 catalog --------------------------------
 
   private def seedV2Table(name: String): Unit = {

@@ -98,10 +98,11 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
         sql(s"SELECT `$loc`.test_json.col FROM $tableName"),
         Seq(Row("0"), Row("1"), Row("2")))
 
-      // 3-part reference must use `table_catalog`. The v1 `SessionCatalog.getRelation` that
-      // `RelationResolution.createRelation` delegates to hardcodes `spark_catalog` in the
-      // SubqueryAlias qualifier, so the attribute qualifier becomes
-      // `[spark_catalog, <loc>, test_json]` -- the reference below fails to resolve.
+      // 3-part reference uses the real catalog name. `V1Table.toCatalogTable` sets
+      // `CatalogTable.multipartIdentifier` to `[table_catalog, <loc>, test_json]`; the
+      // SessionCatalog change in this PR makes `getRelation` prefer that over the hardcoded
+      // `spark_catalog` qualifier, so the SubqueryAlias carries the real catalog and this
+      // 3-part column ref resolves.
       checkAnswer(
         sql(s"SELECT $tableName.col FROM $tableName"),
         Seq(Row("0"), Row("1"), Row("2")))

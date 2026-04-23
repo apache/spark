@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -366,6 +366,38 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeColumn(ResolvedPersistentView(catalog, ident, _), _, _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "DESCRIBE TABLE ... COLUMN")
+
+    // Plans that resolve through `UnresolvedTableOrView` reach here with a
+    // `ResolvedPersistentView` child for non-session v2 views (the v1 rewrite in
+    // `ResolveSessionCatalog` no longer matches them because `ResolvedViewIdentifier` is gated
+    // on `isSessionCatalog`). Pin each with `UNSUPPORTED_FEATURE.TABLE_OPERATION` so users get
+    // a clean `AnalysisException` instead of a generic "No plan for ..." assertion from the
+    // planner. Tracked for follow-up real handlers in SPARK-52729.
+    case RefreshTable(ResolvedPersistentView(catalog, ident, _)) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "REFRESH TABLE")
+
+    case AnalyzeTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ANALYZE TABLE")
+
+    case AnalyzeColumn(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ANALYZE TABLE ... FOR COLUMNS")
+
+    // SHOW PARTITIONS on a view is already rejected during analysis: the parser uses
+    // `UnresolvedTable` (not `UnresolvedTableOrView`), so `CheckAnalysis` surfaces
+    // `EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE` before planning. No strategy case needed.
+
+    // DROP VIEW on a non-session SUPPORTS_VIEW catalog. The v1 rewrite in `ResolveSessionCatalog`
+    // skips SUPPORTS_VIEW catalogs (guard on line 324 case) so they fall through here. Reuses
+    // `DropTableExec` because `TableCatalog.dropTable` is contractually required to drop views
+    // at the same identifier for SUPPORTS_VIEW catalogs.
+    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
+        if CatalogV2Util.supportsView(catalog) =>
+      val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
+      DropTableExec(
+        catalog.asTableCatalog, ident, ifExists, purge = false, invalidateFunc) :: Nil
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec: TableSpec, options, orCreate, true) =>

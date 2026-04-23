@@ -103,12 +103,16 @@ public enum TableCatalogCapability {
    * <p>
    * Catalogs declaring this capability must round-trip those properties and return a
    * {@link MetadataOnlyTable} from {@link TableCatalog#loadTable} so Spark's view resolution
-   * path can expand the view text. {@code ALTER VIEW ... AS} is implemented as a
-   * {@code dropTable} + {@code createTable} on a plain {@code TableCatalog}, or as
-   * {@link StagingTableCatalog#stageReplace} when the catalog also implements
-   * {@link StagingTableCatalog}. Without this capability, Spark rejects {@code CREATE VIEW}
-   * and {@code ALTER VIEW} statements targeting the catalog up front rather than letting the
-   * catalog silently persist a table entry that cannot be read as a view.
+   * path can expand the view text. On a plain {@code TableCatalog}, {@code CREATE VIEW} uses
+   * {@code createTable} and {@code ALTER VIEW ... AS} is implemented as {@code dropTable} +
+   * {@code createTable}. On a {@link StagingTableCatalog}, Spark routes
+   * {@code CREATE VIEW} through {@link StagingTableCatalog#stageCreate},
+   * {@code CREATE OR REPLACE VIEW} through {@link StagingTableCatalog#stageCreateOrReplace},
+   * and {@code ALTER VIEW ... AS} through {@link StagingTableCatalog#stageReplace} so the
+   * metadata swap commits atomically. Without this capability, Spark rejects
+   * {@code CREATE VIEW} and {@code ALTER VIEW} statements targeting the catalog up front
+   * rather than letting the catalog silently persist a table entry that cannot be read as a
+   * view.
    */
   SUPPORTS_VIEW
 }

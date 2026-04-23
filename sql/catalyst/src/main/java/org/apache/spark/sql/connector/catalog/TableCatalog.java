@@ -184,7 +184,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @param ident a table identifier
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist, or is a view and the catalog
-   *                              does not declare {@link TableCatalogCapability#SUPPORTS_VIEW}
+   *                              does not declare {@link TableCatalogCapability#SUPPORTS_VIEW}.
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
@@ -198,7 +198,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @param writePrivileges
    * @return the table's metadata
    * @throws NoSuchTableException If the table doesn't exist or is a view (see
-   *                              {@link #loadTable(Identifier)} for the view contract)
+   *                              {@link #loadTable(Identifier)} for the view contract).
    *
    * @since 3.5.3
    */
