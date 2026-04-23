@@ -23,7 +23,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class ArrowFileReadWriteSuite extends QueryTest with SharedSparkSession {
+class ArrowFileReadWriteSuite
+    extends QueryTest
+    with SharedSparkSession
+    with ArrowAllocatorLeakCheck {
 
   private var tempDataPath: String = _
 
@@ -33,13 +36,15 @@ class ArrowFileReadWriteSuite extends QueryTest with SharedSparkSession {
   }
 
   test("simple") {
-    val df = spark.range(0, 100, 1, 10).select(
-      col("id"),
-      lit(1).alias("int"),
-      lit(2L).alias("long"),
-      lit(3.0).alias("double"),
-      lit("a string").alias("str"),
-      lit(Array(1.0, 2.0, Double.NaN, Double.NegativeInfinity)).alias("arr"))
+    val df = spark
+      .range(0, 100, 1, 10)
+      .select(
+        col("id"),
+        lit(1).alias("int"),
+        lit(2L).alias("long"),
+        lit(3.0).alias("double"),
+        lit("a string").alias("str"),
+        lit(Array(1.0, 2.0, Double.NaN, Double.NegativeInfinity)).alias("arr"))
 
     val path = new File(tempDataPath, "simple.arrowfile").toPath
     ArrowFileReadWrite.save(df, path)

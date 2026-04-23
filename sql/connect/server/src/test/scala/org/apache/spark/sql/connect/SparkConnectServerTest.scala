@@ -37,14 +37,15 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
+import org.apache.spark.sql.execution.arrow.ArrowAllocatorLeakCheck
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.util.CloseableIterator
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
 
 /**
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
  * with a real SparkConnectClient, communicating over RPC, but both in-process.
  */
-trait SparkConnectServerTest extends SharedSparkSession {
+trait SparkConnectServerTest extends SharedSparkSession with ArrowAllocatorLeakCheck {
 
   // Server port
   val serverPort: Int =
@@ -67,6 +68,19 @@ trait SparkConnectServerTest extends SharedSparkSession {
 
   override def afterAll(): Unit = {
     SparkConnectService.stop()
+    spark.sparkContext.cancelAllJobs()
+    // Executor.stop() calls threadPool.shutdown() but does NOT await termination, so task
+    // threads may still be running (and holding Arrow child-allocator memory) when
+    // SparkContext.stop() returns. Wait here for all Arrow memory to drain before the
+    // ArrowAllocatorLeakCheck assertion fires in super.afterAll(). Use a 3-minute timeout
+    // (instead of the default 30 seconds) to accommodate slow CI runners where Arrow
+    // serialization of a large result set can take well over 30 seconds.
+    Eventually.eventually(timeout(3.minutes), interval(500.millis)) {
+      assert(
+        ArrowUtils.rootAllocator.getAllocatedMemory == 0,
+        s"Arrow memory still allocated after cancelAllJobs: " +
+          s"${ArrowUtils.rootAllocator.getAllocatedMemory} bytes")
+    }
     allocator.close()
     super.afterAll()
   }
@@ -82,7 +96,19 @@ trait SparkConnectServerTest extends SharedSparkSession {
   }
 
   protected def clearAllExecutions(): Unit = {
-    SparkConnectService.executionManager.listExecuteHolders.foreach(_.close())
+    val holders = SparkConnectService.executionManager.listExecuteHolders
+    holders.foreach(_.close())
+    // Wait for execution threads to terminate so that Arrow allocators they hold are released
+    // before the ArrowAllocatorLeakCheck runs in afterAll().
+    holders.foreach { holder =>
+      eventuallyWithTimeout { assert(!holder.isExecuteThreadRunnerAlive()) }
+    }
+    // Cancel any Spark jobs still running after the execute threads exited. In local mode the
+    // executor and driver share the same JVM, so a job submitted by an execute thread may still
+    // have tasks running (and holding ArrowBatchWithSchemaIterator allocations) even after the
+    // execute thread itself terminates. cancelAllJobs() signals cancellation; the afterAll()
+    // wait for getAllocatedMemory == 0 ensures TCLs have actually fired before the check.
+    spark.sparkContext.cancelAllJobs()
     SparkConnectService.executionManager.periodicMaintenance(0)
     SparkConnectService.sessionManager.invalidateAllSessions()
     assertNoActiveExecutions()

@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.arrow.{ArrowAllocatorLeakCheck, ArrowConverters}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,7 +45,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
  * test cases.
  */
-trait SparkConnectPlanTest extends SharedSparkSession {
+trait SparkConnectPlanTest extends SharedSparkSession with ArrowAllocatorLeakCheck {
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     SparkConnectPlannerTestUtils.transform(spark, rel)
   }
@@ -95,7 +96,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       schema: Option[StructType] = None): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
-    val bytes = ArrowConverters
+    val iter = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
         DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
@@ -104,7 +105,12 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         timeZoneId,
         true,
         false)
-      .next()
+    val bytes =
+      try {
+        iter.next()
+      } finally {
+        iter.close()
+      }
 
     localRelationBuilder.setData(ByteString.copyFrom(bytes))
     schema.foreach(s => localRelationBuilder.setSchema(s.json))
