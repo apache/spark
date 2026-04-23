@@ -397,12 +397,11 @@ class PlanMerger(
               }
           }
         case (np: Filter, cp) if filterPropagationSupported =>
+          // The recursion keeps `cp` unchanged and `cp` is not a Filter at this level, so no
+          // deeper case can expose a Filter on the cp side. cpFilter is therefore always None
+          // in the child result.
           tryMergePlans(np.child, cp, filterPropagationSupported).collect {
-            // If the cp side already propagated a filter from deeper recursion, the merge is
-            // effectively symmetric (both sides have a filter condition). Abort unless
-            // symmetricFilterPropagationEnabled.
-            case TryMergeResult(mergedChild, npMapping, cpMapping, npFilter, cpFilter)
-                if cpFilter.isEmpty || symmetricFilterPropagationEnabled =>
+            case TryMergeResult(mergedChild, npMapping, cpMapping, npFilter, None) =>
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
               val newNPCondition = npFilter.fold(mappedNPCondition) {
                 case (f, _) => And(f, mappedNPCondition)
@@ -411,26 +410,25 @@ class PlanMerger(
                 Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
               val newNPFilter = newNPFilterAlias.toAttribute
               val project = Project(
-                mergedChild.output.toList ++ Seq(newNPFilterAlias) ++ cpFilter.toSeq,
+                mergedChild.output :+ newNPFilterAlias,
                 mergedChild)
-              TryMergeResult(project, npMapping, cpMapping, Some((newNPFilter, true)), cpFilter)
+              TryMergeResult(project, npMapping, cpMapping, Some((newNPFilter, true)), None)
           }
         case (np, cp: Filter) if filterPropagationSupported =>
+          // Symmetric to the previous case: `np` is unchanged and is not a Filter, so no
+          // deeper case can expose a Filter on the np side. npFilter is always None in the
+          // child result.
           tryMergePlans(np, cp.child, filterPropagationSupported).collect {
-            // If the np side already propagated a filter from deeper recursion, the merge is
-            // effectively symmetric (both sides have a filter condition). Abort unless
-            // symmetricFilterPropagationEnabled.
-            case TryMergeResult(mergedChild, npMapping, cpMapping, npFilter, cpFilter)
-                if npFilter.isEmpty || symmetricFilterPropagationEnabled =>
+            case TryMergeResult(mergedChild, npMapping, cpMapping, None, cpFilter) =>
               val mappedCPCondition = mapAttributes(cp.condition, cpMapping)
               val newCPCondition = cpFilter.fold(mappedCPCondition)(And(_, mappedCPCondition))
               val newCPFilterAlias =
                 Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
               val newCPFilter = newCPFilterAlias.toAttribute
               val project = Project(
-                mergedChild.output.toList ++ npFilter.map(_._1).toSeq ++ Seq(newCPFilterAlias),
+                mergedChild.output :+ newCPFilterAlias,
                 mergedChild)
-              TryMergeResult(project, npMapping, cpMapping, npFilter, Some(newCPFilter))
+              TryMergeResult(project, npMapping, cpMapping, None, Some(newCPFilter))
           }
 
         case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
@@ -526,10 +524,15 @@ class PlanMerger(
     // Wrap unmatched cached expressions with the cached plan's filter so they are only computed
     // for rows that belong to the cached plan side. Plain attribute references are not wrapped.
     // Record each attr rewrite in the cached plan map so ancestor nodes can remap their stale
-    // references.
+    // references. Only iterate over the original cached range; new-plan expressions appended
+    // above were already wrapped with the new plan's filter and must not be double-wrapped.
+    val cachedPlanLength = cachedPlanExpressions.length
     val newCPMapping = AttributeMap(cachedPlanFilter.toSeq.flatMap { f =>
-      mergedExpressions.zipWithIndex.flatMap {
-        case (ce, i) if !matchedCachedIndices.contains(i) =>
+      (0 until cachedPlanLength).flatMap { i =>
+        if (matchedCachedIndices.contains(i)) {
+          None
+        } else {
+          val ce = mergedExpressions(i)
           val withoutAlias = ce match {
             case Alias(child, _) => child
             case e => e
@@ -541,7 +544,7 @@ class PlanMerger(
             mergedExpressions(i) = newAlias
             ce.toAttribute -> newAlias.toAttribute
           }
-        case _ => None
+        }
       }
     })
 
