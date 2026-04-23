@@ -1031,21 +1031,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-56032: FilterExec CSE emits all notNullPreds before guard otherPred") {
-    // The CSE branch in FilterExec.doConsume emits every notNullPred upfront,
-    // before any otherPred. When `InferFiltersFromConstraints` adds a notNull
-    // check on a throw-capable expression (`IsNotNull(cast(s as int))`) derived
-    // from a downstream join, that upfront evaluation fires on rows that the
-    // guard otherPred (`kind = 'numeric'`) would have rejected.
-    //
-    // Shape:
-    //   WITH guarded AS (SELECT s FROM t WHERE kind = 'numeric'),
-    //        derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
-    //        pairs   AS (SELECT s, i FROM derived, idx WHERE i <= n)
-    //   SELECT s, i FROM pairs
-    // Optimized filter:
-    //   Filter(isnotnull(kind) AND kind = 'numeric' AND isnotnull(cast(s as int)))
-    // The non-CSE path defers leftover notNullPreds to after the otherPreds,
-    // so the guard short-circuits before the cast runs.
+    // `InferFiltersFromConstraints` can add a throw-capable `IsNotNull(cast(s as int))`
+    // alongside an earlier guard otherPred (`kind = 'numeric'`). The non-CSE path
+    // defers leftover notNullPreds to after the otherPreds so the guard short-circuits
+    // before the cast runs; the CSE branch must preserve that ordering.
     val t = Seq(("3", "numeric"), ("abc", "text")).toDF("s", "kind")
     val idx = Seq(1, 2).toDF("i")
     withSQLConf(
@@ -1053,26 +1042,28 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.ANSI_ENABLED.key -> "true") {
-      t.createOrReplaceTempView("spark_56032_t")
-      idx.createOrReplaceTempView("spark_56032_idx")
-      val df = spark.sql(
-        """
-          |WITH guarded AS (SELECT s FROM spark_56032_t WHERE kind = 'numeric'),
-          |     derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
-          |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
-          |SELECT s, i FROM pairs
-          |""".stripMargin)
-      // Guard against optimizer drift: this test only exercises the bug when the
-      // rolled-up filter contains `IsNotNull(Cast(s AS INT))` alongside an earlier
-      // guard otherPred. If a future optimizer change stops producing that shape,
-      // `checkAnswer` alone would silently pass even without the fix.
-      assert(df.queryExecution.executedPlan.collectFirst {
-        case f: FilterExec if f.condition.exists {
-          case IsNotNull(_: Cast) => true
-          case _ => false
-        } => f
-      }.nonEmpty, "expected a FilterExec with IsNotNull(Cast(...)) in its condition")
-      checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
+      withTempView("spark_56032_t", "spark_56032_idx") {
+        t.createOrReplaceTempView("spark_56032_t")
+        idx.createOrReplaceTempView("spark_56032_idx")
+        val df = spark.sql(
+          """
+            |WITH guarded AS (SELECT s FROM spark_56032_t WHERE kind = 'numeric'),
+            |     derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
+            |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
+            |SELECT s, i FROM pairs
+            |""".stripMargin)
+        // Guard against optimizer drift: this test only exercises the bug when the
+        // rolled-up filter contains `IsNotNull(Cast(s AS INT))` alongside an earlier
+        // guard otherPred. If a future optimizer change stops producing that shape,
+        // `checkAnswer` alone would silently pass even without the fix.
+        assert(df.queryExecution.executedPlan.collectFirst {
+          case f: FilterExec if f.condition.exists {
+            case IsNotNull(_: Cast) => true
+            case _ => false
+          } => f
+        }.nonEmpty, "expected a FilterExec with IsNotNull(Cast(...)) in its condition")
+        checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
+      }
     }
   }
 

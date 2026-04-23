@@ -325,10 +325,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
           val bound = BindReferences.bindReference(pred, child.output)
           val evaluated = evaluateRequiredVariables(child.output, input, pred.references)
           val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+          val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
           s"""
              |$evaluated
              |${ev.code}
-             |if (${ev.isNull} || !${ev.value}) continue;
+             |if (${nullCheck}!${ev.value}) continue;
            """.stripMargin
         }
 
