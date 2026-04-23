@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableCatalogCapability, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -543,7 +543,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // listTableSummaries); we skip the match here so the plan flows through unchanged. Only
     // non-session, non-SUPPORTS_VIEW catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
     case ShowViews(ns: ResolvedNamespace, pattern, output)
-        if !isSupportsViewCatalog(ns.catalog) =>
+        if !CatalogV2Util.supportsView(ns.catalog) =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
@@ -946,8 +946,4 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         catalog.isInstanceOf[CatalogExtension])
   }
 
-  private def isSupportsViewCatalog(catalog: CatalogPlugin): Boolean = catalog match {
-    case tc: TableCatalog => tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)
-    case _ => false
-  }
 }

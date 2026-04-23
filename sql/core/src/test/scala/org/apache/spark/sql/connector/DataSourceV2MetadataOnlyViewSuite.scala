@@ -67,6 +67,17 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  test("read view resolves unqualified refs via multi-part captured namespace") {
+    // End-to-end coverage of the v2 encoder -> parser round-trip: test_unqualified_multi is a
+    // view whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part namespace) and
+    // whose body references `t` unqualified. At read time the unqualified `t` must expand to
+    // view_catalog.ns1.ns2.t via the captured context -- which TestingViewCatalog resolves to
+    // its own `t` fixture at that namespace.
+    checkAnswer(
+      spark.table("view_catalog.outer_ns.test_unqualified_multi"),
+      Row("multi"))
+  }
+
   // --- TableInfo.Builder unit tests for view-specific properties ----------
 
   test("view current catalog/namespace are serialized into a single property") {
@@ -352,9 +363,8 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
           "SELECT x FROM spark_catalog.default.t WHERE x > 2")
         checkAnswer(spark.table("staging_catalog.default.v_atomic"), Row(3))
 
-        // CREATE IF NOT EXISTS on an existing view -- no-op, but the body is still validated
-        // first (the atomic exec builds the TableInfo before the allow-existing short-circuit),
-        // so a malformed body is rejected even when creation is skipped.
+        // CREATE IF NOT EXISTS on an existing view -- no-op; the atomic exec short-circuits on
+        // tryLoadTable() before buildTableInfo, matching the non-atomic path.
         sql("CREATE VIEW IF NOT EXISTS staging_catalog.default.v_atomic AS " +
           "SELECT x + 100 AS x FROM spark_catalog.default.t")
         // Value unchanged -- IF NOT EXISTS was a no-op.
@@ -804,6 +814,24 @@ class TestingViewCatalog extends TableCatalog {
             .withSchema(new StructType().add("col", "string"))
             .withViewText("SELECT col FROM t WHERE col = 'b'")
             .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
+            .build()
+          new MetadataOnlyTable(info)
+        case "test_unqualified_multi" =>
+          // View whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part). The
+          // unqualified `t` in the body must resolve via that captured context to
+          // view_catalog.ns1.ns2.t, which this catalog also serves (see `t` case below).
+          val info = new TableInfo.Builder()
+            .withSchema(new StructType().add("col", "string"))
+            .withViewText("SELECT col FROM t")
+            .withCurrentCatalogAndNamespace("view_catalog", Array("ns1", "ns2"))
+            .build()
+          new MetadataOnlyTable(info)
+        case "t" if ident.namespace().toSeq == Seq("ns1", "ns2") =>
+          // Target of test_unqualified_multi's unqualified reference. Self-contained view so
+          // the test doesn't need external data.
+          val info = new TableInfo.Builder()
+            .withSchema(new StructType().add("col", "string"))
+            .withViewText("SELECT 'multi' AS col")
             .build()
           new MetadataOnlyTable(info)
         case _ => throw new NoSuchTableException(ident)

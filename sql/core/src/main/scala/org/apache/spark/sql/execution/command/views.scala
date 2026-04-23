@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Util, Identifier}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, NamespaceHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -898,11 +898,7 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
   // callers get the VIEWS-specific error rather than a generic cast failure later.
   private def requireSupportsView(resolved: LogicalPlan): Unit = {
     val (catalog, _) = catalogAndIdent(resolved)
-    val supportsView = catalog match {
-      case tc: TableCatalog => tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)
-      case _ => false
-    }
-    if (!supportsView) {
+    if (!CatalogV2Util.supportsView(catalog)) {
       throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
     }
   }
