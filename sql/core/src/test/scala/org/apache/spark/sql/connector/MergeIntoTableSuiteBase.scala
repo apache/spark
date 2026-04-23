@@ -249,6 +249,105 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("merge with literal false ON condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hardware" }
+          |""".stripMargin)
+
+      Seq((1, 100, "hr"), (3, 300, "finance"))
+        .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON false
+           |WHEN MATCHED THEN UPDATE SET t.salary = -1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 100, "hr"), Row(2, 200, "hardware")))
+
+      val summary = getMergeSummary()
+      assert(summary.numTargetRowsUpdated === 0L)
+      assert(summary.numTargetRowsDeleted === 0L)
+      assert(summary.numTargetRowsInserted === 0L)
+      assert(summary.numTargetRowsMatchedUpdated === 0L)
+      assert(summary.numTargetRowsMatchedDeleted === 0L)
+      assert(summary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(summary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      assert(summary.numTargetRowsCopied === 0L)
+    }
+  }
+
+  test("merge with literal true ON condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hardware" }
+          |""".stripMargin)
+
+      Seq((99, 999, "finance"))
+        .toDF("pk", "salary", "dep").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON true
+           |WHEN MATCHED THEN UPDATE SET t.salary = -1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, -1, "hr"), Row(2, -1, "hardware")))
+
+      val summary = getMergeSummary()
+      assert(summary.numTargetRowsUpdated === 2L)
+      assert(summary.numTargetRowsDeleted === 0L)
+      assert(summary.numTargetRowsInserted === 0L)
+      assert(summary.numTargetRowsMatchedUpdated === 2L)
+      assert(summary.numTargetRowsMatchedDeleted === 0L)
+      assert(summary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(summary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      assert(summary.numTargetRowsCopied === 0L)
+    }
+  }
+
+  test("merge with statically empty source and only MATCHED clauses") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hardware" }
+          |""".stripMargin)
+
+      Seq.empty[(Int, Int, String)].toDF("pk", "salary", "dep")
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN UPDATE SET t.salary = -1
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(Row(1, 100, "hr"), Row(2, 200, "hardware")))
+
+      val summary = getMergeSummary()
+      assert(summary.numTargetRowsUpdated === 0L)
+      assert(summary.numTargetRowsDeleted === 0L)
+      assert(summary.numTargetRowsInserted === 0L)
+      assert(summary.numTargetRowsMatchedUpdated === 0L)
+      assert(summary.numTargetRowsMatchedDeleted === 0L)
+      assert(summary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(summary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+      assert(summary.numTargetRowsCopied === 0L)
+    }
+  }
+
   test("merge into with conditional WHEN MATCHED clause (update)") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
