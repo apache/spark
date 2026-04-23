@@ -42,6 +42,16 @@ case class KubernetesDriverSpec(
   /** Get system properties as a Java-friendly map. */
   @Since("4.2.0")
   def getSystemPropertiesAsJavaMap: JMap[String, String] = systemProperties.asJava
+
+  /** Get driver pre Kubernetes resources as a Java-friendly list. */
+  @Since("4.2.0")
+  def getDriverPreKubernetesResourcesAsJavaList: JList[HasMetadata] =
+    driverPreKubernetesResources.asJava
+
+  /** Get driver Kubernetes resources as a Java-friendly list. */
+  @Since("4.2.0")
+  def getDriverKubernetesResourcesAsJavaList: JList[HasMetadata] =
+    driverKubernetesResources.asJava
 }
 
 @Unstable
