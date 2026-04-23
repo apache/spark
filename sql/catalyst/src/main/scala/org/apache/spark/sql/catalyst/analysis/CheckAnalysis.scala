@@ -73,7 +73,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * Contains system.session and the current catalog namespace only. Not from SQLConf.
    */
   private def ddlSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
-    Seq(toSQLId(Seq("system", "session")), toSQLId(catalogPath))
+    Seq(toSQLId(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)),
+      toSQLId(catalogPath))
   }
 
   /**
@@ -84,9 +85,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
   }
 
-  /** Current catalog name and namespace as a path, used when computing search path for errors. */
+  /**
+   * Current catalog name and namespace as a path, used when computing search path for errors.
+   * When resolving inside a view body, uses the view's defining catalog/namespace
+   * (from AnalysisContext) so the error message reflects the view's resolution context
+   * rather than the caller's current schema.
+   */
   private def catalogPathForError: Seq[String] = {
-    (currentCatalog.name +: catalogManager.currentNamespace).toSeq
+    val ctx = AnalysisContext.get.catalogAndNamespace
+    if (ctx.nonEmpty) ctx
+    else (currentCatalog.name +: catalogManager.currentNamespace).toSeq
   }
 
   /**
@@ -94,7 +102,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * (e.g. DROP TEMPORARY VIEW). Contains system.session only.
    */
   private def tempViewOnlySearchPathForError(): Seq[String] = {
-    Seq(toSQLId(Seq("system", "session")))
+    Seq(toSQLId(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE)))
   }
 
   /**
@@ -595,7 +603,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               searchPathForUnresolvedRelation(u.multipartIdentifier))
 
           case RelationChanges(u: UnresolvedRelation, _) =>
-            u.tableNotFound(u.multipartIdentifier)
+            u.tableNotFound(
+              u.multipartIdentifier,
+              searchPathForUnresolvedRelation(u.multipartIdentifier))
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
