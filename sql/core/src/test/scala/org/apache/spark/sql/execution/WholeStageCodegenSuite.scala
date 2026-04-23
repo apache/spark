@@ -23,7 +23,7 @@ import java.time.Duration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, IsNotNull}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -1037,6 +1037,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     // before the cast runs; the CSE branch must preserve that ordering.
     val t = Seq(("3", "numeric"), ("abc", "text")).toDF("s", "kind")
     val idx = Seq(1, 2).toDF("i")
+    // AQE is disabled so the FilterExec is directly visible for the plan-shape
+    // assertion below, rather than wrapped inside an AdaptiveSparkPlan.
     withSQLConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
@@ -1052,16 +1054,32 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
             |SELECT s, i FROM pairs
             |""".stripMargin)
-        // Guard against optimizer drift: this test only exercises the bug when the
-        // rolled-up filter contains `IsNotNull(Cast(s AS INT))` alongside an earlier
-        // guard otherPred. If a future optimizer change stops producing that shape,
-        // `checkAnswer` alone would silently pass even without the fix.
-        assert(df.queryExecution.executedPlan.collectFirst {
-          case f: FilterExec if f.condition.exists {
-            case IsNotNull(_: Cast) => true
-            case _ => false
-          } => f
-        }.nonEmpty, "expected a FilterExec with IsNotNull(Cast(...)) in its condition")
+        // Guard against optimizer drift: this test only exercises the bug when a
+        // single rolled-up FilterExec contains both `IsNotNull(Cast(s AS INT))`
+        // (throw-capable notNullPred) and an earlier guard otherPred (a non-IsNotNull
+        // conjunct such as `kind = 'numeric'`). If a future optimizer change splits
+        // these into separate FilterExecs or drops the guard, `checkAnswer` alone
+        // would silently pass even without the fix.
+        def conjuncts(e: Expression): Seq[Expression] = e match {
+          case And(l, r) => conjuncts(l) ++ conjuncts(r)
+          case other => Seq(other)
+        }
+        val matchingFilter = df.queryExecution.executedPlan.collect {
+          case f: FilterExec =>
+            val cs = conjuncts(f.condition)
+            val hasThrowingIsNotNull = cs.exists {
+              case IsNotNull(_: Cast) => true
+              case _ => false
+            }
+            val hasGuardOtherPred = cs.exists {
+              case _: IsNotNull => false
+              case _ => true
+            }
+            hasThrowingIsNotNull && hasGuardOtherPred
+        }.exists(identity)
+        assert(matchingFilter,
+          "expected a FilterExec whose condition carries both IsNotNull(Cast(...)) " +
+            "and a non-IsNotNull guard conjunct")
         checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
       }
     }
@@ -1083,6 +1101,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       Row(null, "numeric"),
       Row("abc", "text")))
 
+    // AQE is disabled so the FilterExec is directly visible for plan-shape assertions
+    // below, rather than wrapped inside an AdaptiveSparkPlan.
     withSQLConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",

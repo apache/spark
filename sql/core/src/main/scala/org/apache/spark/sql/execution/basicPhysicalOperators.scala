@@ -254,47 +254,32 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // Apply CSE to otherPreds. Three invariants we must preserve:
-    //   (a) Short-circuit order between otherPreds: each may `continue;` out of the row.
-    //       A precomputation hoisted ahead of an earlier otherPred would run for rows
-    //       an earlier otherPred would have filtered out, turning a filtered-out row
-    //       into a thrown exception for any expression that can throw (overflow, error
-    //       class, etc.). SPARK-56032's original placement of subExprsCode at the top
-    //       of the `do { }` block broke this.
-    //   (b) Short-circuit order between notNullPreds and otherPreds: `notNullPreds` may
-    //       include `IsNotNull(expensive_or_throwing)` inferred by
-    //       `InferFiltersFromConstraints`. Emitting all notNullPreds up front would
-    //       evaluate the inner expression on rows that an earlier-ordered otherPred
-    //       would have rejected -- same class of bug as (a) but across the
-    //       notNullPreds / otherPreds boundary. Mirror the non-CSE branch: for each
-    //       reference of each otherPred, emit the matching IsNotNull check (direct or
-    //       synthetic) before the otherPred, and defer any leftover notNullPreds to
-    //       after all otherPreds.
-    //   (c) Null guards for CSE state materialization: IsNotNull predicates on an
-    //       otherPred's references must short-circuit before CSE precomputation sees
-    //       a null-bearing row. Otherwise CSE's `value_X = isNull ? default : compute`
-    //       materializes `null` into `value_X` for non-primitive types, which
-    //       downstream accessors (e.g. `value_X.isNullAt(0)`) may NPE on without
-    //       consulting `isNull_X`.
-    //
-    // The fix for (a): emit each common subexpression's precompute *just before* the
-    // first otherPred that references it, not all at the top of the `do { }` block.
-    // A later otherPred still reuses the cached value -- it just doesn't pay the cost
-    // for rows that an earlier otherPred rejected.
-    //
-    // The fix for (b): per-otherPred, for each reference `r`: if `notNullPreds` has a
-    // direct `IsNotNull(r)`, emit it; else if `r` is covered by `notNullAttributes`
-    // through some complex `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic
-    // `IsNotNull(r)` so the tightened-output binding below is safe without evaluating
-    // the throw-capable inner expression. Then emit the otherPred's CSE precompute and
-    // body. Remaining notNullPreds (including any complex-child forms whose refs got
-    // synthetic coverage) emit after all otherPreds.
-    //
-    // The fix for (c): the IsNotNull interleaving above runs before any CSE precompute
-    // that is keyed off the same reference, so the precompute sees only non-null rows.
-    // Binding the otherPreds (and the CSE analysis) against `output` (with
-    // `notNullAttributes` tightened to non-nullable) restores the nullability-tightened
-    // optimization inside the predicate bodies.
+    // Apply CSE to otherPreds, mirroring the non-CSE branch's ordering so we preserve
+    // short-circuit semantics. Three invariants:
+    //   (a) Between otherPreds: emit each common subexpression's precompute *just
+    //       before* the first otherPred that references it, not at the top of the
+    //       `do { }` block. A later otherPred still reuses the cached value -- it just
+    //       doesn't pay the cost for rows an earlier otherPred rejected. See #55471.
+    //   (b) Between notNullPreds and otherPreds: `notNullPreds` may include
+    //       `IsNotNull(expensive_or_throwing)` inferred by `InferFiltersFromConstraints`,
+    //       so emitting all notNullPreds up front would evaluate the inner expression
+    //       on rows an earlier-ordered otherPred would have rejected -- same class of
+    //       bug as (a) but across the notNullPreds / otherPreds boundary. Per-otherPred,
+    //       for each reference `r`: if `notNullPreds` has a direct `IsNotNull(r)`, emit
+    //       it; else if `r` is covered by `notNullAttributes` through some complex
+    //       `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic `IsNotNull(r)` so
+    //       the tightened-output binding below is safe without evaluating the
+    //       throw-capable inner expression. Then emit the otherPred's CSE precompute
+    //       and body. Remaining notNullPreds (including complex-child forms whose refs
+    //       got synthetic coverage) emit after all otherPreds.
+    //   (c) CSE state materialization: binding otherPreds (and the CSE analysis)
+    //       against `output` (with `notNullAttributes` tightened to non-nullable)
+    //       requires that the matching IsNotNull has already short-circuited -- else
+    //       CSE's `value_X = isNull ? default : compute` materializes `null` into
+    //       `value_X` for non-primitive types, which downstream accessors may NPE on
+    //       without consulting `isNull_X`. The (b) interleaving gives us that ordering
+    //       for free, since the IsNotNull check fires before the CSE precompute keyed
+    //       off the same reference.
     val (prologueCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
