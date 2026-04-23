@@ -88,6 +88,12 @@ class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
 ProfileResultsParam = _ProfileResultsParam()
 
 
+# _ProfileResultsParam uses (perf, memory) tuple which is very difficult
+# to extend. However, this is shared code between the server and the client
+# for spark connect. In order to gradually migrate to dict implementation,
+# we create a new AccumulatorParam on a new channel SQL_UDF_PROFIER_V2.
+# We started this in 4.2.0. When we drop support for all versions before 4.2.0,
+# we can remove _ProfileResultsParam and other old content.
 class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
     """
     AccumulatorParam for profilers.
