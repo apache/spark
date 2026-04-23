@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   Resolver,

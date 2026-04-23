@@ -32,7 +32,7 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils

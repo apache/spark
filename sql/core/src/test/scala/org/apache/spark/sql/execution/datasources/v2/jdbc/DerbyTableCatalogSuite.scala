@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.util.Utils

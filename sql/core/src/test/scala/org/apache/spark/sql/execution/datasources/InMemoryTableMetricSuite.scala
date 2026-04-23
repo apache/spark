@@ -26,8 +26,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class InMemoryTableMetricSuite
-  extends SharedSparkSession with BeforeAndAfter {
+class InMemoryTableMetricSuite extends SharedSparkSession with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

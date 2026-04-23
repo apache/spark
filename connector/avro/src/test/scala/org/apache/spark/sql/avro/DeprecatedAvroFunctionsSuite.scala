@@ -23,7 +23,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.EncoderFactory
 
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.internal.SQLConf

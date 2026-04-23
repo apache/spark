@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import org.apache.spark.sql.{AnalysisException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._

@@ -36,8 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
 
-class AvroRowReaderSuite
-  extends SharedSparkSession {
+class AvroRowReaderSuite extends SharedSparkSession {
 
   import testImplicits._
 

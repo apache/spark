@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.text
 import java.io.File
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession

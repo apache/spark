@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{AnalysisException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId

@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.FileStatus
 
-import org.apache.spark.sql.{SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSource

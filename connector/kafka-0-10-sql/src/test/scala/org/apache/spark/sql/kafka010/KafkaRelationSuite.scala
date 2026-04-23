@@ -27,7 +27,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkConf, TestUtils}
-import org.apache.spark.sql.{DataFrameReader}
+import org.apache.spark.sql.DataFrameReader
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf

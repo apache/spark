@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning

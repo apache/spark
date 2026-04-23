@@ -20,7 +20,7 @@ package org.apache.spark.sql.analysis.resolver
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{AnalysisException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,

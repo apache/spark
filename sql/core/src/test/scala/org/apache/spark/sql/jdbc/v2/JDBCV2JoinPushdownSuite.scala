@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc.v2
 import java.util.Locale
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{ExplainSuiteHelper}
+import org.apache.spark.sql.ExplainSuiteHelper
 import org.apache.spark.sql.connector.DataSourcePushdownTestUtils
 import org.apache.spark.sql.jdbc.{H2Dialect, JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.test.SharedSparkSession

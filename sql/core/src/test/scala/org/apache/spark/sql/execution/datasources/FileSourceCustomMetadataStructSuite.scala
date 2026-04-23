@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.{Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField, Literal}
 import org.apache.spark.sql.classic.{DataFrame, Dataset}

@@ -32,8 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class MetadataResolverSuite
-    extends SharedSparkSession {
+class MetadataResolverSuite extends SharedSparkSession {
   private val catalogName = "spark_catalog"
 
   private val keyValueTableSchema = StructType(
