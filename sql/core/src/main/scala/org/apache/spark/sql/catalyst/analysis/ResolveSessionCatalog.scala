@@ -323,13 +323,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // SUPPORTS_VIEW catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
     // `TableCatalog.dropTable` (contractually required to drop views for such catalogs). Other
-    // non-session catalogs still get the `catalogOperationNotSupported` rejection.
+    // non-session catalogs get `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from
+    // `CheckViewReferences` for CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
     case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
         if !CatalogV2Util.supportsView(catalog) =>
       if (catalog == FakeSystemCatalog) {
         DropTempViewCommand(ident, ifExists)
       } else {
-        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+        throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
       }
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>

@@ -1078,7 +1078,7 @@ class Analyzer(
         }.getOrElse(u)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
-        lookupTableOrView(identifier).map {
+        lookupTableOrView(identifier, viewOnly = true).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
               identifier, cmd, u)
@@ -1102,13 +1102,23 @@ class Analyzer(
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
      * for resolving DDL and misc commands. UnresolvedView callers reject non-view results
      * downstream via `expectViewNotTableError`.
+     *
+     * When `viewOnly=true`, non-session catalogs that do not declare SUPPORTS_VIEW are
+     * rejected up front with MISSING_CATALOG_ABILITY.VIEWS -- they cannot host views at
+     * all, so surfacing a downstream "view not found" would hide the real reason.
      */
-    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
+    private def lookupTableOrView(
+        identifier: Seq[String],
+        viewOnly: Boolean = false): Option[LogicalPlan] = {
       relationResolution.lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
+            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
+                !CatalogV2Util.supportsView(catalog)) {
+              throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
+            }
             CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>
