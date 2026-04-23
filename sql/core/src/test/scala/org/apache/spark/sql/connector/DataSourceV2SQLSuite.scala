@@ -2966,19 +2966,24 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
-    def validateViewCommand(sqlStatement: String): Unit = {
-      val e = analysisException(sqlStatement)
-      checkError(
-        e,
-        condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
-    }
+  test("View commands on a v2 catalog without SUPPORTS_VIEW are rejected") {
+    // DROP VIEW resolves through `UnresolvedIdentifier` and is rejected by
+    // `ResolveSessionCatalog` with `UNSUPPORTED_FEATURE.CATALOG_OPERATION`.
+    checkError(
+      analysisException("DROP VIEW testcat.v"),
+      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
+      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
 
-    validateViewCommand("DROP VIEW testcat.v")
-    validateViewCommand("ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')")
-    validateViewCommand("ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')")
-    validateViewCommand("ALTER VIEW testcat.v AS SELECT 1")
+    // ALTER VIEW variants resolve through `UnresolvedView`; when the view does not exist
+    // (and this catalog cannot host views), `CheckAnalysis` surfaces TABLE_OR_VIEW_NOT_FOUND.
+    Seq(
+      "ALTER VIEW testcat.v SET TBLPROPERTIES ('key' = 'val')",
+      "ALTER VIEW testcat.v UNSET TBLPROPERTIES ('key')",
+      "ALTER VIEW testcat.v AS SELECT 1"
+    ).foreach { stmt =>
+      val e = analysisException(stmt)
+      assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND", s"got ${e.getCondition} for $stmt")
+    }
   }
 
   test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
