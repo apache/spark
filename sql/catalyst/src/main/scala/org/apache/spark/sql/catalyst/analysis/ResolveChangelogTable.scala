@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max, Min}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -28,18 +29,24 @@ import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSource
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
- * Post-processes a resolved [[DataSourceV2Relation]] backed by a [[ChangelogTable]] to inject
- * carry-over removal and/or update detection plans.
+ * Post-processes a resolved [[ChangelogTable]] read to apply CDC option semantics
+ * (carry-over removal, update detection) and to enforce supported option combinations.
  *
  * Fires after [[ResolveRelations]] has wrapped the connector's [[Changelog]] in a
- * [[DataSourceV2Relation]]. Skipped entirely when [[Changelog.rowId]] is empty (no row identity
- * available; raw delete/insert rows are returned as-is).
+ * [[ChangelogTable]]. Both batch ([[DataSourceV2Relation]]) and streaming
+ * ([[StreamingRelationV2]]) reads are handled:
+ *   - Batch: the requested post-processing passes are injected as logical operators on top
+ *     of the relation. Carry-over removal and update detection are fused into a single
+ *     pass over a (rowId, _commit_version)-partitioned Window: the Filter drops CoW
+ *     carry-over pairs (same rowVersion on both sides) and the subsequent Project relabels
+ *     real delete+insert pairs as update_preimage / update_postimage.
+ *   - Streaming: post-processing is not yet supported. If the requested options would
+ *     require any post-processing, the rule throws an explicit [[AnalysisException]] to
+ *     prevent silent wrong results. Streams that don't require post-processing pass
+ *     through unchanged.
  *
- * Carry-over removal and update detection are fused into a single pass over a
- * (rowId, _commit_version)-partitioned Window: the Filter drops CoW carry-over pairs
- * (same rowVersion on both sides) and the subsequent Project relabels real delete+insert
- * pairs as update_preimage / update_postimage. Net change computation runs afterwards
- * as a separate rule step.
+ * Net change computation (`deduplicationMode = netChanges`) is not yet implemented and
+ * is rejected up-front for both batch and streaming.
  */
 object ResolveChangelogTable extends Rule[LogicalPlan] {
 
@@ -59,51 +66,90 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     if (isAlreadyTransformed(plan)) return plan
     var updatedPlan = plan
     updatedPlan = plan.resolveOperatorsUp {
-      // Guard: without row identity, carry-over removal and update detection cannot
-      // correctly group rows. A match-miss leaves the relation unchanged -- exactly what
-      // we want for connectors that surface an empty rowId().
-      case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _)
-          if table.changelog.rowId().nonEmpty =>
+      case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) =>
         val changelog = table.changelog
-        val options = table.changelogInfo
-
-        // Net change computation is not yet implemented.
-        if (options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES) {
-          throw QueryCompilationErrors.cdcNetChangesNotYetSupported(changelog.name())
-        }
-
-        val requiresCarryOverRemoval =
-          options.deduplicationMode() != ChangelogInfo.DeduplicationMode.NONE &&
-            changelog.containsCarryoverRows()
-        val requiresUpdateDetection =
-          options.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
-        val requiresNetChanges =
-          options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES &&
-            changelog.containsIntermediateChanges()
-
-        // If carry-overs are surfaced and update detection is enabled, carry-overs will
-        // falsely be classified as updates, leading to false results. Hence we throw.
-        if (requiresUpdateDetection &&
-            changelog.containsCarryoverRows() &&
-            options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE) {
-          throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
-            changelog.name())
-        }
+        val req = evaluateRequirements(changelog, table.changelogInfo)
 
         var updatedRel: LogicalPlan = rel
-        if (requiresCarryOverRemoval || requiresUpdateDetection) {
+        if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
           updatedRel = addRowLevelPostProcessing(
-            rel, changelog, requiresCarryOverRemoval, requiresUpdateDetection)
+            rel, changelog, req.requiresCarryOverRemoval, req.requiresUpdateDetection)
         }
-        if (requiresNetChanges) {
+        if (req.requiresNetChanges) {
           updatedRel = injectNetChangeComputation(updatedRel, changelog)
         }
         updatedRel
+
+      case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _) =>
+        // Streaming CDC reads do not yet apply post-processing. Run the same option /
+        // capability validation as the batch path so silent wrong results are impossible:
+        // either no post-processing would be required (fall through, return raw stream),
+        // or we throw an explicit AnalysisException.
+        val changelog = table.changelog
+        val req = evaluateRequirements(changelog, table.changelogInfo)
+        if (req.needsAny) {
+          throw QueryCompilationErrors.cdcStreamingPostProcessingNotSupported(changelog.name())
+        }
+        rel
     }
     if (updatedPlan ne plan) {
       updatedPlan.setTagValue(CHANGELOG_TRANSFORMED_TAG, true)
     }
     updatedPlan
+  }
+
+  // ---------------------------------------------------------------------------
+  // Option validation & Requirement Computation
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Captures which post-processing passes a CDC query requires, derived from the
+   * user-provided [[ChangelogInfo]] options and the connector-declared [[Changelog]]
+   * capability flags.
+   */
+  private case class PostProcessingRequirements(
+      requiresCarryOverRemoval: Boolean,
+      requiresUpdateDetection: Boolean,
+      requiresNetChanges: Boolean) {
+    def needsAny: Boolean =
+      requiresCarryOverRemoval || requiresUpdateDetection || requiresNetChanges
+  }
+
+  /**
+   * Validates CDC option/capability combinations and computes which post-processing
+   * passes are required. Throws an [[org.apache.spark.sql.AnalysisException]] for
+   * unsupported or contradictory combinations (currently: `netChanges` deduplication,
+   * and `computeUpdates` with surfaced carry-overs but no carry-over removal).
+   */
+  private def evaluateRequirements(
+      changelog: Changelog,
+      options: ChangelogInfo): PostProcessingRequirements = {
+    // Net change computation is not yet implemented.
+    if (options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES) {
+      throw QueryCompilationErrors.cdcNetChangesNotYetSupported(changelog.name())
+    }
+
+    val requiresCarryOverRemoval =
+      options.deduplicationMode() != ChangelogInfo.DeduplicationMode.NONE &&
+        changelog.containsCarryoverRows()
+    val requiresUpdateDetection =
+      options.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
+    val requiresNetChanges =
+      options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES &&
+        changelog.containsIntermediateChanges()
+
+    // If carry-overs are surfaced and update detection is enabled without carry-over
+    // removal, carry-overs would be falsely classified as updates, leading to wrong
+    // results. Hence we throw.
+    if (requiresUpdateDetection &&
+        changelog.containsCarryoverRows() &&
+        options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE) {
+      throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
+        changelog.name())
+    }
+
+    PostProcessingRequirements(
+      requiresCarryOverRemoval, requiresUpdateDetection, requiresNetChanges)
   }
 
   // ---------------------------------------------------------------------------
@@ -222,17 +268,17 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   // ---------------------------------------------------------------------------
-  // Net Change Computation (future)
+  // Net Change Computation
   // ---------------------------------------------------------------------------
 
   /**
-   * Collapses multiple changes per row identity into the net effect. Not in
-   * scope for this implementation.
+   * Collapses multiple changes per row identity into the net effect.
+   * Not yet implemented.
    */
   private def injectNetChangeComputation(
       plan: LogicalPlan,
       cl: Changelog): LogicalPlan = {
-        plan
+    plan
   }
 
   // ---------------------------------------------------------------------------

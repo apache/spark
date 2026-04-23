@@ -137,7 +137,11 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
  * @param rowIdNames optional row identity columns as top-level names (e.g. Seq("id"))
  * @param rowIdPaths optional row identity paths for nested struct fields
  *                   (e.g. Seq(Seq("payload", "id"))); takes precedence over rowIdNames
- * @param rowVersionName optional row version column (e.g. Some("_commit_version"))
+ * @param rowVersionName optional row version column (e.g. Some("row_commit_version"));
+ *                       must be a per-row version that distinguishes carry-overs from
+ *                       real updates. Do NOT pass the commit version, which is constant
+ *                       within a partition and would cause every delete+insert pair to
+ *                       look like a carry-over
  */
 case class ChangelogProperties(
     containsCarryoverRows: Boolean = false,

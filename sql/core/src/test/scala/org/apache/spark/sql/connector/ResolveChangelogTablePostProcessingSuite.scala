@@ -305,10 +305,10 @@ class ResolveChangelogTablePostProcessingSuite
       s"CHANGES FROM VERSION 1 TO VERSION 2 WITH (computeUpdates = 'true')")
 
     val plan = df.queryExecution.analyzed.treeString
-    assert(!plan.contains("CarryOverRemoval"),
-      s"Plan should NOT contain CarryOverRemoval without rowId. Plan:\n$plan")
+    assert(!plan.contains("_del_cnt"),
+      s"Plan must not contain post-processing window helpers without rowId. Plan:\n$plan")
     assert(!plan.contains("_ins_cnt"),
-      s"Plan should NOT contain update detection window without rowId. Plan:\n$plan")
+      s"Plan must not contain post-processing window helpers without rowId. Plan:\n$plan")
   }
 
   // ===========================================================================
@@ -778,7 +778,7 @@ class ResolveChangelogTablePostProcessingSuite
     assert(descs.contains("5:E:delete"))
   }
 
-  test("carry-over removal with mixed types (DOUBLE, BOOLEAN)") {
+  test("carry-over removal with mixed types (DOUBLE, BOOLEAN, BINARY)") {
     val mixedTable = "events_mixed"
     val mixedIdent = Identifier.of(Array.empty, mixedTable)
     val cat = catalog
@@ -791,6 +791,7 @@ class ResolveChangelogTablePostProcessingSuite
         Column.create("name", StringType),
         Column.create("score", DoubleType),
         Column.create("active", BooleanType),
+        Column.create("payload", BinaryType),
         Column.create("row_commit_version", LongType, false)),
       Array.empty[Transform],
       Collections.emptyMap[String, String]())
@@ -801,21 +802,24 @@ class ResolveChangelogTablePostProcessingSuite
       rowVersionName = Some("row_commit_version")))
 
     def mixedRow(
-        id: Long, name: String, score: Double, active: Boolean,
+        id: Long, name: String, score: Double, active: Boolean, payload: Array[Byte],
         ct: String, v: Long, rcv: Long): InternalRow = {
       InternalRow(
-        id, UTF8String.fromString(name), score, active, rcv,
+        id, UTF8String.fromString(name), score, active, payload, rcv,
         UTF8String.fromString(ct), v, 0L)
     }
 
+    val alicePayload = Array[Byte](1, 2, 3)
+    val bobPayload = Array[Byte](4, 5, 6)
+
     cat.addChangeRows(mixedIdent, Seq(
-      mixedRow(1L, "Alice", 95.5, true, "insert", 1L, rcv = 1L),
-      mixedRow(2L, "Bob", 87.3, false, "insert", 1L, rcv = 1L),
+      mixedRow(1L, "Alice", 95.5, true, alicePayload, "insert", 1L, rcv = 1L),
+      mixedRow(2L, "Bob", 87.3, false, bobPayload, "insert", 1L, rcv = 1L),
       // v2: update Alice's score (old rcv=1, new rcv=2); Bob is carry-over (rcv unchanged)
-      mixedRow(1L, "Alice", 95.5, true, "delete", 2L, rcv = 1L),
-      mixedRow(1L, "Alice", 99.0, true, "insert", 2L, rcv = 2L),
-      mixedRow(2L, "Bob", 87.3, false, "delete", 2L, rcv = 1L),  // carry-over
-      mixedRow(2L, "Bob", 87.3, false, "insert", 2L, rcv = 1L))) // carry-over
+      mixedRow(1L, "Alice", 95.5, true, alicePayload, "delete", 2L, rcv = 1L),
+      mixedRow(1L, "Alice", 99.0, true, alicePayload, "insert", 2L, rcv = 2L),
+      mixedRow(2L, "Bob", 87.3, false, bobPayload, "delete", 2L, rcv = 1L),  // carry-over
+      mixedRow(2L, "Bob", 87.3, false, bobPayload, "insert", 2L, rcv = 1L))) // carry-over
 
     val rows = sql(
       s"SELECT id, name, score, active, _change_type FROM $catalogName.$mixedTable " +
@@ -827,9 +831,9 @@ class ResolveChangelogTablePostProcessingSuite
     assert(descs.contains("1:update_preimage"))
     assert(descs.contains("1:update_postimage"))
     assert(!descs.contains("2:delete"),
-      s"Bob carry-over must be dropped despite DOUBLE/BOOLEAN. Got: ${descs.mkString(",")}")
+      s"Bob carry-over must be dropped despite DOUBLE/BOOLEAN/BINARY. Got: " +
+        descs.mkString(","))
 
-    // Verify the score values
     val pre = rows.find(r => r.getLong(0) == 1L && r.getString(4) == "update_preimage").get
     val post = rows.find(r => r.getLong(0) == 1L && r.getString(4) == "update_postimage").get
     assert(pre.getDouble(2) == 95.5)
@@ -901,83 +905,14 @@ class ResolveChangelogTablePostProcessingSuite
   }
 
   // ===========================================================================
-  // Regression: BinaryType carry-over (reference-equality bug)
-  // ===========================================================================
-
-  // Two carry-over rows with equal-by-content but reference-unequal byte arrays.
-  // Expectation: Bob's delete+insert pair is identical data and must be dropped.
-  // If `dataColumnsEqual` uses `==` (reference equality) on `Array[Byte]`, this test fails
-  // because the two payloads are different JVM objects.
-  test("carry-over removal with BinaryType column drops content-equal pair") {
-    val binTable = "events_binary"
-    val binIdent = Identifier.of(Array.empty, binTable)
-    val cat = catalog
-    if (cat.tableExists(binIdent)) cat.dropTable(binIdent)
-    cat.clearChangeRows(binIdent)
-    cat.createTable(
-      binIdent,
-      Array(
-        Column.create("id", LongType),
-        Column.create("payload", BinaryType),
-        Column.create("row_commit_version", LongType, false)),
-      Array.empty[Transform],
-      Collections.emptyMap[String, String]())
-    cat.setChangelogProperties(binIdent, ChangelogProperties(
-      containsCarryoverRows = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    def binRow(id: Long, payload: Array[Byte], ct: String, v: Long, rcv: Long): InternalRow = {
-      InternalRow(id, payload, rcv, UTF8String.fromString(ct), v, 0L)
-    }
-
-    // Bob's carry-over: two distinct byte[] instances; but partition-based carry-over
-    // detection looks only at rowVersion, not byte content, so the distinct-instance
-    // concern is moot under the new design. Kept as a regression guard for schemas
-    // containing BinaryType columns.
-    val bobPayloadA = Array[Byte](1, 2, 3, 4)
-    val bobPayloadB = Array[Byte](1, 2, 3, 4)
-    assert(bobPayloadA ne bobPayloadB, "test precondition: distinct array instances")
-
-    cat.addChangeRows(binIdent, Seq(
-      binRow(1L, Array[Byte](9, 9), "insert", 1L, rcv = 1L),
-      binRow(2L, bobPayloadA, "insert", 1L, rcv = 1L),
-      // v2: real delete for Alice (preimage carries old rcv=1);
-      //     Bob carry-over (rcv unchanged=1 on both sides)
-      binRow(1L, Array[Byte](9, 9), "delete", 2L, rcv = 1L),
-      binRow(2L, bobPayloadA, "delete", 2L, rcv = 1L),   // carry-over
-      binRow(2L, bobPayloadB, "insert", 2L, rcv = 1L)))  // carry-over (same rcv)
-
-    val rows = sql(
-      s"SELECT id, _change_type, _commit_version FROM $catalogName.$binTable " +
-      s"CHANGES FROM VERSION 1 TO VERSION 2")
-      .orderBy("_commit_version", "id", "_change_type")
-      .collect()
-
-    val descs = rows.map(r => s"${r.getLong(0)}:${r.getString(1)}:v${r.getLong(2)}")
-
-    // v1 inserts retained
-    assert(descs.contains("1:insert:v1"), s"v1 insert for id=1. Got: ${descs.mkString(",")}")
-    assert(descs.contains("2:insert:v1"), s"v1 insert for id=2. Got: ${descs.mkString(",")}")
-    // v2 real delete retained
-    assert(descs.contains("1:delete:v2"), "Real delete for id=1 retained")
-    // v2 Bob carry-over must be dropped despite distinct byte[] instances
-    assert(!descs.contains("2:delete:v2"),
-      s"Bob BinaryType carry-over delete must be dropped. Got: ${descs.mkString(",")}")
-    assert(!descs.contains("2:insert:v2"),
-      s"Bob BinaryType carry-over insert must be dropped. Got: ${descs.mkString(",")}")
-  }
-
-  // ===========================================================================
   // No-op UPDATE is correctly preserved as update_preimage/postimage
   // ===========================================================================
 
   test("no-op UPDATE is labeled as update (row_commit_version differs on pre/post)") {
-    // Under the partition-based design (SPIP B.6 updated), a no-op UPDATE is no longer
-    // silently dropped. Delta bumps row_commit_version on every UPDATE even when data is
-    // byte-identical, so the delete side carries the OLD rcv and the insert side the NEW
-    // rcv. Carry-over removal sees different rowVersions -> real change -> both survive
-    // and get labeled as update_preimage / update_postimage by update detection.
+    // A no-op UPDATE bumps row_commit_version even when data is byte-identical, so the
+    // delete side carries the OLD rcv and the insert side the NEW rcv. Window post-processing
+    // sees different rowVersions, treats this as a real change, and labels both rows as
+    // update_preimage / update_postimage.
     catalog.setChangelogProperties(ident, ChangelogProperties(
       containsCarryoverRows = true,
       representsUpdateAsDeleteAndInsert = true,

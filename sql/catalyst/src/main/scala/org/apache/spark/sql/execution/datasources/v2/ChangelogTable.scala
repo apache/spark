@@ -70,38 +70,47 @@ object ChangelogTable {
     check("_commit_version")           // connector-defined, any type accepted
     check("_commit_timestamp", TimestampType)
 
+    // `rowId()` / `rowVersion()` default to throwing UnsupportedOperationException for
+    // connectors that haven't opted in. Translate that into "not declared" so we can
+    // reason about it as Option/empty-array below.
+    val rowIds: Array[NamedReference] = try cl.rowId() catch {
+      case _: UnsupportedOperationException => Array.empty
+    }
+    val rowVersionRef: Option[NamedReference] = try Some(cl.rowVersion()) catch {
+      case _: UnsupportedOperationException => None
+    }
+
+    // Capability-driven presence checks: a connector that advertises a capability which
+    // requires row identity or row versioning must actually expose those references.
+    // Otherwise post-processing would crash with an UnsupportedOperationException at
+    // runtime instead of producing a clean AnalysisException here.
     val needsRowId = cl.containsCarryoverRows() ||
       cl.representsUpdateAsDeleteAndInsert() ||
       cl.containsIntermediateChanges()
-    val needsRowVersion = cl.containsCarryoverRows() ||
-      cl.representsUpdateAsDeleteAndInsert()
-
-    if (needsRowId) {
-      val rowIds = try cl.rowId() catch {
-        case _: UnsupportedOperationException => Array.empty[NamedReference]
-      }
-      if (rowIds == null || rowIds.isEmpty) {
-        throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
-      }
+    if (needsRowId && (rowIds == null || rowIds.isEmpty)) {
+      throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
     }
 
-    if (needsRowVersion) {
-      val rowVersionRef = try Some(cl.rowVersion()) catch {
-        case _: UnsupportedOperationException => None
+    val needsRowVersion = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert()
+    if (needsRowVersion && rowVersionRef.isEmpty) {
+      throw QueryCompilationErrors.changelogMissingRowVersionError(cl.name)
+    }
+
+    // Schema constraints on rowVersion: must be a top-level non-nullable column.
+    // Nullable rowVersions break carry-over detection (NULL = NULL is unknown, so a
+    // delete+insert pair would be misclassified as a real update).
+    rowVersionRef.foreach { ref =>
+      val fieldNames = ref.fieldNames()
+      if (fieldNames.length != 1) {
+        throw QueryCompilationErrors.changelogNestedRowVersionError(
+          cl.name, fieldNames.mkString("."))
       }
-      if (rowVersionRef.isEmpty) {
-        throw QueryCompilationErrors.changelogMissingRowVersionError(cl.name)
-      }
-      rowVersionRef.foreach { ref =>
-        val fieldNames = ref.fieldNames()
-        require(fieldNames.length == 1,
-          s"Nested rowVersion is not supported: ${fieldNames.mkString(".")}")
-        val columnName = fieldNames(0)
-        val col = byName.getOrElse(columnName,
-          throw QueryCompilationErrors.changelogMissingColumnError(cl.name, columnName))
-        if (col.nullable) {
-          throw QueryCompilationErrors.changelogNullableRowVersionError(cl.name, columnName)
-        }
+      val columnName = fieldNames(0)
+      val col = byName.getOrElse(columnName,
+        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, columnName))
+      if (col.nullable) {
+        throw QueryCompilationErrors.changelogNullableRowVersionError(cl.name, columnName)
       }
     }
   }

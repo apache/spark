@@ -3891,6 +3891,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changelogName" -> changelogName))
   }
 
+  def changelogNestedRowVersionError(
+      changelogName: String, reference: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CHANGELOG_SCHEMA.NESTED_ROW_VERSION",
+      messageParameters = Map(
+        "changelogName" -> changelogName,
+        "reference" -> reference))
+  }
+
   def cdcUpdateDetectionRequiresCarryOverRemoval(
       changelogName: String): AnalysisException = {
     new AnalysisException(
@@ -3901,6 +3910,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cdcNetChangesNotYetSupported(changelogName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
+      messageParameters = Map("changelogName" -> changelogName))
+  }
+
+  def cdcStreamingPostProcessingNotSupported(changelogName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
       messageParameters = Map("changelogName" -> changelogName))
   }
 
