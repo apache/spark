@@ -1078,7 +1078,7 @@ class Analyzer(
         }.getOrElse(u)
 
       case u @ UnresolvedView(identifier, cmd, allowTemp, suggestAlternative) =>
-        lookupTableOrView(identifier, viewOnly = true).map {
+        lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTemp =>
             throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
               identifier, cmd, u)
@@ -1100,20 +1100,15 @@ class Analyzer(
 
     /**
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
-     * for resolving DDL and misc commands.
+     * for resolving DDL and misc commands. UnresolvedView callers reject non-view results
+     * downstream via `expectViewNotTableError`.
      */
-    private def lookupTableOrView(
-        identifier: Seq[String],
-        viewOnly: Boolean = false): Option[LogicalPlan] = {
+    private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
       relationResolution.lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            // Previously view-only lookups rejected non-session catalogs outright. With
-            // `MetadataOnlyTable`, non-session catalogs can now expose views, so instead we
-            // let the lookup proceed and rely on the downstream match -- a non-view result is
-            // converted into the standard `expectViewNotTableError` by UnresolvedView's caller.
             CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>

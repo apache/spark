@@ -472,6 +472,43 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  test("ALTER VIEW re-captures the current session's SQL configs") {
+    withTable("spark_catalog.default.t") {
+      Seq("a", "b").toDF("col").write.saveAsTable("spark_catalog.default.t")
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        sql("CREATE VIEW view_catalog.default.v_configs AS " +
+          "SELECT col FROM spark_catalog.default.t")
+      }
+      val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+        .asInstanceOf[TestingViewCatalog]
+      val ansiKey = TableCatalog.VIEW_CONF_PREFIX + SQLConf.ANSI_ENABLED.key
+      assert(catalog.getStoredView(Array("default"), "v_configs").properties().get(ansiKey)
+        == "true")
+
+      // ALTER under a different ANSI setting should replace the stored config, not merge.
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        sql("ALTER VIEW view_catalog.default.v_configs AS " +
+          "SELECT col FROM spark_catalog.default.t WHERE col = 'b'")
+      }
+      assert(catalog.getStoredView(Array("default"), "v_configs").properties().get(ansiKey)
+        == "false")
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW whose new body references a nonexistent table fails at " +
+    "analysis") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.default.v_replace_missing AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      val ex = intercept[AnalysisException] {
+        sql("CREATE OR REPLACE VIEW view_catalog.default.v_replace_missing AS " +
+          "SELECT * FROM spark_catalog.default.does_not_exist")
+      }
+      assert(ex.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
+    }
+  }
+
   test("ALTER VIEW on a StagingTableCatalog uses the atomic exec (stageReplace)") {
     withSQLConf(
       "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {

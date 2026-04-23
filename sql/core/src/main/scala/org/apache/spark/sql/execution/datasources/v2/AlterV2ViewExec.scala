@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, TableInfo, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -34,8 +35,11 @@ import org.apache.spark.util.Utils
  * Shared bits for the v2 ALTER VIEW ... AS execs. Loads the existing view once via
  * `existingTable` and uses its properties to preserve user-set properties, comment, collation,
  * and schema-binding mode when constructing the replacement `TableInfo`. A v2 identifier that
- * does not resolve to a [[MetadataOnlyTable]] is rejected -- the connector contract for catalogs
- * with `SUPPORTS_VIEW` is to round-trip `MetadataOnlyTable` from `loadTable`.
+ * does not resolve to a view-typed [[MetadataOnlyTable]] is a catalog contract violation --
+ * the analyzer has already verified the target is a view, and `SUPPORTS_VIEW` catalogs must
+ * round-trip `MetadataOnlyTable` from `loadTable`. The only way to hit the internal-error
+ * branch is a racing DDL between analysis and exec, which is rare enough that we surface it
+ * as an internal error rather than a user-facing one.
  *
  * `generateViewProperties` (invoked from `buildTableInfo`) strips the transient view keys
  * (SQL configs, query column names, referred-temp names) from the inherited properties and
@@ -50,31 +54,14 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
         throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
     }
     table match {
-      case mot: MetadataOnlyTable => mot
+      case mot: MetadataOnlyTable if isViewTable(mot) => mot
       case other =>
-        // SUPPORTS_VIEW requires catalogs to round-trip MetadataOnlyTable; getting
-        // anything else back is a catalog contract violation.
         throw SparkException.internalError(
-          s"Expected MetadataOnlyTable from $catalog for $identifier, " +
-            s"got ${other.getClass.getName}")
+          s"Expected a view-typed MetadataOnlyTable from ${catalog.name()} for " +
+            s"${identifier.quoted}, got ${other.getClass.getName}")
     }
   }
 
-  protected lazy val existingInfo: TableInfo = existingTable.getTableInfo
-
-  // Translate once through V1Table so we can delegate semantics like viewSchemaMode to the
-  // same logic the v1 read path uses (honors viewSchemaBindingEnabled, same default when the
-  // property is absent).
-  protected lazy val existingCatalogTable: CatalogTable =
-    V1Table.toCatalogTable(catalog, identifier, existingTable)
-
-  private def existingProp(key: String): Option[String] =
-    Option(existingInfo.properties.get(key))
-
-  // ALTER VIEW ... AS does not accept a user column list.
-  override def userSpecifiedColumns: Seq[(String, Option[String])] = Seq.empty
-  override def comment: Option[String] = existingProp(TableCatalog.PROP_COMMENT)
-  override def collation: Option[String] = existingProp(TableCatalog.PROP_COLLATION)
   // Carry the existing view's full property map forward. Keys the ALTER actually changes are
   // overwritten downstream: view text + PROP_TABLE_TYPE via `withViewText`, comment / collation
   // via `withComment` / `withCollation`, view.sqlConfig.* / view.query.out.* /
@@ -83,10 +70,22 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   // `buildTableInfo`. Everything else -- notably PROP_OWNER and view.schemaMode -- flows
   // through unchanged, matching v1 `AlterViewAsCommand.alterPermanentView`'s `viewMeta.copy`
   // semantics.
-  override def userProperties: Map[String, String] =
-    existingInfo.properties.asScala.toMap
+  protected lazy val existingProps: Map[String, String] =
+    existingTable.getTableInfo.properties.asScala.toMap
 
-  override def viewSchemaMode: ViewSchemaMode = existingCatalogTable.viewSchemaMode
+  private def existingProp(key: String): Option[String] = existingProps.get(key)
+
+  // ALTER VIEW ... AS does not accept a user column list.
+  override def userSpecifiedColumns: Seq[(String, Option[String])] = Seq.empty
+  override def comment: Option[String] = existingProp(TableCatalog.PROP_COMMENT)
+  override def collation: Option[String] = existingProp(TableCatalog.PROP_COLLATION)
+  override def userProperties: Map[String, String] = existingProps
+
+  // Read the schema binding mode directly from the properties map; shares decoding with
+  // the v1 path via `CatalogTable.viewSchemaModeFromProperties` (honors
+  // viewSchemaBindingEnabled and the same default when the property is absent).
+  override def viewSchemaMode: ViewSchemaMode =
+    CatalogTable.viewSchemaModeFromProperties(existingProps)
 }
 
 /**

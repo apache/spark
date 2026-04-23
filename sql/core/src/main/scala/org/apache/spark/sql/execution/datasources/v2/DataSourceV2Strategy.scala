@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -301,41 +301,28 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
+    // The SUPPORTS_VIEW capability gate runs earlier in `CheckViewReferences`, so by the time
+    // these strategy cases fire the catalog is guaranteed to be a TableCatalog with the flag.
     case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
         _, _) =>
-      // Gate on TableCatalog + SUPPORTS_VIEW together so non-TableCatalog plugins still
-      // surface the VIEWS-specific error (instead of the generic TABLES error that
-      // asTableCatalog would throw).
-      val tableCatalog = catalog match {
-        case tc: TableCatalog
-            if tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW) => tc
-        case _ => throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-      }
       val sqlText = originalText.getOrElse {
         throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
       }
-      tableCatalog match {
+      catalog.asTableCatalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateV2ViewExec(staging, ident, userSpecifiedColumns, comment, collation,
             properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
-        case _ =>
+        case tableCatalog =>
           CreateV2ViewExec(tableCatalog, ident, userSpecifiedColumns, comment, collation,
             properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
       }
 
     case AlterViewAs(ResolvedPersistentView(catalog, ident, _), originalText, query, _, _) =>
-      // Re-use the CREATE VIEW capability -- a catalog able to create views via createTable
-      // must also be able to replace them via dropTable+createTable or stageReplace.
-      val tableCatalog = catalog match {
-        case tc: TableCatalog
-            if tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW) => tc
-        case _ => throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-      }
-      tableCatalog match {
+      catalog.asTableCatalog match {
         case staging: StagingTableCatalog =>
           AtomicAlterV2ViewExec(staging, ident, originalText, query) :: Nil
-        case _ =>
+        case tableCatalog =>
           AlterV2ViewExec(tableCatalog, ident, originalText, query) :: Nil
       }
 

@@ -157,18 +157,23 @@ case class CreateV2ViewExec(
     viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
 
   override protected def run(): Seq[InternalRow] = {
-    val info = buildTableInfo()
-
-    tryLoadTable().foreach { existing =>
-      if (allowExisting) {
-        return Seq.empty
-      }
-      if (!isViewTable(existing)) {
+    // Probe the catalog before preparing the view body so `IF NOT EXISTS` short-circuits
+    // without running `aliasPlan` / `generateViewProperties`, matching v1
+    // `CreateViewCommand.run`. Cyclic-reference detection is done at analysis time in
+    // `CheckViewReferences`.
+    val existing = tryLoadTable()
+    if (allowExisting && existing.isDefined) {
+      return Seq.empty
+    }
+    existing.foreach { table =>
+      if (!isViewTable(table)) {
         throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
           legacyName, replace)
       }
       if (!replace) throw viewAlreadyExists()
-      // Cyclic reference detection is done at analysis time in CheckViewReferences.
+    }
+    val info = buildTableInfo()
+    if (existing.isDefined) {
       CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       catalog.dropTable(identifier)
     }
@@ -205,11 +210,10 @@ case class AtomicCreateV2ViewExec(
     DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
-    // Validate first (mirrors v1 CreateViewCommand.run and the non-atomic exec above) so a
-    // CREATE VIEW IF NOT EXISTS v AS <invalid-query> with existing v fails the same way in
-    // both execs: the malformed view body is rejected even when the allow-existing short-
-    // circuit would otherwise skip creation.
-    val info = buildTableInfo()
+    // Probe the catalog before preparing the view body so `IF NOT EXISTS` short-circuits
+    // without running `aliasPlan` / `generateViewProperties`, matching v1
+    // `CreateViewCommand.run`. Cyclic-reference detection is done at analysis time in
+    // `CheckViewReferences`.
     val existing = tryLoadTable()
     if (allowExisting && existing.isDefined) {
       return Seq.empty
@@ -220,8 +224,8 @@ case class AtomicCreateV2ViewExec(
           legacyName, replace)
       }
     }
+    val info = buildTableInfo()
     val staged: StagedTable = if (replace) {
-      // Cyclic reference detection is done at analysis time in CheckViewReferences.
       if (existing.isDefined) {
         CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       }

@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, NamespaceHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -46,6 +46,12 @@ import org.apache.spark.util.ArrayImplicits._
  * Create or replace a view with given query plan. This command will generate some view-specific
  * properties(e.g. view default database, view query output column names) and store them as
  * properties in metastore, if we need to create a permanent view.
+ *
+ * Note: this is the v1 (session catalog) path. Permanent-view checks (no temp-object refs,
+ * no auto-generated aliases, no cycles) run at exec time here because Dataset-built commands
+ * can be constructed with `isAnalyzed=true` and bypass the analyzer's recapture path. The v2
+ * equivalent is [[org.apache.spark.sql.catalyst.plans.logical.CreateView]]; its checks run at
+ * analysis time via [[CheckViewReferences]]. Mirror any new validation in both places.
  *
  * @param name the name of this view.
  * @param userSpecifiedColumns the output column names and optional comments specified by users,
@@ -209,6 +215,12 @@ case class CreateViewCommand(
  * alter a permanent view matching the given name, or throw an exception if view not exist. Else,
  * this command will try to alter a temporary view first, if view not exist, try permanent view
  * next, if still not exist, throw an exception.
+ *
+ * Note: this is the v1 (session catalog) path. Permanent-view checks (no temp-object refs,
+ * no auto-generated aliases, no cycles) run at exec time here because Dataset-built commands
+ * can be constructed with `isAnalyzed=true` and bypass the analyzer's recapture path. The v2
+ * equivalent is [[org.apache.spark.sql.catalyst.plans.logical.AlterViewAs]]; its checks run at
+ * analysis time via [[CheckViewReferences]]. Mirror any new validation in both places.
  *
  * @param name the name of this view.
  * @param originalText the original SQL text of this view. Note that we can only alter a view by
@@ -847,19 +859,22 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
 }
 
 /**
- * Post-analysis check for v2 CREATE VIEW / ALTER VIEW: rejects permanent views that reference
- * temporary objects and rejects view bodies with auto-generated aliases. `referredTempFunctions`
- * is captured by the command's `markAsAnalyzed` before this rule runs. The v1 counterparts
- * [[CreateViewCommand]] and [[AlterViewAsCommand]] keep their existing exec-time checks --
- * Dataset-built commands bypass the analyzer's re-capture path, so the exec-time safety net
- * must stay for v1.
+ * Post-analysis check for v2 CREATE VIEW / ALTER VIEW. First rejects catalogs that do not
+ * declare [[TableCatalogCapability.SUPPORTS_VIEW]] with `MISSING_CATALOG_ABILITY.VIEWS` -- we
+ * do this before the temp-object and auto-alias checks so a catalog that cannot host views at
+ * all surfaces the correct root cause instead of a misleading "references temp" error. Then
+ * rejects permanent views that reference temporary objects and view bodies with auto-generated
+ * aliases. `referredTempFunctions` is captured by the command's `markAsAnalyzed` before this
+ * rule runs. The v1 counterparts [[CreateViewCommand]] and [[AlterViewAsCommand]] keep their
+ * existing exec-time checks -- Dataset-built commands bypass the analyzer's re-capture path,
+ * so the exec-time safety net must stay for v1.
  */
 object CheckViewReferences extends (LogicalPlan => Unit) {
   import ViewHelper._
 
   // Extract (catalog, identifier) for the two resolved shapes view commands reach us with:
-  // `ResolvedIdentifier` for CREATE VIEW on a new target, `ResolvedPersistentView` for ALTER
-  // VIEW or CREATE OR REPLACE VIEW on an existing view. All other shapes are an analyzer bug.
+  // `ResolvedIdentifier` for CREATE VIEW, `ResolvedPersistentView` for ALTER VIEW. Other shapes
+  // are an analyzer bug.
   private def catalogAndIdent(resolved: LogicalPlan): (CatalogPlugin, Identifier) =
     resolved match {
       case ri: ResolvedIdentifier => (ri.catalog, ri.identifier)
@@ -882,8 +897,22 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
     catalog.name() +: ident.asMultipartIdentifier
   }
 
+  // Fail fast if the catalog cannot host views. Gate non-TableCatalog plugins here too so
+  // callers get the VIEWS-specific error rather than a generic cast failure later.
+  private def requireSupportsView(resolved: LogicalPlan): Unit = {
+    val (catalog, _) = catalogAndIdent(resolved)
+    val supportsView = catalog match {
+      case tc: TableCatalog => tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)
+      case _ => false
+    }
+    if (!supportsView) {
+      throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
+    }
+  }
+
   override def apply(plan: LogicalPlan): Unit = plan.foreach {
     case cv: CreateView if cv.isAnalyzed =>
+      requireSupportsView(cv.child)
       val legacyName = legacyNameFor(cv.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, legacyName, cv.query, cv.referredTempFunctions)
@@ -897,6 +926,7 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
       }
 
     case av: AlterViewAs if av.isAnalyzed =>
+      requireSupportsView(av.child)
       val legacyName = legacyNameFor(av.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, legacyName, av.query, av.referredTempFunctions)

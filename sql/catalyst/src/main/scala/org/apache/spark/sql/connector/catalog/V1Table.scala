@@ -117,6 +117,10 @@ private[sql] object V1Table {
       t: MetadataOnlyTable): CatalogTable = {
     val info = t.getTableInfo
     val props = info.properties.asScala.toMap
+    // PROP_TABLE_TYPE is advisory on the v2 side: it may be absent or carry a value that has no
+    // v1 mapping (e.g. TableSummary.FOREIGN_TABLE_TYPE). v1 only has EXTERNAL/MANAGED/VIEW, so
+    // anything other than the two explicit mappings below falls back to EXTERNAL for the v1
+    // representation -- the same default v1 uses when the value is missing.
     val tableType = props.get(TableCatalog.PROP_TABLE_TYPE) match {
       case Some(TableSummary.VIEW_TABLE_TYPE) => CatalogTableType.VIEW
       case Some(TableSummary.MANAGED_TABLE_TYPE) => CatalogTableType.MANAGED
@@ -147,9 +151,9 @@ private[sql] object V1Table {
     }
     CatalogTable(
       // CatalogTable.identifier uses a single-string database; for multi-part namespaces we
-      // preserve only the last part here and record the full multi-part form in `fullIdentOpt`
-      // below. Callers needing the real fully-qualified name (e.g. cyclic view detection)
-      // should read `CatalogTable.fullIdent`.
+      // preserve only the last part here and record the full multi-part form in
+      // `multipartIdentifier` below. Callers needing the real fully-qualified name (e.g. cyclic
+      // view detection) should read `CatalogTable.fullIdent`.
       identifier = TableIdentifier(
         table = ident.name(),
         database = ident.namespace().lastOption,
@@ -175,7 +179,7 @@ private[sql] object V1Table {
       properties = tablePropsMap ++
         clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation) ++
         viewContextProps,
-      fullIdentOpt = Some(catalog.name() +: ident.asMultipartIdentifier)
+      multipartIdentifier = Some(catalog.name() +: ident.asMultipartIdentifier)
     )
   }
 }

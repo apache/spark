@@ -77,6 +77,11 @@ public class TableInfo {
       return this;
     }
 
+    /**
+     * Replaces the current properties map with a defensive copy of the given map. Any reserved
+     * keys set earlier via convenience setters (e.g. {@link #withProvider}, {@link #withViewText})
+     * are discarded -- call those setters <i>after</i> this method, not before.
+     */
     public Builder withProperties(Map<String, String> properties) {
       this.properties = new HashMap<>(properties);
       return this;
@@ -92,9 +97,12 @@ public class TableInfo {
       return this;
     }
 
-    // Convenience setters that write reserved keys into `properties`. These mutate the current
-    // properties map, so call them after any `withProperties(...)` that replaces the map.
+    // Convenience setters below write reserved keys into the current `properties` map. Pair
+    // each with a preceding `withProperties(...)` call if you want to start from a user map;
+    // calling `withProperties` after a convenience setter discards the convenience setter's
+    // write.
 
+    /** Writes {@link TableCatalog#PROP_PROVIDER} into the current properties map. */
     public Builder withProvider(String provider) {
       properties.put(TableCatalog.PROP_PROVIDER, provider);
       return this;
