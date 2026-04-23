@@ -229,6 +229,31 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
+  // Same semantics as SparkFunSuite.retry, but prints the retry events to stdout so they
+  // appear in the GitHub Actions job log. SparkFunSuite.retry uses log4j, which in our test
+  // setup only writes to target/unit-tests.log (surfaced as an artifact, not in the live log).
+  private def retryWithVisibleLog(maxAttempts: Int)(body: => Unit): Unit = {
+    var attempt = 1
+    var done = false
+    while (!done) {
+      try {
+        body
+        done = true
+      } catch {
+        case t: Throwable if attempt >= maxAttempts => throw t
+        case t: Throwable =>
+          // scalastyle:off println
+          println(
+            s"===== Attempt $attempt/$maxAttempts failed " +
+              s"(${t.getClass.getSimpleName}: ${t.getMessage}); retrying =====")
+          // scalastyle:on println
+          afterEach()
+          beforeEach()
+          attempt += 1
+      }
+    }
+  }
+
   private def awaitTestBodyInNewThread(timeoutMillis: Long)(body: => Unit): Unit = {
     @volatile var error: Throwable = null
     val runnable: Runnable = () => {
@@ -328,7 +353,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
-    retry(n = 2) {
+    retryWithVisibleLog(maxAttempts = 3) {
       // Run the body on a fresh daemon thread so the test thread can move on when the body
       // hangs inside a non-interruptible socket read (failAfter's Thread.interrupt cannot
       // unblock that). On timeout, the worker is leaked and dies with the JVM; each retry
