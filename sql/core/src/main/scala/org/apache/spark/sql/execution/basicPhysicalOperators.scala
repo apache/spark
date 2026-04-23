@@ -188,7 +188,10 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
-        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        val idx = notNullPreds.indexWhere {
+          case IsNotNull(n) => n.semanticEquals(r)
+          case _ => false
+        }
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.

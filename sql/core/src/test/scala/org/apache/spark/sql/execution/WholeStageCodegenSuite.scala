@@ -1035,10 +1035,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     // alongside an earlier guard otherPred (`kind = 'numeric'`). The non-CSE path
     // defers leftover notNullPreds to after the otherPreds so the guard short-circuits
     // before the cast runs; the CSE branch must preserve that ordering.
+    // AQE is disabled here and in the sibling test below so each FilterExec is directly
+    // visible for the plan-shape assertions, rather than wrapped inside an
+    // AdaptiveSparkPlan.
     val t = Seq(("3", "numeric"), ("abc", "text")).toDF("s", "kind")
     val idx = Seq(1, 2).toDF("i")
-    // AQE is disabled so the FilterExec is directly visible for the plan-shape
-    // assertion below, rather than wrapped inside an AdaptiveSparkPlan.
     withSQLConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
@@ -1054,12 +1055,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
             |SELECT s, i FROM pairs
             |""".stripMargin)
-        // Guard against optimizer drift: this test only exercises the bug when a
-        // single rolled-up FilterExec contains both `IsNotNull(Cast(s AS INT))`
-        // (throw-capable notNullPred) and an earlier guard otherPred (a non-IsNotNull
-        // conjunct such as `kind = 'numeric'`). If a future optimizer change splits
-        // these into separate FilterExecs or drops the guard, `checkAnswer` alone
-        // would silently pass even without the fix.
+        // Guard against optimizer drift: require a single rolled-up FilterExec carrying
+        // both `IsNotNull(Cast(s AS INT))` and a non-IsNotNull guard conjunct -- without
+        // this, `checkAnswer` alone would silently pass even if the buggy ordering
+        // returned.
         def conjuncts(e: Expression): Seq[Expression] = e match {
           case And(l, r) => conjuncts(l) ++ conjuncts(r)
           case other => Seq(other)
@@ -1087,11 +1086,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("SPARK-56032: FilterExec CSE handles shared otherPred refs with guard") {
     // Filter shape: kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100.
-    // Exercises invariant (b) on a shape with two cast otherPreds sharing a ref:
-    // the guard `kind = 'numeric'` must short-circuit before either cast runs, so
-    // the 'abc'/'text' row never triggers `CAST_INVALID_INPUT` under ANSI, and the
-    // null-s row is filtered by the IsNotNull check emitted ahead of the cast
-    // otherPreds rather than reaching the tightened-output binding.
+    // Exercises invariant (b) on a shape where two cast otherPreds share a ref: the
+    // guard must short-circuit before either cast runs (so the 'abc'/'text' row never
+    // throws under ANSI), and the null-s row must be filtered by the IsNotNull check
+    // emitted ahead of the cast otherPreds rather than reaching the tightened-output
+    // binding. See the sibling test above for the AQE-off rationale.
     val schema = StructType(Seq(
       StructField("s", StringType, nullable = true),
       StructField("kind", StringType, nullable = true)))
@@ -1101,8 +1100,6 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       Row(null, "numeric"),
       Row("abc", "text")))
 
-    // AQE is disabled so the FilterExec is directly visible for plan-shape assertions
-    // below, rather than wrapped inside an AdaptiveSparkPlan.
     withSQLConf(
       SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
