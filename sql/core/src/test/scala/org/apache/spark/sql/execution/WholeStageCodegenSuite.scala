@@ -23,7 +23,7 @@ import java.time.Duration
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -1062,6 +1062,16 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           |     pairs   AS (SELECT s, i FROM derived, idx WHERE i <= n)
           |SELECT s, i FROM pairs
           |""".stripMargin)
+      // Guard against optimizer drift: this test only exercises the bug when the
+      // rolled-up filter contains `IsNotNull(Cast(s AS INT))` alongside an earlier
+      // guard otherPred. If a future optimizer change stops producing that shape,
+      // `checkAnswer` alone would silently pass even without the fix.
+      assert(df.queryExecution.executedPlan.collectFirst {
+        case f: FilterExec if f.condition.exists {
+          case IsNotNull(_: Cast) => true
+          case _ => false
+        } => f
+      }.nonEmpty, "expected a FilterExec with IsNotNull(Cast(...)) in its condition")
       checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
     }
   }

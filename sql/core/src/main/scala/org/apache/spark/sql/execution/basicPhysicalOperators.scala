@@ -266,9 +266,10 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       `InferFiltersFromConstraints`. Emitting all notNullPreds up front would
     //       evaluate the inner expression on rows that an earlier-ordered otherPred
     //       would have rejected -- same class of bug as (a) but across the
-    //       notNullPreds / otherPreds boundary. Mirror the non-CSE branch: emit just
-    //       the IsNotNull checks each otherPred needs before evaluating it, and defer
-    //       any leftover notNullPreds to after all otherPreds.
+    //       notNullPreds / otherPreds boundary. Mirror the non-CSE branch: for each
+    //       reference of each otherPred, emit the matching IsNotNull check (direct or
+    //       synthetic) before the otherPred, and defer any leftover notNullPreds to
+    //       after all otherPreds.
     //   (c) Null guards for CSE state materialization: IsNotNull predicates on an
     //       otherPred's references must short-circuit before CSE precomputation sees
     //       a null-bearing row. Otherwise CSE's `value_X = isNull ? default : compute`
@@ -281,9 +282,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // A later otherPred still reuses the cached value -- it just doesn't pay the cost
     // for rows that an earlier otherPred rejected.
     //
-    // The fix for (b): per-otherPred, emit the matching IsNotNull(ref) checks from
-    // `notNullPreds` (for each of that otherPred's references) before the otherPred's
-    // CSE precompute and body. Remaining notNullPreds emit after all otherPreds.
+    // The fix for (b): per-otherPred, for each reference `r`: if `notNullPreds` has a
+    // direct `IsNotNull(r)`, emit it; else if `r` is covered by `notNullAttributes`
+    // through some complex `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic
+    // `IsNotNull(r)` so the tightened-output binding below is safe without evaluating
+    // the throw-capable inner expression. Then the otherPred's CSE precompute and
+    // body. Remaining notNullPreds (including any complex-child forms whose refs got
+    // synthetic coverage) emit after all otherPreds.
     //
     // The fix for (c): the IsNotNull interleaving above runs before any CSE precompute
     // that is keyed off the same reference, so the precompute sees only non-null rows.
@@ -328,6 +333,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         }
 
         val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+        val extraIsNotNullAttrs = mutable.Set[Attribute]()
 
         val predCode: String = {
           val parts = new StringBuilder
@@ -342,6 +348,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                   if (ni != -1 && !generatedIsNotNullChecks(ni)) {
                     generatedIsNotNullChecks(ni) = true
                     parts.append(genNotNull(notNullPreds(ni)))
+                    parts.append('\n')
+                  } else if (notNullAttributes.contains(r.exprId) &&
+                      !extraIsNotNullAttrs.contains(r)) {
+                    extraIsNotNullAttrs += r
+                    parts.append(genNotNull(IsNotNull(r)))
                     parts.append('\n')
                   }
                 }
