@@ -133,7 +133,8 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
   test("createDataFrame and round-trip with Geometry SRIDs") {
     // Covers PROJ-sourced SRIDs, the Spark-specific SRID 0,
     // and OGC-overridden SRIDs (4326, 4267, 4269).
-    Seq(0, 3857, 2000, 4326, 4267, 4269, 102100).foreach { srid =>
+    // Includes newer PROJ registry SRIDs (e.g. after PROJ 9.8.x): ESRI:102964, ESRI:104030.
+    Seq(0, 3857, 2000, 4326, 4267, 4269, 102100, 102964, 104030).foreach { srid =>
       val geom = Geometry.fromWKB(point1, srid)
       val schema = StructType(Seq(StructField("g", GeometryType(srid), nullable = false)))
       checkAnswer(
