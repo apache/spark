@@ -397,8 +397,20 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         writerThread.interrupt()
       }
 
-      new DataInputStream(new BufferedInputStream(
-        Channels.newInputStream(worker.channel), bufferSize))
+      // Use a simple InputStream that reads from the channel directly without
+      // going through Channels.newInputStream, which may use blockingLock()
+      // synchronization that interferes with the writer thread's channel.write().
+      val channelInput = new InputStream {
+        private[this] val temp = new Array[Byte](1)
+        override def read(): Int = {
+          val n = read(temp, 0, 1)
+          if (n <= 0) -1 else temp(0) & 0xff
+        }
+        override def read(b: Array[Byte], off: Int, len: Int): Int = {
+          worker.channel.read(ByteBuffer.wrap(b, off, len))
+        }
+      }
+      new DataInputStream(new BufferedInputStream(channelInput, bufferSize))
     } else {
       new DataInputStream(new BufferedInputStream(
         new ReaderInputStream(worker, writer, handle,
