@@ -66,31 +66,18 @@ class DataSourceV2CacheSuite extends QueryTest with SharedSparkSession {
   }
 
   /**
-   * Creates a second [[SparkSession]] sharing the same [[SparkContext]] (and
-   * therefore the same [[SharedState]] and [[CacheManager]]). The external
-   * session can access the same tables via [[SharedInMemoryTableCatalog]].
+   * Creates a second [[SparkSession]] sharing the same [[SparkContext]],
+   * [[SharedState]], and [[CacheManager]]. Uses [[SparkSession.newSession]]
+   * so both sessions share the same CacheManager. Writes from the external
+   * session trigger refreshCache() on the shared CacheManager, making
+   * changes visible to cached reads in the primary session.
+   *
+   * The external session accesses the same tables via
+   * [[SharedInMemoryTableCatalog]] (configured in sparkConf).
    */
   private def withExtSession(f: SparkSession => Unit): Unit = {
-    val savedActive = SparkSession.getActiveSession
-    val savedDefault = SparkSession.getDefaultSession
-    val extSession = try {
-      SparkSession.clearActiveSession()
-      SparkSession.clearDefaultSession()
-      SparkSession.builder()
-        .sparkContext(spark.sparkContext)
-        .config("spark.sql.catalog.sharedcat",
-          classOf[SharedInMemoryTableCatalog].getName)
-        .config("spark.sql.catalog.sharedcat.copyOnLoad", "true")
-        .create()
-    } finally {
-      savedDefault.foreach(SparkSession.setDefaultSession)
-      savedActive.foreach(SparkSession.setActiveSession)
-    }
-    try {
-      f(extSession)
-    } finally {
-      extSession.close()
-    }
+    val extSession = spark.newSession()
+    f(extSession)
   }
 
   private def setupTable(): Unit = {
