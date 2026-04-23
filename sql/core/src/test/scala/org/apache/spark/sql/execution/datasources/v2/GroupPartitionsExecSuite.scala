@@ -183,8 +183,6 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(GroupPartitionsExec(child).outputOrdering !== childOrdering,
         "config alone should not enable k-way merge; enableSortedMerge must be set by planner")
-    }
-    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       assert(GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering === childOrdering)
     }
     withSQLConf(

@@ -233,8 +233,13 @@ case class GroupPartitionsExec(
   /**
    * Returns a copy of this node with k-way merge enabled if the config permits it.
    */
-  def tryEnableSortedMerge(): Option[GroupPartitionsExec] =
-    Option.when(hasCoalescing && canUseSortedMerge)(copy(enableSortedMerge = true))
+  def tryEnableSortedMerge(): Option[GroupPartitionsExec] = {
+    Option.when(hasCoalescing && canUseSortedMerge) {
+      val newGroupPartitions = copy(enableSortedMerge = true)
+      newGroupPartitions.copyTagsFrom(this)
+      newGroupPartitions
+    }
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (groupedPartitions.isEmpty) {
