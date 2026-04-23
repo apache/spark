@@ -397,11 +397,15 @@ class PlanMerger(
               }
           }
         case (np: Filter, cp) if filterPropagationSupported =>
-          // The recursion keeps `cp` unchanged and `cp` is not a Filter at this level, so no
-          // deeper case can expose a Filter on the cp side. cpFilter is therefore always None
-          // in the child result.
-          tryMergePlans(np.child, cp, filterPropagationSupported).collect {
-            case TryMergeResult(mergedChild, npMapping, cpMapping, npFilter, None) =>
+          // The recursion keeps `cp` unchanged and `cp` is not a Filter or Project at this level
+          // (earlier cases would have matched), and no case in the recursion unwraps a non-Filter
+          // non-Project `cp` to expose a deeper Filter. cpFilter is therefore always None in the
+          // child result; assert rather than silently drop so that a future case added above
+          // cannot quietly invalidate this invariant.
+          tryMergePlans(np.child, cp, filterPropagationSupported).map {
+            case TryMergeResult(mergedChild, npMapping, cpMapping, npFilter, cpFilter) =>
+              assert(cpFilter.isEmpty,
+                "cpFilter unexpectedly propagated from deeper recursion in (np: Filter, cp) case")
               val mappedNPCondition = mapAttributes(np.condition, npMapping)
               val newNPCondition = npFilter.fold(mappedNPCondition) {
                 case (f, _) => And(f, mappedNPCondition)
@@ -415,11 +419,13 @@ class PlanMerger(
               TryMergeResult(project, npMapping, cpMapping, Some((newNPFilter, true)), None)
           }
         case (np, cp: Filter) if filterPropagationSupported =>
-          // Symmetric to the previous case: `np` is unchanged and is not a Filter, so no
-          // deeper case can expose a Filter on the np side. npFilter is always None in the
-          // child result.
-          tryMergePlans(np, cp.child, filterPropagationSupported).collect {
-            case TryMergeResult(mergedChild, npMapping, cpMapping, None, cpFilter) =>
+          // Symmetric to the previous case: `np` is unchanged and is not a Filter or Project at
+          // this level, and no case in the recursion unwraps it to expose a deeper Filter.
+          // npFilter is always None in the child result; assert rather than silently drop.
+          tryMergePlans(np, cp.child, filterPropagationSupported).map {
+            case TryMergeResult(mergedChild, npMapping, cpMapping, npFilter, cpFilter) =>
+              assert(npFilter.isEmpty,
+                "npFilter unexpectedly propagated from deeper recursion in (np, cp: Filter) case")
               val mappedCPCondition = mapAttributes(cp.condition, cpMapping)
               val newCPCondition = cpFilter.fold(mappedCPCondition)(And(_, mappedCPCondition))
               val newCPFilterAlias =
@@ -526,9 +532,8 @@ class PlanMerger(
     // Record each attr rewrite in the cached plan map so ancestor nodes can remap their stale
     // references. Only iterate over the original cached range; new-plan expressions appended
     // above were already wrapped with the new plan's filter and must not be double-wrapped.
-    val cachedPlanLength = cachedPlanExpressions.length
     val newCPMapping = AttributeMap(cachedPlanFilter.toSeq.flatMap { f =>
-      (0 until cachedPlanLength).flatMap { i =>
+      cachedPlanExpressions.indices.flatMap { i =>
         if (matchedCachedIndices.contains(i)) {
           None
         } else {
