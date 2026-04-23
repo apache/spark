@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 
@@ -32,16 +32,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   protected def deltaDelete: Boolean = false
 
-  /**
-   * Whether the underlying table supports delete-by-filter (i.e. `canDeleteWhere` may return
-   * `true`). Subclasses backed by a table that always rejects filter-based delete should
-   * override to `false`, which skips tests that specifically exercise the metadata-only
-   * delete path.
-   */
-  protected def supportsDeleteByFilter: Boolean = true
-
   protected def getDeleteSummary(): DeleteSummary = {
-    val t = catalog.loadTable(ident).asInstanceOf[InMemoryBaseTable]
+    val t = catalog.loadTable(ident).asInstanceOf[InMemoryTable]
     t.commits.last.writeSummary.get.asInstanceOf[DeleteSummary]
   }
 
@@ -681,8 +673,6 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete without condition executed as delete with filters") {
-    assume(supportsDeleteByFilter, "requires the metadata-only delete path")
-
     createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }
         |{ "pk": 2, "id": 2, "dep": 200 }
@@ -695,8 +685,6 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("delete with supported predicates gets converted into delete with filters") {
-    assume(supportsDeleteByFilter, "requires the metadata-only delete path")
-
     createAndInitTable("pk INT NOT NULL, id INT, dep INT",
       """{ "pk": 1, "id": 1, "dep": 100 }
         |{ "pk": 2, "id": 2, "dep": 200 }

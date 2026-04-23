@@ -33,21 +33,26 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-/**
- * Row-level operation plumbing shared by [[InMemoryRowLevelOperationTable]] (which also mixes in
- * `SupportsDelete`) and [[InMemoryRowLevelOperationOnlyTable]] (which does not). Keeping this in
- * a trait avoids duplicating the per-operation builders, scan/write wiring, and delta writer.
- */
-trait InMemoryRowLevelOperationsMixin extends SupportsRowLevelOperations {
-  self: InMemoryBaseTable =>
+class InMemoryRowLevelOperationTable(
+    name: String,
+    schema: StructType,
+    partitioning: Array[Transform],
+    properties: util.Map[String, String],
+    constraints: Array[Constraint] = Array.empty)
+  extends InMemoryTable(
+    name,
+    CatalogV2Util.structTypeToV2Columns(schema),
+    partitioning,
+    properties,
+    constraints)
+  with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
   private final val NO_METADATA = "no-metadata"
-  private final def noMetadata: Boolean =
-    properties.getOrDefault(NO_METADATA, "false") == "true"
+  private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -133,18 +138,8 @@ trait InMemoryRowLevelOperationsMixin extends SupportsRowLevelOperations {
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
-      // If the row-level scan was optimized away before
-      // GroupBasedRowLevelOperationScanPlanning could attach one (e.g. the rewritten Filter
-      // folded to FALSE and PruneFilters replaced the scan with an empty LocalRelation), no
-      // partitions were read -- there is nothing to replace.
-      val readPartitions: Seq[Seq[Any]] = if (scan == null) {
-        Seq.empty
-      } else {
-        scan.data
-          .flatMap(_.asInstanceOf[BufferedRows].rows)
-          .map(r => getKey(r, schema))
-          .distinct
-      }
+      val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
+      val readPartitions = readRows.map(r => getKey(r, schema)).distinct
       dataMap --= readPartitions
       replacedPartitions = readPartitions
       withData(newData, schema)
@@ -216,62 +211,6 @@ trait InMemoryRowLevelOperationsMixin extends SupportsRowLevelOperations {
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
-  }
-}
-
-class InMemoryRowLevelOperationTable(
-    name: String,
-    schema: StructType,
-    partitioning: Array[Transform],
-    properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty)
-  extends InMemoryTable(
-    name,
-    CatalogV2Util.structTypeToV2Columns(schema),
-    partitioning,
-    properties,
-    constraints)
-  with InMemoryRowLevelOperationsMixin
-
-object InMemoryRowLevelOperationTable {
-  /**
-   * Table property that makes the catalog instantiate the row-level-only variant of the
-   * row-level operation table, i.e. a table that mixes in `SupportsRowLevelOperations` but
-   * not `SupportsDelete` / `TruncatableTable`. This forces every DELETE onto the row-level
-   * rewrite path regardless of predicate, which is not otherwise reachable with the default
-   * fixture.
-   */
-  val SUPPORTS_DELETE_FILTER_PROP: String = "supports-delete-filter"
-}
-
-/**
- * Row-level operation table without `SupportsDelete`. Used by tests that need DELETE to take
- * the row-level rewrite path for every predicate (including ones that fold to `TrueLiteral`).
- */
-class InMemoryRowLevelOperationOnlyTable(
-    name: String,
-    schema: StructType,
-    partitioning: Array[Transform],
-    properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty)
-  extends InMemoryBaseTable(
-    name,
-    CatalogV2Util.structTypeToV2Columns(schema),
-    partitioning,
-    properties,
-    constraints)
-  with InMemoryRowLevelOperationsMixin {
-
-  // Minimal writer builder that supports append (needed by test fixture's createAndInitTable).
-  // Overwrite/truncate are not supported -- this is a pure row-level operation table.
-  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
-    InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
-    new InMemoryWriterBuilder(info) {
-      override def truncate(): WriteBuilder =
-        throw new UnsupportedOperationException(
-          "truncate is not supported on InMemoryRowLevelOperationOnlyTable")
-    }
   }
 }
 
