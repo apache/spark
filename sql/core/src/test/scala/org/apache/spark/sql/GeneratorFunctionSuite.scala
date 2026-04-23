@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
+class GeneratorFunctionSuite extends SharedSparkSession {
   import testImplicits._
 
   test("stack") {

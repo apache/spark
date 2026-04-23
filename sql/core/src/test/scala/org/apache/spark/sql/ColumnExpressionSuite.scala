@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
+class ColumnExpressionSuite extends SharedSparkSession {
   import testImplicits._
 
   private lazy val booleanData = {

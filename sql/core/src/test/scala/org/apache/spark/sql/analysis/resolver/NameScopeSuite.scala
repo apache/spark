@@ -20,7 +20,6 @@ package org.apache.spark.sql.analysis.resolver
 import java.util.HashMap
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedStar
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   NameResolutionParameters,
@@ -44,7 +43,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class NameScopeSuite extends QueryTest with SharedSparkSession {
+class NameScopeSuite extends SharedSparkSession {
   private val col1Integer = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col1IntegerOther = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col2Integer = AttributeReference(name = "col2", dataType = IntegerType)()

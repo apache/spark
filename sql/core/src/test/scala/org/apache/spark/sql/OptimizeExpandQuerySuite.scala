@@ -22,7 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class OptimizeExpandQuerySuite
-    extends QueryTest with SharedSparkSession {
+    extends SharedSparkSession {
 
   private def checkOptimizationCorrectness(
       sqlText: String): Unit = {

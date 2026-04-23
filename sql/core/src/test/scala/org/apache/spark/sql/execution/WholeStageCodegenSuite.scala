@@ -22,7 +22,7 @@ import java.time.Duration
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
+class WholeStageCodegenSuite extends SharedSparkSession
   with DisableAdaptiveExecutionSuite {
 
   import testImplicits._

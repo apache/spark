@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan => CatalystGreaterThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
@@ -53,7 +53,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
 
-class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def getBatch(query: DataFrame): AdvancedBatch = {

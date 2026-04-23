@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog._
@@ -180,8 +180,7 @@ object InMemoryTableSessionCatalog {
 }
 
 private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with BeforeAndAfter {
 
   protected def catalog(name: String): CatalogPlugin = {

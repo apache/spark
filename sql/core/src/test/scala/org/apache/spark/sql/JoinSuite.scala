@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   with JoinSelectionHelper {
   import testImplicits._
 
@@ -1819,8 +1819,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 }
 
 class ThreadLeakInSortMergeJoinSuite
-  extends QueryTest
-    with SharedSparkSession
+  extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
 
   setupTestData()
