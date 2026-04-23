@@ -886,10 +886,7 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
 
   private def legacyNameFor(resolved: LogicalPlan): TableIdentifier = {
     val (catalog, ident) = catalogAndIdent(resolved)
-    TableIdentifier(
-      table = ident.name(),
-      database = ident.namespace().lastOption,
-      catalog = Some(catalog.name()))
+    ident.asLegacyTableIdentifier(catalog.name())
   }
 
   private def fullIdentFor(resolved: LogicalPlan): Seq[String] = {

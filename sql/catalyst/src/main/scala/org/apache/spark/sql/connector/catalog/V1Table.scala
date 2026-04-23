@@ -22,7 +22,6 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -126,7 +125,14 @@ private[sql] object V1Table {
       case Some(TableSummary.MANAGED_TABLE_TYPE) => CatalogTableType.MANAGED
       case _ => CatalogTableType.EXTERNAL
     }
-    val viewText = props.get(TableCatalog.PROP_VIEW_TEXT)
+    // Only expose viewText when this table actually is a view; otherwise downstream callers that
+    // use `catalogTable.viewText.isDefined` as an "is-view" proxy would misclassify a
+    // misconfigured table entry.
+    val viewText = if (tableType == CatalogTableType.VIEW) {
+      props.get(TableCatalog.PROP_VIEW_TEXT)
+    } else {
+      None
+    }
     // Reserved keys are promoted to first-class CatalogTable fields; strip them from the
     // user-visible properties map so they're not double-persisted or leaked into the serde bag.
     val userProps = props -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
@@ -150,14 +156,11 @@ private[sql] object V1Table {
       Map.empty[String, String]
     }
     CatalogTable(
-      // CatalogTable.identifier uses a single-string database; for multi-part namespaces we
-      // preserve only the last part here and record the full multi-part form in
-      // `multipartIdentifier` below. Callers needing the real fully-qualified name (e.g. cyclic
-      // view detection) should read `CatalogTable.fullIdent`.
-      identifier = TableIdentifier(
-        table = ident.name(),
-        database = ident.namespace().lastOption,
-        catalog = Some(catalog.name())),
+      // `asLegacyTableIdentifier` collapses multi-part namespaces to their last segment (v1
+      // limitation). We record the full multi-part form in `multipartIdentifier` below;
+      // callers needing the real fully-qualified name (e.g. cyclic view detection) should
+      // read `CatalogTable.fullIdent`.
+      identifier = ident.asLegacyTableIdentifier(catalog.name()),
       tableType = tableType,
       storage = CatalogStorageFormat.empty.copy(
         locationUri = props.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI),

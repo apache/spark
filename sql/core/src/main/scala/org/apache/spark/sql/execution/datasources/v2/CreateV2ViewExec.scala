@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils}
 import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -56,10 +57,8 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   // Build a synthetic v1 TableIdentifier for error messages and for ViewHelper methods that
   // accept it purely for rendering. This carries no semantic weight - the v2 Identifier is the
   // actual target.
-  protected lazy val legacyName: TableIdentifier = TableIdentifier(
-    table = identifier.name(),
-    database = identifier.namespace().lastOption,
-    catalog = Some(catalog.name()))
+  protected lazy val legacyName: TableIdentifier =
+    identifier.asLegacyTableIdentifier(catalog.name())
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -223,6 +222,9 @@ case class AtomicCreateV2ViewExec(
         throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
           legacyName, replace)
       }
+      // Match the non-atomic exec: reject plain CREATE against an existing view up front
+      // rather than relying on `stageCreate` to throw.
+      if (!replace) throw viewAlreadyExists()
     }
     val info = buildTableInfo()
     val staged: StagedTable = if (replace) {
@@ -231,6 +233,9 @@ case class AtomicCreateV2ViewExec(
       }
       catalog.stageCreateOrReplace(identifier, info)
     } else {
+      // TOCTOU: a concurrent writer can create an entry between `tryLoadTable` and
+      // `stageCreate`; translate the catalog's `TableAlreadyExistsException` into the same
+      // view-already-exists error the fast-path uses.
       try {
         catalog.stageCreate(identifier, info)
       } catch {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, TableSummary, V1Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -99,6 +99,36 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     val table = new MetadataOnlyTable(info)
     assert(!table.properties().containsKey(
       TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
+  }
+
+  test("multi-part captured namespace round-trips through V1Table.toCatalogTable") {
+    // End-to-end coverage of the v2 encoder -> parser round-trip for multi-level namespaces:
+    // (a) TableInfo.Builder serializes (cat, Array(db1, db2)) into a quoted multi-part
+    // identifier, (b) V1Table.toCatalogTable parses it back via parseMultipartIdentifier, and
+    // (c) the resulting CatalogTable exposes the full (cat, db1, db2) via
+    // viewCatalogAndNamespace -- which is what the v1 view-resolution path consumes to expand
+    // unqualified references in the view body.
+    val info = new TableInfo.Builder()
+      .withSchema(new StructType().add("col", "string"))
+      .withViewText("SELECT col FROM t")
+      .withCurrentCatalogAndNamespace("my_cat", Array("db1", "db2"))
+      .build()
+    val motTable = new MetadataOnlyTable(info)
+    // Any CatalogPlugin works here; toCatalogTable only reads `catalog.name()`.
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+    val ct = V1Table.toCatalogTable(
+      catalog, Identifier.of(Array("ns"), "v"), motTable)
+    assert(ct.viewCatalogAndNamespace == Seq("my_cat", "db1", "db2"))
+
+    // And for a namespace part that needs backtick-quoting.
+    val infoWeird = new TableInfo.Builder()
+      .withSchema(new StructType().add("col", "string"))
+      .withViewText("SELECT col FROM t")
+      .withCurrentCatalogAndNamespace("my_cat", Array("weird.db", "normal"))
+      .build()
+    val ctWeird = V1Table.toCatalogTable(
+      catalog, Identifier.of(Array("ns"), "v"), new MetadataOnlyTable(infoWeird))
+    assert(ctWeird.viewCatalogAndNamespace == Seq("my_cat", "weird.db", "normal"))
   }
 
   test("withCurrentCatalogAndNamespace clears the property when catalog is null or empty") {
@@ -527,17 +557,18 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("ALTER VIEW on a catalog without SUPPORTS_VIEW fails") {
-    // An identifier the TestingTableOnlyCatalog can't find -- we never get past the view
-    // lookup stage, so the error here is the no-such-table / not-a-view path. The capability
-    // gate in DataSourceV2Strategy is only reachable once the existing view is resolvable,
-    // which this catalog can't do; the capability rejection is already exercised by the
-    // CREATE VIEW test above.
+  test("ALTER VIEW on a catalog without SUPPORTS_VIEW fails with MISSING_CATALOG_ABILITY") {
+    // TestingTableOnlyCatalog does NOT declare SUPPORTS_VIEW but DOES round-trip
+    // `default.v` as a view-typed MetadataOnlyTable, so view resolution succeeds and we
+    // reach the capability gate in `CheckViewReferences`. Verifies the gate fires on the
+    // ALTER path (not only on CREATE), which would otherwise silently regress if
+    // `SUPPORTS_VIEW` got added to the default capability set.
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
-      intercept[AnalysisException] {
-        sql("ALTER VIEW no_view_catalog.default.v AS SELECT 1")
+      val ex = intercept[AnalysisException] {
+        sql("ALTER VIEW no_view_catalog.default.v AS SELECT 1 AS x")
       }
+      assert(ex.getCondition == "MISSING_CATALOG_ABILITY.VIEWS")
     }
   }
 
@@ -594,6 +625,131 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  // --- Follow-up-blocked view DDL / inspection on a non-session v2 catalog ------------
+  // These plans don't have a dedicated v2 strategy yet (tracked for a follow-up PR). We pin
+  // the current failure mode -- UNSUPPORTED_FEATURE.TABLE_OPERATION with a statement-specific
+  // operation string -- so a future generic "no plan found" regression would surface here
+  // rather than silently degrading the UX.
+
+  private def seedV2View(name: String): Unit = {
+    sql(s"CREATE VIEW view_catalog.default.$name AS SELECT 1 AS x")
+  }
+
+  private def assertUnsupportedViewOp(statement: String): Unit = {
+    val ex = intercept[AnalysisException](sql(statement))
+    assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION", s"got ${ex.getCondition}")
+  }
+
+  test("ALTER VIEW ... SET TBLPROPERTIES on a v2 view is rejected") {
+    seedV2View("v_set_props")
+    assertUnsupportedViewOp(
+      "ALTER VIEW view_catalog.default.v_set_props SET TBLPROPERTIES ('k' = 'v')")
+  }
+
+  test("ALTER VIEW ... UNSET TBLPROPERTIES on a v2 view is rejected") {
+    seedV2View("v_unset_props")
+    assertUnsupportedViewOp(
+      "ALTER VIEW view_catalog.default.v_unset_props UNSET TBLPROPERTIES ('k')")
+  }
+
+  test("ALTER VIEW ... WITH SCHEMA on a v2 view is rejected") {
+    seedV2View("v_schema_binding")
+    assertUnsupportedViewOp(
+      "ALTER VIEW view_catalog.default.v_schema_binding WITH SCHEMA EVOLUTION")
+  }
+
+  test("ALTER VIEW ... RENAME TO on a v2 view is rejected") {
+    seedV2View("v_rename")
+    assertUnsupportedViewOp(
+      "ALTER VIEW view_catalog.default.v_rename RENAME TO view_catalog.default.v_renamed")
+  }
+
+  test("SHOW CREATE TABLE on a v2 view is rejected") {
+    seedV2View("v_show_create")
+    assertUnsupportedViewOp("SHOW CREATE TABLE view_catalog.default.v_show_create")
+  }
+
+  test("SHOW TBLPROPERTIES on a v2 view is rejected") {
+    seedV2View("v_show_props")
+    assertUnsupportedViewOp("SHOW TBLPROPERTIES view_catalog.default.v_show_props")
+  }
+
+  test("SHOW COLUMNS on a v2 view is rejected") {
+    seedV2View("v_show_cols")
+    assertUnsupportedViewOp("SHOW COLUMNS IN view_catalog.default.v_show_cols")
+  }
+
+  test("DESCRIBE TABLE on a v2 view is rejected") {
+    seedV2View("v_describe")
+    assertUnsupportedViewOp("DESCRIBE TABLE view_catalog.default.v_describe")
+  }
+
+  test("DESCRIBE TABLE ... COLUMN on a v2 view is rejected") {
+    seedV2View("v_describe_col")
+    // Column resolution against a v2 view's output isn't wired up yet, so the analyzer fails
+    // with UNRESOLVED_COLUMN before reaching the planner. That's still a clean
+    // AnalysisException (not a generic "no plan found"), which is the pin we care about.
+    intercept[AnalysisException](
+      sql("DESCRIBE TABLE view_catalog.default.v_describe_col x"))
+  }
+
+  // --- SHOW TABLES / SHOW VIEWS on a v2 catalog --------------------------------
+
+  private def seedV2Table(name: String): Unit = {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingViewCatalog]
+    catalog.createTable(
+      Identifier.of(Array("default"), name),
+      new TableInfo.Builder()
+        .withSchema(new StructType().add("x", "int"))
+        .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
+        .build())
+  }
+
+  test("SHOW TABLES on a v2 catalog includes views (v1 parity)") {
+    // v1 SHOW TABLES returns both tables and views; the `isTemporary` column distinguishes
+    // temp views from everything else. v2 catalogs have no temp views, so `isTemporary` is
+    // always false -- tables and permanent views are indistinguishable at the row level, but
+    // both must appear (callers that want only tables should use listTableSummaries and
+    // filter).
+    seedV2View("v_in_show_tables")
+    seedV2Table("t_in_show_tables")
+    val rows = sql("SHOW TABLES IN view_catalog.default").collect()
+    val names = rows.map(_.getString(1)).toSet
+    assert(names.contains("v_in_show_tables"), s"view missing from SHOW TABLES: $names")
+    assert(names.contains("t_in_show_tables"), s"table missing from SHOW TABLES: $names")
+    rows.foreach(r => assert(!r.getBoolean(2), s"isTemporary must be false: $r"))
+  }
+
+  test("SHOW VIEWS on a v2 catalog returns only views") {
+    seedV2View("v_in_show_views")
+    seedV2Table("t_not_in_show_views")
+    val rows = sql("SHOW VIEWS IN view_catalog.default").collect()
+    val names = rows.map(_.getString(1)).toSet
+    assert(names.contains("v_in_show_views"), s"view missing: $names")
+    assert(!names.contains("t_not_in_show_views"),
+      s"non-view leaked into SHOW VIEWS: $names")
+    rows.foreach(r => assert(!r.getBoolean(2), s"isTemporary must be false for v2: $r"))
+  }
+
+  test("SHOW VIEWS with LIKE pattern filters on the view name") {
+    seedV2View("v_foo")
+    seedV2View("v_bar")
+    val rows = sql("SHOW VIEWS IN view_catalog.default LIKE 'v_foo'").collect()
+    val names = rows.map(_.getString(1)).toSet
+    assert(names == Set("v_foo"), s"expected only v_foo, got $names")
+  }
+
+  test("SHOW VIEWS on a catalog without SUPPORTS_VIEW is rejected") {
+    withSQLConf(
+      "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
+      val ex = intercept[AnalysisException] {
+        sql("SHOW VIEWS IN no_view_catalog.default")
+      }
+      assert(ex.getCondition == "MISSING_CATALOG_ABILITY.VIEWS")
+    }
+  }
+
   test("ALTER VIEW detects cyclic view references") {
     withTable("spark_catalog.default.t") {
       Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
@@ -612,12 +768,15 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
 /**
  * A [[TableCatalog]] that supports SUPPORTS_VIEW: round-trips [[MetadataOnlyTable]] for created
- * views (via `createTable` / `dropTable` / `tableExists`) and exposes two canned read-only
- * fixtures (`test_view`, `test_unqualified_view`) used by the view-read tests.
+ * views and tables (via `createTable` / `dropTable` / `tableExists` / `listTables`) and exposes
+ * two canned read-only fixtures (`test_view`, `test_unqualified_view`) used by the view-read
+ * tests. Entries created via `createTable` can be either tables or views -- their
+ * [[TableCatalog#PROP_TABLE_TYPE]] property is what distinguishes them.
  */
 class TestingViewCatalog extends TableCatalog {
 
-  // Holds views created via createTable within the session. Keyed by (namespace, name).
+  // Holds entries (views and tables) created via createTable within the session. Keyed by
+  // (namespace, name); PROP_TABLE_TYPE in the stored TableInfo distinguishes views from tables.
   private val createdViews =
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
 
@@ -683,7 +842,15 @@ class TestingViewCatalog extends TableCatalog {
     throw new RuntimeException("shouldn't be called")
   }
   override def listTables(namespace: Array[String]): Array[Identifier] = {
-    throw new RuntimeException("shouldn't be called")
+    // Per the TableCatalog contract (v1 parity), this returns identifiers for both tables and
+    // views; `listTableSummaries` (default impl: listTables + loadTable + read PROP_TABLE_TYPE)
+    // is what distinguishes them.
+    val targetNs = namespace.toSeq
+    val ids = new java.util.ArrayList[Identifier]()
+    createdViews.forEach { (key, _) =>
+      if (key._1 == targetNs) ids.add(Identifier.of(key._1.toArray, key._2))
+    }
+    ids.toArray(new Array[Identifier](0))
   }
 
   private var catalogName = ""
@@ -759,11 +926,26 @@ private class RecordingStagedTable(
 }
 
 /**
- * A v2 catalog that does not declare SUPPORTS_VIEW. Used to exercise the capability
- * gate in `DataSourceV2Strategy`.
+ * A v2 catalog that does not declare SUPPORTS_VIEW. Used to exercise the capability gate:
+ * it returns a view-typed [[MetadataOnlyTable]] from `loadTable`, so ALTER VIEW progresses
+ * past view resolution and actually hits the gate in [[CheckViewReferences]].
  */
 class TestingTableOnlyCatalog extends TableCatalog {
-  override def loadTable(ident: Identifier): Table = throw new NoSuchTableException(ident)
+  // Pre-seeded view at default.v, used by the ALTER VIEW capability-gate test. Stored here
+  // rather than in createTable so tests don't need to first create the view through Spark
+  // (which would itself be blocked by the capability gate they're verifying).
+  private val fixtureView: TableInfo = new TableInfo.Builder()
+    .withSchema(new StructType().add("x", "int"))
+    .withViewText("SELECT 1 AS x")
+    .build()
+
+  override def loadTable(ident: Identifier): Table =
+    if (ident.namespace().toSeq == Seq("default") && ident.name() == "v") {
+      new MetadataOnlyTable(fixtureView)
+    } else {
+      throw new NoSuchTableException(ident)
+    }
+
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
     throw new RuntimeException("shouldn't be called")
   override def dropTable(ident: Identifier): Boolean = false

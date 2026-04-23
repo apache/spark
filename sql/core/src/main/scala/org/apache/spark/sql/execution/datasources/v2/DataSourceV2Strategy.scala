@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable, V1Table}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -326,6 +326,47 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           AlterV2ViewExec(tableCatalog, ident, originalText, query) :: Nil
       }
 
+    // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
+    // `ResolveSessionCatalog` can't handle. These are tracked as follow-up work in SPARK-52729;
+    // pin the current failure mode with a clean `UNSUPPORTED_FEATURE.TABLE_OPERATION` error
+    // so users get a meaningful message (and test coverage catches a future regression to a
+    // generic planner error).
+    case SetViewProperties(ResolvedPersistentView(catalog, ident, _), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... SET TBLPROPERTIES")
+
+    case UnsetViewProperties(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... UNSET TBLPROPERTIES")
+
+    case AlterViewSchemaBinding(ResolvedPersistentView(catalog, ident, _), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... WITH SCHEMA")
+
+    case RenameTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... RENAME TO")
+
+    case ShowCreateTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW CREATE TABLE")
+
+    case ShowTableProperties(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW TBLPROPERTIES")
+
+    case ShowColumns(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW COLUMNS")
+
+    case DescribeRelation(ResolvedPersistentView(catalog, ident, _), _, _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "DESCRIBE TABLE")
+
+    case DescribeColumn(ResolvedPersistentView(catalog, ident, _), _, _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "DESCRIBE TABLE ... COLUMN")
+
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec: TableSpec, options, orCreate, true) =>
       catalog match {
@@ -516,6 +557,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
+
+    // SHOW VIEWS on a non-session v2 catalog. Session-catalog targets are rewritten to v1
+    // `ShowViewsCommand` by `ResolveSessionCatalog`; non-SUPPORTS_VIEW catalogs are rejected
+    // there too. This case only sees non-session SUPPORTS_VIEW catalogs.
+    case ShowViews(ResolvedNamespace(catalog: TableCatalog, ns, _), pattern, output)
+        if catalog.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW) =>
+      ShowViewsExec(output, catalog, ns, pattern) :: Nil
 
     case ShowTablesExtended(
         ResolvedNamespace(catalog, ns, _),

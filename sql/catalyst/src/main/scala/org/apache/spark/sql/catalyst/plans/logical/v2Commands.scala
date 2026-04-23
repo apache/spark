@@ -1351,8 +1351,12 @@ case class ShowTablePartition(
 /**
  * The logical plan of the SHOW VIEWS command.
  *
- * Notes: v2 catalogs do not support views API yet, the command will fallback to
- * v1 ShowViewsCommand during ResolveSessionCatalog.
+ * Session-catalog targets fall back to v1 [[org.apache.spark.sql.execution.command
+ * .ShowViewsCommand]] via `ResolveSessionCatalog`. v2 catalogs that declare
+ * [[org.apache.spark.sql.connector.catalog.TableCatalogCapability#SUPPORTS_VIEW]] are handled
+ * in `DataSourceV2Strategy` (enumerates via `listTableSummaries` filtered to
+ * `VIEW_TABLE_TYPE`). Non-SUPPORTS_VIEW v2 catalogs are rejected up front in
+ * `ResolveSessionCatalog` with `MISSING_CATALOG_ABILITY.VIEWS`.
  */
 case class ShowViews(
     namespace: LogicalPlan,

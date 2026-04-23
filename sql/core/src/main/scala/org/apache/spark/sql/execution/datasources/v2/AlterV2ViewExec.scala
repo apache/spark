@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
@@ -34,12 +33,10 @@ import org.apache.spark.util.Utils
 /**
  * Shared bits for the v2 ALTER VIEW ... AS execs. Loads the existing view once via
  * `existingTable` and uses its properties to preserve user-set properties, comment, collation,
- * and schema-binding mode when constructing the replacement `TableInfo`. A v2 identifier that
- * does not resolve to a view-typed [[MetadataOnlyTable]] is a catalog contract violation --
- * the analyzer has already verified the target is a view, and `SUPPORTS_VIEW` catalogs must
- * round-trip `MetadataOnlyTable` from `loadTable`. The only way to hit the internal-error
- * branch is a racing DDL between analysis and exec, which is rare enough that we surface it
- * as an internal error rather than a user-facing one.
+ * and schema-binding mode when constructing the replacement `TableInfo`. A racing DDL between
+ * analysis and exec can change the target out from under us (dropped, or replaced with a
+ * non-view table); in that case we surface a regular no-such-table / not-a-view analysis
+ * error rather than propagating a stale analyzer decision.
  *
  * `generateViewProperties` (invoked from `buildTableInfo`) strips the transient view keys
  * (SQL configs, query column names, referred-temp names) from the inherited properties and
@@ -55,10 +52,15 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
     }
     table match {
       case mot: MetadataOnlyTable if isViewTable(mot) => mot
-      case other =>
-        throw SparkException.internalError(
-          s"Expected a view-typed MetadataOnlyTable from ${catalog.name()} for " +
-            s"${identifier.quoted}, got ${other.getClass.getName}")
+      case _ =>
+        // Analyzer verified this was a view, but a racing DDL (drop + recreate as a
+        // non-view table, or a catalog that now returns a different Table subclass for this
+        // identifier) can invalidate that. Surface as a user-facing error.
+        throw QueryCompilationErrors.expectViewNotTableError(
+          (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
+          cmd = "ALTER VIEW ... AS",
+          suggestAlternative = false,
+          t = this)
     }
   }
 
@@ -86,6 +88,14 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   // viewSchemaBindingEnabled and the same default when the property is absent).
   override def viewSchemaMode: ViewSchemaMode =
     CatalogTable.viewSchemaModeFromProperties(existingProps)
+
+  /**
+   * Force-evaluate `existingTable` so `NoSuchTableException` / `expectViewNotTableError`
+   * surfaces before any other work (e.g. `buildTableInfo`, uncache, drop). The result is
+   * intentionally discarded; call this purely for its side effect of materializing the
+   * lazy val.
+   */
+  protected def requireExistingView(): Unit = existingTable
 }
 
 /**
@@ -100,9 +110,7 @@ case class AlterV2ViewExec(
     query: LogicalPlan) extends V2AlterViewPreparation {
 
   override protected def run(): Seq[InternalRow] = {
-    // Force evaluation of the existingTable lazy val so NoSuchTableException surfaces before
-    // we do any other work.
-    val _ = existingTable
+    requireExistingView()
     val info = buildTableInfo()
     // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
@@ -132,7 +140,7 @@ case class AtomicAlterV2ViewExec(
     DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
-    val _ = existingTable
+    requireExistingView()
     val info = buildTableInfo()
     // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))

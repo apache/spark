@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, TableCatalogCapability, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -524,7 +524,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // CreateViewCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
     // from HandleSpecialCommand after this rewrite.
     case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
+        collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
         _, _) =>
       CreateViewCommand(
         name = ident,
@@ -533,13 +533,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         collation = collation,
         properties = properties,
         originalText = originalText,
-        plan = child,
+        plan = query,
         allowExisting = allowExisting,
         replace = replace,
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    case ShowViews(ns: ResolvedNamespace, pattern, output) =>
+    // SUPPORTS_VIEW catalogs are handled by the v2 strategy (enumerates via
+    // listTableSummaries); we skip the match here so the plan flows through unchanged. Only
+    // non-session, non-SUPPORTS_VIEW catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
+    case ShowViews(ns: ResolvedNamespace, pattern, output)
+        if !isSupportsViewCatalog(ns.catalog) =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
@@ -771,8 +775,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `MetadataOnlyTable`) fall through so they can be picked up by v2 strategies
-    // rather than silently collapsed to a v1 `TableIdentifier`.
+    // (produced for `MetadataOnlyTable`) fall through; `AlterViewAs` is picked up by the v2
+    // strategy, and the remaining view DDL / inspection plans (SET/UNSET TBLPROPERTIES,
+    // ALTER VIEW ... WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW
+    // COLUMNS, DESCRIBE [COLUMN]) are rejected with `UNSUPPORTED_FEATURE.TABLE_OPERATION` by
+    // dedicated v2 strategy cases -- tracked for a follow-up PR (SPARK-52729).
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
@@ -937,5 +944,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     isSessionCatalog(catalog) && (
       SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
+  }
+
+  private def isSupportsViewCatalog(catalog: CatalogPlugin): Boolean = catalog match {
+    case tc: TableCatalog => tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)
+    case _ => false
   }
 }

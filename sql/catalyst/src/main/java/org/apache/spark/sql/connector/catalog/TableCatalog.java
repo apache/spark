@@ -123,10 +123,15 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * List the tables in a namespace from the catalog.
    * <p>
-   * If the catalog supports views, this must return identifiers for only tables and not views.
+   * <b>Includes views.</b> Like v1 {@code ShowTablesCommand}, the output of Spark's
+   * {@code SHOW TABLES} includes permanent views alongside tables; for catalogs that declare
+   * {@link TableCatalogCapability#SUPPORTS_VIEW} this method must therefore return identifiers
+   * for both tables and views, mirroring the v1 session-catalog behavior. Callers that need to
+   * tell tables and views apart should use {@link #listTableSummaries} and read
+   * {@link TableSummary#tableType()}.
    *
    * @param namespace a multi-part namespace
-   * @return an array of Identifiers for tables
+   * @return an array of Identifiers for tables and (for SUPPORTS_VIEW catalogs) views
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    */
   Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException;
@@ -134,11 +139,19 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * List the table summaries in a namespace from the catalog.
    * <p>
-   * This method should return all tables entities from a catalog regardless of type (i.e. views
-   * should be listed as well).
+   * This method should return all entities from the namespace regardless of type (tables AND
+   * views). Each returned {@link TableSummary} carries the entity's {@code tableType}
+   * (e.g. {@link TableSummary#VIEW_TABLE_TYPE VIEW_TABLE_TYPE}), which is what callers use to
+   * tell tables and views apart.
+   * <p>
+   * The default implementation enumerates via {@link #listTables} + {@link #loadTable}, which
+   * works for SUPPORTS_VIEW catalogs because {@code listTables} also returns view identifiers
+   * and {@code loadTable} returns a view-typed {@link MetadataOnlyTable} for each. Catalogs
+   * that can fetch summaries in a single round-trip should override this method for
+   * efficiency.
    *
    * @param namespace a multi-part namespace
-   * @return an array of Identifiers for tables
+   * @return an array of summaries for tables and views in the namespace
    * @throws NoSuchNamespaceException If the namespace does not exist (optional).
    * @throws NoSuchTableException If certain table listed by listTables API does not exist.
    */
@@ -163,12 +176,15 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Load table metadata by {@link Identifier identifier} from the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
+   * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} must return the view
+   * as a {@link MetadataOnlyTable} when {@code ident} resolves to a view, so Spark's view
+   * resolution path can expand the view text. Catalogs that do not declare
+   * {@code SUPPORTS_VIEW} must throw {@link NoSuchTableException} for a view identifier.
    *
    * @param ident a table identifier
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist, or is a view and the catalog
+   *                              does not declare {@link TableCatalogCapability#SUPPORTS_VIEW}
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
 
@@ -176,13 +192,13 @@ public interface TableCatalog extends CatalogPlugin {
    * Load table metadata by {@link Identifier identifier} from the catalog. Spark will write data
    * into this table later.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
+   * Contract for views matches {@link #loadTable(Identifier)}.
    *
    * @param ident a table identifier
    * @param writePrivileges
    * @return the table's metadata
-   * @throws NoSuchTableException If the table doesn't exist or is a view
+   * @throws NoSuchTableException If the table doesn't exist or is a view (see
+   *                              {@link #loadTable(Identifier)} for the view contract)
    *
    * @since 3.5.3
    */
@@ -195,8 +211,9 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
+   * Time-travel targets a versioned table, not a view. This must throw
+   * {@link NoSuchTableException} for a view identifier regardless of whether the catalog
+   * declares {@link TableCatalogCapability#SUPPORTS_VIEW}.
    *
    * @param ident a table identifier
    * @param version version of the table
@@ -210,8 +227,9 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Load table metadata at a specific time by {@link Identifier identifier} from the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
+   * Time-travel targets a versioned table, not a view. This must throw
+   * {@link NoSuchTableException} for a view identifier regardless of whether the catalog
+   * declares {@link TableCatalogCapability#SUPPORTS_VIEW}.
    *
    * @param ident a table identifier
    * @param timestamp timestamp of the table, which is microseconds since 1970-01-01 00:00:00 UTC
@@ -256,8 +274,10 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Test whether a table exists using an {@link Identifier identifier} from the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must return false.
+   * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} manage views through the
+   * same identifier space as tables; for such catalogs this method must return {@code true}
+   * for a view identifier (mirroring {@link #loadTable(Identifier)}). Catalogs that do not
+   * declare {@code SUPPORTS_VIEW} must return {@code false} for a view identifier.
    *
    * @param ident a table identifier
    * @return true if the table exists, false otherwise
@@ -367,8 +387,10 @@ public interface TableCatalog extends CatalogPlugin {
    * <p>
    * The requested changes must be applied in the order given.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must throw {@link NoSuchTableException}.
+   * {@code alterTable} targets tables only. Even for catalogs that declare
+   * {@link TableCatalogCapability#SUPPORTS_VIEW}, this must throw {@link NoSuchTableException}
+   * when {@code ident} resolves to a view. View-specific DDL (CREATE / ALTER ... AS) goes
+   * through {@link #createTable(Identifier, TableInfo)} for SUPPORTS_VIEW catalogs.
    *
    * @param ident a table identifier
    * @param changes changes to apply to the table
@@ -385,11 +407,16 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Drop a table in the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must not drop the view and must return false.
+   * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} manage views through the
+   * same identifier space as tables; for such catalogs this method must also drop views at
+   * {@code ident} and return {@code true}. Spark's non-atomic v2 {@code ALTER VIEW ... AS} path
+   * relies on this ({@code dropTable} + {@code createTable}). Catalogs that do not declare
+   * {@code SUPPORTS_VIEW} must not drop a view and must return {@code false} for a view
+   * identifier.
    *
    * @param ident a table identifier
-   * @return true if a table was deleted, false if no table exists for the identifier
+   * @return true if a table (or, for SUPPORTS_VIEW catalogs, a view) was deleted,
+   *         false if no such entry exists for the identifier
    */
   boolean dropTable(Identifier ident);
 
@@ -397,8 +424,9 @@ public interface TableCatalog extends CatalogPlugin {
    * Drop a table in the catalog and completely remove its data by skipping a trash even if it is
    * supported.
    * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table, this
-   * must not drop the view and must return false.
+   * {@code purgeTable} targets tables only. Even for catalogs that declare
+   * {@link TableCatalogCapability#SUPPORTS_VIEW}, this must not drop a view and must return
+   * {@code false} for a view identifier -- purge semantics (data removal) do not apply to views.
    * <p>
    * If the catalog supports to purge a table, this method should be overridden.
    * The default implementation throws {@link UnsupportedOperationException}.
@@ -416,9 +444,11 @@ public interface TableCatalog extends CatalogPlugin {
   /**
    * Renames a table in the catalog.
    * <p>
-   * If the catalog supports views and contains a view for the old identifier and not a table, this
-   * throws {@link NoSuchTableException}. Additionally, if the new identifier is a table or a view,
-   * this throws {@link TableAlreadyExistsException}.
+   * {@code renameTable} targets tables only -- v2 {@code ALTER VIEW ... RENAME TO} is tracked
+   * as a separate follow-up and is not routed here today. Even for catalogs that declare
+   * {@link TableCatalogCapability#SUPPORTS_VIEW}, this must throw {@link NoSuchTableException}
+   * when {@code oldIdent} resolves to a view, and must throw
+   * {@link TableAlreadyExistsException} if {@code newIdent} resolves to a table or a view.
    * <p>
    * If the catalog does not support table renames between namespaces, it throws
    * {@link UnsupportedOperationException}.
