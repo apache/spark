@@ -254,7 +254,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
-  private def awaitTestBodyInNewThread(timeoutMillis: Long)(body: => Unit): Unit = {
+  private def awaitTestBodyInNewThread(
+      timeoutMillis: Long,
+      onTimeout: () => Unit = () => ())(body: => Unit): Unit = {
     @volatile var error: Throwable = null
     val runnable: Runnable = () => {
       try {
@@ -268,12 +270,18 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     worker.start()
     worker.join(timeoutMillis)
     if (worker.isAlive) {
+      // Best-effort: release any resource the worker is blocked on so it can unwind its own
+      // finally and stop holding global state (SparkConnectService, listeners, ...).
+      onTimeout()
+      // Give the now-unblocked worker time to finish its cleanup before we declare defeat.
+      // 30s covers the body's 4s Thread.sleep plus SparkConnectService.stop().
+      worker.join(30.seconds.toMillis)
       throw new TimeoutException(s"Test body did not complete within ${timeoutMillis} ms")
     }
     if (error != null) throw error
   }
 
-  private def runPythonForeachBatchTerminationTestBody(): Unit = {
+  private def runPythonForeachBatchTerminationTestBody(sessionHolder: SessionHolder): Unit = {
     // Suffix query names so a retry after a timed-out attempt does not collide with a leaked
     // query from the previous attempt (the leaked thread can still hold the old query name in
     // spark.streams.active).
@@ -281,7 +289,6 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     val q1Name = s"foreachBatch_termination_test_q1$suffix"
     val q2Name = s"foreachBatch_termination_test_q2$suffix"
 
-    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
       SparkConnectService.start(spark.sparkContext)
 
@@ -354,12 +361,20 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     // scalastyle:on assume
 
     retryWithVisibleLog(maxAttempts = 3) {
-      // Run the body on a fresh daemon thread so the test thread can move on when the body
-      // hangs inside a non-interruptible socket read (failAfter's Thread.interrupt cannot
-      // unblock that). On timeout, the worker is leaked and dies with the JVM; each retry
-      // gets a new thread, so a pool cannot get starved.
-      awaitTestBodyInNewThread(TimeUnit.MINUTES.toMillis(1)) {
-        runPythonForeachBatchTerminationTestBody()
+      // Create the SessionHolder here (not inside the body) so the wrapper can reach into it
+      // on timeout. The body runs on a fresh daemon thread so the test thread can move on
+      // when the body hangs inside a non-interruptible socket read. On timeout, closing the
+      // cleaner cache closes the Python worker sockets; that unblocks the hung dataIn.readInt
+      // and the leaked thread can run its own finally (stop SparkConnectService, remove
+      // listeners) before the next retry starts.
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      awaitTestBodyInNewThread(
+        timeoutMillis = TimeUnit.MINUTES.toMillis(1),
+        onTimeout = () => {
+          try sessionHolder.streamingForeachBatchRunnerCleanerCache.cleanUpAll()
+          catch { case _: Throwable => () } // best-effort
+        }) {
+        runPythonForeachBatchTerminationTestBody(sessionHolder)
       }
     }
   }
