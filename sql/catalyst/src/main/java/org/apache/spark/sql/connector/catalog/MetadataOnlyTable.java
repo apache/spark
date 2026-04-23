@@ -22,18 +22,19 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 
 /**
  * A concrete {@code Table} implementation that contains only table metadata, deferring
  * read/write to Spark. It represents a general Spark data source table or a Spark view;
- * Spark resolves the table provider into a data source or expands the view text at read time.
+ * Spark resolves the table provider into a data source (for tables) or expands the view text
+ * (for views) at read time.
  * <p>
- * Catalogs build the metadata via {@link TableInfo.Builder} (which provides convenience
- * setters for reserved properties such as {@link TableCatalog#PROP_PROVIDER},
- * {@link TableCatalog#PROP_LOCATION}, {@link TableCatalog#PROP_VIEW_TEXT}, etc.) and wrap
- * the resulting {@link TableInfo} in a {@code MetadataOnlyTable} to return from
- * {@link TableCatalog#loadTable(Identifier)}.
+ * Catalogs build the metadata via {@link TableInfo.Builder} (for data-source tables) or
+ * {@link ViewInfo.Builder} (for views) and wrap the result in a {@code MetadataOnlyTable} to
+ * return from {@link TableCatalog#loadTable(Identifier)}. Downstream consumers distinguish
+ * the two by checking {@code getTableInfo() instanceof ViewInfo}.
  *
  * @since 4.2.0
  */
@@ -43,7 +44,7 @@ public class MetadataOnlyTable implements Table {
   private final String name;
 
   /**
-   * @param info metadata for the table or view.
+   * @param info metadata for the table or view. Pass a {@link ViewInfo} for a view.
    * @param name human-readable name for this table, used by places that read {@link #name()}
    *             (e.g. the {@code Name} row of {@code DESCRIBE TABLE EXTENDED}). Catalogs
    *             returning a {@code MetadataOnlyTable} from {@link TableCatalog#loadTable}
@@ -72,6 +73,11 @@ public class MetadataOnlyTable implements Table {
   @Override
   public Transform[] partitioning() {
     return info.partitions();
+  }
+
+  @Override
+  public Constraint[] constraints() {
+    return info.constraints();
   }
 
   @Override

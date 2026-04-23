@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
@@ -34,9 +33,8 @@ public class TableInfo {
 
   /**
    * Constructor for TableInfo used by the builder.
-   * @param builder Builder.
    */
-  private TableInfo(Builder builder) {
+  protected TableInfo(BaseBuilder<?> builder) {
     this.columns = builder.columns;
     this.properties = builder.properties;
     this.partitions = builder.partitions;
@@ -61,40 +59,58 @@ public class TableInfo {
 
   public Constraint[] constraints() { return constraints; }
 
-  public static class Builder {
-    private Column[] columns = new Column[0];
-    private Map<String, String> properties = new HashMap<>();
-    private Transform[] partitions = new Transform[0];
-    private Constraint[] constraints = new Constraint[0];
+  public static class Builder extends BaseBuilder<Builder> {
+    @Override
+    protected Builder self() { return this; }
 
-    public Builder withColumns(Column[] columns) {
+    @Override
+    public TableInfo build() {
+      Objects.requireNonNull(columns, "columns should not be null");
+      return new TableInfo(this);
+    }
+  }
+
+  /**
+   * Shared builder state for {@link TableInfo} and its subclasses. Setters return {@code B} so
+   * subclass builders (e.g. {@link ViewInfo.Builder}) chain through their own type without
+   * a covariant override on each inherited setter.
+   */
+  protected abstract static class BaseBuilder<B extends BaseBuilder<B>> {
+    protected Column[] columns = new Column[0];
+    protected Map<String, String> properties = new HashMap<>();
+    protected Transform[] partitions = new Transform[0];
+    protected Constraint[] constraints = new Constraint[0];
+
+    protected abstract B self();
+
+    public B withColumns(Column[] columns) {
       this.columns = columns;
-      return this;
+      return self();
     }
 
-    public Builder withSchema(StructType schema) {
+    public B withSchema(StructType schema) {
       this.columns = CatalogV2Util.structTypeToV2Columns(schema);
-      return this;
+      return self();
     }
 
     /**
      * Replaces the current properties map with a defensive copy of the given map. Any reserved
-     * keys set earlier via convenience setters (e.g. {@link #withProvider}, {@link #withViewText})
-     * are discarded -- call those setters <i>after</i> this method, not before.
+     * keys set earlier via convenience setters (e.g. {@link #withProvider}) are discarded --
+     * call those setters <i>after</i> this method, not before.
      */
-    public Builder withProperties(Map<String, String> properties) {
+    public B withProperties(Map<String, String> properties) {
       this.properties = new HashMap<>(properties);
-      return this;
+      return self();
     }
 
-    public Builder withPartitions(Transform[] partitions) {
+    public B withPartitions(Transform[] partitions) {
       this.partitions = partitions;
-      return this;
+      return self();
     }
 
-    public Builder withConstraints(Constraint[] constraints) {
+    public B withConstraints(Constraint[] constraints) {
       this.constraints = constraints;
-      return this;
+      return self();
     }
 
     // Convenience setters below write reserved keys into the current `properties` map. Pair
@@ -103,70 +119,36 @@ public class TableInfo {
     // write.
 
     /** Writes {@link TableCatalog#PROP_PROVIDER} into the current properties map. */
-    public Builder withProvider(String provider) {
+    public B withProvider(String provider) {
       properties.put(TableCatalog.PROP_PROVIDER, provider);
-      return this;
+      return self();
     }
 
-    public Builder withLocation(String location) {
+    public B withLocation(String location) {
       properties.put(TableCatalog.PROP_LOCATION, location);
-      return this;
+      return self();
     }
 
-    public Builder withComment(String comment) {
+    public B withComment(String comment) {
       properties.put(TableCatalog.PROP_COMMENT, comment);
-      return this;
+      return self();
     }
 
-    public Builder withCollation(String collation) {
+    public B withCollation(String collation) {
       properties.put(TableCatalog.PROP_COLLATION, collation);
-      return this;
+      return self();
     }
 
-    public Builder withOwner(String owner) {
+    public B withOwner(String owner) {
       properties.put(TableCatalog.PROP_OWNER, owner);
-      return this;
+      return self();
     }
 
-    public Builder withTableType(String tableType) {
+    public B withTableType(String tableType) {
       properties.put(TableCatalog.PROP_TABLE_TYPE, tableType);
-      return this;
+      return self();
     }
 
-    /**
-     * Sets the view SQL text and marks this TableInfo as a view by setting
-     * {@link TableCatalog#PROP_TABLE_TYPE} to {@link TableSummary#VIEW_TABLE_TYPE}.
-     */
-    public Builder withViewText(String viewText) {
-      properties.put(TableCatalog.PROP_VIEW_TEXT, viewText);
-      properties.put(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
-      return this;
-    }
-
-    /**
-     * Sets the current catalog and namespace at view creation time, encoded as a single quoted
-     * multi-part identifier string (see
-     * {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE}). The first part is the
-     * catalog; remaining parts are the namespace. Passing a null or empty catalog clears the
-     * property.
-     */
-    public Builder withCurrentCatalogAndNamespace(String catalog, String[] namespace) {
-      if (catalog == null || catalog.isEmpty()) {
-        properties.remove(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE);
-        return this;
-      }
-      String[] ns = namespace == null ? new String[0] : namespace;
-      String[] parts = new String[ns.length + 1];
-      parts[0] = catalog;
-      System.arraycopy(ns, 0, parts, 1, ns.length);
-      properties.put(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE,
-          QuotingUtils.quoted(parts));
-      return this;
-    }
-
-    public TableInfo build() {
-      Objects.requireNonNull(columns, "columns should not be null");
-      return new TableInfo(this);
-    }
+    public abstract TableInfo build();
   }
 }

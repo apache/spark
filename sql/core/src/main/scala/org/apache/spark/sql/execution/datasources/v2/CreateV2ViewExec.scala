@@ -20,27 +20,26 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, SchemaEvolution, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableSummary}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
- * Shared validation + TableInfo construction for v2 CREATE VIEW execs.
+ * Shared validation + ViewInfo construction for v2 CREATE VIEW execs.
  *
  * Mirrors the persistent-view portion of v1 [[ViewHelper.prepareTable]] + the execution-time
- * checks in [[CreateViewCommand.run]]. Any future addition on the v1 side -- new view-specific
- * reserved property, new validation, new schema-mode handling -- must be mirrored here.
- * Post-analysis checks for temp-object references and auto-generated aliases run once for both
- * v1 and v2 in [[CheckViewReferences]].
+ * checks in [[CreateViewCommand.run]]. Post-analysis checks for temp-object references and
+ * auto-generated aliases run once for both v1 and v2 in [[CheckViewReferences]].
  */
 private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   def catalog: TableCatalog
@@ -54,25 +53,23 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   def query: LogicalPlan
   def viewSchemaMode: ViewSchemaMode
 
-  // Build a synthetic v1 TableIdentifier for error messages and for ViewHelper methods that
-  // accept it purely for rendering. This carries no semantic weight -- the v2 Identifier is the
-  // actual target.
-  protected lazy val legacyName: TableIdentifier =
-    identifier.asLegacyTableIdentifier(catalog.name())
+  // Full multi-part identifier used for error rendering. Built once so we can avoid routing
+  // through the lossy v1 `TableIdentifier` for multi-level-namespace v2 catalogs.
+  protected lazy val fullNameParts: Seq[String] =
+    (catalog.name() +: identifier.asMultipartIdentifier).toSeq
 
   override def output: Seq[Attribute] = Seq.empty
 
-  protected def buildTableInfo(): TableInfo = {
+  protected def buildViewInfo(): ViewInfo = {
     import ViewHelper._
-    import TableCatalog._
 
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > query.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          legacyName, userSpecifiedColumns.map(_._1), query)
+          fullNameParts, userSpecifiedColumns.map(_._1), query)
       } else if (userSpecifiedColumns.length < query.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          legacyName, userSpecifiedColumns.map(_._1), query)
+          fullNameParts, userSpecifiedColumns.map(_._1), query)
       }
       if (viewSchemaMode == SchemaEvolution) {
         throw SparkException.internalError(
@@ -84,34 +81,29 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 
     val aliasedSchema = CharVarcharUtils.getRawSchema(
       aliasPlan(session, query, userSpecifiedColumns).schema, session.sessionState.conf)
+    SchemaUtils.checkColumnNameDuplication(
+      aliasedSchema.fieldNames.toImmutableArraySeq, session.sessionState.conf.resolver)
 
-    // Emit PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE (single quoted multi-part identifier,
-    // catalog as first part) instead of v1's numbered view.catalogAndNamespace.* keys.
-    val v2Encoder: (String, Seq[String]) => Map[String, String] = { (cat, ns) =>
-      val parts = (cat +: ns).toArray
-      Map(PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE -> QuotingUtils.quoted(parts))
+    val manager = session.sessionState.catalogManager
+    val queryColumnNames = if (viewSchemaMode == SchemaEvolution) {
+      Array.empty[String]
+    } else {
+      query.output.map(_.name).toArray
     }
 
-    // Temp-object collection arguments are omitted: persistent-view semantics are enforced by
-    // CheckViewReferences before this runs, so any referenced temp view/function/variable has
-    // already caused analysis to fail. This matches v1 ViewHelper.prepareTable, which also
-    // calls generateViewProperties without them on the persistent-view path.
-    val viewProps = generateViewProperties(
-      properties = userProperties,
-      session = session,
-      queryOutput = query.output.map(_.name).toArray,
-      fieldNames = aliasedSchema.fieldNames,
-      viewSchemaMode = viewSchemaMode,
-      catalogAndNamespaceEncoder = v2Encoder)
-
+    val builder = new ViewInfo.Builder()
+      .withSchema(aliasedSchema)
+      .withProperties(userProperties.asJava)
+      .withQueryText(originalText)
+      .withCurrentCatalog(manager.currentCatalog.name)
+      .withCurrentNamespace(manager.currentNamespace)
+      .withSqlConfigs(sqlConfigsToProps(session.sessionState.conf, "").asJava)
+      .withSchemaMode(viewSchemaMode.toString)
+      .withQueryColumnNames(queryColumnNames)
     // CREATE stamps the current user into PROP_OWNER (matching v2 CREATE TABLE via
     // CatalogV2Util.withDefaultOwnership and v1 CREATE VIEW via CatalogTable.owner's default);
     // ALTER preserves the existing view's owner (v1-parity with AlterViewAsCommand's
     // viewMeta.copy). Both cases are expressed via the `owner` hook provided by the subclass.
-    val builder = new TableInfo.Builder()
-      .withSchema(aliasedSchema)
-      .withProperties(viewProps.asJava)
-      .withViewText(originalText)
     owner.foreach(builder.withOwner)
     comment.foreach(builder.withComment)
     collation.foreach(builder.withCollation)
@@ -119,7 +111,7 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   }
 
   protected def viewAlreadyExists(): Throwable =
-    QueryCompilationErrors.viewAlreadyExistsError(legacyName)
+    QueryCompilationErrors.viewAlreadyExistsError(fullNameParts)
 
   // Loads the existing entry at `identifier` or returns None if it does not exist. Combines
   // the existence check and type check into a single catalog round-trip (vs. the previous
@@ -132,13 +124,11 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
     }
   }
 
-  // A catalog with SUPPORTS_VIEW round-trips views as MetadataOnlyTable with PROP_TABLE_TYPE
-  // set to VIEW. Anything else at the same identifier is a non-view table -- REPLACE'ing it as
-  // a view would silently destroy the table's data, so we reject at the exec layer.
+  // A SUPPORTS_VIEW catalog round-trips views as MetadataOnlyTable wrapping a ViewInfo.
+  // Anything else at the same identifier is a non-view table -- REPLACE'ing it as a view would
+  // silently destroy the table's data, so we reject at the exec layer.
   protected def isViewTable(table: Table): Boolean = table match {
-    case mot: MetadataOnlyTable =>
-      TableSummary.VIEW_TABLE_TYPE.equals(
-        mot.getTableInfo.properties.get(TableCatalog.PROP_TABLE_TYPE))
+    case mot: MetadataOnlyTable => mot.getTableInfo.isInstanceOf[ViewInfo]
     case _ => false
   }
 }
@@ -164,9 +154,8 @@ case class CreateV2ViewExec(
 
   override protected def run(): Seq[InternalRow] = {
     // Probe the catalog before preparing the view body so `IF NOT EXISTS` short-circuits
-    // without running `aliasPlan` / `generateViewProperties`, matching v1
-    // `CreateViewCommand.run`. Cyclic-reference detection is done at analysis time in
-    // `CheckViewReferences`.
+    // without running `aliasPlan` / config capture, matching v1 `CreateViewCommand.run`.
+    // Cyclic-reference detection is done at analysis time in `CheckViewReferences`.
     val existing = tryLoadTable()
     if (allowExisting && existing.isDefined) {
       return Seq.empty
@@ -174,11 +163,11 @@ case class CreateV2ViewExec(
     existing.foreach { table =>
       if (!isViewTable(table)) {
         throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
-          legacyName, replace)
+          fullNameParts, replace)
       }
       if (!replace) throw viewAlreadyExists()
     }
-    val info = buildTableInfo()
+    val info = buildViewInfo()
     if (existing.isDefined) {
       CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
       catalog.dropTable(identifier)
@@ -219,9 +208,8 @@ case class AtomicCreateV2ViewExec(
 
   override protected def run(): Seq[InternalRow] = {
     // Probe the catalog before preparing the view body so `IF NOT EXISTS` short-circuits
-    // without running `aliasPlan` / `generateViewProperties`, matching v1
-    // `CreateViewCommand.run`. Cyclic-reference detection is done at analysis time in
-    // `CheckViewReferences`.
+    // without running `aliasPlan` / config capture, matching v1 `CreateViewCommand.run`.
+    // Cyclic-reference detection is done at analysis time in `CheckViewReferences`.
     val existing = tryLoadTable()
     if (allowExisting && existing.isDefined) {
       return Seq.empty
@@ -229,13 +217,13 @@ case class AtomicCreateV2ViewExec(
     existing.foreach { table =>
       if (!isViewTable(table)) {
         throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
-          legacyName, replace)
+          fullNameParts, replace)
       }
       // Match the non-atomic exec: reject plain CREATE against an existing view up front
       // rather than relying on `stageCreate` to throw.
       if (!replace) throw viewAlreadyExists()
     }
-    val info = buildTableInfo()
+    val info = buildViewInfo()
     val staged: StagedTable = if (replace) {
       if (existing.isDefined) {
         CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))

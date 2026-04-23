@@ -97,11 +97,10 @@ public interface StagingTableCatalog extends TableCatalog {
    * committed, an exception should be thrown by {@link StagedTable#commitStagedChanges()}.
    * <p>
    * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} also route atomic v2
-   * {@code CREATE VIEW} through this method when {@code tableInfo.properties()} includes
-   * {@link TableCatalog#PROP_VIEW_TEXT}.
+   * {@code CREATE VIEW} through this method when {@code tableInfo} is a {@link ViewInfo}.
    *
    * @param ident a table identifier
-   * @param tableInfo information about the table
+   * @param tableInfo information about the table or view
    * @return metadata for the new table. This can be null if the catalog does not support atomic
    *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
@@ -165,12 +164,11 @@ public interface StagingTableCatalog extends TableCatalog {
    * operation.
    * <p>
    * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} also route atomic v2
-   * {@code ALTER VIEW ... AS} through this method when {@code tableInfo.properties()} includes
-   * {@link TableCatalog#PROP_VIEW_TEXT}; the existing entry at {@code ident} is expected to be
-   * a view.
+   * {@code ALTER VIEW ... AS} through this method when {@code tableInfo} is a {@link ViewInfo};
+   * the existing entry at {@code ident} is expected to be a view.
    *
    * @param ident a table identifier
-   * @param tableInfo information about the table
+   * @param tableInfo information about the table or view
    * @return metadata for the new table. This can be null if the catalog does not support atomic
    *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
@@ -233,11 +231,11 @@ public interface StagingTableCatalog extends TableCatalog {
    * the staged changes are committed but the table doesn't exist at commit time.
    * <p>
    * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} also route atomic v2
-   * {@code CREATE OR REPLACE VIEW} through this method when {@code tableInfo.properties()}
-   * includes {@link TableCatalog#PROP_VIEW_TEXT}.
+   * {@code CREATE OR REPLACE VIEW} through this method when {@code tableInfo} is a
+   * {@link ViewInfo}.
    *
    * @param ident a table identifier
-   * @param tableInfo information about the table
+   * @param tableInfo information about the table or view
    * @return metadata for the new table. This can be null if the catalog does not support atomic
    *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws UnsupportedOperationException If a requested partition transform is not supported

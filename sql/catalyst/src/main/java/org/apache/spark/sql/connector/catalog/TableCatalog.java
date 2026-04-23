@@ -88,29 +88,6 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_OWNER = "owner";
 
   /**
-   * A reserved property that holds the SQL text of a view. Unqualified identifiers in the
-   * view text are resolved against {@link #PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} at read
-   * time.
-   */
-  String PROP_VIEW_TEXT = "view_text";
-
-  /**
-   * A reserved property that captures the current catalog and namespace at the time the view
-   * was created. The value is a Spark multi-part identifier string: parts are joined with
-   * {@code "."} and any part that isn't a simple identifier is backtick-quoted (see
-   * {@code QuotingUtils.quoted}). The first part is the catalog; the remaining parts are the
-   * namespace. For example, {@code my_catalog.db1.db2} or {@code my_catalog.`weird.db`.normal}.
-   * The value is parsed with {@code ParserInterface.parseMultipartIdentifier}. An absent or
-   * empty value means the view was created with no captured resolution context.
-   */
-  String PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE = "view.currentCatalogAndNamespace";
-
-  /**
-   * A prefix used to specify the Spark SQL configurations for reading this view.
-   */
-  String VIEW_CONF_PREFIX = "view.sqlConfig.";
-
-  /**
    * A prefix used to pass OPTIONS in table properties
    */
   String OPTION_PREFIX = "option.";
@@ -322,9 +299,15 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
+   * <p>
+   * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} also receive view writes
+   * through this method: when {@code tableInfo} is a {@link ViewInfo}, the call is a
+   * {@code CREATE VIEW} / {@code CREATE OR REPLACE VIEW} (combined with {@code dropTable}) /
+   * {@code ALTER VIEW ... AS} (combined with {@code dropTable}) request and must be persisted
+   * as a view. Implementations should branch on {@code tableInfo instanceof ViewInfo}.
    *
    * @param ident a table identifier
-   * @param tableInfo information about the table.
+   * @param tableInfo information about the table or view
    * @return metadata for the new table. This can be null if getting the metadata for the new table
    *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
    *

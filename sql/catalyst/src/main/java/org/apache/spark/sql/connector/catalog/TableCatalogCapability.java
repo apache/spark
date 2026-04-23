@@ -95,24 +95,29 @@ public enum TableCatalogCapability {
   SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
 
   /**
-   * Signals that the TableCatalog supports views. Views are created and altered via
-   * {@link TableCatalog#createTable} by accepting a {@link TableInfo} whose properties include
-   * {@link TableCatalog#PROP_VIEW_TEXT} (and related view keys:
-   * {@link TableCatalog#PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE} and
-   * {@link TableCatalog#VIEW_CONF_PREFIX}-prefixed SQL configs).
-   * <p>
-   * Catalogs declaring this capability must round-trip those properties and return a
-   * {@link MetadataOnlyTable} from {@link TableCatalog#loadTable} so Spark's view resolution
-   * path can expand the view text. On a plain {@code TableCatalog}, {@code CREATE VIEW} uses
-   * {@code createTable} and {@code ALTER VIEW ... AS} is implemented as {@code dropTable} +
-   * {@code createTable}. On a {@link StagingTableCatalog}, Spark routes
-   * {@code CREATE VIEW} through {@link StagingTableCatalog#stageCreate},
-   * {@code CREATE OR REPLACE VIEW} through {@link StagingTableCatalog#stageCreateOrReplace},
-   * and {@code ALTER VIEW ... AS} through {@link StagingTableCatalog#stageReplace} so the
-   * metadata swap commits atomically. Without this capability, Spark rejects
-   * {@code CREATE VIEW} and {@code ALTER VIEW} statements targeting the catalog up front
-   * rather than letting the catalog silently persist a table entry that cannot be read as a
-   * view.
+   * Signals that the TableCatalog supports views. Views flow through the same write methods as
+   * tables, using {@link ViewInfo} (a {@link TableInfo} subtype carrying the view-specific
+   * fields -- query text, captured current catalog/namespace, captured SQL configs, schema
+   * binding mode, query output column names) as the DTO. Catalogs declaring this capability
+   * must:
+   * <ul>
+   *   <li>Persist a view when {@link TableCatalog#createTable} (or the
+   *       {@link StagingTableCatalog} staging variants) receives a {@code ViewInfo}.
+   *       Implementations should branch on {@code info instanceof ViewInfo}.</li>
+   *   <li>Return a {@link MetadataOnlyTable} wrapping a {@code ViewInfo} from
+   *       {@link TableCatalog#loadTable} for a view identifier, so Spark's view resolution
+   *       path can expand the view text.</li>
+   *   <li>Drop views through {@link TableCatalog#dropTable} and report view existence through
+   *       {@link TableCatalog#tableExists}.</li>
+   *   <li>Include views in {@link TableCatalog#listTables} output.</li>
+   * </ul>
+   * Spark routes the view DDL through the standard write APIs: {@code CREATE VIEW} uses
+   * {@code createTable} (or {@code stageCreate}); {@code CREATE OR REPLACE VIEW} uses
+   * {@code createTable} (after {@code dropTable}) or {@code stageCreateOrReplace};
+   * {@code ALTER VIEW ... AS} uses {@code createTable} (after {@code dropTable}) or
+   * {@code stageReplace}. Without this capability, Spark rejects {@code CREATE VIEW} and
+   * {@code ALTER VIEW} statements targeting the catalog up front rather than letting the
+   * catalog silently persist a table entry that cannot be read as a view.
    */
   SUPPORTS_VIEW
 }

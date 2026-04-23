@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{View => _, _}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -1126,13 +1126,9 @@ class Analyzer(
                 val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                 ResolvedPersistentView(
                   catalog, v2Ident, v1Table.catalogTable)
-              case t: MetadataOnlyTable =>
+              case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
                 val catalogTable = V1Table.toCatalogTable(catalog, ident, t)
-                if (catalogTable.tableType == CatalogTableType.VIEW) {
-                  ResolvedPersistentView(catalog, ident, catalogTable)
-                } else {
-                  ResolvedTable.create(catalog.asTableCatalog, ident, t)
-                }
+                ResolvedPersistentView(catalog, ident, catalogTable)
               case table =>
                 ResolvedTable.create(catalog.asTableCatalog, ident, table)
             }

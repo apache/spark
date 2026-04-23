@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, TableAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -32,25 +32,35 @@ import org.apache.spark.util.Utils
 
 /**
  * Shared bits for the v2 ALTER VIEW ... AS execs. Loads the existing view once via
- * `existingTable` and uses its properties to preserve user-set properties, comment, collation,
- * and schema-binding mode when constructing the replacement `TableInfo`. A racing DDL between
- * analysis and exec can change the target out from under us (dropped, or replaced with a
- * non-view table); in that case we surface a regular no-such-table / not-a-view analysis
- * error rather than propagating a stale analyzer decision.
+ * `existingView` and uses it to preserve user-set properties, comment, collation, schema
+ * binding mode, and owner when constructing the replacement [[ViewInfo]]. A racing DDL
+ * between analysis and exec can change the target out from under us (dropped, or replaced
+ * with a non-view table); in that case we surface a regular no-such-table / not-a-view
+ * analysis error rather than propagating a stale analyzer decision.
  *
- * `generateViewProperties` (invoked from `buildTableInfo`) strips the transient view keys
- * (SQL configs, query column names, referred-temp names) from the inherited properties and
- * re-emits them from the current session, matching v1 `AlterViewAsCommand.alterPermanentView`.
+ * Transient fields (SQL configs, query column names, schema mode) are re-captured from the
+ * current session by [[V2ViewPreparation.buildViewInfo]], matching v1
+ * `AlterViewAsCommand.alterPermanentView`. PROP_OWNER and user TBLPROPERTIES flow through
+ * unchanged.
  */
 private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   // Reuses `tryLoadTable` / `isViewTable` from the parent trait. A racing DDL between
   // analysis and exec (drop, or replace with a non-view table) can invalidate the analyzer's
   // ResolvedPersistentView decision -- we re-check here and surface user-facing errors
   // rather than propagate the stale resolution.
-  protected lazy val existingTable: MetadataOnlyTable = tryLoadTable() match {
+  protected lazy val existingView: ViewInfo = tryLoadTable() match {
     case None =>
       throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
-    case Some(mot: MetadataOnlyTable) if isViewTable(mot) => mot
+    case Some(mot: MetadataOnlyTable) =>
+      mot.getTableInfo match {
+        case v: ViewInfo => v
+        case _ =>
+          throw QueryCompilationErrors.expectViewNotTableError(
+            (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
+            cmd = "ALTER VIEW ... AS",
+            suggestAlternative = false,
+            t = this)
+      }
     case _ =>
       throw QueryCompilationErrors.expectViewNotTableError(
         (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
@@ -59,16 +69,8 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
         t = this)
   }
 
-  // Carry the existing view's full property map forward. Keys the ALTER actually changes are
-  // overwritten downstream: view text + PROP_TABLE_TYPE via `withViewText`, comment / collation
-  // via `withComment` / `withCollation`, view.sqlConfig.* / view.query.out.* /
-  // view.referredTempNames re-emitted by `generateViewProperties`, and
-  // PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE re-emitted by the v2 encoder inside
-  // `buildTableInfo`. Everything else -- notably PROP_OWNER and view.schemaMode -- flows
-  // through unchanged, matching v1 `AlterViewAsCommand.alterPermanentView`'s `viewMeta.copy`
-  // semantics.
   protected lazy val existingProps: Map[String, String] =
-    existingTable.getTableInfo.properties.asScala.toMap
+    existingView.properties.asScala.toMap
 
   private def existingProp(key: String): Option[String] = existingProps.get(key)
 
@@ -78,23 +80,27 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   override def collation: Option[String] = existingProp(TableCatalog.PROP_COLLATION)
   // Preserve the existing view's owner (v1-parity with AlterViewAsCommand's viewMeta.copy,
   // which leaves `owner` untouched). If the existing view has no PROP_OWNER, pass it through
-  // as None so the replacement TableInfo also has no owner.
+  // as None so the replacement ViewInfo also has no owner.
   override def owner: Option[String] = existingProp(TableCatalog.PROP_OWNER)
   override def userProperties: Map[String, String] = existingProps
 
-  // Read the schema binding mode directly from the properties map; shares decoding with
-  // the v1 path via `CatalogTable.viewSchemaModeFromProperties` (honors
-  // viewSchemaBindingEnabled and the same default when the property is absent).
+  // Preserve the existing view's schema binding mode. Reuse `viewSchemaModeFromProperties`
+  // for a v1-identical decode -- it honors `viewSchemaBindingEnabled` and defaults missing
+  // values to SchemaBinding. We feed the typed `ViewInfo.schemaMode` String in via a
+  // single-key map so the decode logic stays in one place.
   override def viewSchemaMode: ViewSchemaMode =
-    CatalogTable.viewSchemaModeFromProperties(existingProps)
+    CatalogTable.viewSchemaModeFromProperties(
+      Option(existingView.schemaMode)
+        .map(CatalogTable.VIEW_SCHEMA_MODE -> _)
+        .toMap)
 
   /**
-   * Force-evaluate `existingTable` so `NoSuchTableException` / `expectViewNotTableError`
-   * surfaces before any other work (e.g. `buildTableInfo`, uncache, drop). The result is
+   * Force-evaluate `existingView` so `NoSuchTableException` / `expectViewNotTableError`
+   * surfaces before any other work (e.g. `buildViewInfo`, uncache, drop). The result is
    * intentionally discarded; call this purely for its side effect of materializing the
    * lazy val.
    */
-  protected def requireExistingView(): Unit = existingTable
+  protected def requireExistingView(): Unit = existingView
 }
 
 /**
@@ -110,7 +116,7 @@ case class AlterV2ViewExec(
 
   override protected def run(): Seq[InternalRow] = {
     requireExistingView()
-    val info = buildTableInfo()
+    val info = buildViewInfo()
     // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     catalog.dropTable(identifier)
@@ -140,7 +146,7 @@ case class AtomicAlterV2ViewExec(
 
   override protected def run(): Seq[InternalRow] = {
     requireExistingView()
-    val info = buildTableInfo()
+    val info = buildViewInfo()
     // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     val staged: StagedTable = try {

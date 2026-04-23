@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, TableSummary, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, TableSummary, V1Table, ViewInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -78,51 +78,19 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       Row("multi"))
   }
 
-  // --- TableInfo.Builder unit tests for view-specific properties ----------
-
-  test("view current catalog/namespace are serialized into a single property") {
-    val info = new TableInfo.Builder()
-      .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT * FROM t")
-      .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
-      .build()
-    val table = new MetadataOnlyTable(info, "v")
-    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) ==
-      "spark_catalog.default")
-  }
-
-  test("view current catalog/namespace quotes multi-part names with dots") {
-    val info = new TableInfo.Builder()
-      .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT * FROM t")
-      .withCurrentCatalogAndNamespace("spark_catalog", Array("weird.db", "normal"))
-      .build()
-    val table = new MetadataOnlyTable(info, "v")
-    assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) ==
-      "spark_catalog.`weird.db`.normal")
-  }
-
-  test("view with no current catalog/namespace omits the property") {
-    val info = new TableInfo.Builder()
-      .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT * FROM spark_catalog.default.t")
-      .build()
-    val table = new MetadataOnlyTable(info, "v")
-    assert(!table.properties().containsKey(
-      TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
-  }
+  // --- ViewInfo unit tests -----------------------------------------------
 
   test("multi-part captured namespace round-trips through V1Table.toCatalogTable") {
-    // End-to-end coverage of the v2 encoder -> parser round-trip for multi-level namespaces:
-    // (a) TableInfo.Builder serializes (cat, Array(db1, db2)) into a quoted multi-part
-    // identifier, (b) V1Table.toCatalogTable parses it back via parseMultipartIdentifier, and
-    // (c) the resulting CatalogTable exposes the full (cat, db1, db2) via
-    // viewCatalogAndNamespace -- which is what the v1 view-resolution path consumes to expand
-    // unqualified references in the view body.
-    val info = new TableInfo.Builder()
+    // (a) ViewInfo.Builder stores (cat, Array(db1, db2)) as typed fields.
+    // (b) V1Table.toCatalogTable reads them directly and emits v1's numbered
+    //     view.catalogAndNamespace.* keys so (c) the resulting CatalogTable's
+    //     `viewCatalogAndNamespace` exposes the full (cat, db1, db2), which is what the v1
+    //     view-resolution path consumes to expand unqualified references in the view body.
+    val info = new ViewInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT col FROM t")
-      .withCurrentCatalogAndNamespace("my_cat", Array("db1", "db2"))
+      .withQueryText("SELECT col FROM t")
+      .withCurrentCatalog("my_cat")
+      .withCurrentNamespace(Array("db1", "db2"))
       .build()
     val motTable = new MetadataOnlyTable(info, "v")
     // Any CatalogPlugin works here; toCatalogTable only reads `catalog.name()`.
@@ -131,35 +99,27 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       catalog, Identifier.of(Array("ns"), "v"), motTable)
     assert(ct.viewCatalogAndNamespace == Seq("my_cat", "db1", "db2"))
 
-    // And for a namespace part that needs backtick-quoting.
-    val infoWeird = new TableInfo.Builder()
+    // Namespace parts containing dots flow through structurally (no string encoding).
+    val infoWeird = new ViewInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT col FROM t")
-      .withCurrentCatalogAndNamespace("my_cat", Array("weird.db", "normal"))
+      .withQueryText("SELECT col FROM t")
+      .withCurrentCatalog("my_cat")
+      .withCurrentNamespace(Array("weird.db", "normal"))
       .build()
     val ctWeird = V1Table.toCatalogTable(
       catalog, Identifier.of(Array("ns"), "v"), new MetadataOnlyTable(infoWeird, "v"))
     assert(ctWeird.viewCatalogAndNamespace == Seq("my_cat", "weird.db", "normal"))
   }
 
-  test("withCurrentCatalogAndNamespace clears the property when catalog is null or empty") {
-    val infoNull = new TableInfo.Builder()
+  test("view with no captured catalog omits viewCatalogAndNamespace") {
+    val info = new ViewInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT 1 AS col")
-      .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
-      .withCurrentCatalogAndNamespace(null, Array("ignored"))
+      .withQueryText("SELECT * FROM spark_catalog.default.t")
       .build()
-    assert(!infoNull.properties().containsKey(
-      TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
-
-    val infoEmpty = new TableInfo.Builder()
-      .withSchema(new StructType().add("col", "string"))
-      .withViewText("SELECT 1 AS col")
-      .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
-      .withCurrentCatalogAndNamespace("", Array("ignored"))
-      .build()
-    assert(!infoEmpty.properties().containsKey(
-      TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
+    val motTable = new MetadataOnlyTable(info, "v")
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+    val ct = V1Table.toCatalogTable(catalog, Identifier.of(Array("ns"), "v"), motTable)
+    assert(ct.viewCatalogAndNamespace.isEmpty)
   }
 
   // --- CREATE VIEW on a plain TableCatalog --------------------------------
@@ -325,7 +285,8 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         // CREATE VIEW IF NOT EXISTS is a no-op -- the table entry is untouched.
         sql("CREATE VIEW IF NOT EXISTS view_catalog.default.v_existing_table AS " +
           "SELECT x FROM spark_catalog.default.t")
-        val stored = catalog.getStoredView(Array("default"), "v_existing_table")
+        val stored = catalog.getStoredInfo(Array("default"), "v_existing_table")
+        assert(!stored.isInstanceOf[ViewInfo])
         assert(stored.properties().get(TableCatalog.PROP_TABLE_TYPE) ==
           TableSummary.EXTERNAL_TABLE_TYPE)
       }
@@ -521,12 +482,13 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
       .asInstanceOf[TestingViewCatalog]
     val viewIdent = Identifier.of(Array("default"), "v_owner")
-    // Pre-seed a view whose stored TableInfo carries an explicit owner.
-    val initialInfo = new TableInfo.Builder()
+    // Pre-seed a view whose stored ViewInfo carries an explicit owner.
+    val initialInfo = new ViewInfo.Builder()
       .withSchema(new StructType().add("x", "int"))
-      .withViewText("SELECT 1 AS x")
+      .withQueryText("SELECT 1 AS x")
       .withOwner("alice")
-      .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
+      .withCurrentCatalog("spark_catalog")
+      .withCurrentNamespace(Array("default"))
       .build()
     catalog.createTable(viewIdent, initialInfo)
     try {
@@ -554,9 +516,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
         .asInstanceOf[TestingViewCatalog]
-      val info = catalog.getStoredView(Array("default"), "v_evo")
-      // Use the same stored key v1 uses (CatalogTable.VIEW_SCHEMA_MODE = "view.schemaMode").
-      assert(info.properties().get("view.schemaMode") == "EVOLUTION")
+      assert(catalog.getStoredView(Array("default"), "v_evo").schemaMode() == "EVOLUTION")
     }
   }
 
@@ -569,17 +529,16 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       }
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
         .asInstanceOf[TestingViewCatalog]
-      val ansiKey = TableCatalog.VIEW_CONF_PREFIX + SQLConf.ANSI_ENABLED.key
-      assert(catalog.getStoredView(Array("default"), "v_configs").properties().get(ansiKey)
-        == "true")
+      assert(catalog.getStoredView(Array("default"), "v_configs")
+        .sqlConfigs().get(SQLConf.ANSI_ENABLED.key) == "true")
 
       // ALTER under a different ANSI setting should replace the stored config, not merge.
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
         sql("ALTER VIEW view_catalog.default.v_configs AS " +
           "SELECT col FROM spark_catalog.default.t WHERE col = 'b'")
       }
-      assert(catalog.getStoredView(Array("default"), "v_configs").properties().get(ansiKey)
-        == "false")
+      assert(catalog.getStoredView(Array("default"), "v_configs")
+        .sqlConfigs().get(SQLConf.ANSI_ENABLED.key) == "false")
     }
   }
 
@@ -655,6 +614,57 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
           "SELECT x FROM view_catalog.ns2.inner.v")
       }
       assert(ex.getCondition == "RECURSIVE_VIEW")
+    }
+  }
+
+  test("view error messages render the full multi-level namespace") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.ns1.inner.v_err AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      // Second CREATE surfaces `viewAlreadyExistsError` (via TableAlreadyExistsException from
+      // the catalog). Before the error signatures took `Seq[String]`, `legacyName` collapsed
+      // ns1.inner into just `inner` and the error said `view_catalog.inner.v_err` -- missing
+      // the outer `ns1` segment.
+      val dup = intercept[AnalysisException] {
+        sql("CREATE VIEW view_catalog.ns1.inner.v_err AS " +
+          "SELECT x FROM spark_catalog.default.t")
+      }
+      assert(dup.getCondition == "TABLE_OR_VIEW_ALREADY_EXISTS")
+      assert(dup.getMessage.contains("`view_catalog`.`ns1`.`inner`.`v_err`"),
+        s"expected full multi-part name in error, got: ${dup.getMessage}")
+
+      // CREATE OR REPLACE VIEW over a non-view table entry surfaces
+      // `unsupportedCreateOrReplaceViewOnTableError`. Pre-seed a non-view entry at a
+      // multi-level-namespace identifier to exercise the rendering.
+      val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+        .asInstanceOf[TestingViewCatalog]
+      val tblIdent = Identifier.of(Array("ns1", "inner"), "t_err")
+      catalog.createTable(
+        tblIdent,
+        new TableInfo.Builder()
+          .withSchema(new StructType().add("col", "string"))
+          .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
+          .build())
+      try {
+        val notView = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE VIEW view_catalog.ns1.inner.t_err AS " +
+            "SELECT x FROM spark_catalog.default.t")
+        }
+        assert(notView.getCondition == "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE")
+        assert(notView.getMessage.contains("`view_catalog`.`ns1`.`inner`.`t_err`"),
+          s"expected full multi-part name in error, got: ${notView.getMessage}")
+      } finally {
+        catalog.dropTable(tblIdent)
+      }
+
+      // Column-arity mismatch error.
+      val arity = intercept[AnalysisException] {
+        sql("CREATE VIEW view_catalog.ns1.inner.v_arity (a, b) AS " +
+          "SELECT x FROM spark_catalog.default.t")
+      }
+      assert(arity.getMessage.contains("`view_catalog`.`ns1`.`inner`.`v_arity`"),
+        s"expected full multi-part name in error, got: ${arity.getMessage}")
     }
   }
 
@@ -918,40 +928,39 @@ class TestingViewCatalog extends TableCatalog {
     Option(createdViews.get(key)).map(new MetadataOnlyTable(_, ident.toString)).getOrElse {
       ident.name() match {
         case "test_view" =>
-          val viewProps = new java.util.HashMap[String, String]()
-          viewProps.put(
-            TableCatalog.VIEW_CONF_PREFIX + SQLConf.ANSI_ENABLED.key,
-            (ident.namespace().head == "ansi").toString)
-          val info = new TableInfo.Builder()
+          val info = new ViewInfo.Builder()
             .withSchema(new StructType().add("col", "string").add("i", "int"))
-            .withProperties(viewProps)
-            .withViewText(
+            .withQueryText(
               "SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
+            .withSqlConfigs(java.util.Collections.singletonMap(
+              SQLConf.ANSI_ENABLED.key, (ident.namespace().head == "ansi").toString))
             .build()
           new MetadataOnlyTable(info, ident.toString)
         case "test_unqualified_view" =>
-          val info = new TableInfo.Builder()
+          val info = new ViewInfo.Builder()
             .withSchema(new StructType().add("col", "string"))
-            .withViewText("SELECT col FROM t WHERE col = 'b'")
-            .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
+            .withQueryText("SELECT col FROM t WHERE col = 'b'")
+            .withCurrentCatalog("spark_catalog")
+            .withCurrentNamespace(Array("default"))
             .build()
           new MetadataOnlyTable(info, ident.toString)
         case "test_unqualified_multi" =>
           // View whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part). The
           // unqualified `t` in the body must resolve via that captured context to
           // view_catalog.ns1.ns2.t, which this catalog also serves (see `t` case below).
-          val info = new TableInfo.Builder()
+          val info = new ViewInfo.Builder()
             .withSchema(new StructType().add("col", "string"))
-            .withViewText("SELECT col FROM t")
-            .withCurrentCatalogAndNamespace("view_catalog", Array("ns1", "ns2"))
+            .withQueryText("SELECT col FROM t")
+            .withCurrentCatalog("view_catalog")
+            .withCurrentNamespace(Array("ns1", "ns2"))
             .build()
           new MetadataOnlyTable(info, ident.toString)
         case "t" if ident.namespace().toSeq == Seq("ns1", "ns2") =>
           // Target of test_unqualified_multi's unqualified reference. Self-contained view so
           // the test doesn't need external data.
-          val info = new TableInfo.Builder()
+          val info = new ViewInfo.Builder()
             .withSchema(new StructType().add("col", "string"))
-            .withViewText("SELECT 'multi' AS col")
+            .withQueryText("SELECT 'multi' AS col")
             .build()
           new MetadataOnlyTable(info, ident.toString)
         case _ => throw new NoSuchTableException(ident)
@@ -972,11 +981,19 @@ class TestingViewCatalog extends TableCatalog {
     new MetadataOnlyTable(info, ident.toString)
   }
 
-  /** Test-only accessor: returns the stored TableInfo for a created view. */
-  def getStoredView(namespace: Array[String], name: String): TableInfo = {
+  /** Test-only accessor: returns the stored TableInfo (table or view) for the identifier. */
+  def getStoredInfo(namespace: Array[String], name: String): TableInfo = {
     Option(createdViews.get((namespace.toSeq, name))).getOrElse {
       throw new NoSuchTableException(Identifier.of(namespace, name))
     }
+  }
+
+  /** Test-only accessor: returns the stored ViewInfo; fails if the entry is not a view. */
+  def getStoredView(namespace: Array[String], name: String): ViewInfo = getStoredInfo(
+    namespace, name) match {
+    case v: ViewInfo => v
+    case _ => throw new IllegalStateException(
+      s"stored entry at ${namespace.mkString(".")}.$name is not a view")
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -1085,9 +1102,9 @@ private class RecordingStagedTable(
  * kept to make future tests that deliberately bypass the upstream gate easy to write.
  */
 class TestingTableOnlyCatalog extends TableCatalog {
-  private val fixtureView: TableInfo = new TableInfo.Builder()
+  private val fixtureView: ViewInfo = new ViewInfo.Builder()
     .withSchema(new StructType().add("x", "int"))
-    .withViewText("SELECT 1 AS x")
+    .withQueryText("SELECT 1 AS x")
     .build()
 
   override def loadTable(ident: Identifier): Table =

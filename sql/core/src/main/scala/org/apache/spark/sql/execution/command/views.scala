@@ -119,10 +119,10 @@ case class CreateViewCommand(
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > analyzedPlan.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzedPlan)
+          name.nameParts, userSpecifiedColumns.map(_._1), analyzedPlan)
       } else if (userSpecifiedColumns.length < analyzedPlan.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzedPlan)
+          name.nameParts, userSpecifiedColumns.map(_._1), analyzedPlan)
       }
       if (viewSchemaMode == SchemaEvolution) {
         throw SparkException.internalError(
@@ -172,7 +172,8 @@ case class CreateViewCommand(
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
       } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(name, replace)
+        throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
+          name.nameParts, replace)
       } else if (replace) {
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier
@@ -193,7 +194,7 @@ case class CreateViewCommand(
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
-        throw QueryCompilationErrors.viewAlreadyExistsError(name)
+        throw QueryCompilationErrors.viewAlreadyExistsError(name.nameParts)
       }
     } else {
       // Create the view if it doesn't exist.
@@ -498,9 +499,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       viewSchemaMode: ViewSchemaMode,
       tempViewNames: Seq[Seq[String]] = Seq.empty,
       tempFunctionNames: Seq[String] = Seq.empty,
-      tempVariableNames: Seq[Seq[String]] = Seq.empty,
-      catalogAndNamespaceEncoder: (String, Seq[String]) => Map[String, String] =
-        catalogAndNamespaceToProps): Map[String, String] = {
+      tempVariableNames: Seq[Seq[String]] = Seq.empty): Map[String, String] = {
 
     val conf = session.sessionState.conf
 
@@ -519,7 +518,7 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
     removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
-      catalogAndNamespaceEncoder(
+      catalogAndNamespaceToProps(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++

@@ -51,10 +51,10 @@ case class CreateMetricViewCommand(
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > analyzed.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzed)
+          name.nameParts, userSpecifiedColumns.map(_._1), analyzed)
       } else if (userSpecifiedColumns.length < analyzed.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzed)
+          name.nameParts, userSpecifiedColumns.map(_._1), analyzed)
       }
     }
     catalog.createTable(
