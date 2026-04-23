@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUt
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.metric.{CustomMetric, NumDeletedRowsMetric}
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -350,7 +350,7 @@ case class ReplaceDataExec(
         // One of the metrics couldn't be found, also mark numDeletedRows as not found.
         -1L
       }
-      metrics(NumDeletedRowsMetric.NAME).set(numDeletedRows)
+      metrics("numDeletedRows").set(numDeletedRows)
     }
     super.getWriteSummary(query)
   }
@@ -433,8 +433,7 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
         "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
     case DELETE =>
       Map(
-        NumDeletedRowsMetric.NAME ->
-          SQLMetrics.createMetric(sparkContext, "number of deleted rows"),
+        "numDeletedRows" -> SQLMetrics.createMetric(sparkContext, "number of deleted rows"),
         "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
     case _ => Map.empty
   }
@@ -467,7 +466,7 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
           getMetricValue(sparkMetrics, "numCopiedRows")))
       case DELETE =>
         Some(DeleteSummaryImpl(
-          getMetricValue(sparkMetrics, NumDeletedRowsMetric.NAME),
+          getMetricValue(sparkMetrics, "numDeletedRows"),
           getMetricValue(sparkMetrics, "numCopiedRows")))
     }
   }
@@ -665,7 +664,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
     metadataProj: ProjectingInternalRow,
-    sparkMetrics: Map[String, SQLMetric] = Map.empty)
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
   override protected def write(
@@ -706,7 +705,7 @@ case class DataAndMetadataWritingSparkTask(
 
 case class DataWithProjectionWritingSparkTask(
     dataProj: ProjectingInternalRow,
-    sparkMetrics: Map[String, SQLMetric] = Map.empty)
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
   override protected def write(
@@ -752,7 +751,7 @@ object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
 
 case class DeltaWritingSparkTask(
     projections: WriteDeltaProjections,
-    sparkMetrics: Map[String, SQLMetric] = Map.empty)
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
@@ -802,7 +801,7 @@ case class DeltaWritingSparkTask(
 
 case class DeltaWithMetadataWritingSparkTask(
     projections: WriteDeltaProjections,
-    sparkMetrics: Map[String, SQLMetric] = Map.empty)
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
