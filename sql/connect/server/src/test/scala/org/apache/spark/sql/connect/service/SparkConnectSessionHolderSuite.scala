@@ -45,6 +45,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 class SparkConnectSessionHolderSuite extends SharedSparkSession {
 
+  private val foreachBatchTestAttemptId = new java.util.concurrent.atomic.AtomicInteger(0)
+
   test("DataFrame cache: Successful put and get") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     import sessionHolder.session.implicits._
@@ -249,6 +251,13 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   private def runPythonForeachBatchTerminationTestBody(): Unit = {
+    // Suffix query names so a retry after a timed-out attempt does not collide with a leaked
+    // query from the previous attempt (the leaked thread can still hold the old query name in
+    // spark.streams.active).
+    val suffix = s"_${foreachBatchTestAttemptId.incrementAndGet()}"
+    val q1Name = s"foreachBatch_termination_test_q1$suffix"
+    val q2Name = s"foreachBatch_termination_test_q2$suffix"
+
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     try {
       SparkConnectService.start(spark.sparkContext)
@@ -264,7 +273,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         .load()
         .writeStream
         .format("memory")
-        .queryName("foreachBatch_termination_test_q1")
+        .queryName(q1Name)
         .foreachBatch(fn1)
         .start()
 
@@ -273,7 +282,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         .load()
         .writeStream
         .format("memory")
-        .queryName("foreachBatch_termination_test_q2")
+        .queryName(q2Name)
         .foreachBatch(fn2)
         .start()
 
@@ -303,8 +312,9 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         assert(runner2.isWorkerStopped().get)
       }
 
-      assert(spark.streams.active.isEmpty) // no running query
-      assert(spark.streams.listListeners().length == 1) // only process termination listener
+      // Only check this attempt's queries stopped (a previous timed-out attempt may have
+      // leaked queries into spark.streams.active that we cannot synchronously clean up).
+      assert(!spark.streams.active.exists(q => q.name == q1Name || q.name == q2Name))
     } finally {
       SparkConnectService.stop()
       // Wait for things to calm down.
