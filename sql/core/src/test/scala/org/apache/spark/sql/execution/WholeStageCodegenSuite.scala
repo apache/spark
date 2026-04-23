@@ -1053,13 +1053,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.ANSI_ENABLED.key -> "true") {
-      t.createOrReplaceTempView("t")
-      idx.createOrReplaceTempView("idx")
+      t.createOrReplaceTempView("spark_56032_t")
+      idx.createOrReplaceTempView("spark_56032_idx")
       val df = spark.sql(
         """
-          |WITH guarded AS (SELECT s FROM t WHERE kind = 'numeric'),
+          |WITH guarded AS (SELECT s FROM spark_56032_t WHERE kind = 'numeric'),
           |     derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
-          |     pairs   AS (SELECT s, i FROM derived, idx WHERE i <= n)
+          |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
           |SELECT s, i FROM pairs
           |""".stripMargin)
       // Guard against optimizer drift: this test only exercises the bug when the
@@ -1073,6 +1073,40 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         } => f
       }.nonEmpty, "expected a FilterExec with IsNotNull(Cast(...)) in its condition")
       checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE synthetic IsNotNull for shared otherPred refs") {
+    // Filter shape: kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100.
+    // The two cast otherPreds both reference `s`, so the first emits the direct
+    // `IsNotNull(s)` from notNullPreds and the second falls into the else-if that
+    // emits a synthetic `IsNotNull(s)`. This exercises the synthetic-emit branch in
+    // the CSE path and ensures the tightened-output binding of cast(s as int) never
+    // sees a null-s row.
+    //
+    // Also exercises invariant (b): the guard `kind = 'numeric'` must short-circuit
+    // before either cast otherPred runs, so the 'abc'/'text' row never triggers
+    // `CAST_INVALID_INPUT` under ANSI.
+    val schema = StructType(Seq(
+      StructField("s", StringType, nullable = true),
+      StructField("kind", StringType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row("3", "numeric"),
+      Row("7", "numeric"),
+      Row(null, "numeric"),
+      Row("abc", "text")))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema).where(
+        "kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(df, Seq(Row("3", "numeric"), Row("7", "numeric")))
     }
   }
 
