@@ -624,6 +624,62 @@ trait QueryTestBase
     }
   }
 
+  // Whether to materialize all test data before the first test is run
+  private var loadTestDataBeforeTests = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (loadTestDataBeforeTests) {
+      loadTestData()
+    }
+  }
+
+  /**
+   * Materialize the test data immediately after the `SQLContext` is set up.
+   * This is necessary if the data is accessed by name but not through direct reference.
+   */
+  protected def setupTestData(): Unit = {
+    loadTestDataBeforeTests = true
+  }
+
+  /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files.toImmutableArraySeq) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
+    }
+  }
+
+  protected def getCurrentClassCallSitePattern: String = {
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
+    val cs = stack(idx + 1)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+  }
+
+  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
+    val cs = stack(idx + 1)
+    Pattern.quote(
+      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
+  }
+
 }
 
 /**
@@ -637,15 +693,6 @@ trait QueryTestBase
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
-  // Whether to materialize all test data before the first test is run
-  private var loadTestDataBeforeTests = false
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    if (loadTestDataBeforeTests) {
-      loadTestData()
-    }
-  }
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
@@ -670,14 +717,6 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
         }
       }
     }
-  }
-
-  /**
-   * Materialize the test data immediately after the `SQLContext` is set up.
-   * This is necessary if the data is accessed by name but not through direct reference.
-   */
-  protected def setupTestData(): Unit = {
-    loadTestDataBeforeTests = true
   }
 
   /**
@@ -759,44 +798,6 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
       Files.copy(inputStream, tmpFile.toPath)
       f(tmpFile)
     }
-  }
-
-  /**
-   * Waits for all tasks on all executors to be finished.
-   */
-  protected def waitForTasksToFinish(): Unit = {
-    eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker
-        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
-    }
-  }
-
-  /**
-   * Creates the specified number of temporary directories, which is then passed to `f` and will be
-   * deleted after `f` returns.
-   */
-  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
-    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files.toImmutableArraySeq) finally {
-      // wait for all tasks to finish before deleting files
-      waitForTasksToFinish()
-      files.foreach(Utils.deleteRecursively)
-    }
-  }
-
-  protected def getCurrentClassCallSitePattern: String = {
-    val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
-    val cs = stack(idx + 1)
-    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
-  }
-
-  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
-    val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
-    val cs = stack(idx + 1)
-    Pattern.quote(
-      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
 }
 
