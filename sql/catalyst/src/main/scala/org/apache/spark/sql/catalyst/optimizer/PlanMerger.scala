@@ -269,16 +269,15 @@ class PlanMerger(
             case TryMergeResult(mergedChild, npMapping, None, None) =>
               val mappedNPGroupingExpression =
                 np.groupingExpressions.map(mapAttributes(_, npMapping))
-              val mappedCPGroupingExpression = cp.groupingExpressions
               // Order of grouping expression does matter as merging different grouping orders can
               // introduce "extra" shuffles/sorts that might not present in all of the original
               // subqueries.
               if (mappedNPGroupingExpression.map(_.canonicalized) ==
-                  mappedCPGroupingExpression.map(_.canonicalized)) {
+                  cp.groupingExpressions.map(_.canonicalized)) {
                 val (mergedAggregateExpressions, newNPMapping) =
                   mergeNamedExpressions(np.aggregateExpressions, cp.aggregateExpressions, npMapping)
                 val mergedPlan =
-                  Aggregate(mappedCPGroupingExpression, mergedAggregateExpressions, mergedChild)
+                  Aggregate(cp.groupingExpressions, mergedAggregateExpressions, mergedChild)
                 Some(TryMergeResult(mergedPlan, newNPMapping))
               } else {
                 None
@@ -506,6 +505,9 @@ class PlanMerger(
       for (i <- 0 until cachedPlanExpressions.size if !matchedCachedIndices.contains(i)) {
         mergedExpressions(i) match {
           case ce @ Alias(child, _) if !child.isInstanceOf[Attribute] =>
+            // Preserve the original ExprId so parent references to this cached attribute stay valid
+            // without a cp-side remapping. (The new-plan wrapping above uses a fresh ExprId because
+            // those aliases are appended rather than replacing an existing entry.)
             mergedExpressions(i) =
               Alias(If(f, child, Literal(null, child.dataType)), ce.name)(
                 exprId = ce.toAttribute.exprId)
