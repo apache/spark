@@ -254,34 +254,44 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // Apply CSE to otherPreds. Two invariants we must preserve:
-    //   (a) Short-circuit order: otherPreds are evaluated sequentially and each may
-    //       `continue;` out of the row. A precomputation hoisted ahead of an earlier
-    //       otherPred would run for rows an earlier otherPred would have filtered out,
-    //       turning a filtered-out row into a thrown exception for any expression that
-    //       can throw (overflow, error class, etc.). SPARK-56032's original placement of
-    //       subExprsCode at the top of the `do { }` block broke this.
-    //   (b) Null guards: IsNotNull predicates must short-circuit before CSE
-    //       precomputation sees a null-bearing row. Otherwise CSE's
-    //       `value_X = isNull ? default : <compute>` materializes `null` into `value_X`
-    //       for non-primitive types, which downstream accessors (e.g.
-    //       `value_X.isNullAt(0)`) may NPE on without consulting `isNull_X`.
+    // Apply CSE to otherPreds. Three invariants we must preserve:
+    //   (a) Short-circuit order between otherPreds: each may `continue;` out of the row.
+    //       A precomputation hoisted ahead of an earlier otherPred would run for rows
+    //       an earlier otherPred would have filtered out, turning a filtered-out row
+    //       into a thrown exception for any expression that can throw (overflow, error
+    //       class, etc.). SPARK-56032's original placement of subExprsCode at the top
+    //       of the `do { }` block broke this.
+    //   (b) Short-circuit order between notNullPreds and otherPreds: `notNullPreds` may
+    //       include `IsNotNull(expensive_or_throwing)` inferred by
+    //       `InferFiltersFromConstraints`. Emitting all notNullPreds up front would
+    //       evaluate the inner expression on rows that an earlier-ordered otherPred
+    //       would have rejected -- same class of bug as (a) but across the
+    //       notNullPreds / otherPreds boundary. Mirror the non-CSE branch: emit just
+    //       the IsNotNull checks each otherPred needs before evaluating it, and defer
+    //       any leftover notNullPreds to after all otherPreds.
+    //   (c) Null guards for CSE state materialization: IsNotNull predicates on an
+    //       otherPred's references must short-circuit before CSE precomputation sees
+    //       a null-bearing row. Otherwise CSE's `value_X = isNull ? default : compute`
+    //       materializes `null` into `value_X` for non-primitive types, which
+    //       downstream accessors (e.g. `value_X.isNullAt(0)`) may NPE on without
+    //       consulting `isNull_X`.
     //
     // The fix for (a): emit each common subexpression's precompute *just before* the
     // first otherPred that references it, not all at the top of the `do { }` block.
     // A later otherPred still reuses the cached value -- it just doesn't pay the cost
     // for rows that an earlier otherPred rejected.
     //
-    // The fix for (b): emit all IsNotNull short-circuits upfront and bind otherPreds
-    // (and the CSE analysis) against the tightened `output`. `notNullAttributes` are
-    // guaranteed non-null by the time any otherPred (or any CSE precompute) runs, so
-    // the tightened-nullability optimization inside the predicate bodies is restored.
-    // This also supersedes the child.output binding workaround from SPARK-56431.
+    // The fix for (b): per-otherPred, emit the matching IsNotNull(ref) checks from
+    // `notNullPreds` (for each of that otherPred's references) before the otherPred's
+    // CSE precompute and body. Remaining notNullPreds emit after all otherPreds.
+    //
+    // The fix for (c): the IsNotNull interleaving above runs before any CSE precompute
+    // that is keyed off the same reference, so the precompute sees only non-null rows.
+    // Binding the otherPreds (and the CSE analysis) against `output` (with
+    // `notNullAttributes` tightened to non-nullable) restores the nullability-tightened
+    // optimization inside the predicate bodies.
     val (prologueCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
-        val notNullShortCircuitCode = generatePredicateCode(
-          ctx, child.output, input, output, notNullPreds, Seq.empty, notNullAttributes)
-
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
         // fails when otherPreds reference the same input columns that CSE already
@@ -303,25 +313,59 @@ case class FilterExec(condition: Expression, child: SparkPlan)
             boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
           }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
 
+        // Emit an IsNotNull check, binding against child.output so the inner expression
+        // is evaluated with its original nullability (the tightened-nullability `output`
+        // is only appropriate inside otherPreds, where the required checks have fired).
+        def genNotNull(pred: Expression): String = {
+          val bound = BindReferences.bindReference(pred, child.output)
+          val evaluated = evaluateRequiredVariables(child.output, input, pred.references)
+          val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+          s"""
+             |$evaluated
+             |${ev.code}
+             |if (${ev.isNull} || !${ev.value}) continue;
+           """.stripMargin
+        }
+
+        val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+
         val predCode: String = {
           val parts = new StringBuilder
           ctx.withSubExprEliminationExprs(subExprs.states) {
-            boundOtherPreds.zipWithIndex.foreach { case (bound, idx) =>
-              statesByFirstUse.get(idx).foreach { states =>
-                parts.append(ctx.evaluateSubExprEliminationState(states))
-                parts.append('\n')
-              }
-              val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
-              val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
-              parts.append(ev.code.toString)
-              parts.append(s"\nif (${nullCheck}!${ev.value}) continue;\n")
+            otherPreds.iterator.zip(boundOtherPreds.iterator).zipWithIndex.foreach {
+              case ((orig, bound), idx) =>
+                orig.references.foreach { r =>
+                  val ni = notNullPreds.indexWhere {
+                    case IsNotNull(c) => c.semanticEquals(r)
+                    case _ => false
+                  }
+                  if (ni != -1 && !generatedIsNotNullChecks(ni)) {
+                    generatedIsNotNullChecks(ni) = true
+                    parts.append(genNotNull(notNullPreds(ni)))
+                    parts.append('\n')
+                  }
+                }
+                statesByFirstUse.get(idx).foreach { states =>
+                  parts.append(ctx.evaluateSubExprEliminationState(states))
+                  parts.append('\n')
+                }
+                val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+                val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
+                parts.append(ev.code.toString)
+                parts.append(s"\nif (${nullCheck}!${ev.value}) continue;\n")
             }
             Seq.empty
           }
           parts.toString
         }
 
-        (notNullShortCircuitCode + "\n" + inputVarsEvalCode, predCode)
+        // Leftover notNullPreds: any IsNotNull that no otherPred's reference matched.
+        // These run after all otherPreds to match the non-CSE ordering.
+        val leftoverNotNull = notNullPreds.zipWithIndex.collect {
+          case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
+        }.mkString("\n")
+
+        (inputVarsEvalCode, predCode + "\n" + leftoverNotNull)
       } else {
         ("", generatePredicateCode(
           ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
