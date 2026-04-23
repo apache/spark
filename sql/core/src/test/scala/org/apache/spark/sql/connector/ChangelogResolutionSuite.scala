@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
+import java.util.Collections
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
@@ -63,8 +64,8 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       Array(
         Column.create("id", LongType),
         Column.create("data", StringType)),
-      Array.empty,
-      new util.HashMap[String, String]())
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
 
     val noCdcCat = spark.sessionState.catalogManager.catalog(noCdcCatalogName).asTableCatalog
     val ident2 = Identifier.of(Array.empty, "test_table")
@@ -76,8 +77,8 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       Array(
         Column.create("id", LongType),
         Column.create("data", StringType)),
-      Array.empty,
-      new util.HashMap[String, String]())
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
   }
 
   test("CHANGES clause resolves to DataSourceV2Relation with ChangelogTable") {
@@ -202,5 +203,70 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     val range = info.get.range().asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "1")
     assert(range.endingVersion().get() == "5")
+  }
+
+  // ===========================================================================
+  // Streaming post-processing rejection
+  // ===========================================================================
+  //
+  // Streaming CDC reads bypass the post-processing analyzer rule's transformation
+  // path. To prevent silent wrong results when the requested options would require
+  // post-processing, the rule throws an explicit AnalysisException for streaming.
+
+  /** Re-creates the test table with non-nullable columns suitable as rowId / rowVersion. */
+  private def recreatePostProcessingTable(): Identifier = {
+    val cat = spark.sessionState.catalogManager.catalog(cdcCatalogName).asTableCatalog
+    val ident = Identifier.of(Array.empty, "test_table")
+    if (cat.tableExists(ident)) cat.dropTable(ident)
+    cat.createTable(
+      ident,
+      Array(
+        Column.create("id", LongType, false),
+        Column.create("row_commit_version", LongType, false)),
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
+    ident
+  }
+
+  test("DataStreamReader - changes() with carry-over capability throws") {
+    val ident = recreatePostProcessingTable()
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+    cat.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    checkError(
+      intercept[AnalysisException] {
+        spark.readStream
+          .changes(s"$cdcCatalogName.test_table")
+          .queryExecution.analyzed
+      },
+      condition = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
+      parameters = Map("changelogName" -> s"$cdcCatalogName.test_table_changelog"))
+  }
+
+  test("DataStreamReader - changes() with computeUpdates throws") {
+    val ident = recreatePostProcessingTable()
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+    cat.setChangelogProperties(ident, ChangelogProperties(
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    checkError(
+      intercept[AnalysisException] {
+        spark.readStream
+          .option("computeUpdates", "true")
+          .option("deduplicationMode", "none")
+          .changes(s"$cdcCatalogName.test_table")
+          .queryExecution.analyzed
+      },
+      condition = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
+      parameters = Map("changelogName" -> s"$cdcCatalogName.test_table_changelog"))
   }
 }
