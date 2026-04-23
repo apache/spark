@@ -1076,17 +1076,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-56032: FilterExec CSE synthetic IsNotNull for shared otherPred refs") {
+  test("SPARK-56032: FilterExec CSE handles shared otherPred refs with guard") {
     // Filter shape: kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100.
-    // The two cast otherPreds both reference `s`, so the first emits the direct
-    // `IsNotNull(s)` from notNullPreds and the second falls into the else-if that
-    // emits a synthetic `IsNotNull(s)`. This exercises the synthetic-emit branch in
-    // the CSE path and ensures the tightened-output binding of cast(s as int) never
-    // sees a null-s row.
-    //
-    // Also exercises invariant (b): the guard `kind = 'numeric'` must short-circuit
-    // before either cast otherPred runs, so the 'abc'/'text' row never triggers
-    // `CAST_INVALID_INPUT` under ANSI.
+    // Exercises invariant (b) on a shape with two cast otherPreds sharing a ref:
+    // the guard `kind = 'numeric'` must short-circuit before either cast runs, so
+    // the 'abc'/'text' row never triggers `CAST_INVALID_INPUT` under ANSI, and the
+    // null-s row is filtered by the IsNotNull check emitted ahead of the cast
+    // otherPreds rather than reaching the tightened-output binding.
     val schema = StructType(Seq(
       StructField("s", StringType, nullable = true),
       StructField("kind", StringType, nullable = true)))
@@ -1106,6 +1102,13 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val plan = df.queryExecution.executedPlan
       assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
         "Filter should be in whole-stage codegen")
+      // Guard against optimizer drift: require the rolled-up filter to still carry
+      // both `cast(s as int)` conjuncts so the shared-ref path is exercised.
+      val castCount = plan.collectFirst { case f: FilterExec =>
+        f.condition.collect { case c: Cast => c }.size
+      }.getOrElse(0)
+      assert(castCount >= 2,
+        s"expected a FilterExec condition with at least 2 Cast expressions, got $castCount")
       checkAnswer(df, Seq(Row("3", "numeric"), Row("7", "numeric")))
     }
   }

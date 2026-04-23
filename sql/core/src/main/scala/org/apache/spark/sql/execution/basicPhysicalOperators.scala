@@ -286,7 +286,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // direct `IsNotNull(r)`, emit it; else if `r` is covered by `notNullAttributes`
     // through some complex `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic
     // `IsNotNull(r)` so the tightened-output binding below is safe without evaluating
-    // the throw-capable inner expression. Then the otherPred's CSE precompute and
+    // the throw-capable inner expression. Then emit the otherPred's CSE precompute and
     // body. Remaining notNullPreds (including any complex-child forms whose refs got
     // synthetic coverage) emit after all otherPreds.
     //
