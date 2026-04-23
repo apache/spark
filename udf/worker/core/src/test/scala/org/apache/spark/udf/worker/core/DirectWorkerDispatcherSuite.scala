@@ -216,6 +216,70 @@ class DirectWorkerDispatcherSuite
     assert(!worker2.process.isAlive, "worker2 should be terminated")
   }
 
+  test("closing a session terminates its worker") {
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
+
+    val session = createStubSession()
+    val worker = session.workerProcess
+    val socketFile = new File(worker.socketPath)
+
+    assert(worker.process.isAlive, "worker should be alive before session close")
+    assert(socketFile.exists(), "socket file should exist before session close")
+
+    session.close()
+
+    // The session-close path is synchronous: SIGTERM is sent and the process
+    // is reaped before `close` returns.
+    assert(!worker.process.isAlive,
+      "worker process should be terminated when the session closes")
+    assert(!socketFile.exists(),
+      "socket file should be cleaned up when the session closes")
+  }
+
+  test("concurrent session.close and dispatcher.close do not double-close the worker") {
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
+
+    val sessions = (1 to 4).map(_ => createStubSession())
+    val workers = sessions.map(_.workerProcess)
+
+    val barrier = new java.util.concurrent.CyclicBarrier(sessions.size + 1)
+    val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+    val sessionThreads = sessions.map { s =>
+      val t = new Thread(() => {
+        try {
+          barrier.await()
+          s.close()
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      })
+      t.start()
+      t
+    }
+
+    val dispatcherThread = new Thread(() => {
+      try {
+        barrier.await()
+        dispatcher.close()
+      } catch {
+        case t: Throwable => errors.add(t)
+      }
+    })
+    dispatcherThread.start()
+
+    sessionThreads.foreach(_.join(30000))
+    dispatcherThread.join(30000)
+    dispatcher = null
+
+    assert(errors.isEmpty,
+      s"unexpected errors during concurrent close: ${errors.toArray.mkString(", ")}")
+    workers.foreach { w =>
+      assert(!w.process.isAlive,
+        s"worker at ${w.socketPath} should be terminated after concurrent close")
+    }
+  }
+
   // -- Error-path tests -------------------------------------------------------
 
   test("worker is cleaned up when createSessionForWorker throws") {

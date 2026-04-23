@@ -20,9 +20,9 @@ import java.io.{BufferedReader, File, FileInputStream, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.UUID
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
-import scala.collection.mutable.{ArrayBuffer, Queue => MQueue}
+import scala.collection.mutable.{Queue => MQueue}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -41,8 +41,9 @@ import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableR
  * ("direct" creation mode from the worker specification).
  *
  * On the first [[createSession]], the dispatcher ensures the environment is
- * ready (verify / install) and registers the cleanup hook. Currently spawns
- * a fresh worker per session; pooling/reuse is TODO.
+ * ready (verify / install) and registers the cleanup hook. Each session
+ * currently gets a fresh worker that is terminated when the session closes
+ * (the single-reference case of the future pooling policy).
  *
  * Subclasses implement [[createConnection]] and [[createSessionForWorker]]
  * to provide protocol-specific behavior (e.g., gRPC, raw sockets).
@@ -99,8 +100,12 @@ abstract class DirectWorkerDispatcher(
   // it leaks memory in long-lived JVMs (the JDK retains the path string for
   // the process lifetime), and it only works on empty directories.
   private val socketDir = Files.createTempDirectory("spark-udf-worker")
-  private val workers = new ArrayBuffer[DirectWorkerProcess]()
-  private val workersLock = new Object
+  // Keyed by worker id so release is O(1) and lock-free. Iterating for
+  // shutdown is weakly consistent, which is fine: no new workers should be
+  // spawning once close() is running, and any in-flight releaseWorker that
+  // overlaps with close() is idempotent on both sides (remove-missing is a
+  // no-op and DirectWorkerProcess.close() is CAS-guarded).
+  private val workers = new ConcurrentHashMap[String, DirectWorkerProcess]()
 
   @volatile private var environmentState: EnvironmentState = EnvironmentState.Pending
   private val environmentLock = new Object
@@ -122,29 +127,40 @@ abstract class DirectWorkerDispatcher(
       "securityScope is not supported yet; pass None until pooling lands")
     ensureEnvironmentReady()
     val worker = spawnWorker()
-    workersLock.synchronized { workers += worker }
+    workers.put(worker.id, worker)
     worker.acquireSession()
     try {
       createSessionForWorker(worker)
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()
-        cleanupFailedSession(worker)
+        // Drop the ref-count to 0, firing `releaseWorker` via the worker's
+        // callback to remove and tear down the worker.
+        worker.releaseSession()
         throw e
       case NonFatal(e) =>
-        cleanupFailedSession(worker)
+        worker.releaseSession()
         throw e
     }
   }
 
-  private def cleanupFailedSession(worker: DirectWorkerProcess): Unit = {
-    worker.releaseSession()
-    workersLock.synchronized { workers -= worker }
+  /**
+   * Called from [[DirectWorkerProcess.releaseSession]] when the last
+   * active session on `worker` closes. Today this always terminates the
+   * worker; with pooling, this is where the decision to reuse vs. evict
+   * will live (idle-pool handoff, capacity limits, health checks).
+   *
+   * Safe to invoke after dispatcher [[close]] has already reaped this
+   * worker: the worker's own idempotent close guard turns the second
+   * teardown into a no-op.
+   */
+  private def releaseWorker(worker: DirectWorkerProcess): Unit = {
+    workers.remove(worker.id)
     try {
       worker.close()
     } catch {
-      case NonFatal(closeEx) =>
-        logger.warn("Error closing worker after session creation failed", closeEx)
+      case NonFatal(e) =>
+        logger.warn(s"Error closing worker ${worker.id}", e)
     }
   }
 
@@ -153,17 +169,15 @@ abstract class DirectWorkerDispatcher(
     //   N * gracefulTimeoutMs because each worker waits for SIGTERM to
     //   complete before the next one is signalled. A small pool of
     //   short-lived threads would bound shutdown to ~gracefulTimeoutMs.
-    workersLock.synchronized {
-      workers.foreach { w =>
-        try {
-          w.close()
-        } catch {
-          case NonFatal(e) =>
-            logger.warn(s"Error closing worker at ${w.socketPath}", e)
-        }
+    workers.values().iterator().asScala.foreach { w =>
+      try {
+        w.close()
+      } catch {
+        case NonFatal(e) =>
+          logger.warn(s"Error closing worker ${w.id}", e)
       }
-      workers.clear()
     }
+    workers.clear()
     try {
       val dir = socketDir.toFile
       if (dir.exists()) {
@@ -315,7 +329,8 @@ abstract class DirectWorkerDispatcher(
       // remains valid for the child's file descriptor and is deleted in
       // DirectWorkerProcess.close().
       new DirectWorkerProcess(
-        process, connection, socketPath, outputFile, gracefulTimeoutMs, logger)
+        workerId, process, connection, socketPath, outputFile,
+        gracefulTimeoutMs, logger, onLastSessionReleased = releaseWorker)
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()
