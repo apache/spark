@@ -407,7 +407,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _) =>
+      case KeyedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID

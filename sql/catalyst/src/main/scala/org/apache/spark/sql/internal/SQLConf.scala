@@ -2142,15 +2142,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-   val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
-    buildConf("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
-      .doc("Whether to allow storage-partition join in the case where join keys are " +
-        "a subset of the partition keys of the source tables. At planning time, " +
-        "Spark will group the partitions by only those keys that are in the join keys. " +
+   val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =
+    buildConf("spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled")
+      .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
+      .doc("Whether to allow storage-partitioned operations (joins and aggregates) in the case " +
+        "where the operation's keys are a subset of the partition keys of the source tables. At " +
+        "planning time, Spark will group the partitions by only those keys that are in the " +
+        "operation's keys. " +
         s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
         "is false."
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -7926,8 +7929,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def v2BucketingShuffleEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
 
-  def v2BucketingAllowJoinKeysSubsetOfPartitionKeys: Boolean =
-    getConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)
+  def v2BucketingAllowKeysSubsetOfPartitionKeys: Boolean =
+    getConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS)
 
   def v2BucketingAllowCompatibleTransforms: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS)
