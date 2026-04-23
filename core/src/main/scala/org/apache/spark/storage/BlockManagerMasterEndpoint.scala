@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.{Executors, ExecutorService, ThreadFactory, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
@@ -1014,14 +1014,34 @@ private[storage] object BlockManagerMasterEndpoint {
 
   /**
    * Build the `ExecutorService` for the ask thread pool. Uses reflection to
-   * invoke `Executors.newVirtualThreadPerTaskExecutor()` so the source
-   * remains compatible with Java 17, same pattern as SPARK-50383.
+   * stay compatible with Java 17 (same pattern as SPARK-50383). On Java 21+
+   * with the config enabled, this is equivalent to:
+   * {{{
+   *   Executors.newThreadPerTaskExecutor(
+   *     Thread.ofVirtual().name("block-manager-ask-", 0).factory())
+   * }}}
+   * which produces virtual threads named `block-manager-ask-NN` so that
+   * thread dumps mirror the platform-thread pool naming.
    */
   private[storage] def createAskThreadPool(conf: SparkConf): ExecutorService = {
     if (shouldUseVirtualThreads(conf)) {
-      val newVirtualThreadPerTaskExecutor =
-        classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor")
-      newVirtualThreadPerTaskExecutor.invoke(null).asInstanceOf[ExecutorService]
+      // Methods are resolved via the public `Thread.Builder` interface because
+      // `Thread.ofVirtual()` returns an instance of a JDK-internal concrete
+      // class (`java.lang.ThreadBuilders$VirtualThreadBuilder`) that is not
+      // accessible for reflective `invoke`.
+      val builderClass = Utils.classForName("java.lang.Thread$Builder")
+      val ofVirtual = classOf[Thread].getMethod("ofVirtual").invoke(null)
+      val namedBuilder = builderClass
+        .getMethod("name", classOf[String], java.lang.Long.TYPE)
+        .invoke(ofVirtual, "block-manager-ask-", java.lang.Long.valueOf(0L))
+      val factory = builderClass
+        .getMethod("factory")
+        .invoke(namedBuilder)
+        .asInstanceOf[ThreadFactory]
+      classOf[Executors]
+        .getMethod("newThreadPerTaskExecutor", classOf[ThreadFactory])
+        .invoke(null, factory)
+        .asInstanceOf[ExecutorService]
     } else {
       ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
     }

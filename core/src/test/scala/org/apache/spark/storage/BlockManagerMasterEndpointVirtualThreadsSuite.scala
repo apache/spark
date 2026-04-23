@@ -51,6 +51,12 @@ class BlockManagerMasterEndpointVirtualThreadsSuite extends SparkFunSuite {
     ThreadUtils.awaitResult(Future { isVirtualThread(Thread.currentThread()) }(ec), 5.seconds)
   }
 
+  /** Submit a task to the pool and return the executing thread's name. */
+  private def threadNameFromPool(pool: ExecutorService): String = {
+    val ec = ExecutionContext.fromExecutor(pool)
+    ThreadUtils.awaitResult(Future { Thread.currentThread().getName }(ec), 5.seconds)
+  }
+
   private def shutdownQuietly(pool: ExecutorService): Unit = {
     pool.shutdownNow()
     pool.awaitTermination(5, TimeUnit.SECONDS)
@@ -92,6 +98,9 @@ class BlockManagerMasterEndpointVirtualThreadsSuite extends SparkFunSuite {
           s"got ${pool.getClass.getName}")
       assert(runOnPool(pool),
         "Enabled config on Java 21+ should run tasks on a virtual thread")
+      val name = threadNameFromPool(pool)
+      assert(name.startsWith("block-manager-ask-"),
+        s"Virtual thread name should start with 'block-manager-ask-', got '$name'")
     } finally {
       shutdownQuietly(pool)
     }

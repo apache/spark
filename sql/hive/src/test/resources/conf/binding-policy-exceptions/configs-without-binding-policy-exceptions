@@ -1132,6 +1132,7 @@ spark.stage.maxConsecutiveAttempts
 spark.standalone.executorRemoveDelayOnDisconnection
 spark.standalone.submit.waitAppCompletion
 spark.storage.blockManagerHeartbeatTimeoutMs
+spark.storage.blockManagerMaster.virtualThread.enabled
 spark.storage.blockManagerMasterDriverHeartbeatTimeoutMs
 spark.storage.blockManagerTimeoutIntervalMs
 spark.storage.cachedPeersTtl
