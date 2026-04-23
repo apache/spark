@@ -688,6 +688,17 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val STORAGE_BLOCK_MANAGER_MASTER_VIRTUAL_THREADS =
+    ConfigBuilder("spark.storage.blockManagerMaster.virtualThread.enabled")
+      .doc("If true and running on Java 21+, the BlockManagerMasterEndpoint uses virtual " +
+        "threads for its ask thread pool. This can reduce latency of fan-out operations " +
+        "such as removeRdd / removeShuffle / replication on clusters with many executors, " +
+        "where the existing platform-thread cap (100) serializes the Future.sequence " +
+        "fan-out. Has no effect on Java versions earlier than 21.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     ConfigBuilder("spark.storage.cleanupFilesAfterExecutorExit")
       .doc("Whether or not cleanup the files not served by the external shuffle service " +

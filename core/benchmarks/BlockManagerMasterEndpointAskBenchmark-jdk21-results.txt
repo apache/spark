@@ -1,0 +1,26 @@
+================================================================================================
+Ask fan-out (20ms simulated RPC per endpoint)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11 on Mac OS X 26.4
+Apple M4 Pro
+Fan-out over 50 endpoints:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Platform threads (cap=100)                           26             28           1          0.0      520361.7       1.0X
+Virtual threads                                      20             24           2          0.0      408295.8       1.3X
+
+OpenJDK 64-Bit Server VM 21.0.11 on Mac OS X 26.4
+Apple M4 Pro
+Fan-out over 500 endpoints:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Platform threads (cap=100)                          123            126           1          0.0      245398.6       1.0X
+Virtual threads                                      21             24           2          0.0       42824.5       5.7X
+
+OpenJDK 64-Bit Server VM 21.0.11 on Mac OS X 26.4
+Apple M4 Pro
+Fan-out over 5000 endpoints:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Platform threads (cap=100)                         1168           1170           3          0.0      233611.8       1.0X
+Virtual threads                                      31             34           2          0.2        6128.1      38.1X
+
+

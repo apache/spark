@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
@@ -99,8 +99,23 @@ class BlockManagerMasterEndpoint(
   // Maximum number of merger locations to cache
   private val maxRetainedMergerLocations = conf.get(config.SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS)
 
-  private val askThreadPool =
-    ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
+  // When enabled and running on Java 21+, use virtual threads for the ask pool
+  // to avoid the platform-thread cap (100) serializing Future.sequence fan-outs
+  // such as removeRdd / removeShuffle / replication on large clusters.
+  // Construction is delegated to the companion object so tests can exercise it
+  // directly. Same reflection-based pattern as SPARK-50383 (RestSubmissionServer)
+  // and SPARK-56297.
+  private val askThreadPool: ExecutorService = {
+    val vtRequested = conf.get(config.STORAGE_BLOCK_MANAGER_MASTER_VIRTUAL_THREADS)
+    if (vtRequested && !Utils.isJavaVersionAtLeast21) {
+      logWarning(log"${MDC(CONFIG, config.STORAGE_BLOCK_MANAGER_MASTER_VIRTUAL_THREADS.key)}" +
+        log" is enabled but requires Java 21+; falling back to a cached platform-thread pool.")
+    } else if (BlockManagerMasterEndpoint.shouldUseVirtualThreads(conf)) {
+      logInfo(log"Using virtual threads for block-manager-ask-thread-pool" +
+        log" (${MDC(CONFIG, config.STORAGE_BLOCK_MANAGER_MASTER_VIRTUAL_THREADS.key)}=true).")
+    }
+    BlockManagerMasterEndpoint.createAskThreadPool(conf)
+  }
   private implicit val askExecutionContext: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(askThreadPool)
 
@@ -983,6 +998,33 @@ class BlockManagerMasterEndpoint(
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
+  }
+}
+
+private[storage] object BlockManagerMasterEndpoint {
+  /**
+   * Whether the ask thread pool should be backed by Java virtual threads.
+   * Requires both Java 21+ and
+   * [[config.STORAGE_BLOCK_MANAGER_MASTER_VIRTUAL_THREADS]] to be enabled.
+   */
+  private[storage] def shouldUseVirtualThreads(conf: SparkConf): Boolean = {
+    Utils.isJavaVersionAtLeast21 &&
+      conf.get(config.STORAGE_BLOCK_MANAGER_MASTER_VIRTUAL_THREADS)
+  }
+
+  /**
+   * Build the `ExecutorService` for the ask thread pool. Uses reflection to
+   * invoke `Executors.newVirtualThreadPerTaskExecutor()` so the source
+   * remains compatible with Java 17, same pattern as SPARK-50383.
+   */
+  private[storage] def createAskThreadPool(conf: SparkConf): ExecutorService = {
+    if (shouldUseVirtualThreads(conf)) {
+      val newVirtualThreadPerTaskExecutor =
+        classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor")
+      newVirtualThreadPerTaskExecutor.invoke(null).asInstanceOf[ExecutorService]
+    } else {
+      ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
+    }
   }
 }
 
