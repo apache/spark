@@ -919,7 +919,9 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
       }
 
     case av: AlterViewAs if av.isAnalyzed =>
-      requireSupportsView(av.child)
+      // No capability check here: `Analyzer.lookupTableOrView(identifier, viewOnly=true)`
+      // already rejects non-SUPPORTS_VIEW catalogs upstream for `UnresolvedView`, so by the
+      // time an AlterViewAs reaches this rule the catalog is guaranteed to support views.
       val legacyName = legacyNameFor(av.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, legacyName, av.query, av.referredTempFunctions)

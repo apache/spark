@@ -83,6 +83,24 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
     checkAnswer(spark.table(tableName), 0.until(10).map(i => Row(i, -i)))
   }
 
+  test("DESCRIBE TABLE EXTENDED on a non-view MetadataOnlyTable shows the real identifier") {
+    // MetadataOnlyTable.name() is read by DescribeTableExec's "Name" row. Pin that it
+    // reflects the catalog-supplied identifier (here TestingDataSourceTableCatalog passes
+    // `ident.toString`) rather than a generic placeholder, so the DESCRIBE output is
+    // meaningful for users.
+    withTempPath { path =>
+      val loc = path.getCanonicalPath
+      val tableName = s"table_catalog.`$loc`.test_json"
+      spark.range(1).select($"id".cast("string").as("col")).write.json(loc)
+      val nameRow = sql(s"DESCRIBE TABLE EXTENDED $tableName")
+        .collect()
+        .find(_.getString(0) == "Name")
+        .getOrElse(fail("DESCRIBE output missing the `Name` row"))
+      val rendered = nameRow.getString(1)
+      assert(rendered.contains("test_json"), s"expected the real identifier, got: $rendered")
+    }
+  }
+
   test("fully-qualified column reference uses the real catalog name") {
     withTempPath { path =>
       val loc = path.getCanonicalPath
@@ -124,7 +142,7 @@ class TestingDataSourceTableCatalog extends TableCatalog {
         .withLocation(ident.namespace().head)
         .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
         .build()
-      new MetadataOnlyTable(info)
+      new MetadataOnlyTable(info, ident.toString)
     case "test_partitioned_json" =>
       val partitioning = LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2")))
       val info = new TableInfo.Builder()
@@ -134,13 +152,13 @@ class TestingDataSourceTableCatalog extends TableCatalog {
         .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
         .withPartitions(Array(partitioning))
         .build()
-      new MetadataOnlyTable(info)
+      new MetadataOnlyTable(info, ident.toString)
     case "test_v2" =>
       val info = new TableInfo.Builder()
         .withSchema(FakeV2Provider.schema)
         .withProvider(classOf[FakeV2Provider].getName)
         .build()
-      new MetadataOnlyTable(info)
+      new MetadataOnlyTable(info, ident.toString)
     case _ => throw new NoSuchTableException(ident)
   }
 

@@ -86,7 +86,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       .withViewText("SELECT * FROM t")
       .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
       .build()
-    val table = new MetadataOnlyTable(info)
+    val table = new MetadataOnlyTable(info, "v")
     assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) ==
       "spark_catalog.default")
   }
@@ -97,7 +97,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       .withViewText("SELECT * FROM t")
       .withCurrentCatalogAndNamespace("spark_catalog", Array("weird.db", "normal"))
       .build()
-    val table = new MetadataOnlyTable(info)
+    val table = new MetadataOnlyTable(info, "v")
     assert(table.properties().get(TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE) ==
       "spark_catalog.`weird.db`.normal")
   }
@@ -107,7 +107,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       .withSchema(new StructType().add("col", "string"))
       .withViewText("SELECT * FROM spark_catalog.default.t")
       .build()
-    val table = new MetadataOnlyTable(info)
+    val table = new MetadataOnlyTable(info, "v")
     assert(!table.properties().containsKey(
       TableCatalog.PROP_VIEW_CURRENT_CATALOG_AND_NAMESPACE))
   }
@@ -124,7 +124,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       .withViewText("SELECT col FROM t")
       .withCurrentCatalogAndNamespace("my_cat", Array("db1", "db2"))
       .build()
-    val motTable = new MetadataOnlyTable(info)
+    val motTable = new MetadataOnlyTable(info, "v")
     // Any CatalogPlugin works here; toCatalogTable only reads `catalog.name()`.
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
     val ct = V1Table.toCatalogTable(
@@ -138,7 +138,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       .withCurrentCatalogAndNamespace("my_cat", Array("weird.db", "normal"))
       .build()
     val ctWeird = V1Table.toCatalogTable(
-      catalog, Identifier.of(Array("ns"), "v"), new MetadataOnlyTable(infoWeird))
+      catalog, Identifier.of(Array("ns"), "v"), new MetadataOnlyTable(infoWeird, "v"))
     assert(ctWeird.viewCatalogAndNamespace == Seq("my_cat", "weird.db", "normal"))
   }
 
@@ -453,6 +453,36 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
+  test("ALTER VIEW rejects reference to a temporary view") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.default.v_alter_tempview AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      withTempView("tv_alter") {
+        spark.range(3).createOrReplaceTempView("tv_alter")
+        val ex = intercept[AnalysisException] {
+          sql("ALTER VIEW view_catalog.default.v_alter_tempview AS SELECT id FROM tv_alter")
+        }
+        assert(ex.getMessage.toLowerCase(java.util.Locale.ROOT).contains("temporary"))
+      }
+    }
+  }
+
+  test("ALTER VIEW rejects reference to a temporary variable") {
+    withTable("spark_catalog.default.t") {
+      Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+      sql("CREATE VIEW view_catalog.default.v_alter_tempvar AS " +
+        "SELECT x FROM spark_catalog.default.t")
+      withSessionVariable("temp_var_alter") {
+        sql("DECLARE VARIABLE temp_var_alter INT DEFAULT 1")
+        val ex = intercept[AnalysisException] {
+          sql("ALTER VIEW view_catalog.default.v_alter_tempvar AS SELECT temp_var_alter AS x")
+        }
+        assert(ex.getMessage.toLowerCase(java.util.Locale.ROOT).contains("temporary"))
+      }
+    }
+  }
+
   test("ALTER VIEW preserves user-set TBLPROPERTIES") {
     withTable("spark_catalog.default.t") {
       Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
@@ -568,11 +598,13 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
   }
 
   test("ALTER VIEW on a catalog without SUPPORTS_VIEW fails with MISSING_CATALOG_ABILITY") {
-    // TestingTableOnlyCatalog does NOT declare SUPPORTS_VIEW but DOES round-trip
-    // `default.v` as a view-typed MetadataOnlyTable, so view resolution succeeds and we
-    // reach the capability gate in `CheckViewReferences`. Verifies the gate fires on the
-    // ALTER path (not only on CREATE), which would otherwise silently regress if
-    // `SUPPORTS_VIEW` got added to the default capability set.
+    // ALTER VIEW's identifier is resolved via `UnresolvedView`, whose `viewOnly=true` path
+    // in `Analyzer.lookupTableOrView` rejects non-SUPPORTS_VIEW catalogs up front with the
+    // expected error class -- before `loadTable` is even called. `TestingTableOnlyCatalog`
+    // happens to round-trip `default.v` as a view-typed MetadataOnlyTable, but that fixture
+    // is not actually consulted on this path. CREATE VIEW's capability check lives in
+    // `CheckViewReferences`; ALTER VIEW's lives in the analyzer gate. Both yield
+    // `MISSING_CATALOG_ABILITY.VIEWS`.
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
       val ex = intercept[AnalysisException] {
@@ -865,7 +897,7 @@ class TestingViewCatalog extends TableCatalog {
 
   override def loadTable(ident: Identifier): Table = {
     val key = (ident.namespace().toSeq, ident.name())
-    Option(createdViews.get(key)).map(new MetadataOnlyTable(_)).getOrElse {
+    Option(createdViews.get(key)).map(new MetadataOnlyTable(_, ident.toString)).getOrElse {
       ident.name() match {
         case "test_view" =>
           val viewProps = new java.util.HashMap[String, String]()
@@ -878,14 +910,14 @@ class TestingViewCatalog extends TableCatalog {
             .withViewText(
               "SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
             .build()
-          new MetadataOnlyTable(info)
+          new MetadataOnlyTable(info, ident.toString)
         case "test_unqualified_view" =>
           val info = new TableInfo.Builder()
             .withSchema(new StructType().add("col", "string"))
             .withViewText("SELECT col FROM t WHERE col = 'b'")
             .withCurrentCatalogAndNamespace("spark_catalog", Array("default"))
             .build()
-          new MetadataOnlyTable(info)
+          new MetadataOnlyTable(info, ident.toString)
         case "test_unqualified_multi" =>
           // View whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part). The
           // unqualified `t` in the body must resolve via that captured context to
@@ -895,7 +927,7 @@ class TestingViewCatalog extends TableCatalog {
             .withViewText("SELECT col FROM t")
             .withCurrentCatalogAndNamespace("view_catalog", Array("ns1", "ns2"))
             .build()
-          new MetadataOnlyTable(info)
+          new MetadataOnlyTable(info, ident.toString)
         case "t" if ident.namespace().toSeq == Seq("ns1", "ns2") =>
           // Target of test_unqualified_multi's unqualified reference. Self-contained view so
           // the test doesn't need external data.
@@ -903,7 +935,7 @@ class TestingViewCatalog extends TableCatalog {
             .withSchema(new StructType().add("col", "string"))
             .withViewText("SELECT 'multi' AS col")
             .build()
-          new MetadataOnlyTable(info)
+          new MetadataOnlyTable(info, ident.toString)
         case _ => throw new NoSuchTableException(ident)
       }
     }
@@ -919,7 +951,7 @@ class TestingViewCatalog extends TableCatalog {
     if (createdViews.putIfAbsent(key, info) != null) {
       throw new TableAlreadyExistsException(ident)
     }
-    new MetadataOnlyTable(info)
+    new MetadataOnlyTable(info, ident.toString)
   }
 
   /** Test-only accessor: returns the stored TableInfo for a created view. */
@@ -974,7 +1006,7 @@ class TestingStagingCatalog extends StagingTableCatalog {
     (ident.namespace().toSeq, ident.name())
 
   override def loadTable(ident: Identifier): Table = {
-    Option(views.get(keyOf(ident))).map(new MetadataOnlyTable(_))
+    Option(views.get(keyOf(ident))).map(new MetadataOnlyTable(_, ident.toString))
       .getOrElse(throw new NoSuchTableException(ident))
   }
 
@@ -984,21 +1016,24 @@ class TestingStagingCatalog extends StagingTableCatalog {
     if (views.putIfAbsent(keyOf(ident), info) != null) {
       throw new TableAlreadyExistsException(ident)
     }
-    new MetadataOnlyTable(info)
+    new MetadataOnlyTable(info, ident.toString)
   }
 
   override def stageCreate(ident: Identifier, info: TableInfo): StagedTable = {
     if (views.containsKey(keyOf(ident))) throw new TableAlreadyExistsException(ident)
-    new RecordingStagedTable(info, () => views.put(keyOf(ident), info), () => ())
+    new RecordingStagedTable(
+      info, ident.toString, () => views.put(keyOf(ident), info), () => ())
   }
 
   override def stageReplace(ident: Identifier, info: TableInfo): StagedTable = {
     if (!views.containsKey(keyOf(ident))) throw new NoSuchTableException(ident)
-    new RecordingStagedTable(info, () => views.put(keyOf(ident), info), () => ())
+    new RecordingStagedTable(
+      info, ident.toString, () => views.put(keyOf(ident), info), () => ())
   }
 
   override def stageCreateOrReplace(ident: Identifier, info: TableInfo): StagedTable = {
-    new RecordingStagedTable(info, () => views.put(keyOf(ident), info), () => ())
+    new RecordingStagedTable(
+      info, ident.toString, () => views.put(keyOf(ident), info), () => ())
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
@@ -1017,21 +1052,21 @@ class TestingStagingCatalog extends StagingTableCatalog {
 
 private class RecordingStagedTable(
     info: TableInfo,
+    name: String,
     onCommit: () => Unit,
-    onAbort: () => Unit) extends MetadataOnlyTable(info) with StagedTable {
+    onAbort: () => Unit) extends MetadataOnlyTable(info, name) with StagedTable {
   override def commitStagedChanges(): Unit = onCommit()
   override def abortStagedChanges(): Unit = onAbort()
 }
 
 /**
- * A v2 catalog that does not declare SUPPORTS_VIEW. Used to exercise the capability gate:
- * it returns a view-typed [[MetadataOnlyTable]] from `loadTable`, so ALTER VIEW progresses
- * past view resolution and actually hits the gate in [[CheckViewReferences]].
+ * A v2 catalog that does not declare SUPPORTS_VIEW. Used by capability-gate tests. The
+ * gate actually fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
+ * [[CheckViewReferences]] for CREATE VIEW -- in both cases before `loadTable` is called --
+ * so the pre-seeded view fixture is effectively unused on the happy-path-error flow. It's
+ * kept to make future tests that deliberately bypass the upstream gate easy to write.
  */
 class TestingTableOnlyCatalog extends TableCatalog {
-  // Pre-seeded view at default.v, used by the ALTER VIEW capability-gate test. Stored here
-  // rather than in createTable so tests don't need to first create the view through Spark
-  // (which would itself be blocked by the capability gate they're verifying).
   private val fixtureView: TableInfo = new TableInfo.Builder()
     .withSchema(new StructType().add("x", "int"))
     .withViewText("SELECT 1 AS x")
@@ -1039,7 +1074,7 @@ class TestingTableOnlyCatalog extends TableCatalog {
 
   override def loadTable(ident: Identifier): Table =
     if (ident.namespace().toSeq == Seq("default") && ident.name() == "v") {
-      new MetadataOnlyTable(fixtureView)
+      new MetadataOnlyTable(fixtureView, ident.toString)
     } else {
       throw new NoSuchTableException(ident)
     }

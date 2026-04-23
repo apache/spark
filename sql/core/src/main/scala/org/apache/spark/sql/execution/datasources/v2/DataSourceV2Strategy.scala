@@ -390,9 +390,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // `EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE` before planning. No strategy case needed.
 
     // DROP VIEW on a non-session SUPPORTS_VIEW catalog. The v1 rewrite in `ResolveSessionCatalog`
-    // skips SUPPORTS_VIEW catalogs (guard on line 324 case) so they fall through here. Reuses
-    // `DropTableExec` because `TableCatalog.dropTable` is contractually required to drop views
-    // at the same identifier for SUPPORTS_VIEW catalogs.
+    // skips SUPPORTS_VIEW catalogs (its DropView case has a `!supportsView(catalog)` guard), so
+    // they fall through here. Reuses `DropTableExec` because `TableCatalog.dropTable` is
+    // contractually required to drop views at the same identifier for SUPPORTS_VIEW catalogs.
     case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
         if CatalogV2Util.supportsView(catalog) =>
       val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)

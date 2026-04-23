@@ -43,25 +43,20 @@ import org.apache.spark.util.Utils
  * re-emits them from the current session, matching v1 `AlterViewAsCommand.alterPermanentView`.
  */
 private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
-  protected lazy val existingTable: MetadataOnlyTable = {
-    val table = try {
-      catalog.loadTable(identifier)
-    } catch {
-      case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
-    }
-    table match {
-      case mot: MetadataOnlyTable if isViewTable(mot) => mot
-      case _ =>
-        // Analyzer verified this was a view, but a racing DDL (drop + recreate as a
-        // non-view table, or a catalog that now returns a different Table subclass for this
-        // identifier) can invalidate that. Surface as a user-facing error.
-        throw QueryCompilationErrors.expectViewNotTableError(
-          (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
-          cmd = "ALTER VIEW ... AS",
-          suggestAlternative = false,
-          t = this)
-    }
+  // Reuses `tryLoadTable` / `isViewTable` from the parent trait. A racing DDL between
+  // analysis and exec (drop, or replace with a non-view table) can invalidate the analyzer's
+  // ResolvedPersistentView decision -- we re-check here and surface user-facing errors
+  // rather than propagate the stale resolution.
+  protected lazy val existingTable: MetadataOnlyTable = tryLoadTable() match {
+    case None =>
+      throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
+    case Some(mot: MetadataOnlyTable) if isViewTable(mot) => mot
+    case _ =>
+      throw QueryCompilationErrors.expectViewNotTableError(
+        (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
+        cmd = "ALTER VIEW ... AS",
+        suggestAlternative = false,
+        t = this)
   }
 
   // Carry the existing view's full property map forward. Keys the ALTER actually changes are

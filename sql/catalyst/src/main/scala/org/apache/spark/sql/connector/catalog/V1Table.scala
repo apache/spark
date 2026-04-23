@@ -174,7 +174,7 @@ private[sql] object V1Table {
       provider = props.get(TableCatalog.PROP_PROVIDER),
       partitionColumnNames = partCols,
       bucketSpec = bucketSpec,
-      owner = props.getOrElse(TableCatalog.PROP_OWNER, "unknown"),
+      owner = props.getOrElse(TableCatalog.PROP_OWNER, ""),
       viewText = viewText,
       viewOriginalText = viewText,
       comment = props.get(TableCatalog.PROP_COMMENT),

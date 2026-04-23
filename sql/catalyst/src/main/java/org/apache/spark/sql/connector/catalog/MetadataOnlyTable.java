@@ -39,15 +39,17 @@ import org.apache.spark.sql.connector.expressions.Transform;
  */
 @Evolving
 public class MetadataOnlyTable implements Table {
-  private static final String DEFAULT_NAME = "data_source_table_or_view";
-
   private final TableInfo info;
   private final String name;
 
-  public MetadataOnlyTable(TableInfo info) {
-    this(info, DEFAULT_NAME);
-  }
-
+  /**
+   * @param info metadata for the table or view.
+   * @param name human-readable name for this table, used by places that read {@link #name()}
+   *             (e.g. the {@code Name} row of {@code DESCRIBE TABLE EXTENDED}). Catalogs
+   *             returning a {@code MetadataOnlyTable} from {@link TableCatalog#loadTable}
+   *             should typically pass {@code ident.toString()}, matching the quoted
+   *             multi-part form used elsewhere for v2 identifiers.
+   */
   public MetadataOnlyTable(TableInfo info, String name) {
     this.info = info;
     this.name = name;
