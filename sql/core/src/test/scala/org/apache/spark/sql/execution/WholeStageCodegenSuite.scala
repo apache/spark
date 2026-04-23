@@ -1030,7 +1030,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("SPARK-56032: FilterExec CSE emits all notNullPreds before guard otherPred") {
+  test("SPARK-56032: FilterExec CSE defers throw-capable notNullPred past guard otherPred") {
     // `InferFiltersFromConstraints` can add a throw-capable `IsNotNull(cast(s as int))`
     // alongside an earlier guard otherPred (`kind = 'numeric'`). The non-CSE path
     // defers leftover notNullPreds to after the otherPreds so the guard short-circuits
