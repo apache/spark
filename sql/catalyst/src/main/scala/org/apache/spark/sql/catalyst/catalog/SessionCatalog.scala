@@ -1056,11 +1056,12 @@ class SessionCatalog(
       options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()): LogicalPlan = {
     // Prefer `multipartIdentifier` (set by non-session v2 catalogs via `V1Table.toCatalogTable`)
     // so the SubqueryAlias qualifier reflects the real catalog + multi-part namespace.
-    // Fall back to `qualifyIdentifier` for v1 session-catalog tables: it defaults catalog to
-    // `SESSION_CATALOG_NAME` and database to the current database when either is missing.
+    // Fall back to the historical 3-part form for v1 session-catalog tables -- we intentionally
+    // always include `SESSION_CATALOG_NAME` here and ignore
+    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-MetadataOnlyTable behavior.
     val multiParts = metadata.multipartIdentifier.getOrElse {
       val qualifiedIdent = qualifyIdentifier(metadata.identifier)
-      qualifiedIdent.nameParts
+      Seq(CatalogManager.SESSION_CATALOG_NAME, qualifiedIdent.database.get, qualifiedIdent.table)
     }
 
     if (CatalogTable.isMetricView(metadata)) {

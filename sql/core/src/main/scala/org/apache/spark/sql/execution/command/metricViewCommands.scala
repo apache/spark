@@ -90,7 +90,8 @@ object MetricViewHelper {
     val metricViewNode = MetricViewPlanner.planWrite(
       tableMeta, viewText, session.sessionState.sqlParser)
     val analyzed = analyzer.executeAndCheck(metricViewNode, new QueryPlanningTracker)
-    ViewHelper.verifyTemporaryObjectsNotExists(isTemporary = false, name, analyzed, Seq.empty)
+    ViewHelper.verifyTemporaryObjectsNotExists(
+      isTemporary = false, name.nameParts, analyzed, Seq.empty)
     analyzed
   }
 }

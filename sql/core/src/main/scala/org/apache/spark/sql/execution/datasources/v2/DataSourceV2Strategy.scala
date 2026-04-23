@@ -391,13 +391,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     // DROP VIEW on a non-session SUPPORTS_VIEW catalog. The v1 rewrite in `ResolveSessionCatalog`
     // skips SUPPORTS_VIEW catalogs (its DropView case has a `!supportsView(catalog)` guard), so
-    // they fall through here. Reuses `DropTableExec` because `TableCatalog.dropTable` is
-    // contractually required to drop views at the same identifier for SUPPORTS_VIEW catalogs.
+    // they fall through here. `DropViewExec` verifies the target is a view before calling
+    // `dropTable`, mirroring v1's `DropTableCommand(isView = true)` safety net.
     case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
         if CatalogV2Util.supportsView(catalog) =>
       val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
-      DropTableExec(
-        catalog.asTableCatalog, ident, ifExists, purge = false, invalidateFunc) :: Nil
+      DropViewExec(catalog.asTableCatalog, ident, ifExists, invalidateFunc) :: Nil
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec: TableSpec, options, orCreate, true) =>
