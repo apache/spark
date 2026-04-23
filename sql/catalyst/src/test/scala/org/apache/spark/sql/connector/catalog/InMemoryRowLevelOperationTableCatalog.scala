@@ -18,9 +18,31 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.types.StructType
 
 class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
+
+  private def rowLevelOnly(props: java.util.Map[String, String]): Boolean =
+    props.getOrDefault(InMemoryRowLevelOperationTable.SUPPORTS_DELETE_FILTER_PROP, "true") ==
+      "false"
+
+  private def newTable(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: java.util.Map[String, String],
+      constraints: Array[Constraint]): InMemoryBaseTable = {
+    if (rowLevelOnly(properties)) {
+      new InMemoryRowLevelOperationOnlyTable(
+        name, schema, partitioning, properties, constraints)
+    } else {
+      new InMemoryRowLevelOperationTable(
+        name, schema, partitioning, properties, constraints)
+    }
+  }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     if (tables.containsKey(ident)) {
@@ -31,7 +53,7 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
 
     val tableName = s"$name.${ident.quoted}"
     val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
-    val table = new InMemoryRowLevelOperationTable(
+    val table = newTable(
       tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
@@ -39,7 +61,7 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    val table = loadTable(ident).asInstanceOf[InMemoryBaseTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(
       table.schema,
@@ -54,17 +76,12 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTable = new InMemoryRowLevelOperationTable(
-      name = table.name,
-      schema = schema,
-      partitioning = partitioning,
-      properties = properties,
-      constraints = constraints)
-    newTable.alterTableWithData(table.data, schema)
+    val newTbl = newTable(table.name, schema, partitioning, properties, constraints)
+    newTbl.alterTableWithData(table.data, schema)
 
-    tables.put(ident, newTable)
+    tables.put(ident, newTbl)
 
-    newTable
+    newTbl
   }
 }
 
