@@ -2940,10 +2940,20 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        # Pre-compute return schema for output coercion and column reordering
-        return_schema = to_arrow_schema(
-            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-        )
+        # Pre-compute expected column names/types for strict result validation.
+        # Cogrouped map has a strict contract: missing, extra, or type-mismatched
+        # columns must raise; no silent coercion.
+        if runner_conf.assign_cols_by_name:
+            expected_cols_and_types = {
+                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
+            }
+            reorder_names = [col.name for col in return_type.fields]
+        else:
+            expected_cols_and_types = [
+                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
+                for col in return_type.fields
+            ]
+            reorder_names = None
 
         select_columns = ArrowBatchTransformer.select_columns
         left_key_cols, left_val_cols = parsed_offsets[0]
@@ -2970,10 +2980,17 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     result = cogrouped_udf(key, left_values, right_values)
 
                 verify_return_type(result, pa.Table)
+                verify_arrow_result(
+                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                )
 
                 for batch in result.to_batches():
-                    if runner_conf.assign_cols_by_name:
-                        batch = ArrowBatchTransformer.enforce_schema(batch, return_schema)
+                    if reorder_names is not None:
+                        # Names and types already validated equal; pure reorder, no cast.
+                        batch = pa.RecordBatch.from_arrays(
+                            [batch.column(name) for name in reorder_names],
+                            names=reorder_names,
+                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
         # profiling is not supported for UDF
