@@ -3310,6 +3310,44 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHANGELOG_SCHEMA" : {
+    "message" : [
+      "The Change Data Capture (CDC) schema returned by connector <changelogName> is invalid."
+    ],
+    "subClass" : {
+      "INVALID_COLUMN_TYPE" : {
+        "message" : [
+          "Column `<columnName>` has type <actualType>, expected <expectedType>."
+        ]
+      },
+      "MISSING_COLUMN" : {
+        "message" : [
+          "Required column `<columnName>` is missing."
+        ]
+      },
+      "MISSING_ROW_ID" : {
+        "message" : [
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array. Either set all three to `false`, or return at least one row-id `NamedReference`."
+        ]
+      },
+      "MISSING_ROW_VERSION" : {
+        "message" : [
+          "Connector advertises `containsCarryoverRows` or `representsUpdateAsDeleteAndInsert` is `true`, but `Changelog.rowVersion()` is not implemented. Override `rowVersion()` to return a `NamedReference` pointing to a non-nullable column in `Changelog.columns()`."
+        ]
+      },
+      "NESTED_ROW_VERSION" : {
+        "message" : [
+          "Row version `<reference>` references a nested column. Spark requires `Changelog.rowVersion()` to point to a top-level column of `Changelog.columns()`."
+        ]
+      },
+      "NULLABLE_ROW_VERSION" : {
+        "message" : [
+          "The row version column `<columnName>` is nullable. Spark requires a non-nullable row version column when `containsCarryoverRows` or `representsUpdateAsDeleteAndInsert` is `true`, to safely distinguish copy-on-write carry-over pairs from real updates. Mark the column non-nullable in `Changelog.columns()`."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."

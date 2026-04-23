@@ -21,7 +21,10 @@ import java.util.{EnumSet => JEnumSet, Set => JSet}
 
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -36,6 +39,11 @@ case class ChangelogTable(
     changelogInfo: ChangelogInfo,
     resolved: Boolean = false) extends Table with SupportsRead {
 
+  // Validate the connector returned a schema with the required CDC metadata columns
+  // and correct types. `_commit_version` is connector-defined per the Changelog contract,
+  // so its type is not checked.
+  ChangelogTable.validateSchema(changelog)
+
   override def name: String = changelog.name
 
   override def columns: Array[Column] = changelog.columns
@@ -45,4 +53,66 @@ case class ChangelogTable(
   }
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
+}
+
+object ChangelogTable {
+
+  def validateSchema(cl: Changelog): Unit = {
+    val byName = cl.columns.map(c => c.name -> c).toMap
+    def check(name: String, expected: DataType*): Unit = {
+      val col = byName.getOrElse(name,
+        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, name))
+      if (expected.nonEmpty && col.dataType != expected.head) {
+        throw QueryCompilationErrors.changelogInvalidColumnTypeError(
+          cl.name, name, expected.head.sql, col.dataType.sql)
+      }
+    }
+    check("_change_type", StringType)
+    check("_commit_version")           // connector-defined, any type accepted
+    check("_commit_timestamp", TimestampType)
+
+    // `rowId()` / `rowVersion()` default to throwing UnsupportedOperationException for
+    // connectors that haven't opted in. Translate that into "not declared" so we can
+    // reason about it as Option/empty-array below.
+    val rowIds: Array[NamedReference] = try cl.rowId() catch {
+      case _: UnsupportedOperationException => Array.empty
+    }
+    val rowVersionRef: Option[NamedReference] = try Some(cl.rowVersion()) catch {
+      case _: UnsupportedOperationException => None
+    }
+
+    // Capability-driven presence checks: a connector that advertises a capability which
+    // requires row identity or row versioning must actually expose those references.
+    // Otherwise post-processing would crash with an UnsupportedOperationException at
+    // runtime instead of producing a clean AnalysisException here.
+    val needsRowId = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert() ||
+      cl.containsIntermediateChanges()
+    if (needsRowId && (rowIds == null || rowIds.isEmpty)) {
+      throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+    }
+
+    val needsRowVersion = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert()
+    if (needsRowVersion && rowVersionRef.isEmpty) {
+      throw QueryCompilationErrors.changelogMissingRowVersionError(cl.name)
+    }
+
+    // Schema constraints on rowVersion: must be a top-level non-nullable column.
+    // Nullable rowVersions break carry-over detection (NULL = NULL is unknown, so a
+    // delete+insert pair would be misclassified as a real update).
+    rowVersionRef.foreach { ref =>
+      val fieldNames = ref.fieldNames()
+      if (fieldNames.length != 1) {
+        throw QueryCompilationErrors.changelogNestedRowVersionError(
+          cl.name, fieldNames.mkString("."))
+      }
+      val columnName = fieldNames(0)
+      val col = byName.getOrElse(columnName,
+        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, columnName))
+      if (col.nullable) {
+        throw QueryCompilationErrors.changelogNullableRowVersionError(cl.name, columnName)
+      }
+    }
+  }
 }
