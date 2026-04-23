@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
-abstract class BaseScriptTransformationSuite extends SparkPlanTest with QueryTest {
+abstract class BaseScriptTransformationSuite extends QueryTest {
   import testImplicits._
   import ScriptTransformationIOSchema._
 
@@ -202,7 +202,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with QueryTes
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
           ioschema = defaultIOSchema)
-      SparkPlanTest.executePlan(plan, spark.sqlContext)
+      QueryTest.executePlan(plan, spark.sqlContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)

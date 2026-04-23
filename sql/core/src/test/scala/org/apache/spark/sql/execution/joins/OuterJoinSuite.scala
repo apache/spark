@@ -24,13 +24,13 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
-class OuterJoinSuite extends SparkPlanTest with SharedSparkSession with SQLTestData {
+class OuterJoinSuite extends SharedSparkSession with SQLTestData {
   import testImplicits._
   setupTestData()
 
