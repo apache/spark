@@ -108,7 +108,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         sql_ctx: Union["SQLContext", "SparkSession"],
     ) -> "DataFrame":
         self = object.__new__(cls)
-        self.__init__(jdf, sql_ctx)  # type: ignore[misc]
         return self
 
     def __init__(

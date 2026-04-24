@@ -345,7 +345,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         class MockDF(DataFrame):
             def __new__(cls, df: DataFrame) -> "DataFrame":
                 self = object.__new__(cls)
-                self.__init__(df)  # type: ignore[misc]
                 return self
 
             def __init__(self, df: DataFrame):

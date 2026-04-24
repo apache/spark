@@ -116,7 +116,6 @@ class DataFrame(ParentDataFrame):
         session: "SparkSession",
     ) -> "DataFrame":
         self = object.__new__(cls)
-        self.__init__(plan, session)  # type: ignore[misc]
         return self
 
     def __init__(
