@@ -54,8 +54,7 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  *   The TimeType with precision information
  * @since 4.2.0
  */
-case class TimeTypeOps(override val t: TimeType)
-  extends TimeTypeApiOps(t) with TypeOps {
+case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with TypeOps {
 
   // ==================== Physical Type Representation ====================
 
