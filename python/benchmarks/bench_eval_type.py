@@ -77,16 +77,15 @@ class MockProtocolWriter:
     @classmethod
     def write_grouped_data_payload(
         cls,
-        groups: list[tuple[list[pa.RecordBatch], ...]],
+        groups: list[list[list[pa.RecordBatch]]],
         buf: io.BufferedIOBase,
     ) -> None:
         """Write grouped Arrow data in the wire protocol expected by _load_group_dataframes.
 
-        Each group is a tuple of DataFrames; each DataFrame is a list of Arrow
-        RecordBatches written as one Arrow IPC stream (so batches of the same
-        DataFrame stay in one stream, matching the real wire protocol where
-        large groups may be split across multiple batches by
-        ``spark.sql.execution.arrow.maxRecordsPerBatch``).
+        Shape: ``groups[g][df]`` is the list of RecordBatches for DataFrame ``df``
+        of group ``g``. Each DataFrame's batches are written as one Arrow IPC
+        stream, matching the real wire protocol where a group may be split across
+        multiple batches by ``spark.sql.execution.arrow.maxRecordsPerBatch``.
         """
         for group in groups:
             write_int(len(group), buf)  # num_dfs in this group
@@ -272,13 +271,12 @@ class MockDataFactory:
         num_cols: int,
         batch_size: int = MAX_RECORDS_PER_BATCH,
         spark_type_pool: list[tuple[Callable, Any]],
-    ) -> tuple[list[tuple[list[pa.RecordBatch]]], StructType]:
+    ) -> tuple[list[list[list[pa.RecordBatch]]], StructType]:
         """Create groups, each containing a single DataFrame.
 
-        Each group is a 1-tuple ``(batches,)`` where ``batches`` is the list of
-        Arrow RecordBatches for that group's DataFrame (``num_rows`` rows split
-        into batches of ``batch_size``). All batches of a group are written as
-        one Arrow IPC stream by ``write_grouped_data_payload``.
+        Each group is ``[batches]`` where ``batches`` is the list of Arrow
+        RecordBatches for that group's DataFrame (``num_rows`` rows split into
+        batches of ``batch_size``).
         """
         groups = []
         for _ in range(num_groups):
@@ -288,7 +286,7 @@ class MockDataFactory:
                 batch_size=batch_size,
                 spark_type_pool=spark_type_pool,
             )
-            groups.append((list(batches),))
+            groups.append([list(batches)])
 
         schema = StructType(
             [
@@ -307,12 +305,12 @@ class MockDataFactory:
         num_cols: int,
         batch_size: int = MAX_RECORDS_PER_BATCH,
         spark_type_pool: list[tuple[Callable, Any]],
-    ) -> tuple[list[tuple[list[pa.RecordBatch], list[pa.RecordBatch]]], StructType]:
+    ) -> tuple[list[list[list[pa.RecordBatch]]], StructType]:
         """Create cogroups, each containing two DataFrames (left, right).
 
-        Each cogroup is a 2-tuple ``(left_batches, right_batches)``. The two
-        DataFrames share the same schema but have independent data, each with
-        ``num_rows`` rows and ``num_cols`` flat columns.
+        Each cogroup is ``[left_batches, right_batches]``. The two DataFrames
+        share the same schema but have independent data, each with ``num_rows``
+        rows and ``num_cols`` flat columns.
         """
         left_groups, schema = cls.make_grouped_batches(
             num_groups=num_groups,
@@ -328,7 +326,7 @@ class MockDataFactory:
             batch_size=batch_size,
             spark_type_pool=spark_type_pool,
         )
-        cogroups = [(left_groups[i][0], right_groups[i][0]) for i in range(num_groups)]
+        cogroups = [[left_groups[i][0], right_groups[i][0]] for i in range(num_groups)]
         return cogroups, schema
 
 
@@ -933,7 +931,7 @@ class _GroupedMapPandasBenchMixin:
                 spark_type_pool=MockDataFactory.MIXED_TYPES,
                 batch_size=3,
             )
-            return ([([b],) for b in batches] * 200, schema)
+            return ([[[b]] for b in batches] * 200, schema)
         _kind, rows, n_cols, num_groups = cfg
         groups, schema = MockDataFactory.make_grouped_batches(
             num_groups=num_groups,
