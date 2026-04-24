@@ -53,19 +53,22 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   private val CHANGELOG_TRANSFORMED_TAG =
     TreeNodeTag[Boolean]("changelog_transformed")
 
-  private object HelperColumn {
-    final val DelCnt = "_del_cnt"
-    final val InsCnt = "_ins_cnt"
-    final val MinRv = "_min_rv"
-    final val MaxRv = "_max_rv"
+  /**
+   * Reserved (`__spark_cdc_*`) column names used internally by post-processing;
+   * connectors must not emit columns with these names.
+   */
+  object HelperColumn {
+    final val DelCnt = "__spark_cdc_del_cnt"
+    final val InsCnt = "__spark_cdc_ins_cnt"
+    final val MinRv = "__spark_cdc_min_rv"
+    final val MaxRv = "__spark_cdc_max_rv"
 
     val all: Set[String] = Set(DelCnt, InsCnt, MinRv, MaxRv)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (isAlreadyTransformed(plan)) return plan
-    var updatedPlan = plan
-    updatedPlan = plan.resolveOperatorsUp {
+    val updatedPlan = plan.resolveOperatorsUp {
       case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) =>
         val changelog = table.changelog
         val req = evaluateRequirements(changelog, table.changelogInfo)
@@ -158,11 +161,13 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
   /**
    * Adds row-level post-processing (carry-over removal and/or update detection) on top of
-   * the given plan:
-   *   - both active    -> Window(counts + rv bounds) -> Filter -> Project(relabel) -> Drop helpers
+   * the given plan. `counts` = per-partition delete and insert change_type row counts over
+   * `(rowId, _commit_version)`. `rv bounds` = per-partition min/max of `rowVersion` —
+   * equal bounds signal a copy-on-write carry-over.
+   *   - both active     -> Window(counts + rv bounds) -> Filter -> Project(relabel) -> Drop helpers
    *   - carry-over only -> Window(counts + rv bounds) -> Filter -> Drop helpers
-   *   - update only    -> Window(counts only) -> Project(relabel) -> Drop helpers
-   *   - neither        -> not invoked (caller guards this case)
+   *   - update only     -> Window(counts only) -> Project(relabel) -> Drop helpers
+   *   - neither         -> not invoked (caller guards this case)
    */
   private def addRowLevelPostProcessing(
       plan: LogicalPlan,

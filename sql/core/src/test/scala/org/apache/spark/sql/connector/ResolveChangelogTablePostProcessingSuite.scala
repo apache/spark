@@ -22,7 +22,7 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{
   ChangelogProperties, Column, Identifier, InMemoryChangelogCatalog}
@@ -128,25 +128,14 @@ class ResolveChangelogTablePostProcessingSuite
       changeRow(2L, "Bob", "delete", 2L, rowCommitVersion = 1L),  // carry-over
       changeRow(2L, "Bob", "insert", 2L, rowCommitVersion = 1L))) // carry-over (same rcv)
 
-    val rows = sql(
-      s"SELECT id, name, _change_type, _commit_version " +
-      s"FROM $catalogName.$testTableName CHANGES FROM VERSION 1 TO VERSION 2")
-      .orderBy("_commit_version", "id", "_change_type")
-      .collect()
-
-    val descs = rows.map(r =>
-      s"${r.getLong(0)}:${r.getString(1)}:${r.getString(2)}:v${r.getLong(3)}")
-
-    // v1 inserts kept
-    assert(descs.contains("1:Alice:insert:v1"))
-    assert(descs.contains("2:Bob:insert:v1"))
-    // Real Alice delete kept
-    assert(descs.contains("1:Alice:delete:v2"))
-    // Bob carry-over pair removed
-    assert(!descs.contains("2:Bob:delete:v2"),
-      s"Bob delete should be dropped. Got: ${descs.mkString(",")}")
-    assert(!descs.contains("2:Bob:insert:v2"),
-      s"Bob insert should be dropped. Got: ${descs.mkString(",")}")
+    checkAnswer(
+      sql(
+        s"SELECT id, name, _change_type, _commit_version " +
+        s"FROM $catalogName.$testTableName CHANGES FROM VERSION 1 TO VERSION 2"),
+      Seq(
+        Row(1L, "Alice", "insert", 1L),
+        Row(2L, "Bob", "insert", 1L),
+        Row(1L, "Alice", "delete", 2L)))
   }
 
   test("deduplicationMode=none keeps all carry-over rows") {
@@ -293,8 +282,8 @@ class ResolveChangelogTablePostProcessingSuite
   // No row identity: post-processing skipped
   // ===========================================================================
 
-  test("empty rowId skips post-processing in plan") {
-    // Default ChangelogProperties has no rowId; post-processing must not be injected
+  test("no capability flags -> post-processing not injected in plan") {
+    // Default ChangelogProperties has no capability flags set; the rule sees nothing to do.
     catalog.addChangeRows(ident, Seq(
       changeRow(1L, "Alice", "insert", 1L),
       changeRow(2L, "Bob", "delete", 2L),
@@ -305,10 +294,21 @@ class ResolveChangelogTablePostProcessingSuite
       s"CHANGES FROM VERSION 1 TO VERSION 2 WITH (computeUpdates = 'true')")
 
     val plan = df.queryExecution.analyzed.treeString
-    assert(!plan.contains("_del_cnt"),
-      s"Plan must not contain post-processing window helpers without rowId. Plan:\n$plan")
-    assert(!plan.contains("_ins_cnt"),
-      s"Plan must not contain post-processing window helpers without rowId. Plan:\n$plan")
+    assert(!plan.contains("__spark_cdc_del_cnt"),
+      s"Plan must not contain post-processing window helpers. Plan:\n$plan")
+    assert(!plan.contains("__spark_cdc_ins_cnt"),
+      s"Plan must not contain post-processing window helpers. Plan:\n$plan")
+  }
+
+  test("streaming without post-processing options passes through") {
+    // Streaming reads with no capability flags on the connector and no
+    // post-processing options must resolve without the rule throwing.
+    val df = spark.readStream
+      .option("startingVersion", "1")
+      .changes(s"$catalogName.$testTableName")
+    val plan = df.queryExecution.analyzed.treeString
+    assert(!plan.contains("__spark_cdc_del_cnt"),
+      s"Streaming plan must not contain post-processing helpers. Plan:\n$plan")
   }
 
   // ===========================================================================
