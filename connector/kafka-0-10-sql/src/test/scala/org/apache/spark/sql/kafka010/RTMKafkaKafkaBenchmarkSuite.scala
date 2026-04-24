@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.nio.file.Files
 import java.util.{Properties, Timer, TimerTask}
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.concurrent.duration._
@@ -42,8 +42,7 @@ import org.apache.spark.sql.test.TestSparkSession
  * [[RealTimeTrigger]]. After the run it reports e2e latency percentiles.
  *
  * This benchmark intentionally runs a real local-cluster and a live Kafka broker, so it
- * is slow and is not included in the default test run. Run it explicitly when measuring
- * RTM throughput and latency for the stateless path.
+ * is slow. Run it explicitly when measuring RTM throughput and latency for the stateless path.
  */
 class RTMKafkaKafkaBenchmarkSuite
   extends KafkaSourceTest
@@ -136,9 +135,14 @@ class RTMKafkaKafkaBenchmarkSuite
       }
     })
 
-    latch.await()
+    val timeoutMs = numBatches * longRunningBatchDurationMs * 2 + 60 * 1000
+    val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
     query.stop()
     dataGenThread.interrupt()
+    if (!completed) {
+      throw new RuntimeException(
+        s"Benchmark timed out waiting for $numBatches batches to complete after ${timeoutMs}ms.")
+    }
 
     getLatencies(longRunningBatchDurationMs, numBatches, outputTopic)
   }
@@ -152,55 +156,62 @@ class RTMKafkaKafkaBenchmarkSuite
     props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
 
     val producer: Producer[String, String] = new KafkaProducer[String, String](props)
-
     val success = new AtomicLong(0)
+    val timer = new Timer()
 
-    new Timer().scheduleAtFixedRate(
-      new TimerTask() {
-        override def run(): Unit = {
-          logInfo("Throughput: " + success.getAndSet(0) + " requests/sec")
-        }
-      },
-      1000,
-      1000
-    )
+    try {
+      timer.scheduleAtFixedRate(
+        new TimerTask() {
+          override def run(): Unit = {
+            logInfo("Throughput: " + success.getAndSet(0) + " requests/sec")
+          }
+        },
+        1000,
+        1000
+      )
 
-    var i = 0L
-    val startTime = System.nanoTime
-    val delay = (Math.pow(10, 9) / throughput).asInstanceOf[Long]
-    var nextDeadline = startTime + delay
-    while (true) {
-      var currentTime = System.nanoTime
-      if (currentTime >= nextDeadline) {
-        i += 1
-        nextDeadline = startTime + (i * delay)
-        producer.send(
-          new ProducerRecord[String, String](
-            topicName,
-            java.lang.Long.toString(i),
-            java.lang.Long.toString(System.currentTimeMillis())
-          ),
-          new Callback {
-            override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
-              if (e != null) {
-                logError("Got exception producing to kafka", e)
-              } else {
-                success.incrementAndGet()
+      var i = 0L
+      val startTime = System.nanoTime
+      val delay = (Math.pow(10, 9) / throughput).asInstanceOf[Long]
+      var nextDeadline = startTime + delay
+      while (true) {
+        var currentTime = System.nanoTime
+        if (currentTime >= nextDeadline) {
+          i += 1
+          nextDeadline = startTime + (i * delay)
+          producer.send(
+            new ProducerRecord[String, String](
+              topicName,
+              java.lang.Long.toString(i),
+              java.lang.Long.toString(System.currentTimeMillis())
+            ),
+            new Callback {
+              override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
+                if (e != null) {
+                  logError("Got exception producing to kafka", e)
+                } else {
+                  success.incrementAndGet()
+                }
               }
             }
-          }
-        )
-        currentTime = System.nanoTime
+          )
+          currentTime = System.nanoTime
 
-        val sleepTimeNs =
-          if ((nextDeadline - currentTime) > 0) nextDeadline - currentTime
-          else 0
-        if (sleepTimeNs > 0) {
-          val sleepTimeMs = sleepTimeNs.nanoseconds.toMillis
-          val sleepTimeNano = (sleepTimeNs - sleepTimeMs.milliseconds.toNanos).toInt
-          Thread.sleep(sleepTimeMs, sleepTimeNano)
+          val sleepTimeNs =
+            if ((nextDeadline - currentTime) > 0) nextDeadline - currentTime
+            else 0
+          if (sleepTimeNs > 0) {
+            val sleepTimeMs = sleepTimeNs.nanoseconds.toMillis
+            val sleepTimeNano = (sleepTimeNs - sleepTimeMs.milliseconds.toNanos).toInt
+            Thread.sleep(sleepTimeMs, sleepTimeNano)
+          }
         }
       }
+    } catch {
+      case _: InterruptedException => // expected on shutdown
+    } finally {
+      timer.cancel()
+      producer.close()
     }
   }
 
