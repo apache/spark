@@ -308,12 +308,10 @@ object SQLConf {
       .internal()
       .version("4.2.0")
       .doc(
-        "When true, only plan-id-based resolution is used for DataFrame columns " +
-        "(UnresolvedAttribute carrying a plan id tag); name-based resolution is not attempted " +
-        "as a fallback. When false (default), if plan-id-based resolution does not resolve a " +
-        "tagged attribute, the analyzer also tries name-based resolution.")
+        "When true (default), enforce strict resolution of DataFrame columns " +
+        "(UnresolvedAttribute carrying a plan id tag) via plan-id-based resolution.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
     buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
