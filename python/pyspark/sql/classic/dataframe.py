@@ -104,11 +104,12 @@ if TYPE_CHECKING:
 class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def __new__(
         cls,
-        jdf: "JavaObject",
-        sql_ctx: Union["SQLContext", "SparkSession"],
+        *args,
+        **kwargs,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        return self
+        # ParentDataFrame by default calls DataFrame.__new__ for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid infinite recursion.
+        return object.__new__(cls)
 
     def __init__(
         self,
