@@ -27,6 +27,18 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
         super().test_validate_column_types()
 
 
+class ColumnParityWithNonStrictDataFrameColumnResolutionTests(ColumnParityTests):
+    """Re-run the Column parity tests with
+    `spark.sql.analyzer.strictDataFrameColumnResolution=false` to exercise the
+    name-based fallback path for tagged UnresolvedAttributes."""
+
+    @classmethod
+    def conf(cls):
+        cfg = super().conf()
+        cfg.set("spark.sql.analyzer.strictDataFrameColumnResolution", "false")
+        return cfg
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
