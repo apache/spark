@@ -517,6 +517,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
 
 
 def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
+    import pyarrow as pa
+
     if runner_conf.assign_cols_by_name:
         expected_cols_and_types = {
             col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
@@ -534,7 +536,8 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, left_value_table, right_value_table)
 
-        verify_arrow_table(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
+        verify_return_type(result, pa.Table)
+        verify_arrow_result(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
@@ -625,20 +628,6 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
                     )
                 },
             )
-
-
-def verify_arrow_table(table, assign_cols_by_name, expected_cols_and_types):
-    import pyarrow as pa
-
-    verify_return_type(table, pa.Table)
-    verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types)
-
-
-def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
-    import pyarrow as pa
-
-    verify_return_type(batch, pa.RecordBatch)
-    verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
@@ -2784,7 +2773,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     key = tuple(c[0] for c in keys.columns)
                     result = grouped_udf(key, value_table)
 
-                verify_arrow_table(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
+                verify_return_type(result, pa.Table)
+                verify_arrow_result(
+                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                )
 
                 # Reorder columns if needed and wrap into struct
                 for batch in result.to_batches():
@@ -2855,7 +2847,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
 
                 # Verify, reorder, and wrap each output batch
                 for batch in result:
-                    verify_arrow_batch(
+                    verify_return_type(batch, pa.RecordBatch)
+                    verify_arrow_result(
                         batch, runner_conf.assign_cols_by_name, expected_cols_and_types
                     )
                     if runner_conf.assign_cols_by_name:
