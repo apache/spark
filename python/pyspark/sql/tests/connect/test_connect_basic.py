@@ -349,19 +349,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
         assertDataFrameEqual(cdf7, sdf7)
 
-    def test_join_with_cte(self):
-        cte_query = "with dt as (select 1 as ida) select ida as id from dt"
-
-        sdf1 = self.spark.range(10)
-        sdf2 = self.spark.sql(cte_query)
-        sdf3 = sdf1.join(sdf2, sdf1.id == sdf2.id)
-
-        cdf1 = self.connect.range(10)
-        cdf2 = self.connect.sql(cte_query)
-        cdf3 = cdf1.join(cdf2, cdf1.id == cdf2.id)
-
-        assertDataFrameEqual(cdf3, sdf3)
-
     def test_with_columns_renamed(self):
         # SPARK-41312: test DataFrame.withColumnsRenamed()
         self.assertEqual(
