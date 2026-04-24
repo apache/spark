@@ -570,7 +570,7 @@ object ArrowSerializer {
   }
 
   private[connect] abstract class FieldSerializer[E, V <: FieldVector](val vector: V)
-      extends Serializer {
+    extends Serializer {
     def set(index: Int, value: E): Unit
 
     override def write(index: Int, raw: Any): Unit = {

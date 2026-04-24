@@ -35,9 +35,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * Implements ConnectTypeOps for TimeType, providing both proto DataType/Literal conversions and
  * Arrow serialization/deserialization.
  *
- * Lives under the arrow.types.ops sub-package to access arrow-private types (TimeVectorReader,
- * ArrowSerializer.Serializer, ArrowDeserializers.LeafFieldDeserializer) while keeping ops
- * implementations separate from core arrow infrastructure.
+ * Lives under the arrow.types.ops sub-package to co-locate with Arrow infrastructure while
+ * keeping ops implementations separate from core arrow classes.
  *
  * @param t
  *   The TimeType with precision information

@@ -55,7 +55,7 @@ import org.apache.spark.sql.types.ops.TimeTypeApiOps
  * @since 4.2.0
  */
 case class TimeTypeOps(override val t: TimeType)
-    extends TimeTypeApiOps(t) with TypeOps {
+  extends TimeTypeApiOps(t) with TypeOps {
 
   // ==================== Physical Type Representation ====================
 
