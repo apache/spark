@@ -43,12 +43,12 @@ trait RowQueue extends Queue[UnsafeRow]
  * A RowQueue that is based on in-memory page. UnsafeRows are appended into it until it's full.
  * Another thread could read from it at the same time (behind the writer).
  *
- * Thread safety: this queue uses a lock-free SPSC (single-producer single-consumer) design.
+ * Thread safety: this queue is designed for SPSC (single-producer single-consumer) usage.
  * The writer only updates `writeOffset` and the reader only updates `readOffset`.
- * `writeOffset` is `@volatile` to ensure that data written by the producer (via Platform.putInt
- * and Platform.copyMemory) is visible to the consumer before the consumer reads the updated
- * offset. The volatile write acts as a store-store fence, guaranteeing that all prior memory
- * writes (the row data) are visible before the offset update.
+ * In the pipelined Python UDF execution mode, add() runs in the writer thread and remove()
+ * runs in the task main thread. Memory visibility between threads is guaranteed by the
+ * socket I/O that separates them: the reader only calls remove() after Python has processed
+ * the corresponding input sent by the writer via blocking socket write.
  *
  * The format of UnsafeRow in page:
  * [4 bytes to hold length of record (N)] [N bytes to hold record] [...]
@@ -59,8 +59,11 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
   extends RowQueue {
   private val base: AnyRef = page.getBaseObject
   private val endOfPage: Long = page.getBaseOffset + page.size
-  // the first location where a new row would be written (only updated by producer)
-  @volatile private var writeOffset = page.getBaseOffset
+  // the first location where a new row would be written (only updated by producer).
+  // Not volatile: memory visibility is guaranteed by the socket I/O that separates
+  // the writer and reader -- the reader only calls remove() after Python has processed
+  // the corresponding input, which requires the writer's channel.write() to have completed.
+  private var writeOffset = page.getBaseOffset
   // points to the start of the next row to read (only updated by consumer)
   private var readOffset = page.getBaseOffset
   private val resultRow = new UnsafeRow(numFields)

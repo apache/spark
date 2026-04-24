@@ -63,8 +63,8 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   private var writing: Q = _
   protected var reading: Q = _
 
-  @volatile protected var numElementsQueuedOnDisk: Long = 0L
-  @volatile protected var numElementsQueued: Long = 0L
+  protected var numElementsQueuedOnDisk: Long = 0L
+  protected var numElementsQueued: Long = 0L
 
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
