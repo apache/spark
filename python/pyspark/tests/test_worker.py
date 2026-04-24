@@ -34,6 +34,7 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
 from pyspark.errors import PySparkTypeError
+from pyspark.sql.pandas._verify import verify_return_type
 from pyspark.testing.utils import (
     ReusedPySparkTestCase,
     PySparkTestCase,
@@ -42,7 +43,6 @@ from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.worker import verify_return_type
 
 
 class WorkerTests(ReusedPySparkTestCase):
