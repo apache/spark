@@ -27,11 +27,21 @@ from pyspark.testing.connectutils import (
 )
 from pyspark.errors import PySparkValueError
 
+from unittest.mock import MagicMock
+
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.connect.plan import WriteOperation, Read
+    from pyspark.sql.connect.plan import (
+        WriteOperation,
+        Read,
+        Join,
+        SetOperation,
+        CollectMetrics,
+        LogicalPlan,
+    )
+    from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.readwriter import DataFrameReader
     from pyspark.sql.connect.expressions import LiteralExpression
     from pyspark.sql.connect.functions import col, lit, max, min, sum
@@ -1129,6 +1139,89 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             )
 
             LiteralExpression._to_value(proto_lit, DoubleType)
+
+
+if should_test_connect:
+
+    class _StubPlan(LogicalPlan):
+        """Minimal LogicalPlan that returns a fixed observations dict."""
+
+        def __init__(self, observations=None):
+            super().__init__(None)
+            self._obs = observations or {}
+
+        @property
+        def observations(self):
+            return self._obs
+
+        def plan(self, session):
+            raise NotImplementedError
+
+        def print(self, indent=0):
+            return ""
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class TestObservationMerging(unittest.TestCase):
+    """Verify that observations are deduplicated when plan branches share the same key."""
+
+    def test_join_with_duplicate_observation_names(self):
+        obs = MagicMock()
+        obs._name = "shared"
+        shared = {"shared": obs}
+
+        left = _StubPlan(observations=shared)
+        right = _StubPlan(observations=shared)
+
+        join = Join.__new__(Join)
+        join._child = left
+        join.right = right
+
+        result = join.observations
+        self.assertEqual(result, {"shared": obs})
+
+    def test_join_with_distinct_observations(self):
+        obs_a = MagicMock()
+        obs_a._name = "a"
+        obs_b = MagicMock()
+        obs_b._name = "b"
+
+        left = _StubPlan(observations={"a": obs_a})
+        right = _StubPlan(observations={"b": obs_b})
+
+        join = Join.__new__(Join)
+        join._child = left
+        join.right = right
+
+        result = join.observations
+        self.assertEqual(result, {"a": obs_a, "b": obs_b})
+
+    def test_set_operation_with_duplicate_observation_names(self):
+        obs = MagicMock()
+        obs._name = "shared"
+        shared = {"shared": obs}
+
+        left = _StubPlan(observations=shared)
+        right = _StubPlan(observations=shared)
+
+        set_op = SetOperation.__new__(SetOperation)
+        set_op._child = left
+        set_op.other = right
+
+        result = set_op.observations
+        self.assertEqual(result, {"shared": obs})
+
+    def test_collect_metrics_with_duplicate_observation_name(self):
+        obs = Observation("my_metric")
+        parent = _StubPlan(observations={"my_metric": obs})
+
+        cm = CollectMetrics.__new__(CollectMetrics)
+        cm._child = parent
+        cm._observation = obs
+        cm._exprs = []
+
+        result = cm.observations
+        self.assertEqual(result, {"my_metric": obs})
 
 
 if __name__ == "__main__":
