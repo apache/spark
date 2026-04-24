@@ -112,8 +112,8 @@ if TYPE_CHECKING:
 class DataFrame(ParentDataFrame):
     def __new__(
         cls,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
         # ParentDataFrame by default creates classic DataFrame for backward compatibility.
         # We have to do an explicit object.__new__ to avoid that.

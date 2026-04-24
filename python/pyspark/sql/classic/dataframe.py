@@ -104,8 +104,8 @@ if TYPE_CHECKING:
 class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def __new__(
         cls,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
         # ParentDataFrame by default calls DataFrame.__new__ for backward compatibility.
         # We have to do an explicit object.__new__ to avoid infinite recursion.
