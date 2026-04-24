@@ -55,6 +55,13 @@ from pyspark.worker import main as worker_main
 # ---------------------------------------------------------------------------
 
 
+# ``GroupedBatches[i]`` is the list of Arrow RecordBatches making up the ``i``-th
+# DataFrame of a group: 1 DF for grouped scenarios, 2 (left, right) for cogrouped.
+# Analogous to ``GroupedBatch``/``CoGroupedBatch`` in ``pyspark.sql.pandas._typing``
+# but materialized as lists here since benchmarks pre-build the full payload.
+GroupedBatches = list[list[pa.RecordBatch]]
+
+
 class MockProtocolWriter:
     """Constructs the binary wire protocol that ``worker.py``'s ``main()`` expects."""
 
@@ -77,7 +84,7 @@ class MockProtocolWriter:
     @classmethod
     def write_grouped_data_payload(
         cls,
-        groups: list[list[list[pa.RecordBatch]]],
+        groups: list[GroupedBatches],
         buf: io.BufferedIOBase,
     ) -> None:
         """Write grouped Arrow data in the wire protocol expected by _load_group_dataframes.
@@ -271,7 +278,7 @@ class MockDataFactory:
         num_cols: int,
         batch_size: int = MAX_RECORDS_PER_BATCH,
         spark_type_pool: list[tuple[Callable, Any]],
-    ) -> tuple[list[list[list[pa.RecordBatch]]], StructType]:
+    ) -> tuple[list[GroupedBatches], StructType]:
         """Create groups, each containing a single DataFrame.
 
         Each group is ``[batches]`` where ``batches`` is the list of Arrow
@@ -305,7 +312,7 @@ class MockDataFactory:
         num_cols: int,
         batch_size: int = MAX_RECORDS_PER_BATCH,
         spark_type_pool: list[tuple[Callable, Any]],
-    ) -> tuple[list[list[list[pa.RecordBatch]]], StructType]:
+    ) -> tuple[list[GroupedBatches], StructType]:
         """Create cogroups, each containing two DataFrames (left, right).
 
         Each cogroup is ``[left_batches, right_batches]``. The two DataFrames
