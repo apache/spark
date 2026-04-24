@@ -43,7 +43,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -610,12 +609,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * user-registered callback functions.
    */
   private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
-    // Validate source DF's captured table versions before the
-    // new QE's analyzer re-resolves them. Defense-in-depth for
-    // cases where name-based resolution could silently adapt.
-    V2TableRefreshUtil.refresh(
-      session, df.queryExecution.analyzed,
-      versionedOnly = true, PROHIBIT_CHANGES)
     val qe = new QueryExecution(session, command, df.queryExecution.tracker,
       shuffleCleanupModeOpt =
         Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
