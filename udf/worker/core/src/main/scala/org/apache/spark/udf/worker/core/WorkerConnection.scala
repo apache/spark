@@ -28,6 +28,12 @@ import org.apache.spark.annotation.Experimental
  * process wrapper (e.g., [[direct.DirectWorkerProcess]]) and shared
  * across all [[WorkerSession]]s that use that process.
  *
+ * One connection, many sessions: a worker process exposes a single
+ * server-side endpoint (e.g., one UDS path, one TCP port), and multiple
+ * concurrent UDF executions share it. For gRPC transports the channel
+ * multiplexes independent streams per session; for a raw-socket transport
+ * the connection still represents the shared underlying channel.
+ *
  * Implementations wrap the concrete transport and expose only lifecycle
  * methods. Data transmission happens at the [[WorkerSession]] level, not
  * here -- this class is solely about whether the channel is open.

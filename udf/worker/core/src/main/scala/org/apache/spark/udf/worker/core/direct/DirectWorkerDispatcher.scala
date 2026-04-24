@@ -34,8 +34,8 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher,
   WorkerLogger, WorkerSecurityScope, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableResult,
   DEFAULT_CALLABLE_TIMEOUT_MS, DEFAULT_GRACEFUL_TIMEOUT_MS, DEFAULT_INIT_TIMEOUT_MS,
-  EnvironmentState, MAX_OUTPUT_SCAN_BYTES, PROCESS_OUTPUT_TAIL_LINES,
-  SOCKET_POLL_INTERVAL_MS}
+  ENGINE_MAX_TIMEOUT_MS, EnvironmentState, MAX_OUTPUT_SCAN_BYTES,
+  PROCESS_OUTPUT_TAIL_LINES, SOCKET_POLL_INTERVAL_MS}
 
 /**
  * :: Experimental ::
@@ -79,21 +79,44 @@ abstract class DirectWorkerDispatcher(
    */
   protected def callableTimeoutMs: Long = DEFAULT_CALLABLE_TIMEOUT_MS
 
-  private val initTimeoutMs: Long = {
+  // Per worker_spec.proto, the engine applies a maximum cap to each
+  // proto-provided worker timeout (initialization_timeout_ms,
+  // graceful_termination_timeout_ms) so a misbehaving spec cannot make the
+  // engine wait arbitrarily long during startup or shutdown. The cap is
+  // [[ENGINE_MAX_TIMEOUT_MS]] (fixed at 30s for now). The dispatcher-internal
+  // `callableTimeoutMs` is subclass-controlled, not user-controlled, and is
+  // not subject to this cap.
+  // Exposed at package visibility so the core-level test suite can assert
+  // the engine-side clamp applied (kept out of the public API).
+  private[core] val initTimeoutMs: Long = {
     val props = workerSpec.getDirect.getProperties
-    if (props.hasInitializationTimeoutMs && props.getInitializationTimeoutMs > 0) {
+    val raw = if (props.hasInitializationTimeoutMs && props.getInitializationTimeoutMs > 0) {
       props.getInitializationTimeoutMs.toLong
     } else {
       DEFAULT_INIT_TIMEOUT_MS
     }
+    clampTimeout("initialization_timeout_ms", raw)
   }
 
   private val gracefulTimeoutMs: Long = {
     val props = workerSpec.getDirect.getProperties
-    if (props.hasGracefulTerminationTimeoutMs && props.getGracefulTerminationTimeoutMs > 0) {
+    val raw = if (props.hasGracefulTerminationTimeoutMs &&
+      props.getGracefulTerminationTimeoutMs > 0) {
       props.getGracefulTerminationTimeoutMs.toLong
     } else {
       DEFAULT_GRACEFUL_TIMEOUT_MS
+    }
+    clampTimeout("graceful_termination_timeout_ms", raw)
+  }
+
+  private def clampTimeout(field: String, raw: Long): Long = {
+    if (raw > ENGINE_MAX_TIMEOUT_MS) {
+      logger.warn(
+        s"Worker-provided $field=${raw}ms exceeds engine maximum " +
+          s"${ENGINE_MAX_TIMEOUT_MS}ms; using ${ENGINE_MAX_TIMEOUT_MS}ms instead")
+      ENGINE_MAX_TIMEOUT_MS
+    } else {
+      raw
     }
   }
 
@@ -386,43 +409,28 @@ abstract class DirectWorkerDispatcher(
     val env = runner.getEnvironmentVariablesMap.asScala.toMap
     val outputFile = Files.createTempFile("udf-worker-", ".log")
     val process = launchProcess(cmd, env, outputFile.toFile)
+    // Wrap the raw resources into a closeable bundle immediately so any
+    // subsequent failure (waitForSocket, createConnection) can dispose them
+    // through the same path the happy-path teardown uses.
+    val artifacts = new WorkerArtifacts(process, socketPath, outputFile, logger)
 
     try {
       waitForSocket(socketPath, process, outputFile.toFile)
       val connection = createConnection(socketPath)
-      // Ownership of `outputFile` transfers to the DirectWorkerProcess: it
-      // remains valid for the child's file descriptor and is deleted in
-      // DirectWorkerProcess.close().
+      // Ownership of `artifacts` transfers to the DirectWorkerProcess: they
+      // remain alive for the duration of the worker and are disposed via
+      // DirectWorkerProcess.close() -> artifacts.close().
       new DirectWorkerProcess(
-        workerId, process, connection, socketPath, outputFile,
-        gracefulTimeoutMs, logger, onLastSessionReleased = releaseWorker)
+        workerId, artifacts, connection, gracefulTimeoutMs, logger,
+        onLastSessionReleased = releaseWorker)
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()
-        cleanupFailedSpawn(process, socketPath, outputFile)
+        artifacts.close()
         throw e
       case NonFatal(e) =>
-        cleanupFailedSpawn(process, socketPath, outputFile)
+        artifacts.close()
         throw e
-    }
-  }
-
-  private def cleanupFailedSpawn(
-      process: Process,
-      socketPath: String,
-      outputFile: Path): Unit = {
-    DirectWorkerDispatcher.destroyForciblyAndReap(process, logger, "failed spawn")
-    // If the worker (or createConnection) had already created the socket
-    // file, remove it so it doesn't linger until dispatcher.close().
-    try Files.deleteIfExists(new File(socketPath).toPath) catch {
-      case NonFatal(cleanupEx) =>
-        logger.debug(s"Failed to clean up socket file $socketPath", cleanupEx)
-    }
-    // Swallow IOException here so we don't replace the original spawn
-    // failure with a cleanup failure.
-    try Files.deleteIfExists(outputFile) catch {
-      case NonFatal(cleanupEx) =>
-        logger.debug(s"Failed to clean up worker output file $outputFile", cleanupEx)
     }
   }
 
@@ -558,16 +566,13 @@ abstract class DirectWorkerDispatcher(
 
   // -- Spec validation -------------------------------------------------------
 
-  // Multi-connection workers (e.g., a separate control channel) are a future
-  // extension; today the proto field is `repeated` but the engine requires
-  // exactly one. TCP transport is declared in the proto but not yet
-  // implemented; the engine currently only supports UDS.
+  // TCP transport is declared in the proto but not yet implemented; the
+  // engine currently only supports UDS.
   private def validateTransportSupport(): Unit = {
     val props = workerSpec.getDirect.getProperties
-    val n = props.getConnectionsCount
-    require(n == 1,
-      s"DirectWorker.properties.connections must have exactly one entry, got $n")
-    val conn = props.getConnections(0)
+    require(props.hasConnection,
+      "DirectWorker.properties.connection must be set")
+    val conn = props.getConnection
     require(conn.hasUnixDomainSocket,
       "DirectWorker currently only supports UNIX domain socket transport, " +
         s"got ${conn.getTransportCase}")
@@ -591,6 +596,19 @@ private[direct] object DirectWorkerDispatcher {
   private[direct] val DEFAULT_INIT_TIMEOUT_MS = 10000L
   private[direct] val DEFAULT_CALLABLE_TIMEOUT_MS = 120000L
   private[direct] val DEFAULT_GRACEFUL_TIMEOUT_MS = 5000L
+  // Engine-side cap for proto-provided worker timeouts
+  // (initialization_timeout_ms, graceful_termination_timeout_ms). Fixed at
+  // 30s for now, matching the example value in worker_spec.proto;
+  // intentionally not configurable until we have a concrete need. The
+  // defaults below must stay at or under this cap so the clamp path only
+  // triggers on user-provided values, never on dispatcher defaults.
+  private[direct] val ENGINE_MAX_TIMEOUT_MS = 30000L
+  require(DEFAULT_INIT_TIMEOUT_MS <= ENGINE_MAX_TIMEOUT_MS,
+    s"DEFAULT_INIT_TIMEOUT_MS ($DEFAULT_INIT_TIMEOUT_MS) must not exceed " +
+      s"ENGINE_MAX_TIMEOUT_MS ($ENGINE_MAX_TIMEOUT_MS)")
+  require(DEFAULT_GRACEFUL_TIMEOUT_MS <= ENGINE_MAX_TIMEOUT_MS,
+    s"DEFAULT_GRACEFUL_TIMEOUT_MS ($DEFAULT_GRACEFUL_TIMEOUT_MS) must not " +
+      s"exceed ENGINE_MAX_TIMEOUT_MS ($ENGINE_MAX_TIMEOUT_MS)")
   private[direct] val PROCESS_OUTPUT_TAIL_LINES = 50
   // Cap the amount of log file scanned by readOutputTail so a runaway worker
   // producing gigabytes of output cannot OOM the caller during error

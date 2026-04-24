@@ -114,7 +114,7 @@ class DirectWorkerDispatcherSuite
     .build()
 
   private def udsProperties: UDFWorkerProperties = UDFWorkerProperties.newBuilder()
-    .addConnections(WorkerConnectionSpec.newBuilder()
+    .setConnection(WorkerConnectionSpec.newBuilder()
       .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance)
       .build())
     .build()
@@ -255,7 +255,7 @@ class DirectWorkerDispatcherSuite
       .addCommand("bash").addCommand("-c").addCommand(sigtermIgnoringScript).addCommand("--")
       .build()
     val shortGracefulProps = UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnectionSpec.newBuilder()
+      .setConnection(WorkerConnectionSpec.newBuilder()
         .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
       .setGracefulTerminationTimeoutMs(500)
       .build()
@@ -344,6 +344,43 @@ class DirectWorkerDispatcherSuite
     }
   }
 
+  test("worker-provided graceful timeout is capped at the engine-side maximum") {
+    // The proto documents an engine-configurable maximum (fixed at 30s today).
+    // A 60s spec value should be clamped down.
+    val oversizedProps = UDFWorkerProperties.newBuilder()
+      .setConnection(WorkerConnectionSpec.newBuilder()
+        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
+      .setGracefulTerminationTimeoutMs(60000)
+      .build()
+    val spec = UDFWorkerSpecification.newBuilder()
+      .setDirect(DirectWorker.newBuilder()
+        .setRunner(defaultRunner).setProperties(oversizedProps).build())
+      .build()
+    dispatcher = new TestDirectWorkerDispatcher(spec)
+
+    val session = createStubSession()
+    assert(session.workerProcess.gracefulTimeoutMs == 30000L,
+      s"graceful timeout should be capped at 30000ms, " +
+        s"got ${session.workerProcess.gracefulTimeoutMs}")
+    session.close()
+  }
+
+  test("worker-provided init timeout is capped at the engine-side maximum") {
+    val oversizedProps = UDFWorkerProperties.newBuilder()
+      .setConnection(WorkerConnectionSpec.newBuilder()
+        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
+      .setInitializationTimeoutMs(60000)
+      .build()
+    val spec = UDFWorkerSpecification.newBuilder()
+      .setDirect(DirectWorker.newBuilder()
+        .setRunner(defaultRunner).setProperties(oversizedProps).build())
+      .build()
+    dispatcher = new TestDirectWorkerDispatcher(spec)
+
+    assert(dispatcher.initTimeoutMs == 30000L,
+      s"init timeout should be capped at 30000ms, got ${dispatcher.initTimeoutMs}")
+  }
+
   test("createSession after close is rejected") {
     dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     dispatcher.close()
@@ -422,20 +459,20 @@ class DirectWorkerDispatcherSuite
     }
   }
 
-  test("DirectWorker without connections is rejected") {
+  test("DirectWorker without a connection is rejected") {
     val badSpec = UDFWorkerSpecification.newBuilder()
       .setDirect(DirectWorker.newBuilder().setRunner(defaultRunner).build())
       .build()
     val ex = intercept[IllegalArgumentException] {
       new TestDirectWorkerDispatcher(badSpec)
     }
-    assert(ex.getMessage.contains("exactly one entry"),
-      s"expected connections-count error, got: ${ex.getMessage}")
+    assert(ex.getMessage.contains("connection must be set"),
+      s"expected missing-connection error, got: ${ex.getMessage}")
   }
 
   test("DirectWorker with non-UDS transport is rejected") {
     val tcpProperties = UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnectionSpec.newBuilder()
+      .setConnection(WorkerConnectionSpec.newBuilder()
         .setTcp(LocalTcpConnection.getDefaultInstance).build())
       .build()
     val badSpec = UDFWorkerSpecification.newBuilder()
@@ -447,24 +484,6 @@ class DirectWorkerDispatcherSuite
     }
     assert(ex.getMessage.contains("UNIX domain socket"),
       s"expected UDS-only error, got: ${ex.getMessage}")
-  }
-
-  test("DirectWorker with multiple connections is rejected") {
-    val twoConnections = UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnectionSpec.newBuilder()
-        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
-      .addConnections(WorkerConnectionSpec.newBuilder()
-        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
-      .build()
-    val badSpec = UDFWorkerSpecification.newBuilder()
-      .setDirect(DirectWorker.newBuilder()
-        .setRunner(defaultRunner).setProperties(twoConnections).build())
-      .build()
-    val ex = intercept[IllegalArgumentException] {
-      new TestDirectWorkerDispatcher(badSpec)
-    }
-    assert(ex.getMessage.contains("exactly one entry"),
-      s"expected connections-count error, got: ${ex.getMessage}")
   }
 
   test("socket file is cleaned up when createConnection throws") {
@@ -527,7 +546,7 @@ class DirectWorkerDispatcherSuite
       .addCommand("while true; do sleep 1; done").addCommand("--")
       .build()
     val shortInitProps = UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnectionSpec.newBuilder()
+      .setConnection(WorkerConnectionSpec.newBuilder()
         .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
       .setInitializationTimeoutMs(500)
       .build()
