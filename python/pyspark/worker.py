@@ -19,7 +19,6 @@
 Worker that receives input from Piped RDD.
 """
 
-import collections.abc
 import os
 import sys
 import dataclasses
@@ -38,8 +37,6 @@ from typing import (
     TypeVar,
     TYPE_CHECKING,
     Union,
-    get_args,
-    get_origin,
     overload,
 )
 
@@ -266,8 +263,8 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
     For ``Iterator[T]``, returns a lazy iterator that checks each element
     against ``T`` on consumption. Raises ``PySparkTypeError`` on mismatch.
     """
-    if get_origin(expected_type) is collections.abc.Iterator:
-        (element_type,) = get_args(expected_type)
+    if getattr(expected_type, "_name", None) == "Iterator":
+        (element_type,) = expected_type.__args__
         package = getattr(inspect.getmodule(element_type), "__package__", "")
         label = f"iterator of {package}.{element_type.__name__}"
 
