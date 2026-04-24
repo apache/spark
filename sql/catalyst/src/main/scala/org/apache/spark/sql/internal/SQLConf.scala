@@ -2590,9 +2590,11 @@ object SQLConf {
     buildConf("spark.sql.optimizer.mapLookupHashThreshold")
       .internal()
       .doc("The minimum number of map entries to attempt hash-based lookup in `element_at` " +
-        "and the `[]` operator. Below this threshold, linear scan is used. For key types that " +
-        "do not support hashing (e.g. arrays, structs), linear scan is always used regardless " +
-        "of map size.")
+        "and the `[]` operator. Only applies to foldable map expressions (constants / literals), " +
+        "where the hash index can be built once and reused across all rows. Non-foldable maps " +
+        "always use linear scan to avoid per-row hash-table rebuild overhead. Below this " +
+        "threshold, linear scan is used. For key types that do not support hashing (e.g. " +
+        "arrays, structs, binary), linear scan is always used regardless of map size.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf

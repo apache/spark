@@ -38,8 +38,7 @@ import org.apache.spark.tags.SlowSQLTest
  * Window function testing for DataFrame API.
  */
 @SlowSQLTest
-class DataFrameWindowFunctionsSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameWindowFunctionsSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._

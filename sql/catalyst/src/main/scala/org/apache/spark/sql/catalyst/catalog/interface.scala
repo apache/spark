@@ -83,6 +83,7 @@ trait MetadataMapSupport {
           case JLong(value) => Some(new Date(value).toString)
           case _ => Some(jValue.values.toString)
         }
+      case "SQL Path" => SqlPathFormat.formatForDisplay(jValue)
       case _ => None
     }
     reformattedValue.map(value => key -> value)
@@ -610,6 +611,15 @@ case class CatalogTable(
     }
   }
 
+  /**
+   * Frozen SQL PATH stored when the view was created with [[SQLConf.PATH_ENABLED]].
+   * Serialized as a JSON array of path entries (each entry an array of identifier parts);
+   * virtual markers (e.g. `system.current_schema`) are materialized and, for persisted
+   * views, `system.session` is omitted.
+   */
+  def viewStoredResolutionPath: Option[String] =
+    properties.get(CatalogTable.VIEW_RESOLUTION_PATH)
+
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
       locationUri: Option[URI] = storage.locationUri,
@@ -674,6 +684,13 @@ case class CatalogTable(
       if (viewCatalogAndNamespaceInfos.nonEmpty) {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
         map += "View Catalog and Namespace" -> JString(viewCatalogAndNamespaceInfos.quoted)
+      }
+      if (SQLConf.get.pathEnabled) {
+        viewStoredResolutionPath.foreach { pathStr =>
+          SqlPathFormat.toDescribeJson(pathStr).foreach { json =>
+            map += "SQL Path" -> json
+          }
+        }
       }
       val viewQueryOutputColumns: JValue = Try {
         if (viewSchemaMode == SchemaEvolution) {
@@ -764,6 +781,9 @@ object CatalogTable {
   val VIEW_REFERRED_TEMP_VARIABLE_NAMES = VIEW_PREFIX + "referredTempVariablesNames"
 
   val VIEW_SCHEMA_MODE = VIEW_PREFIX + "schemaMode"
+
+  /** Frozen expanded PATH at view creation (PATH feature); not a SQL config property. */
+  val VIEW_RESOLUTION_PATH = VIEW_PREFIX + "resolutionPath"
 
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 

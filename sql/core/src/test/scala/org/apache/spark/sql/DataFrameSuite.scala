@@ -52,8 +52,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
 @SlowSQLTest
-class DataFrameSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

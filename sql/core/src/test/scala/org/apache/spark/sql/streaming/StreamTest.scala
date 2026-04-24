@@ -73,7 +73,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * avoid hanging forever in the case of failures. However, individual suites can change this
  * by overriding `streamingTimeout`.
  */
-trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits {
+trait StreamTest extends SharedSparkSession with TimeLimits {
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler

@@ -134,8 +134,8 @@ private object VectorizedRleValuesReaderSuite {
 
   /**
    * Runs readBatch end-to-end and asserts null-bits, non-null values, and def levels.
-   * Each batch uses a fresh output vector since `state.valueOffset` resets to 0 per batch —
-   * mirrors production where `VectorizedColumnReader` hands in a batch-sized vector.
+   * Each batch uses a fresh output vector since `state.valueOffset` resets to 0 per batch,
+   * mirroring production where `VectorizedColumnReader` hands in a batch-sized vector.
    */
   // Non-trivial value formula: off-by-one mismatches won't coincidentally align.
   private def valueAt(idx: Int): Int = idx * 100 + 7

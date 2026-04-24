@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningExpression}
 import org.apache.spark.sql.connector.catalog.{BufferedRows, InMemoryEnhancedRuntimePartitionFilterTable, InMemoryTableEnhancedRuntimePartitionFilterCatalog}
 import org.apache.spark.sql.connector.expressions.PartitionFieldReference
@@ -54,7 +54,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 12. Partition col not in filterAttributes -> no PartitionPredicate
  */
 class DataSourceV2EnhancedRuntimePartitionFilterSuite
-  extends QueryTest with SharedSparkSession with BeforeAndAfter {
+  extends SharedSparkSession with BeforeAndAfter {
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   protected val catalogName = "testruntimepartfilter"

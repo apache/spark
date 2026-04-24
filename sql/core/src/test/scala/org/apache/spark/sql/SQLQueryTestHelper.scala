@@ -137,6 +137,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
     case _: DescribeCommandBase
          | _: DescribeColumnCommand
          | _: DescribeRelation
+         | _: DescribeTablePartition
          | _: DescribeColumn => true
     case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
     case _ => plan.children.iterator.exists(isSemanticallySorted)

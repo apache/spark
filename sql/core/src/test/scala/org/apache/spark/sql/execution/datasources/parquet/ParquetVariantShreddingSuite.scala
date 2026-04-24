@@ -29,7 +29,7 @@ import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Type}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.VariantVal
 /**
  * Test shredding Variant values in the Parquet reader/writer.
  */
-class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetVariantShreddingSuite extends ParquetTest with SharedSparkSession {
 
   private def testWithTempDir(name: String)(block: File => Unit): Unit = test(name) {
     withTempDir { dir =>

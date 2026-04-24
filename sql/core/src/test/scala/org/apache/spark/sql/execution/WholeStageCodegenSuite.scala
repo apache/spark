@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
+class WholeStageCodegenSuite extends SharedSparkSession
   with DisableAdaptiveExecutionSuite {
 
   import testImplicits._

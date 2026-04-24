@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
 
-class ParametersSuite extends QueryTest with SharedSparkSession {
+class ParametersSuite extends SharedSparkSession {
 
   // Helper function to check CHAR/VARCHAR types (similar to CharVarcharTestSuite)
   private def checkColType(f: StructField, dt: DataType): Unit = {

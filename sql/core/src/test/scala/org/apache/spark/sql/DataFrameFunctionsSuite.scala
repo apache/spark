@@ -41,7 +41,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
 @ExtendedSQLTest
-class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("DataFrame function and SQL function parity") {

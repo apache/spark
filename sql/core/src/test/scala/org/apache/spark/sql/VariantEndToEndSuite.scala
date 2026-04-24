@@ -32,7 +32,7 @@ import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
-class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
+class VariantEndToEndSuite extends SharedSparkSession {
   import testImplicits._
 
   test("parse_json/to_json round-trip") {

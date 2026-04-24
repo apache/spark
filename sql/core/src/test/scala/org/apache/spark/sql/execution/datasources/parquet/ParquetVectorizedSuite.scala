@@ -32,7 +32,7 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -47,7 +47,7 @@ import org.apache.spark.util.collection.Utils.createArray
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
  * low-level decoding logic covering column index, dictionary, different batch and page sizes, etc.
  */
-class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
   private val VALUES: Seq[String] = ('a' to 'z').map(_.toString)
   private val NUM_VALUES: Int = VALUES.length
   private val BATCH_SIZE_CONFIGS: Seq[Int] = Seq(1, 3, 5, 7, 10, 20, 40)

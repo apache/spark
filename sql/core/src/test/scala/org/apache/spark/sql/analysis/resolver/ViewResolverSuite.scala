@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
@@ -33,7 +33,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class ViewResolverSuite extends QueryTest with SharedSparkSession {
+class ViewResolverSuite extends SharedSparkSession {
   private val catalogName = "spark_catalog"
   private val col1Integer = "col1".attr.int.withNullability(false)
   private val col2String = "col2".attr.string.withNullability(false)

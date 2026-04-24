@@ -18,12 +18,12 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
+class CollationTypePrecedenceSuite extends SharedSparkSession {
 
   val dataSource: String = "parquet"
   val UNICODE_COLLATION_NAME = "SYSTEM.BUILTIN.UNICODE"

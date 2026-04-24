@@ -321,6 +321,69 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("GetMapValue - non-foldable map always uses linear scan") {
+    // With threshold=0, a foldable map would take the hash path. A non-foldable map (backed by
+    // a row column) must still fall back to linear scan, because its hash index cannot be
+    // reused across rows (building it per row is a perf regression vs. linear).
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val mapType = MapType(IntegerType, IntegerType)
+      val mapData = ArrayBasedMapData(Map(1 -> 10, 2 -> 20, 3 -> 30))
+      val row = create_row(mapData)
+      val mapRef = BoundReference(0, mapType, nullable = true)
+      assert(!mapRef.foldable)
+
+      // Behavior still correct.
+      checkEvaluation(GetMapValue(mapRef, Literal(1)), 10, row)
+      checkEvaluation(GetMapValue(mapRef, Literal(2)), 20, row)
+      checkEvaluation(GetMapValue(mapRef, Literal(4)), null, row)
+
+      checkEvaluation(ElementAt(mapRef, Literal(3)), 30, row)
+      checkEvaluation(ElementAt(mapRef, Literal(99)), null, row)
+
+      // A null map from a non-foldable reference must still return null.
+      val nullRow = create_row(null)
+      checkEvaluation(GetMapValue(mapRef, Literal(1)), null, nullRow)
+
+      // Strategy choice: non-foldable input never takes the hash path, independent of
+      // threshold. This guards against future refactors that accidentally route every map
+      // through the hash executor (a regression that behavior-only tests wouldn't catch).
+      assert(!GetMapValue(mapRef, Literal(1)).usesFoldableHashLookup)
+      assert(!ElementAt(mapRef, Literal(1)).usesFoldableHashLookup)
+    }
+  }
+
+  test("GetMapValue - strategy choice for foldable maps") {
+    // Build a foldable map literal large enough to clear the default threshold. The
+    // strategy assertions here pair with the non-foldable test above: together they lock in
+    // that foldability, not size alone, gates the hash path.
+    val entries = (0 until 2000).map(i => i -> i.toString).toMap
+    val foldableLit = Literal.create(entries, MapType(IntegerType, StringType))
+    val smallLit = Literal.create(Map(1 -> "a"), MapType(IntegerType, StringType))
+    val binaryKeyLit = Literal.create(
+      Map(Array[Byte](1) -> 10), MapType(BinaryType, IntegerType))
+
+    // Foldable + above threshold + hashable key type --> PrebuiltHashExecutor.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "1000") {
+      assert(GetMapValue(foldableLit, Literal(1)).usesFoldableHashLookup)
+      assert(ElementAt(foldableLit, Literal(1)).usesFoldableHashLookup)
+    }
+
+    // Foldable but below threshold --> LinearExecutor.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "10000") {
+      assert(!GetMapValue(foldableLit, Literal(1)).usesFoldableHashLookup)
+    }
+
+    // Foldable, size=1, threshold=0 --> still LinearExecutor (threshold is >=, len < threshold
+    // is false here but we want to also confirm small maps don't regress with threshold=0).
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      assert(GetMapValue(smallLit, Literal(1)).usesFoldableHashLookup)
+
+      // Unsupported key type (BinaryType fails typeWithProperEquals) --> LinearExecutor even
+      // when foldable and threshold=0.
+      assert(!GetMapValue(binaryKeyLit, Literal(Array[Byte](1))).usesFoldableHashLookup)
+    }
+  }
+
   test("GetStructField") {
     val typeS = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), typeS)

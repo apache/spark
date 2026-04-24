@@ -1568,12 +1568,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "filters" -> filters.mkString("[", ", ", "]")))
   }
 
-  def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1111",
-      messageParameters = Map.empty)
-  }
-
   def cannotReplaceMissingTableError(
       tableIdentifier: Identifier): Throwable = {
     new CannotReplaceMissingTableException(tableIdentifier)

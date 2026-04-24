@@ -910,7 +910,6 @@ case class SetNamespaceLocation(
  */
 case class DescribeRelation(
     relation: LogicalPlan,
-    partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
@@ -920,6 +919,19 @@ case class DescribeRelation(
 
 object DescribeRelation {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+/**
+ * The logical plan of the DESCRIBE relation_name PARTITION command.
+ */
+case class DescribeTablePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec,
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs)
+  extends V2PartitionCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): DescribeTablePartition =
+    copy(table = newChild)
 }
 
 /**

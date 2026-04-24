@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateFunctionsSuite extends QueryTest with SharedSparkSession {
+class DateFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   // The test cases which throw exceptions under ANSI mode are covered by date.sql and
