@@ -630,30 +630,14 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
 def verify_arrow_table(table, assign_cols_by_name, expected_cols_and_types):
     import pyarrow as pa
 
-    if not isinstance(table, pa.Table):
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "pyarrow.Table",
-                "actual": type(table).__name__,
-            },
-        )
-
+    verify_return_type(table, pa.Table)
     verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types)
 
 
 def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
     import pyarrow as pa
 
-    if not isinstance(batch, pa.RecordBatch):
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "pyarrow.RecordBatch",
-                "actual": type(batch).__name__,
-            },
-        )
-
+    verify_return_type(batch, pa.RecordBatch)
     verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
