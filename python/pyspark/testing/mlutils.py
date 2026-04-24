@@ -25,7 +25,8 @@ from pyspark.ml.param.shared import HasMaxIter, HasRegParam
 from pyspark.ml.classification import Classifier, ClassificationModel
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
 from pyspark.ml.wrapper import _java2py
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import SparkSession
+from pyspark.sql.classic.dataframe import DataFrame
 from pyspark.sql.types import DoubleType
 from pyspark.testing.utils import ReusedPySparkTestCase as PySparkTestCase
 
