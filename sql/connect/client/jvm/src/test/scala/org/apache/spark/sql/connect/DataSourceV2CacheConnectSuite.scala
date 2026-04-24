@@ -23,8 +23,8 @@ import org.apache.spark.sql.connect.test.IntegrationTestUtils.isAssemblyJarsDirE
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils
 
 /**
- * DSv2 CACHE TABLE tests for Spark Connect covering the five design doc
- * scenarios from SPARK-54022 section [5] "CACHE TABLE impact on reads".
+ * DSv2 CACHE TABLE tests for Spark Connect covering five cross-session
+ * cache scenarios (S1 through S5).
  *
  * Uses [[SharedInMemoryTableCatalog]] (configured as "sharedcat") so that
  * both sessions share the same underlying table data via a static map.
@@ -34,12 +34,10 @@ import org.apache.spark.sql.connect.test.SparkConnectServerUtils
  * server and share its [[CacheManager]], so session 2's writes trigger
  * refreshCache() on the shared CacheManager.
  *
- * The proposed behavior for DSv2 is cache pinning: external writes should
- * NOT invalidate session 1's cache. The expected values in these tests
- * reflect the current behavior where external writes ARE visible through
- * the shared CacheManager. When per-session caching is implemented, the
- * expected values for S1-S4 should be updated to match the proposed
- * pinning behavior documented in each test's comments.
+ * Write operations ignore the cache: external writes should NOT
+ * invalidate session 1's cache. The expected values in these tests
+ * reflect the current behavior where external writes ARE visible
+ * through the shared CacheManager.
  */
 class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession with SQLHelper {
 
@@ -66,14 +64,6 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   // Scenario 1: external data write after CACHE TABLE
   //
   // Session 1 caches, then session 2 inserts a row.
-  //
-  // Current behavior (shared CacheManager): session 2's INSERT triggers
-  // refreshCache(), so session 1 sees the new data.
-  //   Result: (1, 100), (2, 200)
-  //
-  // Proposed behavior (per-session caching): external write does not
-  // invalidate session 1's cache.
-  //   Result: (1, 100)
   test("[S1] external data write after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -99,13 +89,6 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   //
   // Session 1 caches, session 1 inserts (invalidates and recaches),
   // then session 2 inserts.
-  //
-  // Current behavior: all three rows visible via shared CacheManager.
-  //   Result: (1, 100), (2, 200), (3, 300)
-  //
-  // Proposed behavior: session 1's write recaches, but session 2's
-  // external write does not invalidate session 1's cache.
-  //   Result: (1, 100), (2, 200)
   test("[S2] session write then external write after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -133,14 +116,6 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   // Scenario 3: external schema change after CACHE TABLE
   //
   // Session 2 adds a column and inserts data with the new schema.
-  //
-  // Current behavior: schema change + write visible via shared
-  // CacheManager.
-  //   Result: (1, 100, null), (2, 200, -1)
-  //
-  // Proposed behavior: external schema change does not invalidate
-  // session 1's cache. Cache remains pinned to the original schema.
-  //   Result: (1, 100)
   test("[S3] external schema change after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -165,13 +140,6 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   // Scenario 4: session schema change then external write
   //
   // Session 1 adds a column (invalidates cache), then session 2 inserts.
-  //
-  // Current behavior: both changes visible via shared CacheManager.
-  //   Result: (1, 100, null), (2, 200, -1)
-  //
-  // Proposed behavior: session 1's schema change recaches with new
-  // schema, but session 2's external write does not invalidate cache.
-  //   Result: (1, 100, null)
   test("[S4] session schema change then external write") {
     assumeCanRun()
     withTable(T) {
@@ -197,13 +165,6 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   // Scenario 5: external drop and recreate table
   //
   // Session 2 drops and recreates the table with the same schema.
-  //
-  // Current behavior: cache invalidated by drop, recreated table is
-  // empty.
-  //   Result: empty
-  //
-  // Proposed behavior: same as current (keep as is).
-  //   Result: empty
   test("[S5] external drop and recreate table after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
