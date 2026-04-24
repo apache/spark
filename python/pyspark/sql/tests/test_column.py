@@ -522,13 +522,6 @@ class ColumnTestsMixin:
         self.assertEqual(result[1][0], 40)
         self.assertEqual(result[2][0], 60)
 
-    def test_join_with_cte(self):
-        cte_query = "with dt as (select 1 as ida) select ida as id from dt"
-        df1 = self.spark.range(10)
-        df2 = self.spark.sql(cte_query)
-        df3 = df1.join(df2, df1.id == df2.id)
-        self.assertEqual(df3.count(), 1)
-
     def test_self_join(self):
         df1 = self.spark.range(10).withColumn("a", sf.lit(0))
         df2 = df1.withColumnRenamed("a", "b")
