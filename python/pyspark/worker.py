@@ -260,23 +260,11 @@ def verify_return_type(result: Any, expected_type: Any) -> Any: ...
 
 def verify_return_type(result: Any, expected_type: Any) -> Any:
     """
-    Verify a UDF return value against an expected container type.
+    Verify a UDF return value against an expected type.
 
-    If ``expected_type`` is a concrete type (e.g. ``pa.Table``), checks
-    ``isinstance(result, expected_type)`` and returns ``result`` unchanged.
-
-    If ``expected_type`` is ``Iterator[T]``, checks that ``result`` is iterable
-    and returns a lazy iterator that type-checks each element against ``T`` on
-    consumption.
-
-    Parameters
-    ----------
-    result : Any
-        The UDF return value.
-    expected_type : type or Iterator[type]
-        The expected Python/PyArrow container type (e.g. ``pa.Table``,
-        ``pa.RecordBatch``, ``pa.Array``), or ``Iterator[T]`` to require an
-        iterator of ``T``.
+    Returns ``result`` unchanged if ``isinstance(result, expected_type)``.
+    For ``Iterator[T]``, returns a lazy iterator that checks each element
+    against ``T`` on consumption. Raises ``PySparkTypeError`` on mismatch.
     """
     if get_origin(expected_type) is collections.abc.Iterator:
         (element_type,) = get_args(expected_type)
