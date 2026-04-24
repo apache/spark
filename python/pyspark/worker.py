@@ -250,11 +250,6 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def _type_label(t: type) -> str:
-    package = getattr(inspect.getmodule(t), "__package__", "")
-    return f"{package}.{t.__name__}"
-
-
 @overload
 def verify_return_type(result: Any, expected_type: Type[T]) -> T: ...
 
@@ -285,7 +280,8 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
     """
     if get_origin(expected_type) is collections.abc.Iterator:
         (element_type,) = get_args(expected_type)
-        label = f"iterator of {_type_label(element_type)}"
+        package = getattr(inspect.getmodule(element_type), "__package__", "")
+        label = f"iterator of {package}.{element_type.__name__}"
 
         if not isinstance(result, Iterator):
             raise PySparkTypeError(
@@ -307,10 +303,11 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
         return map(check_element, result)
 
     if not isinstance(result, expected_type):
+        package = getattr(inspect.getmodule(expected_type), "__package__", "")
         raise PySparkTypeError(
             errorClass="UDF_RETURN_TYPE",
             messageParameters={
-                "expected": _type_label(expected_type),
+                "expected": f"{package}.{expected_type.__name__}",
                 "actual": type(result).__name__,
             },
         )
