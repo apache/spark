@@ -2506,10 +2506,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             output_batches = udf_func(input_batches)
 
             # Post-processing
-            verified: Iterator[pa.RecordBatch] = verify_return_type(
-                output_batches, Iterator[pa.RecordBatch]
-            )
-            yield from map(ArrowBatchTransformer.wrap_struct, verified)
+            verified_iter = verify_return_type(output_batches, Iterator[pa.RecordBatch])
+            yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
