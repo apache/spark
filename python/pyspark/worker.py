@@ -34,11 +34,16 @@ from typing import (
     Iterator,
     Optional,
     Tuple,
+    Type,
+    TypeVar,
     TYPE_CHECKING,
     Union,
     get_args,
     get_origin,
+    overload,
 )
+
+T = TypeVar("T")
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import GroupedBatch
@@ -248,6 +253,14 @@ def chain(f, g):
 def _type_label(t: type) -> str:
     package = getattr(inspect.getmodule(t), "__package__", "")
     return f"{package}.{t.__name__}"
+
+
+@overload
+def verify_return_type(result: Any, expected_type: Type[T]) -> T: ...
+
+
+@overload
+def verify_return_type(result: Any, expected_type: Any) -> Any: ...
 
 
 def verify_return_type(result: Any, expected_type: Any) -> Any:
