@@ -55,6 +55,15 @@ class WindowFrame:
 
 
 class WindowSpec(ParentWindowSpec):
+    def __new__(
+        cls,
+        partitionSpec: Sequence[Expression],
+        orderSpec: Sequence[SortOrder],
+        frame: Optional[WindowFrame],
+    ) -> "WindowSpec":
+        self = object.__new__(cls)
+        return self
+
     def __getnewargs__(self) -> Tuple[Any, ...]:
         return (self._partitionSpec, self._orderSpec, self._frame)
 
