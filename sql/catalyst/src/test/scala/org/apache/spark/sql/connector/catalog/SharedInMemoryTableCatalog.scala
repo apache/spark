@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util
+import java.util.concurrent.ConcurrentHashMap
+
 /**
  * An InMemoryTableCatalog that shares table state across all instances.
  * This allows multiple SparkSessions (via newSession/cloneSession) to
@@ -26,19 +29,15 @@ package org.apache.spark.sql.connector.catalog
  * writes and another session reads the same DSv2 table.
  */
 class SharedInMemoryTableCatalog extends InMemoryTableCatalog {
-  override protected val tables: java.util.Map[Identifier, Table] =
+  override protected val tables: util.Map[Identifier, Table] =
     SharedInMemoryTableCatalog.sharedTables
-  override protected val namespaces
-    : java.util.Map[List[String], Map[String, String]] =
+  override protected val namespaces: util.Map[List[String], Map[String, String]] =
     SharedInMemoryTableCatalog.sharedNamespaces
 }
 
 object SharedInMemoryTableCatalog {
-  val sharedTables =
-    new java.util.concurrent.ConcurrentHashMap[Identifier, Table]()
-  val sharedNamespaces =
-    new java.util.concurrent.ConcurrentHashMap[
-      List[String], Map[String, String]]()
+  val sharedTables = new ConcurrentHashMap[Identifier, Table]()
+  val sharedNamespaces = new ConcurrentHashMap[List[String], Map[String, String]]()
 
   def reset(): Unit = {
     sharedTables.clear()
