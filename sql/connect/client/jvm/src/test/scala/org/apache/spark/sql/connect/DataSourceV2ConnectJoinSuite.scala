@@ -160,7 +160,7 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
   // DataSourceV2DataFrameSuite tests. In Connect, both sides re-analyze on
   // every action, so operations that fail in classic mode succeed here.
 
-  test("SPARK-54157: [connect] join refreshes both sides after insert") {
+  test("[connect] join refreshes both sides after insert") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -174,7 +174,7 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
     }
   }
 
-  test("SPARK-54157: [connect] join after ADD COLUMN sees new schema on both sides") {
+  test("[connect] join after ADD COLUMN sees new schema on both sides") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -190,7 +190,7 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
     }
   }
 
-  test("SPARK-54157: [connect] join after DROP COLUMN succeeds") {
+  test("[connect] join after DROP COLUMN succeeds") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -206,7 +206,7 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
     }
   }
 
-  test("SPARK-54157: [connect] join after drop and recreate table succeeds") {
+  test("[connect] join after drop and recreate table succeeds") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -223,7 +223,7 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
     }
   }
 
-  test("SPARK-54157: [connect] join after drop and re-add column with same type") {
+  test("[connect] join after drop and re-add column with same type") {
     assumeCanRun()
     withTable(T) {
       setupTable()
@@ -238,7 +238,7 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
     }
   }
 
-  test("SPARK-54157: [connect] join after drop and re-add column with different type succeeds") {
+  test("[connect] join after drop and re-add column with different type succeeds") {
     assumeCanRun()
     withTable(T) {
       setupTable()
