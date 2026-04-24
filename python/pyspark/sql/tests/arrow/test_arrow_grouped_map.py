@@ -175,7 +175,8 @@ class ApplyInArrowTestsMixin:
                     for func_variation in function_variations(lambda table: table):
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             df.groupby("id").applyInArrow(func_variation, schema=schema).collect()
 
@@ -200,7 +201,8 @@ class ApplyInArrowTestsMixin:
                         for func_variation in function_variations(lambda table: table):
                             with self.assertRaisesRegex(
                                 PythonException,
-                                f"Columns do not match in their data type: {expected}",
+                                "Column types of the returned data do not match specified schema. "
+                                f"Mismatch: {expected}",
                             ):
                                 df.groupby("id").applyInArrow(
                                     func_variation, schema=schema
