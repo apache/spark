@@ -3705,6 +3705,12 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             def _reader_thread():
                 try:
                     for batch in deserializer.load_stream(infile):
+                        # Some serializers (e.g., ArrowStreamGroupSerializer,
+                        # ArrowStreamAggPandasUDFSerializer) yield lazy iterators
+                        # that still read from infile. Materialize them here so the
+                        # main thread can consume them without touching infile.
+                        if hasattr(batch, "__next__"):
+                            batch = list(batch)
                         input_queue.put(batch)
                 except Exception as e:
                     reader_error[0] = e
@@ -3731,23 +3737,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     out_iter.close()
                 t.join(timeout=5)
 
-        # Pipelined mode is only safe for eval types whose deserializer.load_stream()
-        # yields fully-materialized data (e.g., pa.RecordBatch). Serializers for
-        # grouped/aggregate UDFs yield lazy iterators that still read from infile,
-        # which conflicts with the background reader thread.
-        _pipelined_safe_eval_types = (
-            PythonEvalType.NON_UDF,
-            PythonEvalType.SQL_BATCHED_UDF,
-            PythonEvalType.SQL_ARROW_BATCHED_UDF,
-            PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-            PythonEvalType.SQL_SCALAR_ARROW_UDF,
-            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-        )
-        is_pipelined = (
-            os.environ.get("SPARK_PIPELINED_UDF") == "1"
-            and eval_type in _pipelined_safe_eval_types
-        )
+        is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
         run_process = pipelined_process if is_pipelined else process
 
         processing_start_time = time.time()
