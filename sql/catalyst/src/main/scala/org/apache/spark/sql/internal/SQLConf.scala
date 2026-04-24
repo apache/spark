@@ -308,10 +308,9 @@ object SQLConf {
       .internal()
       .version("4.2.0")
       .doc(
-        "Specific to Spark Connect. When true (default), enforce strict resolution of " +
-        "DataFrame columns (UnresolvedAttribute carrying a plan id tag) via plan-id-based " +
-        "resolution. When false, also try name-based resolution as a fallback for tagged " +
-        "attributes.")
+        "When true (default), enforce strict resolution of Spark Connect DataFrame columns " +
+        "(UnresolvedAttribute carrying a plan id tag) via plan-id-based resolution. When " +
+        "false, also try name-based resolution as a fallback for tagged attributes.")
       .booleanConf
       .createWithDefault(true)
 
