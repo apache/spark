@@ -17,7 +17,8 @@
 package org.apache.spark.udf.worker.core
 
 import java.io.File
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
+import java.nio.file.attribute.PosixFileAttributeView
 
 import scala.jdk.CollectionConverters._
 
@@ -27,8 +28,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.udf.worker.{
   DirectWorker, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
-  UDFWorkerSpecification, UnixDomainSocket,
-  WorkerConnection => WorkerConnectionProto, WorkerEnvironment}
+  UDFWorkerSpecification, UnixDomainSocket, WorkerConnectionSpec,
+  WorkerEnvironment}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher,
   DirectWorkerProcess, DirectWorkerSession}
 
@@ -47,13 +48,21 @@ class SocketFileConnection(socketPath: String) extends WorkerConnection {
 /**
  * A stub [[DirectWorkerSession]] for process-lifecycle tests that don't
  * need actual data transmission.
+ *
+ * TODO: [[cancel]] is a no-op here. Once a concrete [[DirectWorkerSession]]
+ *   with real data-plane wiring lands, add tests exercising cancel() in
+ *   particular: cancel from a different thread than process(), cancel
+ *   after process() has returned, and cancel before init (should be a
+ *   no-op). Tracking the thread-safety contract in the docstring on
+ *   [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
  */
 class StubWorkerSession(
     workerProcess: DirectWorkerProcess) extends DirectWorkerSession(workerProcess) {
 
-  override def init(message: InitMessage): Unit = {}
+  override protected def doInit(message: InitMessage): Unit = {}
 
-  override def process(input: Iterator[Array[Byte]]): Iterator[Array[Byte]] =
+  override protected def doProcess(
+      input: Iterator[Array[Byte]]): Iterator[Array[Byte]] =
     Iterator.empty
 
   override def cancel(): Unit = {}
@@ -105,7 +114,7 @@ class DirectWorkerDispatcherSuite
     .build()
 
   private def udsProperties: UDFWorkerProperties = UDFWorkerProperties.newBuilder()
-    .addConnections(WorkerConnectionProto.newBuilder()
+    .addConnections(WorkerConnectionSpec.newBuilder()
       .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance)
       .build())
     .build()
@@ -194,6 +203,13 @@ class DirectWorkerDispatcherSuite
     val workerObjects = sessionList.map(_.workerProcess)
     assert(workerObjects.distinct.length == threads,
       "each session should have its own DirectWorkerProcess")
+    // Object-identity is not sufficient on its own: a future regression
+    // that accidentally shared underlying transport resources could still
+    // hand out distinct DirectWorkerProcess wrappers pointing at the same
+    // socket. Verify socket paths are unique too.
+    val socketPaths = workerObjects.map(_.socketPath)
+    assert(socketPaths.distinct.length == threads,
+      s"each worker should have its own socket path, got $socketPaths")
 
     sessionList.foreach(_.close())
   }
@@ -214,6 +230,54 @@ class DirectWorkerDispatcherSuite
 
     assert(!worker1.process.isAlive, "worker1 should be terminated")
     assert(!worker2.process.isAlive, "worker2 should be terminated")
+  }
+
+  test("close escalates to SIGKILL when worker ignores SIGTERM") {
+    // The worker traps SIGTERM so the graceful stop is ineffective; the
+    // dispatcher must escalate to SIGKILL via destroyForciblyAndReap.
+    // Using a short gracefulTimeoutMs (500ms) keeps the test bounded:
+    // max close time is gracefulTimeoutMs + SIGKILL_REAP_TIMEOUT_MS.
+    val sigtermIgnoringScript =
+      """
+        |#!/bin/bash
+        |SOCKET_PATH=""
+        |while [[ $# -gt 0 ]]; do
+        |  case "$1" in
+        |    --connection) SOCKET_PATH="$2"; shift 2 ;;
+        |    *) shift ;;
+        |  esac
+        |done
+        |touch "$SOCKET_PATH"
+        |trap '' SIGTERM
+        |while true; do sleep 1; done
+      """.stripMargin.trim
+    val runner = ProcessCallable.newBuilder()
+      .addCommand("bash").addCommand("-c").addCommand(sigtermIgnoringScript).addCommand("--")
+      .build()
+    val shortGracefulProps = UDFWorkerProperties.newBuilder()
+      .addConnections(WorkerConnectionSpec.newBuilder()
+        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
+      .setGracefulTerminationTimeoutMs(500)
+      .build()
+    val spec = UDFWorkerSpecification.newBuilder()
+      .setDirect(DirectWorker.newBuilder()
+        .setRunner(runner).setProperties(shortGracefulProps).build())
+      .build()
+    dispatcher = new TestDirectWorkerDispatcher(spec)
+
+    val session = createStubSession()
+    val worker = session.workerProcess
+    assert(worker.process.isAlive, "worker should be alive before close")
+
+    val closeStart = System.nanoTime()
+    session.close()
+    val closeElapsedMs = (System.nanoTime() - closeStart) / 1000000L
+
+    assert(!worker.process.isAlive,
+      s"worker should have been SIGKILLed after ignoring SIGTERM (took ${closeElapsedMs}ms)")
+    assert(closeElapsedMs >= 500L,
+      s"close should have waited for gracefulTimeoutMs before escalating, " +
+        s"took ${closeElapsedMs}ms")
   }
 
   test("closing a session terminates its worker") {
@@ -280,6 +344,53 @@ class DirectWorkerDispatcherSuite
     }
   }
 
+  test("createSession after close is rejected") {
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
+    dispatcher.close()
+
+    val ex = intercept[IllegalStateException] {
+      dispatcher.createSession(None)
+    }
+    assert(ex.getMessage.contains("closed"),
+      s"expected dispatcher-closed error, got: ${ex.getMessage}")
+    dispatcher = null
+  }
+
+  test("socket directory is owner-only (0700) on POSIX") {
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
+    // Drive one createSession so a worker (and therefore the socket dir) is
+    // observable via session.workerProcess.socketPath.
+    val session = createStubSession()
+    val socketDir: Path = new File(session.workerProcess.socketPath).toPath.getParent
+    session.close()
+
+    val view = Files.getFileAttributeView(socketDir, classOf[PosixFileAttributeView])
+    // Skip explicitly on non-POSIX filesystems rather than silently pass,
+    // so a CI environment without POSIX attributes is visible in the
+    // test report instead of giving false confidence.
+    assume(view != null, s"POSIX file attributes required to check $socketDir")
+    val perms = view.readAttributes().permissions().asScala.toSet
+    val expected = java.nio.file.attribute.PosixFilePermissions
+      .fromString("rwx------").asScala.toSet
+    assert(perms == expected,
+      s"socket directory $socketDir should be 0700, got ${perms.mkString(",")}")
+  }
+
+  test("socket directory is removed after dispatcher.close") {
+    dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
+    val session = createStubSession()
+    val socketDir = new File(session.workerProcess.socketPath).toPath.getParent.toFile
+    assert(socketDir.exists(),
+      s"socket directory $socketDir should exist while a session is open")
+    session.close()
+
+    dispatcher.close()
+    dispatcher = null
+
+    assert(!socketDir.exists(),
+      s"socket directory $socketDir should be removed after dispatcher.close")
+  }
+
   // -- Error-path tests -------------------------------------------------------
 
   test("worker is cleaned up when createSessionForWorker throws") {
@@ -324,7 +435,7 @@ class DirectWorkerDispatcherSuite
 
   test("DirectWorker with non-UDS transport is rejected") {
     val tcpProperties = UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnectionProto.newBuilder()
+      .addConnections(WorkerConnectionSpec.newBuilder()
         .setTcp(LocalTcpConnection.getDefaultInstance).build())
       .build()
     val badSpec = UDFWorkerSpecification.newBuilder()
@@ -340,9 +451,9 @@ class DirectWorkerDispatcherSuite
 
   test("DirectWorker with multiple connections is rejected") {
     val twoConnections = UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnectionProto.newBuilder()
+      .addConnections(WorkerConnectionSpec.newBuilder()
         .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
-      .addConnections(WorkerConnectionProto.newBuilder()
+      .addConnections(WorkerConnectionSpec.newBuilder()
         .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
       .build()
     val badSpec = UDFWorkerSpecification.newBuilder()
@@ -405,6 +516,34 @@ class DirectWorkerDispatcherSuite
       s"expected early-exit error, got: ${ex.getMessage}")
     assert(ex.getMessage.contains("fatal: bad config"),
       s"expected process output in error, got: ${ex.getMessage}")
+  }
+
+  test("spawnWorker times out when worker stays alive but never creates socket") {
+    // Distinct from the "process exits immediately" case: here the worker
+    // process is healthy but simply doesn't bind the socket, so the
+    // dispatcher must time out and SIGKILL-reap it rather than wait forever.
+    val hangingRunner = ProcessCallable.newBuilder()
+      .addCommand("bash").addCommand("-c")
+      .addCommand("while true; do sleep 1; done").addCommand("--")
+      .build()
+    val shortInitProps = UDFWorkerProperties.newBuilder()
+      .addConnections(WorkerConnectionSpec.newBuilder()
+        .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
+      .setInitializationTimeoutMs(500)
+      .build()
+    val spec = UDFWorkerSpecification.newBuilder()
+      .setDirect(DirectWorker.newBuilder()
+        .setRunner(hangingRunner).setProperties(shortInitProps).build())
+      .build()
+    dispatcher = new TestDirectWorkerDispatcher(spec)
+
+    val ex = intercept[RuntimeException] {
+      dispatcher.createSession(None)
+    }
+    assert(ex.getMessage.contains("did not create socket"),
+      s"expected init-timeout error, got: ${ex.getMessage}")
+    assert(ex.getMessage.contains("500ms"),
+      s"expected timeout value in error, got: ${ex.getMessage}")
   }
 
   // -- Environment lifecycle tests -------------------------------------------
@@ -486,6 +625,36 @@ class DirectWorkerDispatcherSuite
       s"expected process output in error, got: ${ex.getMessage}")
   }
 
+  test("installation that exceeds callableTimeoutMs is killed and reported") {
+    // Installation sleeps longer than callableTimeoutMs; the dispatcher
+    // must SIGKILL-reap it and surface a "Callable timed out" error
+    // rather than hang the caller.
+    val slowInstall = ProcessCallable.newBuilder()
+      .addCommand("bash").addCommand("-c")
+      .addCommand("sleep 30").build()
+    val env = WorkerEnvironment.newBuilder().setInstallation(slowInstall).build()
+    val shortTimeoutDispatcher =
+      new DirectWorkerDispatcher(specWithEnv(env = env)) {
+        override protected def callableTimeoutMs: Long = 500L
+        override protected def createConnection(socketPath: String): WorkerConnection =
+          new SocketFileConnection(socketPath)
+        override protected def createSessionForWorker(
+            worker: DirectWorkerProcess): WorkerSession =
+          new StubWorkerSession(worker)
+      }
+    try {
+      val ex = intercept[RuntimeException] {
+        shortTimeoutDispatcher.createSession(None)
+      }
+      assert(ex.getMessage.contains("Callable timed out"),
+        s"expected callable-timeout error, got: ${ex.getMessage}")
+      assert(ex.getMessage.contains("500ms"),
+        s"expected timeout value in error, got: ${ex.getMessage}")
+    } finally {
+      shortTimeoutDispatcher.close()
+    }
+  }
+
   test("environment setup runs only once across multiple sessions") {
     val counterFile = Files.createTempFile("env-counter", ".txt").toFile
     counterFile.delete()
@@ -504,6 +673,56 @@ class DirectWorkerDispatcherSuite
     val lines = try src.getLines().toList finally src.close()
     assert(lines.size == 1,
       s"installation should run exactly once, but ran ${lines.size} time(s)")
+    counterFile.delete()
+  }
+
+  test("concurrent createSession still installs exactly once") {
+    // The sequential single-install test above cannot catch a missing
+    // lock around ensureEnvironmentReady. Race many createSession calls
+    // with an install script that takes long enough for the threads to
+    // queue on environmentLock, then verify it still ran exactly once.
+    val counterFile = Files.createTempFile("env-concurrent-install", ".txt").toFile
+    counterFile.delete()
+
+    val env = WorkerEnvironment.newBuilder()
+      .setInstallation(ProcessCallable.newBuilder()
+        .addCommand("bash").addCommand("-c")
+        .addCommand(
+          s"sleep 0.2; echo invoked >> ${counterFile.getAbsolutePath}").build())
+      .build()
+    dispatcher = new TestDirectWorkerDispatcher(specWithEnv(env = env))
+
+    val threads = 4
+    val startGate = new java.util.concurrent.CountDownLatch(1)
+    val doneGate = new java.util.concurrent.CountDownLatch(threads)
+    val sessions = new java.util.concurrent.ConcurrentLinkedQueue[WorkerSession]()
+    val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+    (1 to threads).foreach { _ =>
+      new Thread(() => {
+        try {
+          startGate.await()
+          sessions.add(dispatcher.createSession(None))
+        } catch {
+          case t: Throwable => errors.add(t)
+        } finally {
+          doneGate.countDown()
+        }
+      }).start()
+    }
+    startGate.countDown()
+    assert(doneGate.await(30, java.util.concurrent.TimeUnit.SECONDS),
+      "createSession threads did not finish in time")
+    assert(errors.isEmpty,
+      s"unexpected errors during concurrent createSession: ${errors.toArray.mkString(", ")}")
+
+    val src = scala.io.Source.fromFile(counterFile)
+    val lines = try src.getLines().toList finally src.close()
+    assert(lines.size == 1,
+      s"installation should run exactly once under concurrent createSession, " +
+        s"but ran ${lines.size} time(s)")
+
+    sessions.asScala.foreach(_.close())
     counterFile.delete()
   }
 

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.udf.worker.core
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import org.apache.spark.annotation.Experimental
 
 /**
@@ -27,6 +29,13 @@ import org.apache.spark.annotation.Experimental
  * extended in future versions with new fields (e.g., UDF shape, data format,
  * Spark context metadata, chaining information) without breaking existing
  * worker implementations.
+ *
+ * Placeholder until the UDF protocol lands: this Scala case class will be
+ * replaced by a generated proto message once the wire protocol is
+ * introduced. Do not rely on case-class equality -- `Array[Byte]` fields
+ * compare by reference under the default case-class `equals`/`hashCode`,
+ * so do not use [[InitMessage]] as a hash-based collection key or
+ * compare instances by value without first wrapping the byte arrays.
  *
  * @param functionPayload serialized function (e.g., pickled Python, JVM bytes)
  * @param inputSchema     serialized input schema (e.g., Arrow schema bytes)
@@ -72,18 +81,34 @@ case class InitMessage(
  *  - [[process]] must be called at most once per session.
  *  - [[close]] must always be called (use try-finally).
  *  - [[cancel]] may be called at any time to abort execution.
+ *
+ * The lifecycle is enforced by this class: [[init]] and [[process]] are
+ * `final` and delegate to [[doInit]] / [[doProcess]] after checking
+ * AtomicBoolean guards. Subclasses implement the protocol-specific work
+ * in [[doInit]] and [[doProcess]] and do not need to re-check the
+ * contract themselves.
  */
 @Experimental
 abstract class WorkerSession extends AutoCloseable {
+
+  private val initialized = new AtomicBoolean(false)
+  private val processed = new AtomicBoolean(false)
 
   /**
    * Initializes the UDF execution. Must be called exactly once before
    * [[process]].
    *
+   * Throws `IllegalStateException` if called more than once.
+   *
    * @param message the initialization parameters including the serialized
    *                function, input/output schemas, and configuration.
    */
-  def init(message: InitMessage): Unit
+  final def init(message: InitMessage): Unit = {
+    if (!initialized.compareAndSet(false, true)) {
+      throw new IllegalStateException("init has already been called on this session")
+    }
+    doInit(message)
+  }
 
   /**
    * Processes input data through the worker and returns results.
@@ -93,12 +118,33 @@ abstract class WorkerSession extends AutoCloseable {
    * iterator. The session sends a Finish signal to the worker when the input
    * iterator is exhausted.
    *
-   * Must be called at most once per session.
+   * Must be called after [[init]] and at most once per session.
+   * Throws `IllegalStateException` if called before [[init]] or more than once.
    *
    * @param input iterator of raw input data batches (e.g., Arrow IPC)
    * @return iterator of raw result data batches
    */
-  def process(input: Iterator[Array[Byte]]): Iterator[Array[Byte]]
+  final def process(input: Iterator[Array[Byte]]): Iterator[Array[Byte]] = {
+    if (!initialized.get()) {
+      throw new IllegalStateException("process called before init")
+    }
+    if (!processed.compareAndSet(false, true)) {
+      throw new IllegalStateException("process has already been called on this session")
+    }
+    doProcess(input)
+  }
+
+  /**
+   * Subclass hook for [[init]]. Called exactly once, after the lifecycle
+   * guard has verified init has not already run.
+   */
+  protected def doInit(message: InitMessage): Unit
+
+  /**
+   * Subclass hook for [[process]]. Called at most once, after the
+   * lifecycle guard has verified init has run and process has not.
+   */
+  protected def doProcess(input: Iterator[Array[Byte]]): Iterator[Array[Byte]]
 
   /**
    * Requests cancellation of the current UDF execution.

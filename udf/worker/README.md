@@ -78,7 +78,7 @@ Workers are terminated via SIGTERM/SIGKILL when the dispatcher is closed.
 import org.apache.spark.udf.worker.{
   DirectWorker, ProcessCallable, UDFProtoCommunicationPattern,
   UDFWorkerDataFormat, UDFWorkerProperties, UDFWorkerSpecification,
-  UnixDomainSocket, WorkerCapabilities, WorkerConnection, WorkerEnvironment}
+  UnixDomainSocket, WorkerCapabilities, WorkerConnectionSpec, WorkerEnvironment}
 import org.apache.spark.udf.worker.core._
 
 // 1. Define a worker spec (direct creation mode).
@@ -98,7 +98,7 @@ val spec = UDFWorkerSpecification.newBuilder()
     .setRunner(ProcessCallable.newBuilder()
       .addCommand("python").addCommand("-m").addCommand("my_udf_worker").build())
     .setProperties(UDFWorkerProperties.newBuilder()
-      .addConnections(WorkerConnection.newBuilder()
+      .addConnections(WorkerConnectionSpec.newBuilder()
         .setUnixDomainSocket(UnixDomainSocket.getDefaultInstance).build())
       .build())
     .build())

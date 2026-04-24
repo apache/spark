@@ -202,7 +202,7 @@ message UDFWorkerProperties {
     //
     // On [[DirectWorker]] creation, connection information
     // is passed to the callable as a string parameter.
-    // The string format depends on the [[WorkerConnection]]:
+    // The string format depends on the [[WorkerConnectionSpec]]:
     //
     // For example, when using TCP, the callable argument will be:
     // --connection PORT
@@ -214,10 +214,14 @@ message UDFWorkerProperties {
     // (Required) Exactly one entry today; the field is repeated to allow
     // additional connections (e.g., data + control) to be added without a
     // schema-breaking migration.
-    repeated WorkerConnection connections = 3;
+    repeated WorkerConnectionSpec connections = 3;
 }
 
-message WorkerConnection {
+// Describes one connection (transport endpoint) that a [[DirectWorker]]
+// exposes. This is a configuration message -- the live transport object
+// used by the engine at runtime is the Scala abstraction
+// `org.apache.spark.udf.worker.core.WorkerConnection`.
+message WorkerConnectionSpec {
     // (Required)
     oneof transport {
         UnixDomainSocket unix_domain_socket = 1;
@@ -284,7 +288,7 @@ message ProcessCallable {
     // 
     // --connection
     // The value of the connection argument is a string with
-    // engine-assinged connection parameters. See [[UDFWorkerProperties]]
+    // engine-assigned connection parameters. See [[UDFWorkerProperties]]
     // for details.
     //
     // (Optional)

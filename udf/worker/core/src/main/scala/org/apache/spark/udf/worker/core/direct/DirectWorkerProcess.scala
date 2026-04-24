@@ -36,9 +36,10 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger}
  *  - A '''[[WorkerConnection]]''' (the transport channel to that process).
  *  - A '''socket path''' (a UDS socket file) that both sides use.
  *
- * Multiple [[DirectWorkerSession]]s may share the same process when the
- * worker supports concurrent UDFs. The [[acquireSession]]/[[releaseSession]]
- * ref-count tracks how many sessions are active.
+ * The dispatcher currently creates one process per session and tears it
+ * down when the session closes; the [[acquireSession]]/[[releaseSession]]
+ * ref-count is scaffolding for future pooling, where a single process
+ * will back multiple concurrent sessions.
  *
  * Closing tears down everything: closes the connection, sends SIGTERM
  * (then SIGKILL), and removes the socket file and the process output log.
@@ -155,11 +156,16 @@ class DirectWorkerProcess(
       process.destroy() // SIGTERM
       try {
         if (!process.waitFor(gracefulTimeoutMs, TimeUnit.MILLISECONDS)) {
-          process.destroyForcibly() // SIGKILL
+          // Graceful window expired; escalate to SIGKILL. destroyForciblyAndReap
+          // waits for the kernel to actually reap the child so we don't leak
+          // a zombie here.
+          DirectWorkerDispatcher.destroyForciblyAndReap(process, logger, s"worker $id")
         }
       } catch {
         case _: InterruptedException =>
-          process.destroyForcibly()
+          // Interrupted mid-wait: kill forcibly so we don't leave the child
+          // behind, then re-raise the interrupt on the caller.
+          DirectWorkerDispatcher.destroyForciblyAndReap(process, logger, s"worker $id")
           Thread.currentThread().interrupt()
       }
     }
