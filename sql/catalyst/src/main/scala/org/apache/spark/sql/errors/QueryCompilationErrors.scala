@@ -3910,12 +3910,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changelogName" -> changelogName))
   }
 
-  def changelogMissingRowVersionError(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_VERSION",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
   def invalidCdcOptionConflictingRangeTypes(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.CONFLICTING_RANGE_TYPES",

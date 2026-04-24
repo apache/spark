@@ -21,7 +21,6 @@ import java.util.{EnumSet => JEnumSet, Set => JSet}
 
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
-import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
@@ -39,7 +38,7 @@ case class ChangelogTable(
     changelogInfo: ChangelogInfo,
     resolved: Boolean = false) extends Table with SupportsRead {
 
-  // Validate the connector returned a schema with the required CDC metadata columns
+  // Validate that the connector returned a schema with the required CDC metadata columns
   // and correct types. `_commit_version` is connector-defined per the Changelog contract,
   // so its type is not checked.
   ChangelogTable.validateSchema(changelog)
@@ -57,7 +56,7 @@ case class ChangelogTable(
 
 object ChangelogTable {
 
-  def validateSchema(cl: Changelog): Unit = {
+  private[v2] def validateSchema(cl: Changelog): Unit = {
     val byName = cl.columns.map(c => c.name -> c).toMap
     def check(name: String, expected: DataType*): Unit = {
       val col = byName.getOrElse(name,
@@ -71,31 +70,22 @@ object ChangelogTable {
     check("_commit_version")           // connector-defined, any type accepted
     check("_commit_timestamp", TimestampType)
 
-    // `rowId()` / `rowVersion()` default to throwing UnsupportedOperationException for
-    // connectors that haven't opted in. Translate that into "not declared" so we can
-    // reason about it as Option/empty-array below.
-    val rowIds: Array[NamedReference] = try cl.rowId() catch {
-      case _: UnsupportedOperationException => Array.empty
-    }
-    val rowVersionRef: Option[NamedReference] = try Some(cl.rowVersion()) catch {
-      case _: UnsupportedOperationException => None
-    }
-
-    // Capability-driven presence checks: a connector that advertises a capability which
-    // requires row identity or row versioning must actually expose those references.
-    // Otherwise post-processing would crash with an UnsupportedOperationException at
-    // runtime instead of producing a clean AnalysisException here.
+    // Only call `rowId()` / `rowVersion()` when a capability requires them; a connector
+    // that advertises a capability without overriding the method surfaces the default
+    // UnsupportedOperationException directly.
     val needsRowId = cl.containsCarryoverRows() ||
       cl.representsUpdateAsDeleteAndInsert() ||
       cl.containsIntermediateChanges()
-    if (needsRowId && (rowIds == null || rowIds.isEmpty)) {
-      throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+    if (needsRowId) {
+      val rowIds = cl.rowId()
+      if (rowIds == null || rowIds.isEmpty) {
+        throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+      }
     }
-
     val needsRowVersion = cl.containsCarryoverRows() ||
       cl.representsUpdateAsDeleteAndInsert()
-    if (needsRowVersion && rowVersionRef.isEmpty) {
-      throw QueryCompilationErrors.changelogMissingRowVersionError(cl.name)
+    if (needsRowVersion) {
+      cl.rowVersion()
     }
   }
 }

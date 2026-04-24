@@ -3327,12 +3327,7 @@
       },
       "MISSING_ROW_ID" : {
         "message" : [
-          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array. Either set all three to `false`, or return at least one row-id `NamedReference`."
-        ]
-      },
-      "MISSING_ROW_VERSION" : {
-        "message" : [
-          "Connector advertises `containsCarryoverRows` or `representsUpdateAsDeleteAndInsert` is `true`, but `Changelog.rowVersion()` is not implemented. Override `rowVersion()` to return a `NamedReference` pointing to a non-nullable column in `Changelog.columns()`."
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array."
         ]
       }
     },

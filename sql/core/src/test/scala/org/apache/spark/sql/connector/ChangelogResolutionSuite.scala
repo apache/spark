@@ -381,6 +381,63 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     ChangelogTable(cl, stubInfo())
   }
 
+  test("ChangelogTable - representsUpdateAsDeleteAndInsert=true requires non-empty rowId") {
+    val cl = new TestChangelog(
+      "bad_cl",
+      Array(
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType)),
+      updateAsDeleteInsert = true,
+      rowIdRefs = Array.empty,
+      rowVersionRef = Some(FieldReference.column("_commit_version")))
+    checkError(
+      intercept[AnalysisException] { ChangelogTable(cl, stubInfo()) },
+      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
+      parameters = Map("changelogName" -> "bad_cl"))
+  }
+
+  test("ChangelogTable - containsIntermediateChanges=true requires non-empty rowId") {
+    val cl = new TestChangelog(
+      "bad_cl",
+      Array(
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType)),
+      intermediateChanges = true,
+      rowIdRefs = Array.empty)
+    checkError(
+      intercept[AnalysisException] { ChangelogTable(cl, stubInfo()) },
+      condition = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
+      parameters = Map("changelogName" -> "bad_cl"))
+  }
+
+  test("ChangelogTable - UnsupportedOperationException surfaces when rowId() not implemented") {
+    val cl = new TestChangelog(
+      "bad_cl",
+      Array(
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType)),
+      carryoverRows = true,
+      rowIdSupported = false,
+      rowVersionRef = Some(FieldReference.column("_commit_version")))
+    intercept[UnsupportedOperationException] { ChangelogTable(cl, stubInfo()) }
+  }
+
+  test("ChangelogTable - UnsupportedOperationException surfaces when rowVersion() missing") {
+    val cl = new TestChangelog(
+      "bad_cl",
+      Array(
+        Column.create("_change_type", StringType),
+        Column.create("_commit_version", LongType),
+        Column.create("_commit_timestamp", TimestampType)),
+      carryoverRows = true,
+      rowIdRefs = Array(FieldReference.column("id")),
+      rowVersionRef = None)
+    intercept[UnsupportedOperationException] { ChangelogTable(cl, stubInfo()) }
+  }
+
 }
 
 /**
@@ -394,14 +451,18 @@ private class TestChangelog(
     nameArg: String,
     cols: Array[Column],
     carryoverRows: Boolean = false,
+    updateAsDeleteInsert: Boolean = false,
+    intermediateChanges: Boolean = false,
     rowIdRefs: Array[NamedReference] = Array.empty,
+    rowIdSupported: Boolean = true,
     rowVersionRef: Option[NamedReference] = None) extends Changelog {
   override def name(): String = nameArg
   override def columns(): Array[Column] = cols
   override def containsCarryoverRows(): Boolean = carryoverRows
-  override def containsIntermediateChanges(): Boolean = false
-  override def representsUpdateAsDeleteAndInsert(): Boolean = false
-  override def rowId(): Array[NamedReference] = rowIdRefs
+  override def containsIntermediateChanges(): Boolean = intermediateChanges
+  override def representsUpdateAsDeleteAndInsert(): Boolean = updateAsDeleteInsert
+  override def rowId(): Array[NamedReference] =
+    if (rowIdSupported) rowIdRefs else super.rowId()
   override def rowVersion(): NamedReference =
     rowVersionRef.getOrElse(super.rowVersion())
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
