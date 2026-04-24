@@ -359,7 +359,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "SHOW COLUMNS")
 
-    case DescribeRelation(ResolvedPersistentView(catalog, ident, _), _, _, _) =>
+    case DescribeRelation(ResolvedPersistentView(catalog, ident, _), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(
         catalog, ident, "DESCRIBE TABLE")
 
