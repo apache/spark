@@ -153,6 +153,32 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
   }
 
+  testWithTempDir("infer shredding mixed array and non-array at root") { dir =>
+    val df = spark.sql(
+      """
+        | select if(id % 2 = 0, parse_json('[1]'), parse_json('42')) as v
+        | from range(0, 20, 1, 1)
+        |""".stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    // Array rows and scalar rows cannot share one array element type; the column must stay variant.
+    val expected = VariantType
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
+  testWithTempDir("infer shredding heterogeneous array elements (object and nested array)") { dir =>
+    val df = spark.sql(
+      """
+        | select parse_json('[{"a": 1}, [2]]') as v
+        | from range(0, 20, 1, 1)
+        |""".stripMargin)
+    df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+    // Object elements and inner-array elements on the same aggregate must become array<variant>.
+    val expected = ArrayType(VariantType, containsNull = false)
+    checkFileSchema(expected, dir)
+    checkAnswer(spark.read.parquet(dir.getAbsolutePath), df.collect())
+  }
+
   test("infer shredding does not infer rare rows") {
     Seq(2, 9, 10, 11, 19, 20, 21, 100).foreach { inverseFreq =>
       withTempDir { dir =>

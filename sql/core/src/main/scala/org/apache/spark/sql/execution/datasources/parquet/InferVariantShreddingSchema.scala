@@ -415,14 +415,13 @@ class InferVariantShreddingSchema(val schema: StructType) {
             val element = v.getElementAtIndex(i)
             val elementTypeClass = element.getType
 
-            // Primitives merge into `dataType`; objects/arrays are merged with the recursive
-            // `buildSchemaFromStats` result in `mergeSchema` below.
+            // Primitives merge into `dataType` only; objects and arrays need tree descent.
             if (elementTypeClass != Type.OBJECT && elementTypeClass != Type.ARRAY) {
               val primitiveType = inferPrimitiveType(element, depth)
               arrayNode.dataType = mergeSchema(arrayNode.dataType, primitiveType)
+            } else {
+              collectFieldStats(element, arrayNode, rowIdx, depth + 1, inArrayContext = true)
             }
-
-            collectFieldStats(element, arrayNode, rowIdx, depth + 1, inArrayContext = true)
           }
         }
 
@@ -470,8 +469,15 @@ class InferVariantShreddingSchema(val schema: StructType) {
 
   /**
    * Build a schema from collected field statistics tree.
-   * For fields in array contexts, use arrayElementCount / total rows.
-   * For top-level fields, use distinct row count.
+   *
+   * When isArray=true the function builds and returns the full ArrayType for this node
+   * (using its arrayElementNode to determine the element type).
+   * When isArray=false it returns the type for the node itself (scalar, VariantType,
+   * or StructType).
+   *
+   * Cardinality metric:
+   *  - inArrayContext=true  uses arrayElementCount (total occurrences across array positions).
+   *  - inArrayContext=false uses rowCount (distinct rows containing the field).
    */
   private def buildSchemaFromStats(
       currentNode: FieldNode,
@@ -479,90 +485,76 @@ class InferVariantShreddingSchema(val schema: StructType) {
       inArrayContext: Boolean,
       isArray: Boolean): DataType = {
 
-    // If this node is an array, use array-element node to build element type.
+    // Pick the right counter for this context; reused in filter, sort, and metadata below.
+    def cardinality(n: FieldNode): Long =
+      if (inArrayContext) n.arrayElementCount else n.rowCount
+
+    // Array branch
     if (isArray) {
-      val arrayElementNodeOpt = currentNode.arrayElementNode
-      if (arrayElementNodeOpt.isDefined && arrayElementNodeOpt.get.rowCount >= minCardinality) {
-        val arrayElementNode = arrayElementNodeOpt.get
-        val elementType = buildSchemaFromStats(
-          arrayElementNode,
-          minCardinality,
-          inArrayContext = true,
-          isArray = arrayElementNode.arrayElementNode.isDefined
-        )
-        // Collection keeps primitives in `dataType` and structure in children;
-        // `elementType` is only known after this recursion. mergeSchema combines both
-        // into one element type so mixed arrays (e.g. `[1, {"a": 1}]`) become array<variant>,
-        val mergedElement = mergeSchema(arrayElementNode.dataType, elementType)
-        return ArrayType(mergedElement)
+      // Case 1: mixed array and non-array rows at the same path merged dataType to VariantType.
+      //         The whole node is variant, not an array.
+      if (currentNode.dataType == VariantType) {
+        return VariantType
       }
-      return currentNode.dataType
+      // Case 2: object elements and inner-array elements coexist on the same element aggregate
+      //         (children from objects, arrayElementNode from inner arrays): element is variant.
+      if (currentNode.children.nonEmpty && currentNode.arrayElementNode.isDefined) {
+        return ArrayType(VariantType)
+      }
+
+      // Case 3: uniform inner array -- recurse into the element node and merge with any scalar
+      //         dataType on the same node (e.g. `[1, {"a":1}]` merges long + struct -> variant).
+      currentNode.arrayElementNode match {
+        case Some(elemNode) if elemNode.rowCount >= minCardinality =>
+          // If the element node itself has both object children and a nested array, the two
+          // element shapes cannot be reconciled: treat the element as variant.
+          val elementType = if (elemNode.children.nonEmpty && elemNode.arrayElementNode.isDefined) {
+            VariantType
+          } else {
+            buildSchemaFromStats(
+              elemNode,
+              minCardinality,
+              inArrayContext = true,
+              isArray = elemNode.arrayElementNode.isDefined)
+          }
+          return ArrayType(mergeSchema(elemNode.dataType, elementType))
+        case _ =>
+          return currentNode.dataType
+      }
     }
 
-    // Incompatible types merged at this node, store as variant to avoid creating
-    // a struct that is built from a subset of rows
-    if (currentNode.dataType == VariantType) {
-      return VariantType
-    }
+    // Non-array branch: incompatible types already collapsed to VariantType during collection.
+    if (currentNode.dataType == VariantType) return VariantType
 
-    // Get all direct children, filter by cardinality, sort by cardinality descending,
-    // take top N, then sort alphabetically for determinism.
+    // Filter children by cardinality, keep the top N by frequency, sort alphabetically.
     val maxStructSize = Math.min(1000, maxShreddedFieldsPerFile)
     val children = currentNode.getChildren
-      .filter { case (_, childNode) =>
-        val cardinality = if (inArrayContext) {
-          childNode.arrayElementCount
-        } else {
-          childNode.rowCount
-        }
-        cardinality >= minCardinality
-      }
-      .sortBy { case (fieldName, childNode) =>
-        val cardinality = if (inArrayContext) {
-          childNode.arrayElementCount
-        } else {
-          childNode.rowCount
-        }
-        // Sort by cardinality descending, then by name ascending for stability
-        (-cardinality, fieldName)
-      }
+      .filter { case (_, n) => cardinality(n) >= minCardinality }
+      .sortBy { case (name, n) => (-cardinality(n), name) }
       .take(maxStructSize)
-      .sortBy(_._1)  // Sort alphabetically
+      .sortBy(_._1)
 
     if (children.isEmpty) {
-      // No child fields met minCardinality: cannot emit a typed struct. Use merged scalars from
-      // `dataType` when present; empty struct/array/null markers imply no typed columns → variant.
+      // No qualifying children: fall back to any scalar merged at this node, or variant.
       return currentNode.dataType match {
         case _: StructType | _: ArrayType | NullType => VariantType
         case dt => dt
       }
     }
 
-    // Build struct from children
     val fields = children.map { case (fieldName, childNode) =>
       val fieldType = childNode.dataType match {
         case StructType(_) =>
-          buildSchemaFromStats(
-            childNode, minCardinality, inArrayContext, isArray = false)
-
+          buildSchemaFromStats(childNode, minCardinality, inArrayContext, isArray = false)
         case ArrayType(_, _) =>
           buildSchemaFromStats(
-            childNode,
-            minCardinality,
-            inArrayContext = true,
+            childNode, minCardinality, inArrayContext = true,
             isArray = childNode.arrayElementNode.isDefined)
-
         case other => other
       }
-
-      val cardinality = if (inArrayContext) {
-        childNode.arrayElementCount
-      } else {
-        childNode.rowCount
-      }
-
+      val cnt = cardinality(childNode)
       StructField(fieldName, fieldType,
-        metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, cardinality).build())
+        metadata = new MetadataBuilder().putLong(COUNT_METADATA_KEY, cnt).build())
     }
 
     StructType(fields.toSeq)
