@@ -4790,12 +4790,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         psdf = psdf[columns]
         self._update_internal_frame(psdf._internal)
 
-    # TODO(SPARK-46156): add frep and axis parameter
-    def shift(self, periods: int = 1, fill_value: Optional[Any] = None) -> "DataFrame":
+    # TODO(SPARK-46160): add freq parameter
+    def shift(
+        self,
+        periods: int = 1,
+        fill_value: Optional[Any] = None,
+        axis: Axis = 0,
+    ) -> "DataFrame":
         """
         Shift DataFrame by desired number of periods.
 
-        .. note:: the current implementation of shift uses Spark's Window without
+        .. note:: When axis=0, the current implementation of shift uses Spark's Window without
             specifying partition specification. This leads to moving all data into
             a single partition in a single machine and could cause serious
             performance degradation. Avoid this method with very large datasets.
@@ -4807,6 +4812,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         fill_value : object, optional
             The scalar value to use for newly introduced missing values.
             The default depends on the dtype of self. For numeric data, np.nan is used.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            Axis along which to shift:
+
+            * 0 or 'index': shift each column independently (down/up rows)
+            * 1 or 'columns': shift each row independently (across columns)
+
+            .. versionchanged:: 4.2.0
 
         Returns
         -------
@@ -4835,10 +4847,57 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3    10    13    17
         4    20    23    27
 
+        Shift across columns with axis=1:
+
+        >>> df = ps.DataFrame({'A': [1, 2, 3], 'B': [4, 5, 6], 'C': [7, 8, 9]},
+        ...                   columns=['A', 'B', 'C'])
+        >>> df.shift(periods=1, axis=1).sort_index()
+            A    B    C
+        0 NaN  1.0  4.0
+        1 NaN  2.0  5.0
+        2 NaN  3.0  6.0
         """
-        return self._apply_series_op(
-            lambda psser: psser._shift(periods, fill_value), should_resolve=True
-        )
+        if not isinstance(periods, int):
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
+
+        axis = validate_axis(axis)
+
+        if axis == 0:
+            return self._apply_series_op(
+                lambda psser: psser._shift(periods, fill_value), should_resolve=True
+            )
+        else:
+            # Infer result schema from a small sample, following the same
+            # pattern as apply() (shortcut_limit).
+            limit = get_option("compute.shortcut_limit")
+            pdf = self.head(limit + 1)._to_internal_pandas()
+            pdf_shifted = pdf.shift(periods=periods, fill_value=fill_value, axis=1)
+            if len(pdf) <= limit:
+                return DataFrame(InternalFrame.from_pandas(pdf_shifted))
+
+            # Use the shifted sample to infer return types so that the UDF
+            # path produces consistent dtypes with the fast path.
+            psdf_shifted = DataFrame(InternalFrame.from_pandas(pdf_shifted))
+            data_fields = [
+                field.normalize_spark_type() for field in psdf_shifted._internal.data_fields
+            ]
+            return_schema = StructType([field.struct_field for field in data_fields])
+
+            column_label_strings = [
+                name_like_string(label) for label in self._internal.column_labels
+            ]
+
+            @pandas_udf(returnType=return_schema)  # type: ignore[call-overload]
+            def shift_axis_1(*cols: pd.Series) -> pd.DataFrame:
+                pdf_row = pd.concat(cols, axis=1, keys=column_label_strings)
+                return pdf_row.shift(periods=periods, fill_value=fill_value, axis=1)
+
+            shifted_struct_col = shift_axis_1(*self._internal.data_spark_columns)
+            new_data_columns = [
+                shifted_struct_col[col_name].alias(col_name) for col_name in column_label_strings
+            ]
+            internal = self._internal.with_new_columns(new_data_columns, data_fields=data_fields)
+            return DataFrame(internal)
 
     # TODO(SPARK-46161): axis should support 1 or 'columns' either at this moment
     def diff(self, periods: int = 1, axis: Axis = 0) -> "DataFrame":

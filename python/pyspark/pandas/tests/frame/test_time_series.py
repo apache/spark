@@ -60,6 +60,99 @@ class FrameTimeSeriesMixin:
         self.assert_eq(pdf.shift().shift(-1), psdf.shift().shift(-1))
         self.assert_eq(pdf.shift(0), psdf.shift(0))
 
+    def test_shift_axis(self):
+        # SPARK-46160: shift with axis parameter
+        pdf = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6], "C": [7, 8, 9]})
+        psdf = ps.from_pandas(pdf)
+
+        # Test axis=0 (explicit, should match default behavior)
+        self.assert_eq(pdf.shift(axis=0).sort_index(), psdf.shift(axis=0).sort_index())
+
+        # Test axis=1 (shift across columns)
+        self.assert_eq(pdf.shift(axis=1).sort_index(), psdf.shift(axis=1).sort_index())
+
+        # Test axis='index' and axis='columns'
+        self.assert_eq(pdf.shift(axis="index").sort_index(), psdf.shift(axis="index").sort_index())
+        self.assert_eq(
+            pdf.shift(axis="columns").sort_index(), psdf.shift(axis="columns").sort_index()
+        )
+
+        # Test various periods with axis=1
+        for periods in [1, -1, 2, -2, 0]:
+            self.assert_eq(
+                pdf.shift(periods=periods, axis=1).sort_index(),
+                psdf.shift(periods=periods, axis=1).sort_index(),
+            )
+
+        # Test fill_value with axis=1
+        self.assert_eq(
+            pdf.shift(periods=1, fill_value=0, axis=1).sort_index(),
+            psdf.shift(periods=1, fill_value=0, axis=1).sort_index(),
+        )
+
+        # Test with single column DataFrame
+        pdf_single = pd.DataFrame({"A": [1, 2, 3]})
+        psdf_single = ps.from_pandas(pdf_single)
+        self.assert_eq(
+            pdf_single.shift(axis=1).sort_index(),
+            psdf_single.shift(axis=1).sort_index(),
+        )
+
+        # Test with NaN values
+        pdf_nan = pd.DataFrame({"A": [1, np.nan, 3], "B": [4, 3, np.nan]})
+        psdf_nan = ps.from_pandas(pdf_nan)
+        self.assert_eq(
+            pdf_nan.shift(axis=1).sort_index(),
+            psdf_nan.shift(axis=1).sort_index(),
+        )
+
+        # Test with multi-index columns
+        columns = pd.MultiIndex.from_tuples([("x", "A"), ("x", "B"), ("y", "C")])
+        pdf.columns = columns
+        psdf.columns = columns
+        self.assert_eq(pdf.shift(axis=1).sort_index(), psdf.shift(axis=1).sort_index())
+
+        # Test with large dataset to ensure UDF path is used (>1000 rows)
+        rng = np.random.RandomState(42)
+        pdf_large = pd.DataFrame({"A": rng.rand(1500), "B": rng.rand(1500), "C": rng.rand(1500)})
+        psdf_large = ps.from_pandas(pdf_large)
+        self.assert_eq(
+            pdf_large.shift(axis=1).sort_index(),
+            psdf_large.shift(axis=1).sort_index(),
+        )
+
+        # Test fill_value on UDF path (large dataset)
+        self.assert_eq(
+            pdf_large.shift(periods=1, fill_value=0, axis=1).sort_index(),
+            psdf_large.shift(periods=1, fill_value=0, axis=1).sort_index(),
+        )
+
+        # Test periods larger than number of columns (should produce all NaN)
+        self.assert_eq(
+            pdf.shift(periods=5, axis=1).sort_index(),
+            psdf.shift(periods=5, axis=1).sort_index(),
+        )
+
+        # Test with mixed numeric types (int + float)
+        pdf_mixed = pd.DataFrame({"A": [1, 2, 3], "B": [4.0, 5.0, 6.0], "C": [7, 8, 9]})
+        psdf_mixed = ps.from_pandas(pdf_mixed)
+        self.assert_eq(
+            pdf_mixed.shift(axis=1).sort_index(),
+            psdf_mixed.shift(axis=1).sort_index(),
+        )
+
+        # Test with empty DataFrame
+        pdf_empty = pd.DataFrame({"A": pd.Series([], dtype="float64")})
+        psdf_empty = ps.from_pandas(pdf_empty)
+        self.assert_eq(
+            pdf_empty.shift(axis=1).sort_index(),
+            psdf_empty.shift(axis=1).sort_index(),
+        )
+
+        # Test invalid axis value
+        with self.assertRaisesRegex(ValueError, "No axis named"):
+            psdf.shift(axis=2)
+
     def test_first_valid_index(self):
         pdf = pd.DataFrame(
             {"a": [None, 2, 3, 2], "b": [None, 2.0, 3.0, 1.0], "c": [None, 200, 400, 200]},
