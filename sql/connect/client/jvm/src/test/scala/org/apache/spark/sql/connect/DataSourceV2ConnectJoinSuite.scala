@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect
 
+import org.apache.spark.sql.Row
+
 /**
  * Design doc Section [3] in Connect: Incrementally constructed queries.
  *
@@ -151,6 +153,105 @@ class DataSourceV2ConnectJoinSuite extends DataSourceV2RefreshConnectTestBase {
         .join(df2, df1("a") === df2("b"))
         .join(df3, df1("a") === df3("c"))
       assert(joined.collect().length == 3)
+    }
+  }
+
+  // Incrementally constructed queries: join scenarios mirroring the classic
+  // DataSourceV2DataFrameSuite tests. In Connect, both sides re-analyze on
+  // every action, so operations that fail in classic mode succeed here.
+
+  test("SPARK-54157: [connect] join refreshes both sides after insert") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      // Both sides re-analyze to latest version
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
+    }
+  }
+
+  test("SPARK-54157: [connect] join after ADD COLUMN sees new schema on both sides") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      spark.sql(s"ALTER TABLE $T ADD COLUMN new_column INT")
+      spark.sql(s"INSERT INTO $T VALUES (2, 200, -1)")
+      val df2 = spark.table(T)
+      // In Connect, df1 also re-analyzes to the 3-column schema
+      // (unlike classic where df1 keeps original 2-column schema)
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
+    }
+  }
+
+  test("SPARK-54157: [connect] join after DROP COLUMN succeeds") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      spark.sql(s"ALTER TABLE $T DROP COLUMN salary")
+      spark.sql(s"INSERT INTO $T VALUES (2)")
+      val df2 = spark.table(T)
+      // In Connect, both sides re-analyze: both see only 'id'
+      // (classic fails with COLUMNS_MISMATCH)
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, 1), Row(2, 2)))
+    }
+  }
+
+  test("SPARK-54157: [connect] join after drop and recreate table succeeds") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      spark.sql(s"DROP TABLE $T")
+      spark.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      // In Connect, both sides re-analyze against the new table
+      // (classic fails with TABLE_ID_MISMATCH)
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(2, 200, 2, 200)))
+    }
+  }
+
+  test("SPARK-54157: [connect] join after drop and re-add column with same type") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      spark.sql(s"ALTER TABLE $T DROP COLUMN salary")
+      spark.sql(s"ALTER TABLE $T ADD COLUMN salary INT")
+      spark.sql(s"INSERT INTO $T VALUES (2, 200)")
+      val df2 = spark.table(T)
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, null, 1, null), Row(2, 200, 2, 200)))
+    }
+  }
+
+  test("SPARK-54157: [connect] join after drop and re-add column with different type succeeds") {
+    assumeCanRun()
+    withTable(T) {
+      setupTable()
+      val df1 = spark.table(T)
+      spark.sql(s"ALTER TABLE $T DROP COLUMN salary")
+      spark.sql(s"ALTER TABLE $T ADD COLUMN salary STRING")
+      spark.sql(s"INSERT INTO $T VALUES (2, 'high')")
+      val df2 = spark.table(T)
+      // In Connect, both sides re-analyze: both see salary as STRING
+      // (classic fails with COLUMNS_MISMATCH)
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, null, 1, null), Row(2, "high", 2, "high")))
     }
   }
 }
