@@ -1765,7 +1765,7 @@ class DataSourceV2DataFrameSuite
   // (to demonstrate that the stored plan is non-trivial), and then verifies the view
   // behavior after various table modifications (session or external).
 
-  test("SPARK-53924: temp view with stored plan reflects session write") {
+  test("temp view with stored plan reflects session write") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -1780,7 +1780,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan reflects external write") {
+  test("temp view with stored plan reflects external write") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1801,7 +1801,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan preserves schema after session ADD COLUMN") {
+  test("temp view with stored plan preserves schema after session ADD COLUMN") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -1818,7 +1818,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan preserves schema after external ADD COLUMN") {
+  test("temp view with stored plan preserves schema after external ADD COLUMN") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1844,7 +1844,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan detects external column removal") {
+  test("temp view with stored plan detects external column removal") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1869,7 +1869,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan resolves to externally recreated table") {
+  test("temp view with stored plan resolves to externally recreated table") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1903,7 +1903,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan after session drop and re-add column same type") {
+  test("temp view with stored plan after session drop and re-add column same type") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -1922,7 +1922,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan after external drop and re-add column same type") {
+  test("temp view with stored plan after external drop and re-add column same type") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1942,7 +1942,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan detects session column type change") {
+  test("temp view with stored plan detects session column type change") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -1966,7 +1966,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan detects external column type change") {
+  test("temp view with stored plan detects external column type change") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -1992,7 +1992,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view with stored plan detects type widening") {
+  test("temp view with stored plan detects type widening") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
