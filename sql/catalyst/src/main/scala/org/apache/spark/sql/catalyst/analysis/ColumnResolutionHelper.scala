@@ -140,8 +140,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts) if !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
-          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
+        case u @ UnresolvedAttribute(nameParts)
+          if conf.getConf(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION) ||
+            !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
+          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn,
+          // unless strict DataFrame column resolution is enabled, in which case we also allow
+          // name-based resolution as a fallback for tagged attributes.
           val result = withPosition(u) {
             resolveColumnByName(nameParts)
               .orElse(LiteralFunctionResolution.resolve(nameParts))
@@ -570,6 +574,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         p.getMetadataAttributeByNameOpt(u.nameParts.head)
       } else {
         None
+      }
+      if (resolved.isEmpty &&
+          conf.getConf(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION)) {
+        // The target plan node is found, but the column cannot be resolved on it.
+        // Under strict DataFrame column resolution, fail immediately instead of
+        // delaying the failure.
+        throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
       }
       // The targe plan node is found, but might still fail to resolve.
       // In this case, return None to delay the failure, so it is possible to be

@@ -303,6 +303,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STRICT_DATAFRAME_COLUMN_RESOLUTION =
+    buildConf("spark.sql.analyzer.strictDataFrameColumnResolution")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, enforces strict resolution of DataFrame columns (UnresolvedAttribute " +
+        "carrying a plan id tag): if the target plan node is found but the column cannot be " +
+        "resolved on it, fail immediately with CANNOT_RESOLVE_DATAFRAME_COLUMN instead of " +
+        "delaying the failure for a later analyzer iteration. In this mode we also allow " +
+        "name-based resolution as a fallback for tagged attributes. When false (default), " +
+        "failures are delayed so that downstream analyzer rules can still resolve the column.")
+      .booleanConf
+      .createWithDefault(false)
+
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
     buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
       .doc("If enabled, we fail legacy CREATE TEMPORARY TABLE ... USING provider during parsing.")

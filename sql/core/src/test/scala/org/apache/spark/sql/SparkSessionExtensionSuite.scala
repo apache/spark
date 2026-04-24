@@ -109,6 +109,32 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
+  test("strict DataFrame column resolution fails immediately on matched plan node") {
+    withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
+      session.conf.set(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION.key, true)
+      try {
+        val rel = LocalRelation(
+          AttributeReference("a", IntegerType)(),
+          AttributeReference("b", IntegerType)())
+        rel.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+        val u = UnresolvedAttribute("x")
+        u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+        val proj = Project(Seq(u), rel)
+
+        val e = intercept[AnalysisException] {
+          Dataset.ofRows(session, proj)
+        }
+        checkError(
+          exception = e,
+          condition = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+          parameters = Map("name" -> "\"x\""))
+      } finally {
+        session.conf.unset(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION.key)
+      }
+    }
+  }
+
   test("inject post hoc resolution analyzer rule") {
     withSession(Seq(_.injectPostHocResolutionRule(MyRule))) { session =>
       assert(session.sessionState.analyzer.postHocResolutionRules.contains(MyRule(session)))
