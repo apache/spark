@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 
 /**
  * :: DeveloperApi ::
@@ -30,7 +30,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
  * Spec for driver pod and resources, used for K8s operations internally
  * and Spark K8s operator.
  */
-@Unstable
+@Stable
 @DeveloperApi
 @Since("3.3.0")
 case class KubernetesDriverSpec(
@@ -54,8 +54,9 @@ case class KubernetesDriverSpec(
     driverKubernetesResources.asJava
 }
 
-@Unstable
+@Stable
 @DeveloperApi
+@Since("4.2.0")
 object KubernetesDriverSpec {
   @Since("4.2.0")
   def create(
