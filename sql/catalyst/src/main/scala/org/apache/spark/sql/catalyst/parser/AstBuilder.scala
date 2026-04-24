@@ -7010,7 +7010,7 @@ class AstBuilder extends DataTypeAstBuilder
             // and replace it with the corresponding attribute from the child operator.
             case UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
-              newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
+              newAggregateExpressions += UnresolvedPipeAggregateOrdinal(v)
             case e: Expression =>
               newGroupingExpressions += e
               newAggregateExpressions += UnresolvedAlias(e, None)

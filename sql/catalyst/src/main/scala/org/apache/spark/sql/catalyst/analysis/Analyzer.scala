@@ -1960,7 +1960,7 @@ class Analyzer(
     }
 
     private def containUnresolvedPipeAggregateOrdinal(e: Expression): Boolean = e match {
-      case UnresolvedAlias(_: UnresolvedPipeAggregateOrdinal, _) => true
+      case _: UnresolvedPipeAggregateOrdinal => true
       case _ => false
     }
 
@@ -1991,7 +1991,7 @@ class Analyzer(
   private def resolvePipeAggregateExpressionOrdinal(
       expr: NamedExpression,
       inputs: Seq[Attribute]): NamedExpression = expr match {
-    case UnresolvedAlias(UnresolvedPipeAggregateOrdinal(index), _) =>
+    case UnresolvedPipeAggregateOrdinal(index) =>
       // In this case, the user applied the SQL pipe aggregate operator ("|> AGGREGATE") and used
       // ordinals in its GROUP BY clause. This expression then refers to the i-th attribute of the
       // child operator (one-based). Here we resolve the ordinal to the corresponding attribute.
