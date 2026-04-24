@@ -1456,6 +1456,65 @@ class MergeSubplansSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  test("SPARK-56570: Merge non-grouping subqueries with different filter conditions and " +
+      "non-attribute Project expressions on both sides") {
+    val subquery1 = ScalarSubquery(
+      testRelation.where($"a" > 1).select(($"a" * 2).as("x")).groupBy()(sum($"x").as("sum_x")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"a" < 1).select(($"a" + 1).as("y")).groupBy()(max($"y").as("max_y")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    // Merge steps:
+    // Inner Filter level - (np: Filter(a < 1), cp: Filter(a > 1)):
+    //   Different conditions -> symmetric first-time filter propagation.
+    //   f0 = Alias(a < 1, "propagatedFilter_0")  -- np
+    //   f1 = Alias(a > 1, "propagatedFilter_1")  -- cp
+    //   -> Project([a, b, c, f0Alias, f1Alias], testRelation)
+    //   -> Filter(OR(f0, f1), above)  [tagged]
+    //   propagates (Some(f0), Some(f1)) upward
+    //
+    // Outer Project level - (np: Project(a + 1 AS y), cp: Project(a * 2 AS x)):
+    //   Both sides have non-matching, non-attribute projections. Each side's projection is
+    //   wrapped with its own filter: np's a + 1 with f0, cp's a * 2 with f1. The cached-side
+    //   wrapping must touch only original cached entries; it must not double-wrap the np-
+    //   appended entry with f1.
+    //   -> Project([If(f1, a * 2, null) AS x, If(f0, a + 1, null) AS y, f0, f1], innerFilter)
+    //
+    // Aggregate consumes:
+    //   sum(x) FILTER f1  -- cp: rows where a > 1
+    //   max(y) FILTER f0  -- np: rows where a < 1
+    val f0Alias = Alias($"a" < 1, "propagatedFilter_0")()
+    val f1Alias = Alias($"a" > 1, "propagatedFilter_1")()
+    val f0 = f0Alias.toAttribute
+    val f1 = f1Alias.toAttribute
+    val intType = testRelation.output.head.dataType
+    val xAlias = Alias(If(f1, $"a" * 2, Literal(null, intType)), "x")()
+    val yAlias = Alias(If(f0, $"a" + 1, Literal(null, intType)), "y")()
+    val x = xAlias.toAttribute
+    val y = yAlias.toAttribute
+    val mergedSubquery = testRelation
+      .select(testRelation.output ++ Seq(f0Alias, f1Alias): _*)
+      .where(Or(f0, f1))
+      .select(xAlias, yAlias, f0, f1)
+      .groupBy()(
+        sum(x, Some(f1)).as("sum_x"),
+        max(y, Some(f0)).as("max_y"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_x"), $"sum_x",
+        Literal("max_y"), $"max_y"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("SPARK-40193: Merge non-grouping subqueries where one aggregate already carries a " +
       "FILTER clause") {
     val subquery1 = ScalarSubquery(testRelation.groupBy()(max($"a").as("max_a")))

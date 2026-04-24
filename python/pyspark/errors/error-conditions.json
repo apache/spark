@@ -808,24 +808,19 @@
       "Number of columns of the returned data doesn't match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
+  "RESULT_COLUMN_TYPES_MISMATCH": {
+    "message": [
+      "Column types of the returned data do not match specified schema. Mismatch: <mismatch>."
+    ]
+  },
   "RESULT_ROWS_MISMATCH": {
     "message": [
       "The number of output rows (<output_length>) must match the number of input rows (<input_length>)."
     ]
   },
-  "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF": {
-    "message": [
-      "Columns do not match in their data type: <mismatch>."
-    ]
-  },
   "REUSE_OBSERVATION": {
     "message": [
       "An Observation can be used with a DataFrame only once."
-    ]
-  },
-  "SCHEMA_MISMATCH_FOR_ARROW_PYTHON_UDF": {
-    "message": [
-      "Result vector from <udf_type> was not the required length: expected <expected>, got <actual>."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF": {

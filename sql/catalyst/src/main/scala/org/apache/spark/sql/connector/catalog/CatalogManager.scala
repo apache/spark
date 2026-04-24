@@ -244,6 +244,10 @@ private[sql] object CatalogManager {
       isFullyQualifiedSystemSessionViewName(nameParts)
   }
 
+  /** True if a SQL path entry is the well-known `system.session` entry. */
+  def isSystemSessionPathEntry(parts: Seq[String]): Boolean =
+    parts == Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE)
+
   /**
    * A single entry in the session SQL path: either a literal schema
    * or the current-schema marker.
@@ -272,4 +276,40 @@ private[sql] object CatalogManager {
       currentCatalog: String,
       currentNamespace: Seq[String]): Seq[Seq[String]] =
     entries.map(_.resolve(currentCatalog, currentNamespace))
+
+  /**
+   * Compute the resolved path entries to persist in view or SQL function metadata.
+   * When PATH is enabled, resolves the stored session path (or falls back to the
+   * legacy resolutionSearchPath). If `stripSession` is true, removes `system.session`
+   * entries (persisted objects cannot reference temporary objects).
+   */
+  def pathEntriesForPersistence(
+      catalogManager: CatalogManager,
+      conf: SQLConf,
+      stripSession: Boolean): Seq[Seq[String]] = {
+    if (!conf.pathEnabled) return Seq.empty
+    val currentCatalog = catalogManager.currentCatalog.name()
+    val currentNamespace = catalogManager.currentNamespace.toSeq
+    val entries = catalogManager.sessionPathEntries match {
+      case Some(stored) =>
+        resolvePathEntries(stored, currentCatalog, currentNamespace)
+      case None =>
+        val catalogPath =
+          (currentCatalog +: currentNamespace).toSeq
+        conf.resolutionSearchPath(catalogPath)
+    }
+    if (stripSession) {
+      entries.filterNot(isSystemSessionPathEntry)
+    } else {
+      entries
+    }
+  }
+
+  /** Serialize resolved path entries to JSON for storage in view/function properties. */
+  def serializePathEntries(entries: Seq[Seq[String]]): String = {
+    import org.json4s.JsonAST.{JArray, JString}
+    import org.json4s.jackson.JsonMethods.compact
+    compact(JArray(entries.map(parts =>
+      JArray(parts.map(JString(_)).toList)).toList))
+  }
 }

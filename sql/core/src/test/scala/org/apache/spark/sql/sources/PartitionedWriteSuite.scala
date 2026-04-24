@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileNameSpec
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
@@ -48,7 +48,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   }
 }
 
-class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
+class PartitionedWriteSuite extends SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {

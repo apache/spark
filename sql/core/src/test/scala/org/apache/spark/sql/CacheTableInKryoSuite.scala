@@ -27,8 +27,7 @@ import org.apache.spark.sql.execution.columnar.{DefaultCachedBatch, DefaultCache
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
-class CacheTableInKryoSuite extends QueryTest
-  with SharedSparkSession {
+class CacheTableInKryoSuite extends SharedSparkSession {
 
   override def sparkConf: SparkConf = {
     super.sparkConf

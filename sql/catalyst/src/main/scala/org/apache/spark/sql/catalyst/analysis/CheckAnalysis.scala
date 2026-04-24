@@ -214,6 +214,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       operator: LogicalPlan,
       a: Attribute,
       errorClass: String): Nothing = {
+    // An unresolved attribute tagged with `PLAN_ID_TAG` is a Spark Connect DataFrame column
+    // reference (`df.col_name` or `df["col_name"]`). If it ends up unresolved, it means the
+    // referenced column is not reachable from the current operator — typically because the
+    // user referenced a column from the wrong DataFrame. Raise the dedicated error so the
+    // message points at the wrong DataFrame reference instead of the generic unresolved column.
+    if (a.containsTag(LogicalPlan.PLAN_ID_TAG)) {
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(a)
+    }
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq
       .map(attr => attr.qualifier :+ attr.name)

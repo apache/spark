@@ -55,6 +55,13 @@ from pyspark.worker import main as worker_main
 # ---------------------------------------------------------------------------
 
 
+# ``GroupedBatches[i]`` is the list of Arrow RecordBatches making up the ``i``-th
+# DataFrame of a group: 1 DF for grouped scenarios, 2 (left, right) for cogrouped.
+# Analogous to ``GroupedBatch``/``CoGroupedBatch`` in ``pyspark.sql.pandas._typing``
+# but materialized as lists here since benchmarks pre-build the full payload.
+GroupedBatches = list[list[pa.RecordBatch]]
+
+
 class MockProtocolWriter:
     """Constructs the binary wire protocol that ``worker.py``'s ``main()`` expects."""
 
@@ -77,15 +84,20 @@ class MockProtocolWriter:
     @classmethod
     def write_grouped_data_payload(
         cls,
-        groups: list[tuple[pa.RecordBatch, ...]],
-        num_dfs: int,
+        groups: list[GroupedBatches],
         buf: io.BufferedIOBase,
     ) -> None:
-        """Write grouped Arrow data in the wire protocol expected by _load_group_dataframes."""
+        """Write grouped Arrow data in the wire protocol expected by _load_group_dataframes.
+
+        Shape: ``groups[g][df]`` is the list of RecordBatches for DataFrame ``df``
+        of group ``g``. Each DataFrame's batches are written as one Arrow IPC
+        stream, matching the real wire protocol where a group may be split across
+        multiple batches by ``spark.sql.execution.arrow.maxRecordsPerBatch``.
+        """
         for group in groups:
-            write_int(num_dfs, buf)
-            for df_batch in group:
-                cls.write_data_payload(iter([df_batch]), buf)
+            write_int(len(group), buf)  # num_dfs in this group
+            for df_batches in group:
+                cls.write_data_payload(iter(df_batches), buf)
         write_int(0, buf)  # end of groups
 
     @classmethod
@@ -266,10 +278,12 @@ class MockDataFactory:
         num_cols: int,
         batch_size: int = MAX_RECORDS_PER_BATCH,
         spark_type_pool: list[tuple[Callable, Any]],
-    ) -> tuple[list[tuple[pa.RecordBatch, ...]], StructType]:
-        """Create groups of batches.
+    ) -> tuple[list[GroupedBatches], StructType]:
+        """Create groups, each containing a single DataFrame.
 
-        Each group has ``num_rows`` total rows, split into batches of ``batch_size``.
+        Each group is ``[batches]`` where ``batches`` is the list of Arrow
+        RecordBatches for that group's DataFrame (``num_rows`` rows split into
+        batches of ``batch_size``).
         """
         groups = []
         for _ in range(num_groups):
@@ -279,7 +293,7 @@ class MockDataFactory:
                 batch_size=batch_size,
                 spark_type_pool=spark_type_pool,
             )
-            groups.append(tuple(batches))
+            groups.append([list(batches)])
 
         schema = StructType(
             [
@@ -298,11 +312,12 @@ class MockDataFactory:
         num_cols: int,
         batch_size: int = MAX_RECORDS_PER_BATCH,
         spark_type_pool: list[tuple[Callable, Any]],
-    ) -> tuple[list[tuple[pa.RecordBatch, pa.RecordBatch]], StructType]:
-        """Create cogroups of batch pairs (left, right).
+    ) -> tuple[list[GroupedBatches], StructType]:
+        """Create cogroups, each containing two DataFrames (left, right).
 
-        Each cogroup has two DataFrames with identical schema but independent
-        data, each with ``num_rows`` rows and ``num_cols`` flat columns.
+        Each cogroup is ``[left_batches, right_batches]``. The two DataFrames
+        share the same schema but have independent data, each with ``num_rows``
+        rows and ``num_cols`` flat columns.
         """
         left_groups, schema = cls.make_grouped_batches(
             num_groups=num_groups,
@@ -318,7 +333,7 @@ class MockDataFactory:
             batch_size=batch_size,
             spark_type_pool=spark_type_pool,
         )
-        cogroups = [(left_groups[i][0], right_groups[i][0]) for i in range(num_groups)]
+        cogroups = [[left_groups[i][0], right_groups[i][0]] for i in range(num_groups)]
         return cogroups, schema
 
 
@@ -530,7 +545,7 @@ class _CogroupedMapArrowBenchMixin:
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=2, buf=b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
         )
 
@@ -608,7 +623,7 @@ class _GroupedAggArrowBenchMixin:
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
         )
 
@@ -667,7 +682,7 @@ class _GroupedAggArrowIterBenchMixin(_GroupedAggArrowBenchMixin):
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
         )
 
@@ -677,6 +692,80 @@ class GroupedAggArrowIterUDFTimeBench(_GroupedAggArrowIterBenchMixin, _TimeBench
 
 
 class GroupedAggArrowIterUDFPeakmemBench(_GroupedAggArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_GROUPED_AGG_PANDAS_UDF ------------------------------------------------
+# UDF receives ``pd.Series`` columns per group, returns scalar.
+
+
+class _GroupedAggPandasBenchMixin:
+    """Provides _write_scenario for SQL_GROUPED_AGG_PANDAS_UDF."""
+
+    def _grouped_agg_pandas_sum(col):
+        """Sum a single Pandas Series."""
+        return col.sum()
+
+    def _grouped_agg_pandas_mean_multi(col0, col1):
+        """Mean of two Pandas Series combined."""
+        return (col0.mean() or 0) + (col1.mean() or 0)
+
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5),
+        "few_groups_lg": (50, 50_000, 5),
+        "many_groups_sm": (2_000, 500, 5),
+        "many_groups_lg": (500, 10_000, 5),
+        "wide_cols": (200, 5_000, 20),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        num_groups, rows_per_group, n_cols = _GroupedAggPandasBenchMixin._scenario_configs[name]
+        return MockDataFactory.make_grouped_batches(
+            num_groups=num_groups,
+            num_rows=rows_per_group,
+            num_cols=n_cols,
+            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+            batch_size=rows_per_group,
+        )
+
+    _udfs = {
+        "sum_udf": _grouped_agg_pandas_sum,
+        "mean_multi_udf": _grouped_agg_pandas_mean_multi,
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, _schema = self._build_scenario(scenario)
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_udf(b):
+            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
+            buf,
+        )
+
+
+class GroupedAggPandasUDFTimeBench(_GroupedAggPandasBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedAggPandasUDFPeakmemBench(_GroupedAggPandasBenchMixin, _PeakmemBenchBase):
     pass
 
 
@@ -744,14 +833,14 @@ class _GroupedMapArrowBenchMixin:
     def _write_scenario(self, scenario, udf_name, buf):
         groups, schema = self._build_scenario(scenario)
         udf_func = self._udfs[udf_name]
-        n_total = groups[0][0].column(0).type.num_fields
+        n_total = groups[0][0][0].column(0).type.num_fields
         n_values = len(schema.fields)
         num_key_cols = n_total - n_values
         arg_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, n_values)
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
         )
 
@@ -798,14 +887,14 @@ class _GroupedMapArrowIterBenchMixin(_GroupedMapArrowBenchMixin):
     def _write_scenario(self, scenario, udf_name, buf):
         groups, schema = self._build_scenario(scenario)
         udf_func = self._udfs[udf_name]
-        n_total = groups[0][0].column(0).type.num_fields
+        n_total = groups[0][0][0].column(0).type.num_fields
         n_values = len(schema.fields)
         num_key_cols = n_total - n_values
         arg_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, n_values)
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
         )
 
@@ -849,7 +938,7 @@ class _GroupedMapPandasBenchMixin:
                 spark_type_pool=MockDataFactory.MIXED_TYPES,
                 batch_size=3,
             )
-            return ([(b,) for b in batches] * 200, schema)
+            return ([[[b]] for b in batches] * 200, schema)
         _kind, rows, n_cols, num_groups = cfg
         groups, schema = MockDataFactory.make_grouped_batches(
             num_groups=num_groups,
@@ -882,11 +971,7 @@ class _GroupedMapPandasBenchMixin:
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(
-                groups,
-                num_dfs=1,
-                buf=b,
-            ),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
         )
 
@@ -1274,7 +1359,7 @@ class _WindowAggArrowBenchMixin:
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
             write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, num_dfs=1, buf=b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
             runner_conf={"window_bound_types": "unbounded"},
         )

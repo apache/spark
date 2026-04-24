@@ -22,7 +22,7 @@ import java.time.Duration
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
+class WholeStageCodegenSuite extends SharedSparkSession
   with DisableAdaptiveExecutionSuite {
 
   import testImplicits._
@@ -1027,6 +1027,41 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       checkAnswer(filtered, Seq(
         Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
         Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE preserves short-circuit across predicates") {
+    // A CSE'd subexpression must not be hoisted above an earlier otherPred's short-circuit,
+    // otherwise rows an earlier otherPred would have rejected still pay the cost of the
+    // later predicate's throw-prone expression. Two shapes worth exercising:
+    //   - CSE within one conjunct: `x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)` --
+    //     `100 / x` appears twice inside otherPreds(1) only.
+    //   - CSE across two conjuncts: `x > 0 AND (100 / x) > 0 AND (100 / x) < 1000` --
+    //     `100 / x` is shared between otherPreds(1) and otherPreds(2); the precompute
+    //     must be emitted just before otherPreds(1), not at the top of the do { } block.
+    // In both shapes, hoisting to the top of the do { } block evaluates 100 / 0 on the
+    // x=0 row under ANSI and throws before x > 0 rejects.
+    val schema = StructType(Seq(
+      StructField("x", IntegerType, nullable = false)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(0), Row(2), Row(4)))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema)
+      Seq(
+        "x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)",
+        "x > 0 AND (100 / x) > 0 AND (100 / x) < 1000"
+      ).foreach { predicate =>
+        val filtered = df.where(predicate)
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          s"Filter should be in whole-stage codegen for: $predicate")
+        checkAnswer(filtered, Seq(Row(2), Row(4)))
+      }
     }
   }
 }

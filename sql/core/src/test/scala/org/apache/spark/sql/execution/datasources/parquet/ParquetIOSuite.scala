@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   import testImplicits._
 
   /**

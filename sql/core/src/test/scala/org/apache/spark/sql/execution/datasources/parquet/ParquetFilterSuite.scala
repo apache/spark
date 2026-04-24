@@ -76,7 +76,7 @@ import org.apache.spark.util.ArrayImplicits._
  * dependent on this configuration, don't forget you better explicitly set this configuration
  * within the test.
  */
-abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
+abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   import testImplicits.toRichColumn
 
   protected def createParquetFilters(

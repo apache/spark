@@ -24,13 +24,13 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan, SparkPlanTest}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructType}
 
-class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
+class ExistenceJoinSuite extends SharedSparkSession {
   import testImplicits.toRichColumn
 
   private val EnsureRequirements = new EnsureRequirements()

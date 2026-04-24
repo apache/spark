@@ -254,41 +254,76 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // Apply CSE to otherPreds only (notNullPreds are simple IsNotNull checks with no CSE value).
-    val (inputVarsCode, subExprsCode, predicateCode) =
+    // Apply CSE to otherPreds. Two invariants we must preserve:
+    //   (a) Short-circuit order: otherPreds are evaluated sequentially and each may
+    //       `continue;` out of the row. A precomputation hoisted ahead of an earlier
+    //       otherPred would run for rows an earlier otherPred would have filtered out,
+    //       turning a filtered-out row into a thrown exception for any expression that
+    //       can throw (overflow, error class, etc.). SPARK-56032's original placement of
+    //       subExprsCode at the top of the `do { }` block broke this.
+    //   (b) Null guards: IsNotNull predicates must short-circuit before CSE
+    //       precomputation sees a null-bearing row. Otherwise CSE's
+    //       `value_X = isNull ? default : <compute>` materializes `null` into `value_X`
+    //       for non-primitive types, which downstream accessors (e.g.
+    //       `value_X.isNullAt(0)`) may NPE on without consulting `isNull_X`.
+    //
+    // The fix for (a): emit each common subexpression's precompute *just before* the
+    // first otherPred that references it, not all at the top of the `do { }` block.
+    // A later otherPred still reuses the cached value -- it just doesn't pay the cost
+    // for rows that an earlier otherPred rejected.
+    //
+    // The fix for (b): emit all IsNotNull short-circuits upfront and bind otherPreds
+    // (and the CSE analysis) against the tightened `output`. `notNullAttributes` are
+    // guaranteed non-null by the time any otherPred (or any CSE precompute) runs, so
+    // the tightened-nullability optimization inside the predicate bodies is restored.
+    // This also supersedes the child.output binding workaround from SPARK-56431.
+    val (prologueCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
-        // Bind against child.output (not output) so that columns in
-        // notNullAttributes keep their original nullable=true for the
-        // CSE precomputation, which runs BEFORE IsNotNull short-circuits.
-        val boundOtherPreds = otherPreds.map(
-          BindReferences.bindReference(_, child.output))
+        val notNullShortCircuitCode = generatePredicateCode(
+          ctx, child.output, input, output, notNullPreds, Seq.empty, notNullAttributes)
+
         // Pre-evaluate input variables before CSE analysis: CSE clears
-        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino fails
-        // with "Unknown variable or type" when notNullPreds reference the same input columns.
+        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
+        // fails when otherPreds reference the same input columns that CSE already
+        // consumed.
         val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
         val inputVarsEvalCode = evaluateRequiredVariables(
           child.output, input, otherPredInputAttrs)
 
+        val boundOtherPreds = otherPreds.map(BindReferences.bindReference(_, output))
         val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundOtherPreds)
+
+        // Group CSE states by the index of the first otherPred that references them.
+        // `evaluateSubExprEliminationState` recursively emits each state's children
+        // before the state itself and marks emitted code as `EmptyBlock`, so emitting
+        // a later group whose states depend on an earlier group's states is a no-op
+        // for the already-emitted dependencies.
+        val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
+          subExprs.states.toSeq.groupBy { case (exprEq, _) =>
+            boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
+          }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
+
         val predCode: String = {
-          var code = ""
+          val parts = new StringBuilder
           ctx.withSubExprEliminationExprs(subExprs.states) {
-            code = generatePredicateCode(
-              ctx, child.output, input, child.output, notNullPreds, otherPreds, notNullAttributes)
+            boundOtherPreds.zipWithIndex.foreach { case (bound, idx) =>
+              statesByFirstUse.get(idx).foreach { states =>
+                parts.append(ctx.evaluateSubExprEliminationState(states))
+                parts.append('\n')
+              }
+              val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+              val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
+              parts.append(ev.code.toString)
+              parts.append(s"\nif (${nullCheck}!${ev.value}) continue;\n")
+            }
             Seq.empty
           }
-          code
+          parts.toString
         }
-        // Note: subExprs.exprCodesNeedEvaluate is intentionally not used here, unlike ProjectExec.
-        // evaluateRequiredVariables above cleared input[i].code = EmptyBlock for all
-        // otherPredInputAttrs before CSE analysis ran, so getLocalInputVariableValues never
-        // adds them to exprCodesNeedEvaluate -- it is always empty. Do NOT replace the
-        // pre-evaluation above with evaluateVariables(subExprs.exprCodesNeedEvaluate):
-        // that would leave notNullPreds referencing undeclared variables (Janino: "Unknown
-        // variable or type") for any input column shared between notNullPreds and otherPreds.
-        (inputVarsEvalCode, ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
+
+        (notNullShortCircuitCode + "\n" + inputVarsEvalCode, predCode)
       } else {
-        ("", "", generatePredicateCode(
+        ("", generatePredicateCode(
           ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
       }
 
@@ -304,8 +339,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $inputVarsCode
-       |  $subExprsCode
+       |  $prologueCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}

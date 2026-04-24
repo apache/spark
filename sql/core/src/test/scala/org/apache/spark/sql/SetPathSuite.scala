@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Resolution-level tests (tables/functions resolving via the stored path)
  * belong in a separate suite once the resolution engine is wired.
  */
-class SetPathSuite extends QueryTest with SharedSparkSession {
+class SetPathSuite extends SharedSparkSession {
 
   private def withPathEnabled(f: => Unit): Unit = {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true")(f)

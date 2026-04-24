@@ -25,6 +25,8 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   import testImplicits._
 
+  override protected def deltaDelete: Boolean = true
+
   override protected lazy val extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")
@@ -52,6 +54,7 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
       expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
 
     checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
   test("delete with subquery handles metadata columns correctly") {
@@ -83,6 +86,7 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))))
 
       checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = Row("hr", null)))
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
     }
   }
 
@@ -136,6 +140,7 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, "us", "software") :: Row(3, 3, "canada", "hr") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
   test("delete does not double plan table") {
@@ -162,5 +167,6 @@ class DeltaBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 }
