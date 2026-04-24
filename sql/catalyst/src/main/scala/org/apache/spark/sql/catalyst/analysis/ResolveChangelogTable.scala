@@ -58,8 +58,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     final val InsCnt = "__spark_cdc_ins_cnt"
     final val MinRv = "__spark_cdc_min_rv"
     final val MaxRv = "__spark_cdc_max_rv"
+    final val RvCnt = "__spark_cdc_rv_cnt"
 
-    val all: Set[String] = Set(DelCnt, InsCnt, MinRv, MaxRv)
+    val all: Set[String] = Set(DelCnt, InsCnt, MinRv, MaxRv, RvCnt)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -176,11 +177,13 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   /**
    * Adds a Window node partitioned by (rowId, _commit_version) that computes
    * `_del_cnt` and `_ins_cnt` per partition, and, when `includeRowVersionBounds`
-   * is true, additionally `_min_rv` / `_max_rv` (min/max of `Changelog.rowVersion()`).
+   * is true, additionally `_min_rv` / `_max_rv` / `_rv_cnt` (min, max and non-null
+   * count of `Changelog.rowVersion()`).
    *
    * `_del_cnt` / `_ins_cnt` drive update detection (1 each -> relabel as
-   * update_preimage / update_postimage). `_min_rv` / `_max_rv` drive carry-over
-   * detection (within a delete+insert pair, equal bounds signal a CoW carry-over).
+   * update_preimage / update_postimage). `_min_rv` / `_max_rv` / `_rv_cnt` drive
+   * carry-over detection (within a delete+insert pair, `_rv_cnt = 2` AND equal
+   * bounds signal a CoW carry-over).
    */
   private def addPostProcessingWindow(
       plan: LogicalPlan,
@@ -209,7 +212,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         Alias(WindowExpression(
           Min(rowVersionExpr).toAggregateExpression(), windowSpec), HelperColumn.MinRv)(),
         Alias(WindowExpression(
-          Max(rowVersionExpr).toAggregateExpression(), windowSpec), HelperColumn.MaxRv)())
+          Max(rowVersionExpr).toAggregateExpression(), windowSpec), HelperColumn.MaxRv)(),
+        Alias(WindowExpression(
+          Count(Seq(rowVersionExpr)).toAggregateExpression(), windowSpec), HelperColumn.RvCnt)())
     } else {
       Seq.empty
     }
@@ -218,18 +223,21 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
   /**
    * Adds a Filter node that drops rows belonging to a CoW carry-over pair.
-   * Expects the input to expose `_del_cnt`, `_ins_cnt`, `_min_rv`, `_max_rv`.
-   * A pair is a carry-over iff `_del_cnt = 1 AND _ins_cnt = 1 AND _min_rv = _max_rv`.
+   * A pair is a carry-over iff
+   * `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND _min_rv = _max_rv`.
+   * The `_rv_cnt = 2` clause guards against a NULL rowVersion silently matching
+   * `_min_rv = _max_rv` (Spark's min/max skip NULLs).
    */
   private def addCarryOverPairFilter(input: LogicalPlan): LogicalPlan = {
     val delCnt = getAttribute(input, HelperColumn.DelCnt)
     val insCnt = getAttribute(input, HelperColumn.InsCnt)
     val minRv = getAttribute(input, HelperColumn.MinRv)
     val maxRv = getAttribute(input, HelperColumn.MaxRv)
+    val rvCnt = getAttribute(input, HelperColumn.RvCnt)
 
     val isCarryoverPair = And(
       And(EqualTo(delCnt, Literal(1L)), EqualTo(insCnt, Literal(1L))),
-      EqualTo(minRv, maxRv))
+      And(EqualTo(rvCnt, Literal(2L)), EqualTo(minRv, maxRv)))
     Filter(Not(isCarryoverPair), input)
   }
 
