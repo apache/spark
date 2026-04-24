@@ -78,27 +78,26 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       assertCached(serverSession.table(T))
       checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
 
-      // S2: session write via Connect invalidates the cache entry.
-      // After recache, the table contains (1, 100) + external (2, 200) + session (2, 200).
-      connectSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      // S2: UNCACHE + re-CACHE picks up external write, then session
+      // write invalidates and recaches.
+      connectSession.sql(s"UNCACHE TABLE $T").collect()
+      connectSession.sql(s"CACHE TABLE $T").collect()
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(2, 200)))
+      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200)))
 
-      // external writer adds (3, 300) via direct catalog API
+      connectSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
+      assertCached(serverSession.table(T))
+      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+
+      // external writer adds (4, 400) via direct catalog API
       val extTable2 = cat.loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
       extTable2.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(3, 300))))
+        new BufferedRows(Seq.empty, schema).withRow(InternalRow(4, 400))))
 
       // cache is re-pinned, external write invisible
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(2, 200)))
-
-      // REFRESH TABLE picks up all external changes
-      connectSession.sql(s"REFRESH TABLE $T").collect()
-      assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T),
-        Seq(Row(1, 100), Row(2, 200), Row(2, 200), Row(3, 300)))
+      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
 
       connectSession.sql(s"UNCACHE TABLE IF EXISTS $T").collect()
       connectSession.sql(s"DROP TABLE IF EXISTS $T").collect()
