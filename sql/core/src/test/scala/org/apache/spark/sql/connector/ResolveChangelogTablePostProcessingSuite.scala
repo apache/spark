@@ -157,6 +157,31 @@ class ResolveChangelogTablePostProcessingSuite
     assert(rows.length == 3, "Without dedup, all 3 raw rows should be returned")
   }
 
+  test("NULL rowVersion on one side is NOT silently dropped as carry-over") {
+    // Regression for a NULL-safety hole: min/max skip NULLs, so _min_rv = _max_rv alone
+    // would match a pair with one NULL and one non-null rowVersion. The _rv_cnt = 2
+    // clause in the carry-over filter prevents that.
+    catalog.setChangelogProperties(ident, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(ident, Seq(
+      changeRow(1L, "Alice", "insert", 1L, rowCommitVersion = 1L),
+      // v2: one side has NULL rowVersion (buggy connector), the other has a real value.
+      InternalRow(1L, UTF8String.fromString("Alice"), null,
+        UTF8String.fromString("delete"), 2L, 0L),
+      changeRow(1L, "Alice", "insert", 2L, rowCommitVersion = 5L)))
+
+    checkAnswer(
+      sql(s"SELECT id, name, _change_type, _commit_version " +
+          s"FROM $catalogName.$testTableName CHANGES FROM VERSION 1 TO VERSION 2"),
+      Seq(
+        Row(1L, "Alice", "insert", 1L),
+        Row(1L, "Alice", "delete", 2L),
+        Row(1L, "Alice", "insert", 2L)))
+  }
+
   // ===========================================================================
   // Update Detection
   // ===========================================================================
