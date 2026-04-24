@@ -235,7 +235,18 @@ abstract class DirectWorkerDispatcher(
           val verified = env.hasEnvironmentVerification &&
             runCallable(env.getEnvironmentVerification).exitCode == 0
           if (!verified && env.hasInstallation) {
-            val result = runCallable(env.getInstallation)
+            // Treat any install failure (timeout or non-zero exit) as
+            // permanent. A partially-completed install can leave files on
+            // disk that a retry would race with; retry policy belongs in
+            // the future predicate (see TODO above).
+            val result = try {
+              runCallable(env.getInstallation)
+            } catch {
+              case e: DirectWorkerException =>
+                environmentState = EnvironmentState.Failed(
+                  s"installation failed: ${e.getMessage}")
+                throw e
+            }
             if (result.exitCode != 0) {
               val detail = s"exit code ${result.exitCode}\n${result.outputTail}"
               environmentState = EnvironmentState.Failed(detail)
@@ -253,8 +264,10 @@ abstract class DirectWorkerDispatcher(
 
   /** Registers the JVM shutdown hook that runs the cleanup callable. */
   private def registerEnvironmentCleanupHook(): Unit = {
-    assert(Thread.holdsLock(environmentLock),
-      "registerEnvironmentCleanupHook must be called while holding environmentLock")
+    if (!Thread.holdsLock(environmentLock)) {
+      throw new IllegalStateException(
+        "registerEnvironmentCleanupHook must be called while holding environmentLock")
+    }
     if (cleanupHook.isDefined) return
     if (workerSpec.getEnvironment.hasEnvironmentCleanup) {
       val hook = new Thread(() => runEnvironmentCleanup(), "udf-env-cleanup")
@@ -318,7 +331,7 @@ abstract class DirectWorkerDispatcher(
         DirectWorkerDispatcher.destroyForciblyAndReap(
           process, logger, s"callable timeout: ${cmd.head}")
         val tail = readOutputTail(outputFile.toFile)
-        throw new DirectWorkerException(
+        throw new DirectWorkerTimeoutException(
           s"Callable timed out after ${timeoutMs}ms: " +
             s"${cmd.mkString(" ")}\n$tail")
       }
@@ -428,7 +441,7 @@ abstract class DirectWorkerDispatcher(
         DirectWorkerDispatcher.destroyForciblyAndReap(
           process, logger, s"init timeout $socketPath")
         val tail = readOutputTail(outputFile)
-        throw new DirectWorkerException(
+        throw new DirectWorkerTimeoutException(
           s"Worker did not create socket at $socketPath within ${initTimeoutMs}ms\n$tail")
       } else {
         // Worker exited after the last poll without creating the socket;

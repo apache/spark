@@ -31,7 +31,8 @@ import org.apache.spark.udf.worker.{
   UDFWorkerSpecification, UnixDomainSocket, WorkerConnectionSpec,
   WorkerEnvironment}
 import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher,
-  DirectWorkerProcess, DirectWorkerSession}
+  DirectWorkerException, DirectWorkerProcess, DirectWorkerSession,
+  DirectWorkerTimeoutException}
 
 /**
  * A [[WorkerConnection]] test implementation that considers the connection
@@ -344,6 +345,99 @@ class DirectWorkerDispatcherSuite
     }
   }
 
+  test("close racing with in-flight createSession does not leak the worker") {
+    // The acquire-before-publish + post-publish closed re-check pattern in
+    // createSession is designed for this race: thread A is mid-spawn when
+    // thread B calls close(). Thread A must either throw IllegalStateException
+    // (post-publish check caught the close) or receive a session whose worker
+    // is reaped by close()'s iteration. No orphan process or socket file
+    // should remain in either case.
+    val readyLatch = new java.util.concurrent.CountDownLatch(1)
+    val releaseLatch = new java.util.concurrent.CountDownLatch(1)
+    val capturedWorkers =
+      new java.util.concurrent.ConcurrentLinkedQueue[DirectWorkerProcess]()
+    val racing = new DirectWorkerDispatcher(specWithRunner(defaultRunner)) {
+      override protected def createConnection(socketPath: String): WorkerConnection =
+        new SocketFileConnection(socketPath)
+      override protected def createSessionForWorker(
+          worker: DirectWorkerProcess): WorkerSession = {
+        capturedWorkers.add(worker)
+        readyLatch.countDown()
+        // Block here so dispatcher.close() runs while createSession is in
+        // flight. Use a generous wait so a slow CI doesn't time out.
+        if (!releaseLatch.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
+          fail("releaseLatch never fired -- test orchestration broken")
+        }
+        new StubWorkerSession(worker)
+      }
+    }
+    try {
+      val outcome = new java.util.concurrent.atomic.AtomicReference[Either[Throwable, WorkerSession]]()
+      val createThread = new Thread(() => {
+        try {
+          val s = racing.createSession(None)
+          outcome.set(Right(s))
+        } catch {
+          case t: Throwable => outcome.set(Left(t))
+        }
+      }, "createSession-racer")
+      createThread.start()
+
+      // Wait for thread A to have published the worker and entered the
+      // blocking override.
+      assert(readyLatch.await(10, java.util.concurrent.TimeUnit.SECONDS),
+        "createSession thread never reached createSessionForWorker")
+
+      val closeThread = new Thread(() => racing.close(), "close-racer")
+      closeThread.start()
+      // Give close() time to flip `closed` and iterate workers.
+      Thread.sleep(200)
+
+      // Now release the in-flight createSession.
+      releaseLatch.countDown()
+
+      createThread.join(10000)
+      closeThread.join(10000)
+      assert(!createThread.isAlive, "createSession thread did not finish")
+      assert(!closeThread.isAlive, "close thread did not finish")
+
+      val captured = capturedWorkers.toArray(Array.empty[DirectWorkerProcess])
+      assert(captured.length == 1,
+        s"expected exactly one worker spawned, got ${captured.length}")
+      val worker = captured(0)
+
+      outcome.get() match {
+        case Left(e: IllegalStateException) =>
+          // Contractually allowed, but unreachable with this orchestration:
+          // readyLatch only fires after createSession has cleared both
+          // `closed` checks, so B's close cannot flip `closed` in time for
+          // A to observe it. Kept defensive so a future internal change
+          // that introduces a new window is still covered.
+          assert(e.getMessage.contains("closed"),
+            s"expected dispatcher-closed error, got: ${e.getMessage}")
+        case Left(other) =>
+          fail(s"unexpected exception from racing createSession: $other")
+        case Right(_) =>
+          // close() iterated the published worker and tore it down; the
+          // returned session points at a worker that should now be dead.
+      }
+
+      // Whichever path won, the worker must not still be running and the
+      // socket file must be gone.
+      val deadline = System.currentTimeMillis() + 5000
+      while (worker.process.isAlive && System.currentTimeMillis() < deadline) {
+        Thread.sleep(50)
+      }
+      assert(!worker.process.isAlive,
+        s"worker process should be terminated after close, still alive at ${worker.socketPath}")
+      assert(!new java.io.File(worker.socketPath).exists(),
+        s"socket file ${worker.socketPath} should have been removed")
+    } finally {
+      releaseLatch.countDown()
+      racing.close()
+    }
+  }
+
   test("worker-provided graceful timeout is capped at the engine-side maximum") {
     // The proto documents an engine-configurable maximum (fixed at 30s today).
     // A 60s spec value should be clamped down.
@@ -556,7 +650,7 @@ class DirectWorkerDispatcherSuite
       .build()
     dispatcher = new TestDirectWorkerDispatcher(spec)
 
-    val ex = intercept[RuntimeException] {
+    val ex = intercept[DirectWorkerTimeoutException] {
       dispatcher.createSession(None)
     }
     assert(ex.getMessage.contains("did not create socket"),
@@ -662,7 +756,7 @@ class DirectWorkerDispatcherSuite
           new StubWorkerSession(worker)
       }
     try {
-      val ex = intercept[RuntimeException] {
+      val ex = intercept[DirectWorkerTimeoutException] {
         shortTimeoutDispatcher.createSession(None)
       }
       assert(ex.getMessage.contains("Callable timed out"),
@@ -773,6 +867,50 @@ class DirectWorkerDispatcherSuite
     assert(lines.size == 1,
       s"installation should run only once across failed retries, got ${lines.size}")
     counterFile.delete()
+  }
+
+  test("installation timeout transitions to Failed and is not retried") {
+    val counterFile = Files.createTempFile("env-timeout-counter", ".txt").toFile
+    counterFile.delete()
+
+    // Install appends to a counter file, then sleeps past callableTimeoutMs
+    // so runCallable times out. The dispatcher must mark the env Failed
+    // and reject the next createSession without re-running install.
+    val env = WorkerEnvironment.newBuilder()
+      .setInstallation(ProcessCallable.newBuilder()
+        .addCommand("bash").addCommand("-c")
+        .addCommand(
+          s"echo invoked >> ${counterFile.getAbsolutePath}; sleep 30").build())
+      .build()
+    val timeoutDispatcher = new DirectWorkerDispatcher(specWithEnv(env = env)) {
+      override protected def callableTimeoutMs: Long = 500L
+      override protected def createConnection(socketPath: String): WorkerConnection =
+        new SocketFileConnection(socketPath)
+      override protected def createSessionForWorker(
+          worker: DirectWorkerProcess): WorkerSession =
+        new StubWorkerSession(worker)
+    }
+    try {
+      val first = intercept[DirectWorkerTimeoutException] {
+        timeoutDispatcher.createSession(None)
+      }
+      assert(first.getMessage.contains("Callable timed out"),
+        s"expected callable-timeout error, got: ${first.getMessage}")
+
+      val second = intercept[DirectWorkerException] {
+        timeoutDispatcher.createSession(None)
+      }
+      assert(second.getMessage.contains("previously failed"),
+        s"expected cached failure on retry, got: ${second.getMessage}")
+
+      val src = scala.io.Source.fromFile(counterFile)
+      val lines = try src.getLines().toList finally src.close()
+      assert(lines.size == 1,
+        s"installation should run only once across timed-out retries, got ${lines.size}")
+    } finally {
+      timeoutDispatcher.close()
+      counterFile.delete()
+    }
   }
 
   test("non-None securityScope is rejected until pooling lands") {

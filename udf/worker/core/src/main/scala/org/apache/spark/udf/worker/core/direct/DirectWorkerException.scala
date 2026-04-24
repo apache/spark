@@ -32,3 +32,15 @@ import org.apache.spark.annotation.Experimental
 @Experimental
 class DirectWorkerException(message: String, cause: Throwable = null)
   extends RuntimeException(message, cause)
+
+/**
+ * :: Experimental ::
+ * A [[DirectWorkerException]] caused specifically by a timeout: a worker
+ * that did not bind its socket within `initialization_timeout_ms`, or a
+ * setup callable (verify / install / cleanup) that exceeded
+ * `callableTimeoutMs`. Exposed as a distinct type so callers can choose
+ * different retry / escalation paths for timeouts vs other failures.
+ */
+@Experimental
+class DirectWorkerTimeoutException(message: String, cause: Throwable = null)
+  extends DirectWorkerException(message, cause)
