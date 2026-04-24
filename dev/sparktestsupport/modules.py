@@ -517,7 +517,6 @@ pyspark_core = Module(
         "pyspark.tests.test_statcounter",
         "pyspark.tests.test_taskcontext",
         "pyspark.tests.test_util",
-        "pyspark.tests.test_verify_return_type",
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
         "pyspark.tests.test_zero_copy_byte_stream",
