@@ -55,6 +55,13 @@ class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
         super().setUpClass()
         cls.spark.conf.set("spark.sql.analyzer.strictDataFrameColumnResolution", "false")
 
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.analyzer.strictDataFrameColumnResolution")
+        finally:
+            super().tearDownClass()
+
     def test_df_col_resolution_mode(self):
         self.assertEqual(
             self.spark.conf.get("spark.sql.analyzer.strictDataFrameColumnResolution"),
