@@ -239,25 +239,17 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-56549: tryEnableSortedMerge returns Some even when child ordering is only a prefix " +
-      "of required ordering; caller is responsible for the final satisfaction check") {
-    // tryEnableSortedMerge checks technical feasibility only (config + safety + non-empty
-    // ordering). The EnsureRequirements caller verifies the resulting outputOrdering against the
-    // parent's requirement, which correctly handles aliasing projections between the two.
-    val partitionKeys = Seq(row(1), row(2), row(1))
-    // Child only reports ordering on exprA; parent would require exprC too.
+  test("SPARK-56549: tryEnableSortedMerge returns None when no coalescing occurs") {
+    val partitionKeys = Seq(row(1), row(2), row(3))
+    val childOrdering = Seq(SortOrder(exprA, Ascending))
     val child = DummyLeafSparkPlan(
       outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
-      outputOrdering = Seq(SortOrder(exprA, Ascending)))
+      outputOrdering = childOrdering)
     val gpe = GroupPartitionsExec(child)
 
+    assert(gpe.groupedPartitions.forall(_._2.size <= 1), "expected non-coalescing")
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      // tryEnableSortedMerge returns Some — it does not check the required ordering.
-      val result = gpe.tryEnableSortedMerge()
-      assert(result.isDefined)
-      // But the caller's ordering satisfaction check would fail for a stricter requirement.
-      val strictRequirement = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
-      assert(!SortOrder.orderingSatisfies(result.get.outputOrdering, strictRequirement))
+      assert(gpe.tryEnableSortedMerge().isEmpty)
     }
   }
 }

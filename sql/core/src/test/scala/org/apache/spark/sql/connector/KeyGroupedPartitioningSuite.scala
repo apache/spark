@@ -3952,12 +3952,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
            |""".stripMargin)
+      checkAnswer(hashDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
       val hashPlan = hashDf.queryExecution.executedPlan
       assert(collect(hashPlan) { case j: ShuffledHashJoinExec => j }.nonEmpty,
         "expected ShuffledHashJoinExec")
       assert(collectAllShuffles(hashPlan).isEmpty, "should not shuffle for compatible partitioning")
-      val hashCoalescing = collectAllGroupPartitions(hashPlan)
-        .filter(_.groupedPartitions.exists(_._2.size > 1))
+      val hashCoalescing =
+        collectAllGroupPartitions(hashPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
       assert(hashCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
       hashCoalescing.foreach { gp =>
         assert(!gp.enableSortedMerge,
@@ -3973,12 +3974,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
            |FROM testcat.ns.$items i
            |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
            |""".stripMargin)
-      checkAnswer(smjDf, Seq(
-        Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      checkAnswer(smjDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
       val smjPlan = smjDf.queryExecution.executedPlan
       assert(collectAllShuffles(smjPlan).isEmpty, "should not shuffle for compatible partitioning")
-      val smjCoalescing = collectAllGroupPartitions(smjPlan)
-        .filter(_.groupedPartitions.exists(_._2.size > 1))
+      val smjCoalescing =
+        collectAllGroupPartitions(smjPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
       assert(smjCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
       smjCoalescing.foreach { gp =>
         assert(gp.enableSortedMerge,

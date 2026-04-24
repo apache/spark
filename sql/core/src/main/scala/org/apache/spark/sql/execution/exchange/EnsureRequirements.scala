@@ -287,40 +287,42 @@ case class EnsureRequirements(
         child
       } else {
         // Before adding a SortExec, check whether a GroupPartitionsExec anywhere in the child
-        // subtree can self-satisfy via sorted merge.
-        tryEnableSortedMerge(child) match {
-          case Some(newChild)
-              if SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering) =>
-            newChild
-          case _ => SortExec(requiredOrdering, global = false, child = child)
-        }
+        // subtree can self-satisfy via sorted merge. tryEnableSortedMerge generates all alternative
+        // plans where one or more GPEs have sorted merge enabled; we take the first one whose
+        // outputOrdering satisfies the requirement.
+        tryEnableSortedMerge(child)
+          .find(newChild => SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering))
+          .getOrElse(SortExec(requiredOrdering, global = false, child = child))
       }
     }
 
     children
   }
 
-  private def tryEnableSortedMerge(plan: SparkPlan): Option[SparkPlan] = {
-    var sortedMergeEnabled = false
-    var stop = false
-    val updated = plan.transformDownWithPruning(_ => !stop) {
-      case gpe: GroupPartitionsExec =>
-        stop = true
-        gpe.tryEnableSortedMerge() match {
-          case Some(u) =>
-            sortedMergeEnabled = true
-            u
-          case None => gpe
-        }
-      case node if !node.isInstanceOf[OrderPreservingUnaryExecNode] =>
-        // Stop traversal at nodes that do not preserve child ordering (binary nodes, leaf
-        // nodes, SortExec, exchanges, etc.) -- a GroupPartitionsExec below them cannot
-        // satisfy this parent's ordering requirement.
-        stop = true
-        node
-    }
-    Option.when(sortedMergeEnabled)(updated)
+  private def hasKeyedPartitioning(p: Partitioning): Boolean = p match {
+    case e: Expression => e.exists(_.isInstanceOf[KeyedPartitioning])
+    case _ => false
   }
+
+  // Generates all alternative plans in which one or more GroupPartitionsExec nodes in the subtree
+  // have sorted-merge enabled (every possible combination). Returns a LazyList so the caller can
+  // stop evaluating once a satisfying alternative is found.
+  //
+  // Pruning: traversal stops at SortExec (which reorders data, making sorted merge below it
+  // pointless) and at any node whose outputPartitioning no longer carries a KeyedPartitioning
+  // (indicating the GPE's partitioning did not flow here, e.g. after an Exchange).
+  //
+  // At each GPE the rule emits [original, sorted-merge-enabled] alternatives (or just [original]
+  // when sorted merge cannot be enabled). multiTransformDownWithPruning then builds the Cartesian
+  // product across all GPEs in the subtree, giving every combination.
+  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] =
+    plan.multiTransformDownWithPruning(
+      p => !p.isInstanceOf[SortExec] &&
+        hasKeyedPartitioning(p.asInstanceOf[SparkPlan].outputPartitioning)) {
+      case gpe: GroupPartitionsExec =>
+        // Include the original so that peer GPEs are still independently considered.
+        gpe +: gpe.tryEnableSortedMerge().toSeq
+    }
 
   private def reorder(
       leftKeys: IndexedSeq[Expression],
