@@ -293,7 +293,7 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
                 messageParameters={"expected": label, "actual": type(result).__name__},
             )
 
-        def check_element(element: Any) -> Any:
+        def check_element(element: T) -> T:
             if not isinstance(element, element_type):
                 raise PySparkTypeError(
                     errorClass="UDF_RETURN_TYPE",
