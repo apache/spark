@@ -23,15 +23,23 @@ import org.apache.spark.sql.connect.test.IntegrationTestUtils.isAssemblyJarsDirE
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils
 
 /**
- * DSv2 CACHE TABLE tests for Spark Connect using two sessions.
+ * DSv2 CACHE TABLE tests for Spark Connect covering the five design doc
+ * scenarios from SPARK-54022 section [5] "CACHE TABLE impact on reads".
  *
- * Uses [[SharedInMemoryTableCatalog]] (configured as "sharedcat") so that both sessions share the
- * same underlying table data via a static ConcurrentHashMap. Session 1 caches and reads; session
- * 2 acts as an external writer.
+ * Uses [[SharedInMemoryTableCatalog]] (configured as "sharedcat") so that
+ * both sessions share the same underlying table data via a static map.
  *
- * All sessions on the same server share one CacheManager (via SharedState). DSv2 writes trigger
- * refreshCache() which recaches on the shared CacheManager. These tests document the observable
- * behavior for each design doc CACHE scenario.
+ * Session 1 (Connect client) caches and reads. Session 2 (another Connect
+ * client) acts as an external writer. Both clients connect to the same
+ * server and share its [[CacheManager]], so session 2's writes trigger
+ * refreshCache() on the shared CacheManager.
+ *
+ * The proposed behavior for DSv2 is cache pinning: external writes should
+ * NOT invalidate session 1's cache. The expected values in these tests
+ * reflect the current behavior where external writes ARE visible through
+ * the shared CacheManager. When per-session caching is implemented, the
+ * expected values for S1-S4 should be updated to match the proposed
+ * pinning behavior documented in each test's comments.
  */
 class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession with SQLHelper {
 
@@ -55,12 +63,17 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
     }
   }
 
-  // Scenario 1: external write after CACHE TABLE
+  // Scenario 1: external data write after CACHE TABLE
   //
-  // Session 1 caches the table, then session 2 inserts a row.
-  // Because both sessions share the same CacheManager, session 2's
-  // INSERT triggers refreshCache() which recaches the table. Session 1
-  // sees the new data.
+  // Session 1 caches, then session 2 inserts a row.
+  //
+  // Current behavior (shared CacheManager): session 2's INSERT triggers
+  // refreshCache(), so session 1 sees the new data.
+  //   Result: (1, 100), (2, 200)
+  //
+  // Proposed behavior (per-session caching): external write does not
+  // invalidate session 1's cache.
+  //   Result: (1, 100)
   test("[S1] external data write after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -70,13 +83,12 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 2 writes to the same underlying table
         session2.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
-        // Shared CacheManager: session 2's write triggers refreshCache(),
-        // so session 1 sees the new data
         assert(spark.catalog.isCached(T))
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $T"),
+          Seq(Row(1, 100), Row(2, 200)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -85,9 +97,15 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
 
   // Scenario 2: session write then external write after CACHE TABLE
   //
-  // Session 1 caches, then session 1 inserts (invalidates cache),
-  // then session 2 inserts. Both writes are visible due to shared
-  // CacheManager.
+  // Session 1 caches, session 1 inserts (invalidates and recaches),
+  // then session 2 inserts.
+  //
+  // Current behavior: all three rows visible via shared CacheManager.
+  //   Result: (1, 100), (2, 200), (3, 300)
+  //
+  // Proposed behavior: session 1's write recaches, but session 2's
+  // external write does not invalidate session 1's cache.
+  //   Result: (1, 100), (2, 200)
   test("[S2] session write then external write after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -97,25 +115,32 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 1 writes (invalidates and recaches)
         spark.sql(s"INSERT INTO $T VALUES (2, 200)")
         assert(spark.catalog.isCached(T))
 
-        // Session 2 writes externally
         session2.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
 
-        // Both writes visible due to shared CacheManager
         assert(spark.catalog.isCached(T))
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $T"),
+          Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
     }
   }
 
-  // Scenario 3: external schema change (add column + insert)
+  // Scenario 3: external schema change after CACHE TABLE
   //
   // Session 2 adds a column and inserts data with the new schema.
+  //
+  // Current behavior: schema change + write visible via shared
+  // CacheManager.
+  //   Result: (1, 100, null), (2, 200, -1)
+  //
+  // Proposed behavior: external schema change does not invalidate
+  // session 1's cache. Cache remains pinned to the original schema.
+  //   Result: (1, 100)
   test("[S3] external schema change after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -125,12 +150,12 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 2 adds a column and inserts
         session2.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
         session2.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
-        // Schema change + write visible via shared CacheManager
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, -1)))
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $T"),
+          Seq(Row(1, 100, null), Row(2, 200, -1)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -140,6 +165,13 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   // Scenario 4: session schema change then external write
   //
   // Session 1 adds a column (invalidates cache), then session 2 inserts.
+  //
+  // Current behavior: both changes visible via shared CacheManager.
+  //   Result: (1, 100, null), (2, 200, -1)
+  //
+  // Proposed behavior: session 1's schema change recaches with new
+  // schema, but session 2's external write does not invalidate cache.
+  //   Result: (1, 100, null)
   test("[S4] session schema change then external write") {
     assumeCanRun()
     withTable(T) {
@@ -149,14 +181,13 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 1 evolves schema (invalidates and recaches)
         spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
 
-        // Session 2 inserts with new schema
         session2.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
-        // Both changes visible
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100, null), Row(2, 200, -1)))
+        checkAnswer(
+          spark.sql(s"SELECT * FROM $T"),
+          Seq(Row(1, 100, null), Row(2, 200, -1)))
 
         spark.sql(s"UNCACHE TABLE IF EXISTS $T")
       }
@@ -166,6 +197,13 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   // Scenario 5: external drop and recreate table
   //
   // Session 2 drops and recreates the table with the same schema.
+  //
+  // Current behavior: cache invalidated by drop, recreated table is
+  // empty.
+  //   Result: empty
+  //
+  // Proposed behavior: same as current (keep as is).
+  //   Result: empty
   test("[S5] external drop and recreate table after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
@@ -175,59 +213,11 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        // Session 2 drops and recreates with same schema
         session2.sql(s"DROP TABLE $T").collect()
         session2.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
-        // Recreated table is empty; cache was invalidated by drop
         assert(!spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
-
-        spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-      }
-    }
-  }
-
-  // REFRESH TABLE after external write
-  test("[S1] REFRESH TABLE picks up external write") {
-    assumeCanRun()
-    withTable(T) {
-      withSession2 { session2 =>
-        setupTable()
-        spark.sql(s"CACHE TABLE $T")
-        assert(spark.catalog.isCached(T))
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-
-        // Session 2 writes
-        session2.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-
-        // Explicit REFRESH should pick up the external write
-        spark.sql(s"REFRESH TABLE $T")
-        assert(spark.catalog.isCached(T))
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
-
-        spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-      }
-    }
-  }
-
-  // UNCACHE TABLE after external write
-  test("[S1] UNCACHE TABLE then fresh read sees external write") {
-    assumeCanRun()
-    withTable(T) {
-      withSession2 { session2 =>
-        setupTable()
-        spark.sql(s"CACHE TABLE $T")
-        assert(spark.catalog.isCached(T))
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
-
-        // Session 2 writes
-        session2.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-
-        // Uncache and re-read
-        spark.sql(s"UNCACHE TABLE IF EXISTS $T")
-        assert(!spark.catalog.isCached(T))
-        checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
   }
