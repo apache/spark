@@ -95,23 +95,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
   test("inject analyzer rule - hidden column") {
     withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
-      val rel = LocalRelation(
-        AttributeReference("a", IntegerType)(),
-        AttributeReference("b", IntegerType)())
-      rel.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
-
-      val u = UnresolvedAttribute("x")
-      u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
-      val proj = Project(Seq(u), rel)
-
-      val df = Dataset.ofRows(session, proj)
-      assert(df.schema.fieldNames === Array("x"))
-    }
-  }
-
-  test("strict DataFrame column resolution fails immediately on matched plan node") {
-    withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
-      session.conf.set(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION.key, true)
+      // This test relies on delayed DataFrame column resolution so that the hidden column
+      // rule can inject `x` before the analyzer gives up on it.
+      session.conf.set(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION.key, false)
       try {
         val rel = LocalRelation(
           AttributeReference("a", IntegerType)(),
@@ -122,16 +108,35 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
         val proj = Project(Seq(u), rel)
 
-        val e = intercept[AnalysisException] {
-          Dataset.ofRows(session, proj)
-        }
-        checkError(
-          exception = e,
-          condition = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
-          parameters = Map("name" -> "\"x\""))
+        val df = Dataset.ofRows(session, proj)
+        assert(df.schema.fieldNames === Array("x"))
       } finally {
         session.conf.unset(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION.key)
       }
+    }
+  }
+
+  test("strict DataFrame column resolution fails immediately on matched plan node") {
+    withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
+      // Strict mode is the default; a tagged UnresolvedAttribute whose column is not in
+      // the matched plan node's output must fail immediately, without waiting for
+      // MyHiddenColumn to inject it.
+      val rel = LocalRelation(
+        AttributeReference("a", IntegerType)(),
+        AttributeReference("b", IntegerType)())
+      rel.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+      val u = UnresolvedAttribute("x")
+      u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+      val proj = Project(Seq(u), rel)
+
+      val e = intercept[AnalysisException] {
+        Dataset.ofRows(session, proj)
+      }
+      checkError(
+        exception = e,
+        condition = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        parameters = Map("name" -> "\"x\""))
     }
   }
 
