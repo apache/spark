@@ -448,14 +448,32 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil, None) :: Nil
 
-    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
+    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), rawNewNameParts, isView) =>
       if (isView) {
         throw QueryCompilationErrors.cannotRenameTableWithAlterViewError()
       }
+
+      // Strip catalog prefix if the identifier is catalog-qualified.
+      val newNameParts =
+        if (rawNewNameParts.length > 1 && rawNewNameParts.head == catalog.name()) {
+          rawNewNameParts.tail
+        } else {
+          rawNewNameParts
+        }
+
+      val namespace =
+        if (newNameParts.length == 1) {
+          oldIdent.namespace()
+        } else {
+          newNameParts.dropRight(1).toArray
+        }
+
+      val newIdent = Identifier.of(namespace, newNameParts.last)
+
       RenameTableExec(
         catalog,
         oldIdent,
-        newIdent.asIdentifier,
+        newIdent,
         invalidateTableCache(r),
         session.sharedState.cacheManager.cacheQuery) :: Nil
 
