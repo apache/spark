@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max, Min}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
@@ -50,9 +49,6 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  */
 object ResolveChangelogTable extends Rule[LogicalPlan] {
 
-  private val CHANGELOG_TRANSFORMED_TAG =
-    TreeNodeTag[Boolean]("changelog_transformed")
-
   /**
    * Reserved (`__spark_cdc_*`) column names used internally by post-processing;
    * connectors must not emit columns with these names.
@@ -66,39 +62,34 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     val all: Set[String] = Set(DelCnt, InsCnt, MinRv, MaxRv)
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (isAlreadyTransformed(plan)) return plan
-    val updatedPlan = plan.resolveOperatorsUp {
-      case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) =>
-        val changelog = table.changelog
-        val req = evaluateRequirements(changelog, table.changelogInfo)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) if !table.resolved =>
+      val changelog = table.changelog
+      val req = evaluateRequirements(changelog, table.changelogInfo)
 
-        var updatedRel: LogicalPlan = rel
-        if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
-          updatedRel = addRowLevelPostProcessing(
-            rel, changelog, req.requiresCarryOverRemoval, req.requiresUpdateDetection)
-        }
-        if (req.requiresNetChanges) {
-          updatedRel = injectNetChangeComputation(updatedRel, changelog)
-        }
-        updatedRel
+      val resolvedRel = rel.copy(table = table.copy(resolved = true))
+      var updatedRel: LogicalPlan = resolvedRel
+      if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
+        updatedRel = addRowLevelPostProcessing(
+          resolvedRel, changelog, req.requiresCarryOverRemoval, req.requiresUpdateDetection)
+      }
+      if (req.requiresNetChanges) {
+        updatedRel = injectNetChangeComputation(updatedRel, changelog)
+      }
+      updatedRel
 
-      case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _) =>
-        // Streaming CDC reads do not yet apply post-processing. Run the same option /
-        // capability validation as the batch path so silent wrong results are impossible:
-        // either no post-processing would be required (fall through, return raw stream),
-        // or we throw an explicit AnalysisException.
-        val changelog = table.changelog
-        val req = evaluateRequirements(changelog, table.changelogInfo)
-        if (req.needsAny) {
-          throw QueryCompilationErrors.cdcStreamingPostProcessingNotSupported(changelog.name())
-        }
-        rel
-    }
-    if (updatedPlan ne plan) {
-      updatedPlan.setTagValue(CHANGELOG_TRANSFORMED_TAG, true)
-    }
-    updatedPlan
+    case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
+        if !table.resolved =>
+      // Streaming CDC reads do not yet apply post-processing. Run the same option /
+      // capability validation as the batch path so silent wrong results are impossible:
+      // either no post-processing would be required (fall through, return raw stream),
+      // or we throw an explicit AnalysisException.
+      val changelog = table.changelog
+      val req = evaluateRequirements(changelog, table.changelogInfo)
+      if (req.needsAny) {
+        throw QueryCompilationErrors.cdcStreamingPostProcessingNotSupported(changelog.name())
+      }
+      rel.copy(table = table.copy(resolved = true))
   }
 
   // ---------------------------------------------------------------------------
@@ -162,8 +153,8 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   /**
    * Adds row-level post-processing (carry-over removal and/or update detection) on top of
    * the given plan. `counts` = per-partition delete and insert change_type row counts over
-   * `(rowId, _commit_version)`. `rv bounds` = per-partition min/max of `rowVersion` —
-   * equal bounds signal a copy-on-write carry-over.
+   * `(rowId, _commit_version)`. `rv bounds` = per-partition min/max of `rowVersion`.
+   * Equal bounds signal a copy-on-write carry-over.
    *   - both active     -> Window(counts + rv bounds) -> Filter -> Project(relabel) -> Drop helpers
    *   - carry-over only -> Window(counts + rv bounds) -> Filter -> Drop helpers
    *   - update only     -> Window(counts only) -> Project(relabel) -> Drop helpers
@@ -260,7 +251,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       Literal("update_postimage"), Literal("update_preimage"))
 
     val raiseInvalid = RaiseError(
-      Literal("INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION"),
+      Literal("CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION"),
       CreateMap(Nil),
       StringType)
     val caseExpr = CaseWhen(Seq(isInvalid -> raiseInvalid, isUpdate -> updateType), changeTypeAttr)
@@ -289,14 +280,6 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
-
-  /**
-   * Returns true if this plan has already been transformed by this rule.
-   * Uses a plan-level tag to prevent re-processing on subsequent rule executor iterations.
-   */
-  private def isAlreadyTransformed(plan: LogicalPlan): Boolean = {
-    plan.getTagValue(CHANGELOG_TRANSFORMED_TAG).getOrElse(false)
-  }
 
   /**
    * Removes any helper columns (see [[HelperColumn]]) that earlier steps added to the
