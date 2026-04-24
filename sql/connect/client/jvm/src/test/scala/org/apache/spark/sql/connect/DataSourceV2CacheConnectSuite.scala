@@ -53,11 +53,11 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   }
 
   private def withExtSession(f: SparkSession => Unit): Unit = {
-    val ext = SparkConnectServerUtils.createSparkSession()
+    val extSession = SparkConnectServerUtils.createSparkSession()
     try {
-      f(ext)
+      f(extSession)
     } finally {
-      ext.stop()
+      extSession.stop()
     }
   }
 
@@ -67,13 +67,13 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   test("[S1] external data write after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
-      withExtSession { ext =>
+      withExtSession { extSession =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        ext.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+        extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
 
         assert(spark.catalog.isCached(T))
         checkAnswer(
@@ -92,7 +92,7 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   test("[S2] session write then external write after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
-      withExtSession { ext =>
+      withExtSession { extSession =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
         assert(spark.catalog.isCached(T))
@@ -101,7 +101,7 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
         spark.sql(s"INSERT INTO $T VALUES (2, 200)")
         assert(spark.catalog.isCached(T))
 
-        ext.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
+        extSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
 
         assert(spark.catalog.isCached(T))
         checkAnswer(
@@ -119,14 +119,14 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   test("[S3] external schema change after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
-      withExtSession { ext =>
+      withExtSession { extSession =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        ext.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
-        ext.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+        extSession.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
+        extSession.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
@@ -143,7 +143,7 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   test("[S4] session schema change then external write") {
     assumeCanRun()
     withTable(T) {
-      withExtSession { ext =>
+      withExtSession { extSession =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
         assert(spark.catalog.isCached(T))
@@ -151,7 +151,7 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
 
         spark.sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
 
-        ext.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+        extSession.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
         checkAnswer(
           spark.sql(s"SELECT * FROM $T"),
@@ -168,14 +168,14 @@ class DataSourceV2CacheConnectSuite extends QueryTest with RemoteSparkSession wi
   test("[S5] external drop and recreate table after CACHE TABLE") {
     assumeCanRun()
     withTable(T) {
-      withExtSession { ext =>
+      withExtSession { extSession =>
         setupTable()
         spark.sql(s"CACHE TABLE $T")
         assert(spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq(Row(1, 100)))
 
-        ext.sql(s"DROP TABLE $T").collect()
-        ext.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        extSession.sql(s"DROP TABLE $T").collect()
+        extSession.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
         assert(!spark.catalog.isCached(T))
         checkAnswer(spark.sql(s"SELECT * FROM $T"), Seq.empty)
