@@ -48,7 +48,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.sql.internal.SQLConf.SHOW_ALL_PARTITION_PARAMETERS_ENABLED
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -1301,7 +1301,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // Note: partition-level statistics were introduced in 2.3.
     val restoredStats = statsFromProperties(partition.parameters, table.identifier.table)
     if (restoredStats.isDefined) {
-      val filteredParameters = if (conf.get(SHOW_ALL_PARTITION_PARAMETERS_ENABLED)) {
+      val filteredParameters = if (SQLConf.get.showAllPartitionParameters) {
         partition.parameters
       } else {
         partition.parameters.filterNot {

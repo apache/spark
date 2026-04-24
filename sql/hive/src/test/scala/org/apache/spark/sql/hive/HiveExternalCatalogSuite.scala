@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.SHOW_ALL_PARTITION_PARAMETERS_ENABLED
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -245,19 +246,19 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
     assert(DataTypeUtils.sameType(alteredTable.schema, newSchema))
   }
 
-  test("partition parameters should not be filtered by config") {
-    def createCatalog(showAllPartitionParameters: Boolean): (HiveExternalCatalog, String) = {
+  test("partition parameters should be controlled by config") {
+    def createCatalog(): (HiveExternalCatalog, String, Seq[java.io.File]) = {
       val sparkConf = new SparkConf()
-        .set(SHOW_ALL_PARTITION_PARAMETERS_ENABLED.key, showAllPartitionParameters.toString)
       val hadoopConf = new Configuration
       val metastorePath = Utils.createTempDir()
       metastorePath.delete()
+      val warehousePath = Utils.createTempDir()
       hadoopConf.set(
         "javax.jdo.option.ConnectionURL",
         s"jdbc:derby:;databaseName=${metastorePath.getCanonicalPath};create=true")
-      hadoopConf.set("hive.metastore.warehouse.dir", Utils.createTempDir().getCanonicalPath)
+      hadoopConf.set("hive.metastore.warehouse.dir", warehousePath.getCanonicalPath)
       val catalog = new HiveExternalCatalog(sparkConf, hadoopConf)
-      val db = if (showAllPartitionParameters) "db_show_part_params_all" else "db_show_part_params"
+      val db = "db_show_part_params"
       catalog.client.reset()
       catalog.createDatabase(newDb(db), ignoreIfExists = false)
       catalog.createTable(newTable("tbl", db), ignoreIfExists = false)
@@ -271,25 +272,33 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
         parameters = Map("k1" -> "v1", sparkSqlParamKey -> "v2"),
         stats = Some(CatalogStatistics(sizeInBytes = 1, rowCount = Some(1))))
       catalog.alterPartitions(db, "tbl", Seq(updatedPart))
-      (catalog, db)
+      (catalog, db, Seq(metastorePath, warehousePath))
     }
 
-    val (hiddenParamsCatalog, hiddenParamsDb) = createCatalog(showAllPartitionParameters = false)
-    val hiddenParamsPart =
-      hiddenParamsCatalog.getPartition(hiddenParamsDb, "tbl", Map("a" -> "1", "b" -> "2"))
-    assert(hiddenParamsPart.stats.nonEmpty)
-    assert(hiddenParamsPart.parameters.getOrElse("k1", "").equals("v1"))
-    assert(
-      hiddenParamsPart.parameters.keys.forall(!_.startsWith(HiveExternalCatalog.SPARK_SQL_PREFIX)))
+    val (catalog, db, cleanupDirs) = createCatalog()
+    try {
+      val hiddenParamsConf = new SQLConf
+      hiddenParamsConf.setConf(SHOW_ALL_PARTITION_PARAMETERS_ENABLED, false)
+      SQLConf.withExistingConf(hiddenParamsConf) {
+        val hiddenParamsPart = catalog.getPartition(db, "tbl", Map("a" -> "1", "b" -> "2"))
+        assert(hiddenParamsPart.stats.nonEmpty)
+        assert(hiddenParamsPart.parameters.get("k1").contains("v1"))
+        assert(hiddenParamsPart.parameters.keys.forall(
+          !_.startsWith(HiveExternalCatalog.SPARK_SQL_PREFIX)))
+      }
 
-    val (allParamsCatalog, allParamsDb) = createCatalog(showAllPartitionParameters = true)
-    val allParamsPart =
-      allParamsCatalog.getPartition(allParamsDb, "tbl", Map("a" -> "1", "b" -> "2"))
-    assert(allParamsPart.stats.nonEmpty)
-    assert(allParamsPart.parameters.getOrElse("k1", "").equals("v1"))
-    assert(
-      allParamsPart.parameters.getOrElse(
-        HiveExternalCatalog.SPARK_SQL_PREFIX + "test", "").equals("v2"))
+      val allParamsConf = new SQLConf
+      allParamsConf.setConf(SHOW_ALL_PARTITION_PARAMETERS_ENABLED, true)
+      SQLConf.withExistingConf(allParamsConf) {
+        val allParamsPart = catalog.getPartition(db, "tbl", Map("a" -> "1", "b" -> "2"))
+        assert(allParamsPart.stats.nonEmpty)
+        assert(allParamsPart.parameters.get("k1").contains("v1"))
+        assert(allParamsPart.parameters.get(HiveExternalCatalog.SPARK_SQL_PREFIX + "test")
+          .contains("v2"))
+      }
+    } finally {
+      cleanupDirs.foreach(Utils.deleteRecursively)
+    }
   }
 
   test("SPARK-50137: Avoid fallback to Hive-incompatible ways on thrift exception") {
