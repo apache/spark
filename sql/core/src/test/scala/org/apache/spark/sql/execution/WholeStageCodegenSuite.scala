@@ -1048,13 +1048,17 @@ class WholeStageCodegenSuite extends SharedSparkSession
       withTempView("spark_56032_t", "spark_56032_idx") {
         t.createOrReplaceTempView("spark_56032_t")
         idx.createOrReplaceTempView("spark_56032_idx")
-        val df = spark.sql(
+        val query =
           """
             |WITH guarded AS (SELECT s FROM spark_56032_t WHERE kind = 'numeric'),
             |     derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
             |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
             |SELECT s, i FROM pairs
-            |""".stripMargin)
+            |""".stripMargin
+        val df = spark.sql(query)
+        val plan = df.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
         // Guard against optimizer drift: require a single rolled-up FilterExec carrying
         // both `IsNotNull(Cast(s AS INT))` and a non-IsNotNull guard conjunct -- without
         // this, `checkAnswer` alone would silently pass even if the buggy ordering
@@ -1063,7 +1067,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
           case And(l, r) => conjuncts(l) ++ conjuncts(r)
           case other => Seq(other)
         }
-        val matchingFilter = df.queryExecution.executedPlan.collect {
+        val matchingFilter = plan.collect {
           case f: FilterExec =>
             val cs = conjuncts(f.condition)
             val hasThrowingIsNotNull = cs.exists {
@@ -1080,6 +1084,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
           "expected a FilterExec whose condition carries both IsNotNull(Cast(...)) " +
             "and a non-IsNotNull guard conjunct")
         checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
+        // Cross-check the codegen path against the interpreted path.
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          checkAnswer(spark.sql(query), Seq(Row("3", 1), Row("3", 2)))
+        }
       }
     }
   }

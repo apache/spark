@@ -336,7 +336,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         val predCode: String = {
           val parts = new StringBuilder
           ctx.withSubExprEliminationExprs(subExprs.states) {
-            otherPreds.iterator.zip(boundOtherPreds.iterator).zipWithIndex.foreach {
+            otherPreds.zip(boundOtherPreds).zipWithIndex.foreach {
               case ((orig, bound), idx) =>
                 orig.references.foreach { r =>
                   val ni = notNullPreds.indexWhere {
