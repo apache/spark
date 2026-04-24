@@ -145,6 +145,16 @@ class SparkConnectColumnTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             },
         )
 
+    def test_select_column_replaced_by_withcolumn(self):
+        # Selecting the original DataFrame's column after `withColumn` replaces it
+        # with a cast: the plan-id-tagged reference must resolve to the overwritten
+        # alias rather than the inner column. This requires the non-strict
+        # DataFrame column resolution path, which falls back to name-based
+        # resolution for the tagged attribute.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
+            df = self.connect.sql("SELECT 123 AS c")
+            df.withColumn("c", CF.col("c").cast("string")).select(df["c"]).collect()
+
     def test_column_with_null(self):
         # SPARK-41751: test isNull, isNotNull, eqNullSafe
 

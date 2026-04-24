@@ -22,6 +22,18 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.analyzer.strictDataFrameColumnResolution", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.analyzer.strictDataFrameColumnResolution")
+        finally:
+            super().tearDownClass()
+
     @unittest.skip("Requires JVM access.")
     def test_validate_column_types(self):
         super().test_validate_column_types()
@@ -39,10 +51,9 @@ class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
     name-based fallback path for tagged UnresolvedAttributes."""
 
     @classmethod
-    def conf(cls):
-        cfg = super().conf()
-        cfg.set("spark.sql.analyzer.strictDataFrameColumnResolution", "false")
-        return cfg
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.analyzer.strictDataFrameColumnResolution", "false")
 
     def test_df_col_resolution_mode(self):
         self.assertEqual(
