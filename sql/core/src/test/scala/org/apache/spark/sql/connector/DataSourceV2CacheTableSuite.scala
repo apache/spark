@@ -43,6 +43,7 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
@@ -52,6 +53,8 @@ class DataSourceV2CacheTableSuite
       // External write does not invalidate this session's CacheManager.
       // SPARK-54022 cache-aware resolution finds the cached relation,
       // so the cache stays pinned. Matches Delta/Iceberg behavior.
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
     }
   }
@@ -79,10 +82,13 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // Session write: invalidates cache, rebuilds with fresh data
       sql(s"INSERT INTO $T VALUES (2, 200)")
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(
         spark.table(T),
         Seq(Row(1, 100), Row(2, 200)))
@@ -92,6 +98,8 @@ class DataSourceV2CacheTableSuite
 
       // External write does not invalidate this session's CacheManager.
       // Cache stays pinned at the session write's snapshot.
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(
         spark.table(T),
         Seq(Row(1, 100), Row(2, 200)))
@@ -105,6 +113,8 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // External schema change + data (separate CacheManager)
@@ -114,6 +124,8 @@ class DataSourceV2CacheTableSuite
 
       // External changes do not invalidate this session's CacheManager.
       // Cache stays pinned at original 2-column schema.
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
     }
   }
@@ -123,11 +135,13 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       sql(s"ALTER TABLE $T ADD COLUMN extra INT")
       sql(s"INSERT INTO $T VALUES (2, 200, 77)")
 
+      assert(spark.catalog.isCached(T))
       checkAnswer(
         spark.table(T),
         Seq(Row(1, 100, null), Row(2, 200, 77)))
@@ -142,11 +156,13 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // Session schema change: invalidates cache, rebuilds with new schema
       sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
       // After session ALTER, cache is rebuilt with 3-col schema
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100, null)))
     }
   }
@@ -159,16 +175,20 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // Session schema change: invalidates + rebuilds cache with 3-col schema
       sql(s"ALTER TABLE $T ADD COLUMN new_col INT")
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100, null)))
 
       // External write after session schema change (separate CacheManager)
       extSession.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
       // External write invisible: cache pinned after session rebuild
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100, null)))
     }
   }
@@ -180,6 +200,8 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // External drop/recreate
@@ -199,11 +221,13 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       sql(s"DROP TABLE $T")
       sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
 
+      assert(!spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq.empty)
     }
   }
@@ -214,14 +238,43 @@ class DataSourceV2CacheTableSuite
     withTable(T) {
       setupTable()
       sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // External write (invisible due to cache pinning, separate CacheManager)
       extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      assert(spark.catalog.isCached(T))
       checkAnswer(spark.table(T), Seq(Row(1, 100)))
 
       // REFRESH TABLE forces re-read from catalog, picks up external write
       sql(s"REFRESH TABLE $T")
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
+      checkAnswer(
+        spark.table(T),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+
+  // UNCACHE TABLE clears cache; fresh read sees external data
+  test("[5.7] UNCACHE TABLE then fresh read sees external write") {
+    withTable(T) {
+      setupTable()
+      sql(s"CACHE TABLE $T")
+      assert(spark.catalog.isCached(T))
+      assertCached(spark.table(T))
+
+      // External write (invisible due to cache pinning)
+      extSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      assert(spark.catalog.isCached(T))
+      checkAnswer(spark.table(T), Seq(Row(1, 100)))
+
+      // UNCACHE TABLE clears the cache
+      sql(s"UNCACHE TABLE IF EXISTS $T")
+      assert(!spark.catalog.isCached(T))
+
+      // Fresh read bypasses cache, sees external write
       checkAnswer(
         spark.table(T),
         Seq(Row(1, 100), Row(2, 200)))
