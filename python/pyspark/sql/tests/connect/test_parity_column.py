@@ -26,6 +26,12 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
     def test_validate_column_types(self):
         super().test_validate_column_types()
 
+    def test_df_col_resolution_mode(self):
+        self.assertEqual(
+            self.spark.conf.get("spark.sql.analyzer.strictDataFrameColumnResolution"),
+            "true",
+        )
+
 
 class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
     """Re-run the Column parity tests with
@@ -37,6 +43,12 @@ class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
         cfg = super().conf()
         cfg.set("spark.sql.analyzer.strictDataFrameColumnResolution", "false")
         return cfg
+
+    def test_df_col_resolution_mode(self):
+        self.assertEqual(
+            self.spark.conf.get("spark.sql.analyzer.strictDataFrameColumnResolution"),
+            "false",
+        )
 
 
 if __name__ == "__main__":
