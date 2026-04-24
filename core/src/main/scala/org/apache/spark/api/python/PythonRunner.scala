@@ -121,6 +121,15 @@ private[spark] object PythonEvalType {
 
 private[spark] object BasePythonRunner extends Logging {
 
+  /**
+   * Shared thread pool for pipelined writer tasks. Using a cached thread pool ensures that
+   * writer threads are reused across tasks, which keeps JIT-compiled code, branch prediction
+   * history, and CPU caches warm. This avoids the 2-3x serialization slowdown observed when
+   * using freshly created threads.
+   */
+  private[python] lazy val pipelinedWriterThreadPool =
+    ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer")
+
   private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
   private[spark] def faultHandlerLogPath(pid: Int): Path = {
@@ -390,11 +399,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       worker.channel.configureBlocking(true)
       worker.refresh() // re-initializes (no selector in blocking mode)
 
-      val writerThread = new PipelinedWriterThread(worker, writer, bufferSize, context)
-      writerThread.start()
+      val writerRunnable = new PipelinedWriterRunnable(worker, writer, bufferSize, context)
+      val writerFuture = BasePythonRunner.pipelinedWriterThreadPool.submit(writerRunnable)
 
       context.addTaskCompletionListener[Unit] { _ =>
-        writerThread.interrupt()
+        writerFuture.cancel(true)
       }
 
       // Use a simple InputStream that reads from the channel directly without
@@ -1072,16 +1081,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
    * shared mutable state. The old design's deadlocks were caused by complex interactions
    * with vectorized readers and monitor threads, not by the fundamental read/write split.
    */
-  class PipelinedWriterThread(
+  class PipelinedWriterRunnable(
       worker: PythonWorker,
       writer: Writer,
       bufferSize: Int,
       context: TaskContext)
-    extends Thread(s"python-udf-pipelined-writer-${taskIdentifier(context)}") {
-
-    setDaemon(true)
+    extends Runnable {
 
     override def run(): Unit = {
+      // Propagate TaskContext to the pool thread so that upstream operators
+      // that depend on TaskContext.get() work correctly.
+      TaskContext.setTaskContext(context)
       val bufferStream = new DirectByteBufferOutputStream(bufferSize)
       val dataOut = new DataOutputStream(bufferStream)
       try {
@@ -1106,6 +1116,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
           writer._exception = t
       } finally {
+        TaskContext.unset()
         try {
           bufferStream.close()
         } catch {
