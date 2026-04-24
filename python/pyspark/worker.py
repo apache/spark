@@ -19,6 +19,7 @@
 Worker that receives input from Piped RDD.
 """
 
+import collections.abc
 import os
 import sys
 import dataclasses
@@ -26,7 +27,18 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, TYPE_CHECKING, Union
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Optional,
+    Tuple,
+    TYPE_CHECKING,
+    Union,
+    get_args,
+    get_origin,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import GroupedBatch
@@ -233,46 +245,63 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def verify_result(expected_type: type) -> Callable[[Any], Iterator]:
-    """
-    Create a result verifier that checks both iterability and element types.
+def _type_label(t: type) -> str:
+    package = getattr(inspect.getmodule(t), "__package__", "")
+    return f"{package}.{t.__name__}"
 
-    Returns a function that takes a UDF result, verifies it is iterable,
-    and lazily type-checks each element via map.
+
+def verify_return_type(result: Any, expected_type: Any) -> Any:
+    """
+    Verify a UDF return value against an expected container type.
+
+    If ``expected_type`` is a concrete type (e.g. ``pa.Table``), checks
+    ``isinstance(result, expected_type)`` and returns ``result`` unchanged.
+
+    If ``expected_type`` is ``Iterator[T]``, checks that ``result`` is iterable
+    and returns a lazy iterator that type-checks each element against ``T`` on
+    consumption.
 
     Parameters
     ----------
-    expected_type : type
-        The expected Python/PyArrow type for each element
-        (e.g. pa.RecordBatch, pa.Array).
+    result : Any
+        The UDF return value.
+    expected_type : type or Iterator[type]
+        The expected Python/PyArrow container type (e.g. ``pa.Table``,
+        ``pa.RecordBatch``, ``pa.Array``), or ``Iterator[T]`` to require an
+        iterator of ``T``.
     """
+    if get_origin(expected_type) is collections.abc.Iterator:
+        (element_type,) = get_args(expected_type)
+        label = f"iterator of {_type_label(element_type)}"
 
-    package = getattr(inspect.getmodule(expected_type), "__package__", "")
-    label: str = f"{package}.{expected_type.__name__}"
-
-    def check_element(element: Any) -> Any:
-        if not isinstance(element, expected_type):
+        if not isinstance(result, Iterator):
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": f"iterator of {label}",
-                    "actual": f"iterator of {type(element).__name__}",
-                },
+                messageParameters={"expected": label, "actual": type(result).__name__},
             )
-        return element
 
-    def check(result: Any) -> Iterator:
-        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": f"iterator of {label}",
-                    "actual": type(result).__name__,
-                },
-            )
+        def check_element(element: Any) -> Any:
+            if not isinstance(element, element_type):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": label,
+                        "actual": f"iterator of {type(element).__name__}",
+                    },
+                )
+            return element
+
         return map(check_element, result)
 
-    return check
+    if not isinstance(result, expected_type):
+        raise PySparkTypeError(
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
+                "expected": _type_label(expected_type),
+                "actual": type(result).__name__,
+            },
+        )
+    return result
 
 
 def verify_result_row_count(result_length: int, expected: int) -> None:
@@ -2464,7 +2493,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             output_batches = udf_func(input_batches)
 
             # Post-processing
-            verified: Iterator[pa.RecordBatch] = verify_result(pa.RecordBatch)(output_batches)
+            verified: Iterator[pa.RecordBatch] = verify_return_type(
+                output_batches, Iterator[pa.RecordBatch]
+            )
             yield from map(ArrowBatchTransformer.wrap_struct, verified)
 
         # profiling is not supported for UDF
@@ -2529,7 +2560,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             args_iter = map(extract_args, data)
 
             # Call UDF and verify result type (iterator of pa.Array)
-            verified_iter = verify_result(pa.Array)(udf_func(args_iter))
+            verified_iter = verify_return_type(udf_func(args_iter), Iterator[pa.Array])
 
             # Process results: enforce schema and assemble into RecordBatch
             target_schema = pa.schema([pa.field("_0", arrow_return_type)])
