@@ -97,22 +97,5 @@ object ChangelogTable {
     if (needsRowVersion && rowVersionRef.isEmpty) {
       throw QueryCompilationErrors.changelogMissingRowVersionError(cl.name)
     }
-
-    // Schema constraints on rowVersion: must be a top-level non-nullable column.
-    // Nullable rowVersions break carry-over detection (NULL = NULL is unknown, so a
-    // delete+insert pair would be misclassified as a real update).
-    rowVersionRef.foreach { ref =>
-      val fieldNames = ref.fieldNames()
-      if (fieldNames.length != 1) {
-        throw QueryCompilationErrors.changelogNestedRowVersionError(
-          cl.name, fieldNames.mkString("."))
-      }
-      val columnName = fieldNames(0)
-      val col = byName.getOrElse(columnName,
-        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, columnName))
-      if (col.nullable) {
-        throw QueryCompilationErrors.changelogNullableRowVersionError(cl.name, columnName)
-      }
-    }
   }
 }

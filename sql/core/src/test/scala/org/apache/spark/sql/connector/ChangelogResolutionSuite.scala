@@ -365,38 +365,19 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       stubInfo())
   }
 
-  test("ChangelogTable - nullable rowVersion column fails") {
+  test("ChangelogTable - nested rowId and rowVersion references pass (Delta-style _metadata)") {
+    val metadataRowId = FieldReference(Seq("_metadata", "row_id"))
+    val metadataRowVersion = FieldReference(Seq("_metadata", "row_commit_version"))
     val cl = new TestChangelog(
-      "bad_cl",
+      "delta_cl",
       Array(
         Column.create("id", LongType, false),
         Column.create("_change_type", StringType),
         Column.create("_commit_version", LongType),
-        Column.create("_commit_timestamp", TimestampType),
-        Column.create("row_commit_version", LongType)),
+        Column.create("_commit_timestamp", TimestampType)),
       carryoverRows = true,
-      rowIdRefs = Array(FieldReference.column("id")),
-      rowVersionRef = Some(FieldReference.column("row_commit_version")))
-    checkError(
-      intercept[AnalysisException] { ChangelogTable(cl, stubInfo()) },
-      condition = "INVALID_CHANGELOG_SCHEMA.NULLABLE_ROW_VERSION",
-      parameters = Map(
-        "changelogName" -> "bad_cl",
-        "columnName" -> "row_commit_version"))
-  }
-
-  test("ChangelogTable - non-nullable rowVersion column passes") {
-    val cl = new TestChangelog(
-      "good_cl",
-      Array(
-        Column.create("id", LongType, false),
-        Column.create("_change_type", StringType),
-        Column.create("_commit_version", LongType),
-        Column.create("_commit_timestamp", TimestampType),
-        Column.create("row_commit_version", LongType, false)),
-      carryoverRows = true,
-      rowIdRefs = Array(FieldReference.column("id")),
-      rowVersionRef = Some(FieldReference.column("row_commit_version")))
+      rowIdRefs = Array(metadataRowId),
+      rowVersionRef = Some(metadataRowVersion))
     ChangelogTable(cl, stubInfo())
   }
 

@@ -3904,15 +3904,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "actualType" -> actualType))
   }
 
-  def changelogNullableRowVersionError(
-      changelogName: String, columnName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CHANGELOG_SCHEMA.NULLABLE_ROW_VERSION",
-      messageParameters = Map(
-        "changelogName" -> changelogName,
-        "columnName" -> columnName))
-  }
-
   def changelogMissingRowIdError(changelogName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_ID",
@@ -3923,15 +3914,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INVALID_CHANGELOG_SCHEMA.MISSING_ROW_VERSION",
       messageParameters = Map("changelogName" -> changelogName))
-  }
-
-  def changelogNestedRowVersionError(
-      changelogName: String, reference: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CHANGELOG_SCHEMA.NESTED_ROW_VERSION",
-      messageParameters = Map(
-        "changelogName" -> changelogName,
-        "reference" -> reference))
   }
 
   def invalidCdcOptionConflictingRangeTypes(): Throwable = {
