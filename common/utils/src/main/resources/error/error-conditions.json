@@ -661,6 +661,19 @@
     ],
     "sqlState" : "42P08"
   },
+  "CHANGELOG_CONTRACT_VIOLATION" : {
+    "message" : [
+      "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
+    ],
+    "subClass" : {
+      "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
+        "message" : [
+          "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -3292,11 +3305,6 @@
       "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
         "message" : [
           "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."
-        ]
-      },
-      "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
-        "message" : [
-          "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
         ]
       }
     },

@@ -487,7 +487,7 @@ class ResolveChangelogTablePostProcessingSuite
           s"CHANGES FROM VERSION 2 TO VERSION 2 WITH (computeUpdates = 'true')")
           .collect()
       },
-      condition = "INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
+      condition = "CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
       parameters = Map.empty)
   }
 
@@ -509,7 +509,7 @@ class ResolveChangelogTablePostProcessingSuite
           s"CHANGES FROM VERSION 2 TO VERSION 2 WITH (computeUpdates = 'true')")
           .collect()
       },
-      condition = "INVALID_CDC_OPTION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
+      condition = "CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
       parameters = Map.empty)
   }
 
