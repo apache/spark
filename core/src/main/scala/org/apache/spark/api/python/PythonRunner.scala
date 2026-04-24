@@ -406,20 +406,41 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         writerFuture.cancel(true)
       }
 
-      // Use a simple InputStream that reads from the channel directly without
-      // going through Channels.newInputStream, which may use blockingLock()
-      // synchronization that interferes with the writer thread's channel.write().
-      val channelInput = new InputStream {
-        private[this] val temp = new Array[Byte](1)
-        override def read(): Int = {
-          val n = read(temp, 0, 1)
-          if (n <= 0) -1 else temp(0) & 0xff
-        }
-        override def read(b: Array[Byte], off: Int, len: Int): Int = {
-          worker.channel.read(ByteBuffer.wrap(b, off, len))
+      // Set socket read timeout for idle timeout detection in pipelined mode.
+      // In sync mode, the NIO Selector's select(timeout) handles this. In pipelined
+      // mode, we use SO_TIMEOUT on the blocking socket instead.
+      if (idleTimeoutSeconds > 0) {
+        worker.channel.socket().setSoTimeout(idleTimeoutSeconds.toInt * 1000)
+      }
+
+      // Wrap the socket InputStream to handle idle timeout: on SocketTimeoutException,
+      // kill the worker (if configured) and throw PythonWorkerException with the same
+      // message that sync mode's ReaderInputStream produces.
+      val socketInput = new InputStream {
+        private val inner = worker.channel.socket().getInputStream
+        override def read(): Int = doRead(() => inner.read())
+        override def read(b: Array[Byte], off: Int, len: Int): Int =
+          doRead(() => inner.read(b, off, len))
+        private def doRead(op: () => Int): Int = {
+          try {
+            op()
+          } catch {
+            case _: java.net.SocketTimeoutException =>
+              if (killOnIdleTimeout) {
+                handle.foreach { h =>
+                  if (h.isAlive) h.destroy()
+                }
+              }
+              val base = "Python worker process terminated due to idle timeout " +
+                s"(timeout: $idleTimeoutSeconds seconds)"
+              val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+                .map(error => s"$base: $error")
+                .getOrElse(base)
+              throw new PythonWorkerException(msg)
+          }
         }
       }
-      new DataInputStream(new BufferedInputStream(channelInput, bufferSize))
+      new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
     } else {
       new DataInputStream(new BufferedInputStream(
         new ReaderInputStream(worker, writer, handle,
@@ -1088,10 +1109,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       context: TaskContext)
     extends Runnable {
 
+    // Capture InputFileBlockHolder from the task thread so we can propagate it
+    // to the writer pool thread. This is needed because upstream scan operators
+    // set InputFileBlockHolder via InheritableThreadLocal, but pool threads
+    // don't inherit from the task thread.
+    private val parentInputFileBlockHolder = InputFileBlockHolder.getThreadLocalValue()
+
     override def run(): Unit = {
-      // Propagate TaskContext to the pool thread so that upstream operators
-      // that depend on TaskContext.get() work correctly.
+      // Propagate TaskContext and InputFileBlockHolder to the pool thread so that
+      // upstream operators work correctly.
       TaskContext.setTaskContext(context)
+      InputFileBlockHolder.setThreadLocalValue(parentInputFileBlockHolder)
       val bufferStream = new DirectByteBufferOutputStream(bufferSize)
       val dataOut = new DataOutputStream(bufferStream)
       try {
@@ -1117,6 +1145,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           writer._exception = t
       } finally {
         TaskContext.unset()
+        InputFileBlockHolder.unset()
         try {
           bufferStream.close()
         } catch {
