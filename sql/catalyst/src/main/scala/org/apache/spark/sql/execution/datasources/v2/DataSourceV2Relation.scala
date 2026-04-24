@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataC
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, SupportsReportCatalogStatistics, Table, TableCapability, TableCatalog, V2TableUtil}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
@@ -199,20 +199,6 @@ case class DataSourceV2ScanRelation(
   }
 
   override def computeStats(): Statistics = {
-    // If the table reports catalog-level (pre-filter, pre-pruning) statistics via
-    // SupportsReportCatalogStatistics and those stats carry a row count, prefer them:
-    // they describe the full table independent of any pushdown and are typically the
-    // strongest stats available to CBO. Otherwise fall through to the scan's own
-    // post-pushdown statistics as before.
-    relation.table match {
-      case t: SupportsReportCatalogStatistics =>
-        val catalogStats = t.catalogStatistics()
-        if (catalogStats.numRows().isPresent) {
-          return DataSourceV2Relation.transformV2Stats(
-            catalogStats, None, conf.defaultSizeInBytes, output)
-        }
-      case _ =>
-    }
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
