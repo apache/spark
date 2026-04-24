@@ -25,17 +25,11 @@ import org.apache.spark.annotation.Experimental
  * Carries all information needed to initialize a UDF execution on a worker.
  *
  * This message is passed to [[WorkerSession#init]] and contains the function
- * definition, schemas, and any additional configuration. It is designed to be
- * extended in future versions with new fields (e.g., UDF shape, data format,
- * Spark context metadata, chaining information) without breaking existing
- * worker implementations.
+ * definition, schemas, and any additional configuration.
  *
- * Placeholder until the UDF protocol lands: this Scala case class will be
- * replaced by a generated proto message once the wire protocol is
- * introduced. Do not rely on case-class equality -- `Array[Byte]` fields
- * compare by reference under the default case-class `equals`/`hashCode`,
- * so do not use [[InitMessage]] as a hash-based collection key or
- * compare instances by value without first wrapping the byte arrays.
+ * Placeholder: will be replaced by a generated proto message once the
+ * UDF wire protocol lands. Do not rely on case-class equality --
+ * `Array[Byte]` fields compare by reference.
  *
  * @param functionPayload serialized function (e.g., pickled Python, JVM bytes)
  * @param inputSchema     serialized input schema (e.g., Arrow schema bytes)
@@ -82,11 +76,10 @@ case class InitMessage(
  *  - [[close]] must always be called (use try-finally).
  *  - [[cancel]] may be called at any time to abort execution.
  *
- * The lifecycle is enforced by this class: [[init]] and [[process]] are
- * `final` and delegate to [[doInit]] / [[doProcess]] after checking
- * AtomicBoolean guards. Subclasses implement the protocol-specific work
- * in [[doInit]] and [[doProcess]] and do not need to re-check the
- * contract themselves.
+ * The lifecycle is enforced here: [[init]] and [[process]] are `final`
+ * and delegate to [[doInit]] / [[doProcess]] after AtomicBoolean guards.
+ * Subclasses implement the protocol-specific work and do not re-check
+ * the contract.
  */
 @Experimental
 abstract class WorkerSession extends AutoCloseable {
@@ -134,16 +127,10 @@ abstract class WorkerSession extends AutoCloseable {
     doProcess(input)
   }
 
-  /**
-   * Subclass hook for [[init]]. Called exactly once, after the lifecycle
-   * guard has verified init has not already run.
-   */
+  /** Subclass hook for [[init]]. Called once, after the guard. */
   protected def doInit(message: InitMessage): Unit
 
-  /**
-   * Subclass hook for [[process]]. Called at most once, after the
-   * lifecycle guard has verified init has run and process has not.
-   */
+  /** Subclass hook for [[process]]. Called at most once, after the guard. */
   protected def doProcess(input: Iterator[Array[Byte]]): Iterator[Array[Byte]]
 
   /**

@@ -79,15 +79,10 @@ abstract class DirectWorkerDispatcher(
    */
   protected def callableTimeoutMs: Long = DEFAULT_CALLABLE_TIMEOUT_MS
 
-  // Per worker_spec.proto, the engine applies a maximum cap to each
-  // proto-provided worker timeout (initialization_timeout_ms,
-  // graceful_termination_timeout_ms) so a misbehaving spec cannot make the
-  // engine wait arbitrarily long during startup or shutdown. The cap is
-  // [[ENGINE_MAX_TIMEOUT_MS]] (fixed at 30s for now). The dispatcher-internal
-  // `callableTimeoutMs` is subclass-controlled, not user-controlled, and is
-  // not subject to this cap.
-  // Exposed at package visibility so the core-level test suite can assert
-  // the engine-side clamp applied (kept out of the public API).
+  // Proto-provided timeouts are clamped to ENGINE_MAX_TIMEOUT_MS. The
+  // dispatcher-internal callableTimeoutMs above is subclass-controlled and
+  // not subject to the cap.
+  // Package-private for test access.
   private[core] val initTimeoutMs: Long = {
     val props = workerSpec.getDirect.getProperties
     val raw = if (props.hasInitializationTimeoutMs && props.getInitializationTimeoutMs > 0) {
@@ -120,26 +115,10 @@ abstract class DirectWorkerDispatcher(
     }
   }
 
-  // The socket directory is removed explicitly in close(). deleteOnExit is
-  // deliberately not registered: it is redundant with the explicit cleanup,
-  // it leaks memory in long-lived JVMs (the JDK retains the path string for
-  // the process lifetime), and it only works on empty directories.
-  //
-  // Created with POSIX 0700 so UDS sockets inside are not reachable by other
-  // local users. On non-POSIX filesystems the JDK rejects the attribute with
-  // UnsupportedOperationException; fall back to owner-only permissions via
-  // the File API, which is best-effort but still narrows the mode.
+  // Removed explicitly in close(). deleteOnExit is avoided because the JDK
+  // retains the path for the JVM lifetime, which leaks in long-lived drivers.
   private val socketDir: Path = createPrivateTempDirectory()
-  // Keyed by worker id so release is O(1) and lock-free. Iterating for
-  // shutdown is weakly consistent, which is fine: any createSession racing
-  // with close() is caught by the `closed` flag checks in createSession, and
-  // any in-flight releaseWorker that overlaps with close() is idempotent on
-  // both sides (remove-missing is a no-op, DirectWorkerProcess.close() is
-  // CAS-guarded).
   private[this] val workers = new ConcurrentHashMap[String, DirectWorkerProcess]()
-  // Flips to true on close(); createSession rejects afterwards and any
-  // already-spawned worker caught between `workers.put` and the post-publish
-  // check tears itself down instead of leaking.
   private[this] val closed = new AtomicBoolean(false)
 
   @volatile private var environmentState: EnvironmentState = EnvironmentState.Pending
@@ -154,23 +133,17 @@ abstract class DirectWorkerDispatcher(
 
   override def createSession(
       securityScope: Option[WorkerSecurityScope]): WorkerSession = {
-    // Pooling keyed by security scope is not yet implemented. Accepting a
-    // non-None scope here would silently create a one-off worker and give
-    // the caller a false expectation of isolation, so reject it until the
-    // dispatcher actually honors the scope.
     require(securityScope.isEmpty,
       "securityScope is not supported yet; pass None until pooling lands")
     if (closed.get()) throwClosed()
     ensureEnvironmentReady()
     val worker = spawnWorker()
-    // Acquire the session ref-count BEFORE publishing to `workers`: otherwise
-    // close() could iterate `workers`, tear this worker down, and leave the
-    // subsequent acquireSession handing the caller a dead worker.
+    // Acquire before publish: a concurrent close() iterating `workers` must
+    // not tear down this worker before we hand it to the caller.
     worker.acquireSession()
     workers.put(worker.id, worker)
-    // Re-check after publishing. close() may have iterated `workers` before
-    // our put (orphan case) or after (already closed here). Either way,
-    // releasing our ref-count fires the callback that removes and closes.
+    // Re-check for close() that ran concurrently. Releasing fires the
+    // ref-count callback, which removes and tears down the worker.
     if (closed.get()) {
       worker.releaseSession()
       throwClosed()
@@ -180,8 +153,6 @@ abstract class DirectWorkerDispatcher(
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()
-        // Drop the ref-count to 0, firing `releaseWorker` via the worker's
-        // callback to remove and tear down the worker.
         worker.releaseSession()
         throw e
       case NonFatal(e) =>
@@ -191,14 +162,10 @@ abstract class DirectWorkerDispatcher(
   }
 
   /**
-   * Called from [[DirectWorkerProcess.releaseSession]] when the last
-   * active session on `worker` closes. Today this always terminates the
-   * worker; with pooling, this is where the decision to reuse vs. evict
-   * will live (idle-pool handoff, capacity limits, health checks).
-   *
-   * Safe to invoke after dispatcher [[close]] has already reaped this
-   * worker: the worker's own idempotent close guard turns the second
-   * teardown into a no-op.
+   * Invoked when a worker's last session closes. Terminates the worker
+   * today; future pooling can reuse it here instead. Safe to call after
+   * dispatcher close -- the worker's own CAS-idempotent close makes a
+   * second teardown a no-op.
    */
   private def releaseWorker(worker: DirectWorkerProcess): Unit = {
     workers.remove(worker.id)
@@ -214,29 +181,18 @@ abstract class DirectWorkerDispatcher(
     throw new IllegalStateException("Dispatcher is closed")
 
   /**
-   * Shuts down the dispatcher: terminates tracked workers, removes the
-   * socket directory, and runs environment cleanup. Idempotent via CAS --
-   * only the first caller performs teardown; subsequent calls are no-ops.
-   *
-   * Does not block in-flight `createSession` calls. A createSession caller
-   * racing past the post-publish `closed` check will still produce a
-   * spawned worker; that worker tears itself down via the ref-count
-   * callback, but the subprocess teardown may outlive this `close()`.
-   * Callers needing a fully quiescent state must externally synchronize
-   * with their `createSession` callers.
+   * Terminates tracked workers, removes the socket directory, and runs
+   * environment cleanup. Idempotent via CAS. Does not drain in-flight
+   * createSession calls -- a worker spawned racing with close tears
+   * itself down through the ref-count callback, which may outlive this
+   * method.
    */
   override def close(): Unit = {
-    // Flip `closed` first so that any concurrent createSession either bails
-    // on its fast-path check or cleans up its own worker via the post-publish
-    // check. Only the first caller performs the teardown; subsequent calls
-    // are no-ops.
     if (!closed.compareAndSet(false, true)) {
       return
     }
-    // TODO: Close workers in parallel. Worst-case shutdown today is
-    //   N * gracefulTimeoutMs because each worker waits for SIGTERM to
-    //   complete before the next one is signalled. A small pool of
-    //   short-lived threads would bound shutdown to ~gracefulTimeoutMs.
+    // TODO: close workers in parallel -- today shutdown is serialised at
+    //   N * gracefulTimeoutMs worst case.
     workers.values().iterator().asScala.foreach { w =>
       try {
         w.close()
@@ -263,27 +219,18 @@ abstract class DirectWorkerDispatcher(
 
   // -- Environment lifecycle -------------------------------------------------
 
-  // TODO: Handle permanently unrecoverable environment failures (e.g., wrong
-  //   CPU architecture, unavailable system resources) differently from transient
-  //   ones. Currently all failures are treated as permanent, but some callers
-  //   may want to distinguish retriable vs. fatal failures.
+  // TODO: distinguish retriable vs permanent environment failures.
   private def ensureEnvironmentReady(): Unit = {
     environmentLock.synchronized {
       environmentState match {
         case EnvironmentState.Ready | EnvironmentState.CleanedUp =>
-          // Already set up (or torn down); nothing to do.
         case EnvironmentState.Failed(msg) =>
           throw new DirectWorkerException(s"Environment setup previously failed: $msg")
         case EnvironmentState.Pending =>
           val env = workerSpec.getEnvironment
-          // Register the cleanup hook up front. Cleanup is user-defined
-          // and may tear down more than install artifacts (worker state,
-          // temp files, etc.), so we honor it whenever it is configured,
-          // independent of whether verify/install run. Registering before
-          // any callable runs also ensures a partially-successful install
-          // (e.g., half-copied files) still gets cleaned up at JVM
-          // shutdown if the caller never reaches dispatcher.close(). The
-          // hook is a no-op when environment_cleanup is not configured.
+          // Register up front so a partially-successful install still gets
+          // torn down at JVM shutdown if dispatcher.close is never called.
+          // No-op when environment_cleanup is not configured.
           registerEnvironmentCleanupHook()
           val verified = env.hasEnvironmentVerification &&
             runCallable(env.getEnvironmentVerification).exitCode == 0
@@ -301,22 +248,10 @@ abstract class DirectWorkerDispatcher(
     }
   }
 
-  // TODO: Share a single JVM shutdown hook across all dispatchers in the
-  //   process. Today each dispatcher (when environment_cleanup is set)
-  //   registers its own Thread, which the JVM retains until shutdown.
-  //   In a long-running driver that creates many dispatchers without
-  //   explicit close() (e.g., failed-task paths), this keeps per-dispatcher
-  //   memory live for the process lifetime. A shared cleanup coordinator
-  //   draining a ConcurrentLinkedQueue<Runnable> would collapse the N hooks
-  //   into one.
+  // TODO: share one JVM shutdown hook across all dispatchers in the
+  //   process. Each live dispatcher is retained by the JVM until shutdown.
 
-  /**
-   * Registers the JVM shutdown hook that runs the cleanup callable.
-   *
-   * '''Caller must hold `environmentLock`''' -- this method reads and
-   * writes `cleanupHook` without its own synchronization. It is only
-   * called from `ensureEnvironmentReady`, which already owns the lock.
-   */
+  /** Registers the JVM shutdown hook that runs the cleanup callable. */
   private def registerEnvironmentCleanupHook(): Unit = {
     assert(Thread.holdsLock(environmentLock),
       "registerEnvironmentCleanupHook must be called while holding environmentLock")
@@ -347,7 +282,6 @@ abstract class DirectWorkerDispatcher(
     environmentLock.synchronized {
       environmentState match {
         case EnvironmentState.CleanedUp =>
-          // Already cleaned up; nothing to do.
         case _ =>
           if (workerSpec.getEnvironment.hasEnvironmentCleanup) {
             try {
@@ -402,24 +336,19 @@ abstract class DirectWorkerDispatcher(
       "DirectWorker.runner must have at least one entry in command or arguments")
     val workerId = UUID.randomUUID().toString
     val socketPath = socketDir.resolve(s"worker-$workerId.sock").toString
-    // Per the ProcessCallable contract in worker_spec.proto, the engine must
-    // always pass --id (worker identifier for logs) and --connection (the
-    // engine-assigned endpoint, format depending on transport).
+    // Proto contract: the engine must pass --id and --connection.
     val cmd = baseCmd ++ Seq("--id", workerId, "--connection", socketPath)
     val env = runner.getEnvironmentVariablesMap.asScala.toMap
     val outputFile = Files.createTempFile("udf-worker-", ".log")
     val process = launchProcess(cmd, env, outputFile.toFile)
-    // Wrap the raw resources into a closeable bundle immediately so any
-    // subsequent failure (waitForSocket, createConnection) can dispose them
-    // through the same path the happy-path teardown uses.
+    // Bundle raw resources so spawn-failure teardown reuses the happy-path
+    // dispose path.
     val artifacts = new WorkerArtifacts(process, socketPath, outputFile, logger)
 
     try {
       waitForSocket(socketPath, process, outputFile.toFile)
       val connection = createConnection(socketPath)
-      // Ownership of `artifacts` transfers to the DirectWorkerProcess: they
-      // remain alive for the duration of the worker and are disposed via
-      // DirectWorkerProcess.close() -> artifacts.close().
+      // Ownership of `artifacts` transfers to the DirectWorkerProcess.
       new DirectWorkerProcess(
         workerId, artifacts, connection, gracefulTimeoutMs, logger,
         onLastSessionReleased = releaseWorker)
@@ -436,10 +365,9 @@ abstract class DirectWorkerDispatcher(
 
   /**
    * Creates a temp directory with owner-only permissions (0700 on POSIX).
-   * Falls back to a best-effort `File.setXxx` on non-POSIX filesystems
-   * that cannot honor the attribute. The fallback is racy and weaker
-   * than the POSIX path; the logger call surfaces when the platform
-   * refuses the `setXxx` calls so operators see the degraded mode.
+   * On non-POSIX filesystems falls back to best-effort `File.setXxx`,
+   * which is TOCTOU-racy and weaker; a WARN surfaces if the platform
+   * refuses the setters.
    */
   private def createPrivateTempDirectory(): Path = {
     val attr = PosixFilePermissions.asFileAttribute(
@@ -448,15 +376,10 @@ abstract class DirectWorkerDispatcher(
       Files.createTempDirectory("spark-udf-worker", attr)
     } catch {
       case _: UnsupportedOperationException =>
-        // Non-POSIX filesystem. The dir exists with default perms between
-        // `createTempDirectory` and the `setXxx` calls below, so this
-        // fallback is TOCTOU-racy by nature.
         val dir = Files.createTempDirectory("spark-udf-worker")
         val f = dir.toFile
-        // Strip group/other access, then restore owner rwx. `&` (non-short-
-        // circuiting) so every call is attempted before we decide whether
-        // to warn; any `false` return means the platform silently refused
-        // the change and the directory is less private than advertised.
+        // `&` (non-short-circuiting) so every setter is attempted even if
+        // an earlier one refused.
         val applied =
           f.setReadable(false, false) & f.setWritable(false, false) &
             f.setExecutable(false, false) & f.setReadable(true, true) &
@@ -491,9 +414,8 @@ abstract class DirectWorkerDispatcher(
       process: Process,
       outputFile: File): Unit = {
     val file = new File(socketPath)
-    // Ensure at least one poll attempt even for very small init timeouts,
-    // so we don't declare a premature timeout before the worker has any
-    // chance to create the socket.
+    // At least one poll so very small initTimeouts don't trip a premature
+    // timeout before the worker has any chance to create the socket.
     val maxAttempts = math.max(1, (initTimeoutMs / SOCKET_POLL_INTERVAL_MS).toInt)
     var attempts = 0
     while (!file.exists() && attempts < maxAttempts) {
@@ -509,9 +431,8 @@ abstract class DirectWorkerDispatcher(
         throw new DirectWorkerException(
           s"Worker did not create socket at $socketPath within ${initTimeoutMs}ms\n$tail")
       } else {
-        // The worker exited between the last file.exists() poll and here
-        // without creating the socket -- report the exit code rather than
-        // an ambiguous "did not create" message.
+        // Worker exited after the last poll without creating the socket;
+        // prefer the exit-code message over the ambiguous "did not create".
         throwWorkerExitedBeforeSocket(process, socketPath, outputFile)
       }
     }
@@ -527,24 +448,18 @@ abstract class DirectWorkerDispatcher(
         s"before creating socket at $socketPath\n$tail")
   }
 
-  // Reads at most the final MAX_OUTPUT_SCAN_BYTES of `file` and returns the
-  // last PROCESS_OUTPUT_TAIL_LINES lines via a fixed-size ring buffer, so a
-  // runaway worker that writes gigabytes of output does not OOM the caller
-  // during error reporting.
+  // Bounded scan so a runaway worker that writes gigabytes of output does
+  // not OOM the caller during error reporting.
   private def readOutputTail(file: File): String = {
     if (!file.exists() || file.length() == 0) return ""
     val fileLen = file.length()
     val startPos = math.max(0L, fileLen - MAX_OUTPUT_SCAN_BYTES)
     val fis = new FileInputStream(file)
     try {
-      // FileChannel.position is O(1) and unambiguously seeks, unlike
-      // FileInputStream.skip which is allowed to return 0 even when bytes
-      // remain.
       if (startPos > 0) fis.getChannel.position(startPos)
       val reader = new BufferedReader(
         new InputStreamReader(fis, StandardCharsets.UTF_8))
-      // If we started mid-line, the first line is partial -- discard it so
-      // the tail never shows a line fragment.
+      // Discard the first (partial) line when we seeked into the middle.
       if (startPos > 0) reader.readLine()
       val buffer = new MQueue[String]()
       var line = reader.readLine()
@@ -578,12 +493,9 @@ abstract class DirectWorkerDispatcher(
         s"got ${conn.getTransportCase}")
   }
 
-  // worker_spec.proto documents that verification is only meaningful together
-  // with installation -- verification exists so the engine can skip running
-  // installation when the environment is already prepared. A verification
-  // callable with no installation callable would either always succeed (no-op)
-  // or always fail (worker spawn then fails) -- both user errors worth
-  // catching at spec-validation time.
+  // Verification exists to short-circuit installation when the environment
+  // is already prepared, so requiring installation alongside verification
+  // catches user errors at spec-validation time.
   private def validateEnvironmentCallables(): Unit = {
     val env = workerSpec.getEnvironment
     require(!env.hasEnvironmentVerification || env.hasInstallation,
@@ -596,55 +508,28 @@ private[direct] object DirectWorkerDispatcher {
   private[direct] val DEFAULT_INIT_TIMEOUT_MS = 10000L
   private[direct] val DEFAULT_CALLABLE_TIMEOUT_MS = 120000L
   private[direct] val DEFAULT_GRACEFUL_TIMEOUT_MS = 5000L
-  // Engine-side cap for proto-provided worker timeouts
-  // (initialization_timeout_ms, graceful_termination_timeout_ms). Fixed at
-  // 30s for now, matching the example value in worker_spec.proto;
-  // intentionally not configurable until we have a concrete need. The
-  // defaults below must stay at or under this cap so the clamp path only
-  // triggers on user-provided values, never on dispatcher defaults.
+  // Engine-side cap on proto-provided worker timeouts. The defaults below
+  // must stay at or under this cap so the clamp only fires on
+  // user-provided values.
   private[direct] val ENGINE_MAX_TIMEOUT_MS = 30000L
-  require(DEFAULT_INIT_TIMEOUT_MS <= ENGINE_MAX_TIMEOUT_MS,
-    s"DEFAULT_INIT_TIMEOUT_MS ($DEFAULT_INIT_TIMEOUT_MS) must not exceed " +
-      s"ENGINE_MAX_TIMEOUT_MS ($ENGINE_MAX_TIMEOUT_MS)")
-  require(DEFAULT_GRACEFUL_TIMEOUT_MS <= ENGINE_MAX_TIMEOUT_MS,
-    s"DEFAULT_GRACEFUL_TIMEOUT_MS ($DEFAULT_GRACEFUL_TIMEOUT_MS) must not " +
-      s"exceed ENGINE_MAX_TIMEOUT_MS ($ENGINE_MAX_TIMEOUT_MS)")
+  require(DEFAULT_INIT_TIMEOUT_MS <= ENGINE_MAX_TIMEOUT_MS &&
+    DEFAULT_GRACEFUL_TIMEOUT_MS <= ENGINE_MAX_TIMEOUT_MS,
+    "default timeouts must not exceed ENGINE_MAX_TIMEOUT_MS")
   private[direct] val PROCESS_OUTPUT_TAIL_LINES = 50
-  // Cap the amount of log file scanned by readOutputTail so a runaway worker
-  // producing gigabytes of output cannot OOM the caller during error
-  // reporting. The tail is still limited to PROCESS_OUTPUT_TAIL_LINES.
   private[direct] val MAX_OUTPUT_SCAN_BYTES = 1024L * 1024L // 1 MiB
-  // Bound on how long we wait for the kernel to reap a SIGKILL'd child.
-  // Distinct from the user-configurable gracefulTimeoutMs: SIGKILL is
-  // unblockable, so the only delay is kernel latency (milliseconds in the
-  // common case). Five seconds is generous; if we exceed it the child is
-  // likely stuck in uninterruptible I/O (D-state) and further waiting
-  // won't help.
+  // 5s bounds the wait for the kernel to reap a SIGKILL'd child. SIGKILL
+  // is unblockable, so exceeding this usually means the process is stuck
+  // in uninterruptible I/O (D-state) and further waiting will not help.
   private[direct] val SIGKILL_REAP_TIMEOUT_MS = 5000L
 
   /**
-   * Sends SIGKILL to `process` and waits up to [[SIGKILL_REAP_TIMEOUT_MS]]
-   * for the kernel to reap it.
+   * SIGKILL `process` and wait up to [[SIGKILL_REAP_TIMEOUT_MS]] for the
+   * kernel to reap it. `destroyForcibly()` alone returns before the child
+   * is reaped, which leaks a zombie until JVM exit. On reap-timeout logs
+   * a warning; on interrupt re-raises the interrupt and returns.
    *
-   * `destroyForcibly()` returns before the child has been reaped from the
-   * process table. Without a bounded `waitFor` the child lingers as a
-   * zombie until the JVM itself exits; in long-lived drivers with repeated
-   * failed spawns or session teardowns, the zombies accumulate. Callers
-   * should use this helper instead of calling `destroyForcibly()` directly.
-   *
-   * Behaviour:
-   *  - No-op if the process is already dead.
-   *  - If the reap times out, logs a warning and returns -- we do not
-   *    block forever on a wedged child. The process remains a zombie;
-   *    this is a real (but rare) operational condition the warning
-   *    surfaces.
-   *  - If the current thread is interrupted while waiting, re-raises
-   *    the interrupt and returns without logging a zombie warning --
-   *    we have not actually waited the full reap window.
-   *
-   * @param context short human-readable tag included in the warn log so
-   *                operators can correlate a wedged child with its source
-   *                (e.g. worker id, or the callable that was killed).
+   * @param context short tag included in the timeout warning so operators
+   *                can correlate a stuck child with its source.
    */
   private[direct] def destroyForciblyAndReap(
       process: Process,
