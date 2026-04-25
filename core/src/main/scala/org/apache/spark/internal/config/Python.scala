@@ -158,7 +158,7 @@ private[spark] object Python {
         "while the main task thread reads output from the Python worker, allowing the two " +
         "directions to overlap for improved throughput. " +
         "This is particularly beneficial for compute-heavy UDFs (e.g., ML inference).")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -168,7 +168,7 @@ private[spark] object Python {
         "between the JVM writer thread and the NIO selector thread. A higher value allows " +
         "more data to be buffered ahead, at the cost of increased memory usage. " +
         "Only effective when spark.python.udf.pipelined.enabled is true.")
-      .version("4.1.0")
+      .version("4.2.0")
       .intConf
       .checkValue(_ > 0, "Queue depth must be positive.")
       .createWithDefault(2)
