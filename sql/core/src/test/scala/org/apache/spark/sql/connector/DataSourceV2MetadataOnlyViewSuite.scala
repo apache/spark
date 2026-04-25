@@ -495,7 +495,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       .withCurrentCatalog("spark_catalog")
       .withCurrentNamespace(Array("default"))
       .build()
-    catalog.createTable(viewIdent, initialInfo)
+    catalog.createView(viewIdent, initialInfo)
     try {
       withTable("spark_catalog.default.t") {
         Seq(2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
@@ -850,9 +850,9 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
       sql("CREATE VIEW view_catalog.default.v_drop AS " +
         "SELECT x FROM spark_catalog.default.t")
-      assert(catalog.tableExists(Identifier.of(Array("default"), "v_drop")))
+      assert(catalog.viewExists(Identifier.of(Array("default"), "v_drop")))
       sql("DROP VIEW view_catalog.default.v_drop")
-      assert(!catalog.tableExists(Identifier.of(Array("default"), "v_drop")))
+      assert(!catalog.viewExists(Identifier.of(Array("default"), "v_drop")))
     }
   }
 
@@ -896,9 +896,9 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
         sql("CREATE VIEW staging_catalog.default.v_drop_atomic AS " +
           "SELECT x FROM spark_catalog.default.t")
-        assert(catalog.tableExists(Identifier.of(Array("default"), "v_drop_atomic")))
+        assert(catalog.viewExists(Identifier.of(Array("default"), "v_drop_atomic")))
         sql("DROP VIEW staging_catalog.default.v_drop_atomic")
-        assert(!catalog.tableExists(Identifier.of(Array("default"), "v_drop_atomic")))
+        assert(!catalog.viewExists(Identifier.of(Array("default"), "v_drop_atomic")))
       }
     }
   }
