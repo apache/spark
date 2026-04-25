@@ -172,11 +172,6 @@ private[sql] object CatalogV2Implicits {
     }
 
     /**
-     * DO NOT MERGE -- intentional javadoc-crash bait to verify CI diagnostic.
-     * Reproduces the exact doc pattern that hard-exited javadoc on PR #51419:
-     * a wiki-style link to [[TableIdentifier]], a forward ref to
-     * [[toQualifiedNameParts]], and an inline-backticked `Seq[String]`.
-     *
      * Tries to convert catalog identifier to the table identifier. Table identifier does not
      * support multiple namespaces (nested namespaces), so if identifier contains nested namespace,
      * conversion cannot be done
