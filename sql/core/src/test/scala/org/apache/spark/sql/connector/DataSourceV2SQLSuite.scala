@@ -2966,7 +2966,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs without SUPPORTS_VIEW") {
+  test("View commands are not supported in v2 catalogs that don't implement ViewCatalog") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = analysisException(sqlStatement)
       checkError(

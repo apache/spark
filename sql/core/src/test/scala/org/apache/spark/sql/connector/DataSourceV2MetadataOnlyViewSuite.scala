@@ -19,8 +19,8 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableChange, TableInfo, TableSummary, V1Table, ViewInfo}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -170,7 +170,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("CREATE VIEW on a catalog without SUPPORTS_VIEW fails") {
+  test("CREATE VIEW on a catalog without ViewCatalog fails") {
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
       val ex = intercept[AnalysisException] {
@@ -574,9 +574,9 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("ALTER VIEW on a catalog without SUPPORTS_VIEW fails with MISSING_CATALOG_ABILITY") {
+  test("ALTER VIEW on a catalog without ViewCatalog fails with MISSING_CATALOG_ABILITY") {
     // ALTER VIEW's identifier is resolved via `UnresolvedView`, whose `viewOnly=true` path
-    // in `Analyzer.lookupTableOrView` rejects non-SUPPORTS_VIEW catalogs up front with the
+    // in `Analyzer.lookupTableOrView` rejects non-ViewCatalog catalogs up front with the
     // expected error class -- before `loadTable` is even called. `TestingTableOnlyCatalog`
     // happens to round-trip `default.v` as a view-typed MetadataOnlyTable, but that fixture
     // is not actually consulted on this path. CREATE VIEW's capability check lives in
@@ -807,7 +807,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   // --- DROP VIEW on a v2 catalog --------------------------------
 
-  test("DROP VIEW on a SUPPORTS_VIEW v2 catalog drops the view") {
+  test("DROP VIEW on a ViewCatalog drops the view") {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
       .asInstanceOf[TestingViewCatalog]
     withTable("spark_catalog.default.t") {
@@ -822,7 +822,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   test("DROP VIEW IF EXISTS on a v2 catalog is a no-op when the view is missing") {
     // Exercises the `ifExists=true` path -- DropViewExec should not throw when the view
-    // doesn't exist on a SUPPORTS_VIEW catalog.
+    // doesn't exist on a ViewCatalog.
     sql("DROP VIEW IF EXISTS view_catalog.default.v_never_existed")
   }
 
@@ -867,13 +867,13 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("DROP VIEW on a catalog without SUPPORTS_VIEW is rejected") {
+  test("DROP VIEW on a catalog without ViewCatalog is rejected") {
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
       val ex = intercept[AnalysisException] {
         sql("DROP VIEW no_view_catalog.default.v")
       }
-      // Preserves the pre-PR error surface for non-SUPPORTS_VIEW catalogs.
+      // Preserves the pre-PR error surface for non-ViewCatalog catalogs.
       assert(ex.getMessage.toLowerCase(java.util.Locale.ROOT).contains("views"))
     }
   }
@@ -925,7 +925,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     assert(names == Set("v_foo"), s"expected only v_foo, got $names")
   }
 
-  test("SHOW VIEWS on a catalog without SUPPORTS_VIEW is rejected") {
+  test("SHOW VIEWS on a catalog without ViewCatalog is rejected") {
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
       val ex = intercept[AnalysisException] {
@@ -952,21 +952,20 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 }
 
 /**
- * A [[TableCatalog]] that supports SUPPORTS_VIEW: round-trips [[MetadataOnlyTable]] for created
+ * A [[TableCatalog]] implementing ViewCatalog: round-trips [[MetadataOnlyTable]] for created
  * views and tables (via `createTable` / `dropTable` / `tableExists` / `listTables`) and exposes
  * two canned read-only fixtures (`test_view`, `test_unqualified_view`) used by the view-read
  * tests. Entries created via `createTable` can be either tables or views -- their
  * [[TableCatalog#PROP_TABLE_TYPE]] property is what distinguishes them.
  */
-class TestingViewCatalog extends TableCatalog {
+class TestingViewCatalog extends TableCatalog with ViewCatalog {
 
-  // Holds entries (views and tables) created via createTable within the session. Keyed by
-  // (namespace, name); PROP_TABLE_TYPE in the stored TableInfo distinguishes views from tables.
+  // Holds entries (views and tables) created via createTable / createView within the session.
+  // Keyed by (namespace, name); the stored value's runtime type (ViewInfo vs TableInfo)
+  // distinguishes views from tables. Mixed-catalog: shared identifier namespace per the
+  // ViewCatalog contract.
   private val createdViews =
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
-
-  override def capabilities(): java.util.Set[TableCatalogCapability] =
-    java.util.Collections.singleton(TableCatalogCapability.SUPPORTS_VIEW)
 
   override def loadTable(ident: Identifier): Table = {
     val key = (ident.namespace().toSeq, ident.name())
@@ -1015,10 +1014,17 @@ class TestingViewCatalog extends TableCatalog {
 
   override def tableExists(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
-    createdViews.containsKey(key) || super.tableExists(ident)
+    val existing = createdViews.get(key)
+    existing != null && !existing.isInstanceOf[ViewInfo]
   }
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {
+    // Per the mixed-catalog contract: createTable must reject if the ident is already a view.
+    if (info.isInstanceOf[ViewInfo]) {
+      throw new IllegalStateException(
+        "TestingViewCatalog.createTable should not be called with a ViewInfo; views go through " +
+          "ViewCatalog.createView")
+    }
     val key = (ident.namespace().toSeq, ident.name())
     if (createdViews.putIfAbsent(key, info) != null) {
       throw new TableAlreadyExistsException(ident)
@@ -1046,21 +1052,69 @@ class TestingViewCatalog extends TableCatalog {
   }
   override def dropTable(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
+    val existing = createdViews.get(key)
+    if (existing == null || existing.isInstanceOf[ViewInfo]) return false
     createdViews.remove(key) != null
   }
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
     throw new RuntimeException("shouldn't be called")
   }
   override def listTables(namespace: Array[String]): Array[Identifier] = {
-    // Per the TableCatalog contract (v1 parity), this returns identifiers for both tables and
-    // views; `listTableSummaries` (default impl: listTables + loadTable + read PROP_TABLE_TYPE)
-    // is what distinguishes them.
+    // Tables only -- views are listed via ViewCatalog.listViews per the new contract.
     val targetNs = namespace.toSeq
     val ids = new java.util.ArrayList[Identifier]()
-    createdViews.forEach { (key, _) =>
-      if (key._1 == targetNs) ids.add(Identifier.of(key._1.toArray, key._2))
+    createdViews.forEach { (key, info) =>
+      if (key._1 == targetNs && !info.isInstanceOf[ViewInfo]) {
+        ids.add(Identifier.of(key._1.toArray, key._2))
+      }
     }
     ids.toArray(new Array[Identifier](0))
+  }
+
+  // ViewCatalog methods. Storage is shared with TableCatalog (mixed-catalog pattern).
+
+  override def listViews(namespace: Array[String]): Array[Identifier] = {
+    val targetNs = namespace.toSeq
+    val ids = new java.util.ArrayList[Identifier]()
+    createdViews.forEach { (key, info) =>
+      if (key._1 == targetNs && info.isInstanceOf[ViewInfo]) {
+        ids.add(Identifier.of(key._1.toArray, key._2))
+      }
+    }
+    ids.toArray(new Array[Identifier](0))
+  }
+
+  override def loadView(ident: Identifier): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    Option(createdViews.get(key)) match {
+      case Some(v: ViewInfo) => v
+      case _ => throw new NoSuchViewException(ident)
+    }
+  }
+
+  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    if (createdViews.putIfAbsent(key, info) != null) {
+      throw new ViewAlreadyExistsException(ident)
+    }
+    info
+  }
+
+  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    val existing = createdViews.get(key)
+    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+      throw new NoSuchViewException(ident)
+    }
+    createdViews.put(key, info)
+    info
+  }
+
+  override def dropView(ident: Identifier): Boolean = {
+    val key = (ident.namespace().toSeq, ident.name())
+    val existing = createdViews.get(key)
+    if (existing == null || !existing.isInstanceOf[ViewInfo]) return false
+    createdViews.remove(key) != null
   }
 
   private var catalogName = ""
@@ -1071,16 +1125,14 @@ class TestingViewCatalog extends TableCatalog {
 }
 
 /**
- * A minimal [[StagingTableCatalog]] used to drive `AtomicCreateV2ViewExec`. Views are stored
- * in a local map; staging commits write through, aborts discard. Supports SUPPORTS_VIEW.
+ * A minimal mixed [[StagingTableCatalog]] + [[ViewCatalog]]. View DDL routes through the
+ * ViewCatalog API (no separate staging variant for views in the new design). The staging
+ * methods cover table CTAS / RTAS only.
  */
-class TestingStagingCatalog extends StagingTableCatalog {
+class TestingStagingCatalog extends StagingTableCatalog with ViewCatalog {
 
   private val views =
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
-
-  override def capabilities(): java.util.Set[TableCatalogCapability] =
-    java.util.Collections.singleton(TableCatalogCapability.SUPPORTS_VIEW)
 
   private def keyOf(ident: Identifier): (Seq[String], String) =
     (ident.namespace().toSeq, ident.name())
@@ -1090,9 +1142,16 @@ class TestingStagingCatalog extends StagingTableCatalog {
       .getOrElse(throw new NoSuchTableException(ident))
   }
 
-  override def tableExists(ident: Identifier): Boolean = views.containsKey(keyOf(ident))
+  override def tableExists(ident: Identifier): Boolean = {
+    val v = views.get(keyOf(ident))
+    v != null && !v.isInstanceOf[ViewInfo]
+  }
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {
+    if (info.isInstanceOf[ViewInfo]) {
+      throw new IllegalStateException(
+        "TestingStagingCatalog.createTable should not be called with a ViewInfo")
+    }
     if (views.putIfAbsent(keyOf(ident), info) != null) {
       throw new TableAlreadyExistsException(ident)
     }
@@ -1118,10 +1177,54 @@ class TestingStagingCatalog extends StagingTableCatalog {
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
     throw new RuntimeException("shouldn't be called")
-  override def dropTable(ident: Identifier): Boolean = views.remove(keyOf(ident)) != null
+  override def dropTable(ident: Identifier): Boolean = {
+    val v = views.get(keyOf(ident))
+    if (v == null || v.isInstanceOf[ViewInfo]) return false
+    views.remove(keyOf(ident)) != null
+  }
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit =
     throw new RuntimeException("shouldn't be called")
   override def listTables(namespace: Array[String]): Array[Identifier] = Array.empty
+
+  // ViewCatalog methods -- shared storage with the table side.
+
+  override def listViews(namespace: Array[String]): Array[Identifier] = {
+    val targetNs = namespace.toSeq
+    val ids = new java.util.ArrayList[Identifier]()
+    views.forEach { (key, info) =>
+      if (key._1 == targetNs && info.isInstanceOf[ViewInfo]) {
+        ids.add(Identifier.of(key._1.toArray, key._2))
+      }
+    }
+    ids.toArray(new Array[Identifier](0))
+  }
+
+  override def loadView(ident: Identifier): ViewInfo = views.get(keyOf(ident)) match {
+    case v: ViewInfo => v
+    case _ => throw new NoSuchViewException(ident)
+  }
+
+  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    if (views.putIfAbsent(keyOf(ident), info) != null) {
+      throw new ViewAlreadyExistsException(ident)
+    }
+    info
+  }
+
+  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val existing = views.get(keyOf(ident))
+    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+      throw new NoSuchViewException(ident)
+    }
+    views.put(keyOf(ident), info)
+    info
+  }
+
+  override def dropView(ident: Identifier): Boolean = {
+    val existing = views.get(keyOf(ident))
+    if (existing == null || !existing.isInstanceOf[ViewInfo]) return false
+    views.remove(keyOf(ident)) != null
+  }
 
   private var catalogName = ""
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
@@ -1140,7 +1243,7 @@ private class RecordingStagedTable(
 }
 
 /**
- * A v2 catalog that does not declare SUPPORTS_VIEW. Used by capability-gate tests. The
+ * A v2 catalog that does not implement ViewCatalog. Used by capability-gate tests. The
  * gate actually fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
  * [[CheckViewReferences]] for CREATE VIEW -- in both cases before `loadTable` is called --
  * so the pre-seeded view fixture is effectively unused on the happy-path-error flow. It's
