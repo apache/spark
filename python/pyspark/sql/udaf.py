@@ -179,10 +179,10 @@ def _validate_aggregator_methods(aggregator: Aggregator) -> None:
         # Check if the method exists on the class (not just inherited from Aggregator base)
         if not hasattr(aggregator_class, method_name):
             raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
+                errorClass="ATTRIBUTE_NOT_CALLABLE",
                 messageParameters={
-                    "arg_name": f"aggregator.{method_name}",
-                    "arg_type": "missing",
+                    "attr_name": method_name,
+                    "obj_name": "aggregator",
                 },
             )
 
@@ -192,10 +192,10 @@ def _validate_aggregator_methods(aggregator: Aggregator) -> None:
             raw_method = aggregator_class.__dict__[method_name]
             if not isinstance(raw_method, staticmethod):
                 raise PySparkTypeError(
-                    errorClass="NOT_CALLABLE",
+                    errorClass="ATTRIBUTE_NOT_CALLABLE",
                     messageParameters={
-                        "arg_name": f"aggregator.{method_name}",
-                        "arg_type": "non-static method (must use @staticmethod decorator)",
+                        "attr_name": method_name,
+                        "obj_name": "aggregator",
                     },
                 )
 
@@ -219,9 +219,10 @@ class UserDefinedAggregateFunction:
     ):
         if not isinstance(aggregator, Aggregator):
             raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "aggregator",
+                    "expected_type": "Aggregator",
                     "arg_type": type(aggregator).__name__,
                 },
             )
