@@ -16,7 +16,6 @@
 #
 
 import datetime
-import unittest
 from collections import Counter
 from decimal import Decimal as D
 

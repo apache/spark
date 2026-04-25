@@ -17,7 +17,8 @@
 """
 User-defined aggregate function related classes and functions
 """
-from typing import Any, TYPE_CHECKING, Optional, List, Iterator, Tuple
+
+from typing import Any, Callable, TYPE_CHECKING, Optional, List, Iterator, Tuple, cast
 
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
@@ -247,7 +248,7 @@ class UserDefinedAggregateFunction:
         # Serialize aggregator for use in Arrow functions
         # Use cloudpickle to ensure proper serialization of classes
         try:
-            import cloudpickle
+            import cloudpickle  # type: ignore[import-untyped]
         except ImportError:
             import pickle as cloudpickle
         self._serialized_aggregator = cloudpickle.dumps(aggregator)
@@ -324,7 +325,7 @@ class UserDefinedAggregateFunction:
         # Create a Column and attach UDAF information as an attribute
         # This is similar to how pandas UDF works - the Column contains metadata
         # that can be checked in agg() without requiring a special Column type
-        result_col = ClassicColumn(col_expr._jc)  # type: ignore[attr-defined]
+        result_col = ClassicColumn(col_expr._jc)
         # Attach UDAF metadata as attributes (not a special type)
         result_col._udaf_func = self  # type: ignore[attr-defined]
         result_col._udaf_col = col_expr  # type: ignore[attr-defined]
@@ -339,7 +340,7 @@ def _extract_column_name(col_expr: "ColumnOrName") -> tuple[Column, str]:
         return spark_col(col_expr), col_expr
     else:
         # Extract column name from expression string (e.g., "value" from "Column<'value'>")
-        col_name_str = col_expr._jc.toString() if hasattr(col_expr, "_jc") else str(col_expr)
+        col_name_str = str(col_expr)
         col_name = col_name_str.split("'")[1] if "'" in col_name_str else "value"
         return col_expr, col_name
 
@@ -348,7 +349,7 @@ def _extract_grouping_column_names(grouping_cols: List[Column]) -> List[str]:
     """Extract grouping column names from Column objects."""
     grouping_col_names = []
     for gc in grouping_cols:
-        gc_str = gc._jc.toString() if hasattr(gc, "_jc") else str(gc)
+        gc_str = str(gc)
         if "'" in gc_str:
             gc_name = gc_str.split("'")[1]
         else:
@@ -430,7 +431,7 @@ def _apply_udaf_via_catalyst(
     serialized_aggregator = udaf_func._serialized_aggregator
     return_type = udaf_func.returnType
     has_grouping = grouping_cols is not None and len(grouping_cols) > 0
-    grouping_col_names = _extract_grouping_column_names(grouping_cols) if has_grouping else []
+    grouping_col_names = _extract_grouping_column_names(grouping_cols) if grouping_cols else []
     col_expr, col_name = _extract_column_name(udaf_col_expr)
 
     # Get max key for random grouping
@@ -460,14 +461,14 @@ def _apply_udaf_via_catalyst(
             StructField("buffer", BinaryType(), True),
         ]
     )
-    reduce_udf = pandas_udf(
+    reduce_udf = pandas_udf(  # type: ignore[call-overload]
         reduce_func,
         returnType=reduce_schema,
         functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
     )
 
     merge_schema = StructType([StructField("buffer", BinaryType(), True)])
-    merge_udf = pandas_udf(
+    merge_udf = pandas_udf(  # type: ignore[call-overload]
         merge_func,
         returnType=merge_schema,
         functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
@@ -476,7 +477,7 @@ def _apply_udaf_via_catalyst(
     final_schema_str = _build_result_schema(
         has_grouping, grouping_col_names, result_col_name_safe, return_type_str
     )
-    final_udf = pandas_udf(
+    final_udf = pandas_udf(  # type: ignore[call-overload]
         final_merge_func,
         returnType=final_schema_str,
         functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
@@ -559,8 +560,8 @@ def _handle_udaf_aggregation_in_grouped_data(
 
     # Extract UDAF information
     udaf_col = udaf_cols[0]
-    udaf_func = udaf_col._udaf_func  # type: ignore[attr-defined]
-    udaf_col_expr = udaf_col._udaf_col  # type: ignore[attr-defined]
+    udaf_func = cast(UserDefinedAggregateFunction, udaf_col._udaf_func)
+    udaf_col_expr = udaf_col._udaf_col
 
     # Get grouping columns
     grouping_cols = _extract_grouping_columns_from_jvm(jgd)
@@ -579,7 +580,9 @@ def _get_max_key_for_random_grouping(df: "DataFrame") -> int:
     """Get max key for random grouping based on Spark config or partition count."""
     try:
         spark_session = df.sparkSession
-        shuffle_partitions = int(spark_session.conf.get("spark.sql.shuffle.partitions", "200"))
+        shuffle_partitions = int(
+            spark_session.conf.get("spark.sql.shuffle.partitions", "200") or "200"
+        )
         num_partitions = df.rdd.getNumPartitions()
         return max(shuffle_partitions, num_partitions, 1)
     except Exception:
@@ -608,10 +611,10 @@ def _create_reduce_func(
     serialized_aggregator: bytes,
     max_key: int,
     num_grouping_cols: int,
-):
+) -> Callable[[Iterator[Any]], Iterator[Any]]:
     """Create reduce function for mapInArrow."""
 
-    def reduce_func(iterator):
+    def reduce_func(iterator: Iterator[Any]) -> Iterator[Any]:
         import pyarrow as pa
         import cloudpickle
         import random
@@ -663,7 +666,9 @@ def _create_reduce_func(
     return reduce_func
 
 
-def _create_merge_func(serialized_aggregator: bytes):
+def _create_merge_func(
+    serialized_aggregator: bytes,
+) -> Callable[[Iterator[Any]], Iterator[Any]]:
     """Create merge function for applyInArrow using iterator API."""
     import pyarrow as pa
 
@@ -712,7 +717,7 @@ def _create_final_merge_func(
     grouping_col_names: List[str],
     udaf_func_name: str,
     col_name: str,
-):
+) -> Callable[[Iterator[Any]], Iterator[Any]]:
     """Create final merge function for applyInArrow using iterator API."""
     import pyarrow as pa
     import cloudpickle
