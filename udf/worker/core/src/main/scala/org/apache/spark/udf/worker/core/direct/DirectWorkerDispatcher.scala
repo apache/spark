@@ -19,7 +19,6 @@ package org.apache.spark.udf.worker.core.direct
 import java.io.{BufferedReader, File, FileInputStream, InputStreamReader}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import java.nio.file.attribute.PosixFilePermissions
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -35,7 +34,7 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher,
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableResult,
   DEFAULT_CALLABLE_TIMEOUT_MS, DEFAULT_GRACEFUL_TIMEOUT_MS, DEFAULT_INIT_TIMEOUT_MS,
   ENGINE_MAX_TIMEOUT_MS, EnvironmentState, MAX_OUTPUT_SCAN_BYTES,
-  PROCESS_OUTPUT_TAIL_LINES, SOCKET_POLL_INTERVAL_MS}
+  PROCESS_OUTPUT_TAIL_LINES}
 
 /**
  * :: Experimental ::
@@ -115,9 +114,6 @@ abstract class DirectWorkerDispatcher(
     }
   }
 
-  // Removed explicitly in close(). deleteOnExit is avoided because the JDK
-  // retains the path for the JVM lifetime, which leaks in long-lived drivers.
-  private val socketDir: Path = createPrivateTempDirectory()
   private[this] val workers = new ConcurrentHashMap[String, DirectWorkerProcess]()
   private[this] val closed = new AtomicBoolean(false)
 
@@ -125,8 +121,43 @@ abstract class DirectWorkerDispatcher(
   private val environmentLock = new Object
   private[this] var cleanupHook: Option[Thread] = None
 
-  /** Creates a protocol-specific connection to a worker at the given socket path. */
-  protected def createConnection(socketPath: String): WorkerConnection
+  /**
+   * Allocates a fresh endpoint address for a new worker. The string is
+   * passed to the worker binary as `--connection <address>`.
+   */
+  protected def newEndpointAddress(workerId: String): String
+
+  /**
+   * Waits for the worker process to be ready to accept connections at
+   * `address`. Throws [[DirectWorkerTimeoutException]] on timeout, or
+   * [[DirectWorkerException]] if the process exits early.
+   */
+  protected def waitForReady(
+      address: String,
+      process: Process,
+      outputFile: File): Unit
+
+  /**
+   * Best-effort per-endpoint cleanup, called from the spawn-failure path
+   * before any [[WorkerArtifacts]] / [[WorkerConnection]] exists.
+   */
+  protected def cleanupEndpointAddress(address: String): Unit
+
+  /**
+   * Cleans up dispatcher-level transport state (e.g., a UDS socket
+   * directory). Called from [[close]].
+   */
+  protected def closeTransport(): Unit
+
+  /**
+   * Validates the worker spec's transport choice. Subclasses declare
+   * which transports they support. Called from the base constructor;
+   * implementations must only read base-class state (`workerSpec`).
+   */
+  protected def validateTransportSupport(): Unit
+
+  /** Creates a protocol-specific connection to a worker at the given address. */
+  protected def createConnection(address: String): WorkerConnection
 
   /** Creates a protocol-specific session for the given worker. */
   protected def createSessionForWorker(worker: DirectWorkerProcess): WorkerSession
@@ -202,16 +233,9 @@ abstract class DirectWorkerDispatcher(
       }
     }
     workers.clear()
-    try {
-      val dir = socketDir.toFile
-      if (dir.exists()) {
-        val remaining = dir.listFiles()
-        if (remaining != null) remaining.foreach(_.delete())
-        dir.delete()
-      }
-    } catch {
+    try closeTransport() catch {
       case NonFatal(e) =>
-        logger.warn(s"Error cleaning up socket directory $socketDir", e)
+        logger.warn("Error cleaning up transport state", e)
     }
     deregisterEnvironmentCleanupHook()
     runEnvironmentCleanup()
@@ -348,62 +372,42 @@ abstract class DirectWorkerDispatcher(
     require(baseCmd.nonEmpty,
       "DirectWorker.runner must have at least one entry in command or arguments")
     val workerId = UUID.randomUUID().toString
-    val socketPath = socketDir.resolve(s"worker-$workerId.sock").toString
+    val address = newEndpointAddress(workerId)
     // Proto contract: the engine must pass --id and --connection.
-    val cmd = baseCmd ++ Seq("--id", workerId, "--connection", socketPath)
+    val cmd = baseCmd ++ Seq("--id", workerId, "--connection", address)
     val env = runner.getEnvironmentVariablesMap.asScala.toMap
     val outputFile = Files.createTempFile("udf-worker-", ".log")
     val process = launchProcess(cmd, env, outputFile.toFile)
-    // Bundle raw resources so spawn-failure teardown reuses the happy-path
-    // dispose path.
-    val artifacts = new WorkerArtifacts(process, socketPath, outputFile, logger)
 
     try {
-      waitForSocket(socketPath, process, outputFile.toFile)
-      val connection = createConnection(socketPath)
-      // Ownership of `artifacts` transfers to the DirectWorkerProcess.
+      waitForReady(address, process, outputFile.toFile)
+      val connection = createConnection(address)
+      val artifacts = new WorkerArtifacts(process, connection, outputFile, logger)
       new DirectWorkerProcess(
-        workerId, artifacts, connection, gracefulTimeoutMs, logger,
+        workerId, artifacts, gracefulTimeoutMs, logger,
         onLastSessionReleased = releaseWorker)
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()
-        artifacts.close()
+        cleanupRawSpawn(process, address, outputFile)
         throw e
       case NonFatal(e) =>
-        artifacts.close()
+        cleanupRawSpawn(process, address, outputFile)
         throw e
     }
   }
 
-  /**
-   * Creates a temp directory with owner-only permissions (0700 on POSIX).
-   * On non-POSIX filesystems falls back to best-effort `File.setXxx`,
-   * which is TOCTOU-racy and weaker; a WARN surfaces if the platform
-   * refuses the setters.
-   */
-  private def createPrivateTempDirectory(): Path = {
-    val attr = PosixFilePermissions.asFileAttribute(
-      PosixFilePermissions.fromString("rwx------"))
-    try {
-      Files.createTempDirectory("spark-udf-worker", attr)
-    } catch {
-      case _: UnsupportedOperationException =>
-        val dir = Files.createTempDirectory("spark-udf-worker")
-        val f = dir.toFile
-        // `&` (non-short-circuiting) so every setter is attempted even if
-        // an earlier one refused.
-        val applied =
-          f.setReadable(false, false) & f.setWritable(false, false) &
-            f.setExecutable(false, false) & f.setReadable(true, true) &
-            f.setWritable(true, true) & f.setExecutable(true, true)
-        if (!applied) {
-          logger.warn(
-            s"Could not fully restrict permissions on $dir; socket " +
-              s"directory may be accessible to other local users on this " +
-              s"filesystem")
-        }
-        dir
+  // Pre-WorkerArtifacts cleanup: the connection has not been built yet,
+  // so we have no bundle to close(). Each step is independent.
+  private def cleanupRawSpawn(p: Process, address: String, outputFile: Path): Unit = {
+    DirectWorkerDispatcher.destroyForciblyAndReap(p, logger, "failed spawn")
+    try cleanupEndpointAddress(address) catch {
+      case NonFatal(e) =>
+        logger.debug(s"Failed to clean up endpoint address $address", e)
+    }
+    try Files.deleteIfExists(outputFile) catch {
+      case NonFatal(e) =>
+        logger.debug(s"Failed to clean up worker output file $outputFile", e)
     }
   }
 
@@ -422,48 +426,9 @@ abstract class DirectWorkerDispatcher(
     builder.start()
   }
 
-  private def waitForSocket(
-      socketPath: String,
-      process: Process,
-      outputFile: File): Unit = {
-    val file = new File(socketPath)
-    // At least one poll so very small initTimeouts don't trip a premature
-    // timeout before the worker has any chance to create the socket.
-    val maxAttempts = math.max(1, (initTimeoutMs / SOCKET_POLL_INTERVAL_MS).toInt)
-    var attempts = 0
-    while (!file.exists() && attempts < maxAttempts) {
-      if (!process.isAlive) throwWorkerExitedBeforeSocket(process, socketPath, outputFile)
-      Thread.sleep(SOCKET_POLL_INTERVAL_MS)
-      attempts += 1
-    }
-    if (!file.exists()) {
-      if (process.isAlive) {
-        DirectWorkerDispatcher.destroyForciblyAndReap(
-          process, logger, s"init timeout $socketPath")
-        val tail = readOutputTail(outputFile)
-        throw new DirectWorkerTimeoutException(
-          s"Worker did not create socket at $socketPath within ${initTimeoutMs}ms\n$tail")
-      } else {
-        // Worker exited after the last poll without creating the socket;
-        // prefer the exit-code message over the ambiguous "did not create".
-        throwWorkerExitedBeforeSocket(process, socketPath, outputFile)
-      }
-    }
-  }
-
-  private def throwWorkerExitedBeforeSocket(
-      process: Process,
-      socketPath: String,
-      outputFile: File): Nothing = {
-    val tail = readOutputTail(outputFile)
-    throw new DirectWorkerException(
-      s"Worker exited with code ${process.exitValue()} " +
-        s"before creating socket at $socketPath\n$tail")
-  }
-
   // Bounded scan so a runaway worker that writes gigabytes of output does
   // not OOM the caller during error reporting.
-  private def readOutputTail(file: File): String = {
+  protected def readOutputTail(file: File): String = {
     if (!file.exists() || file.length() == 0) return ""
     val fileLen = file.length()
     val startPos = math.max(0L, fileLen - MAX_OUTPUT_SCAN_BYTES)
@@ -493,18 +458,6 @@ abstract class DirectWorkerDispatcher(
   }
 
   // -- Spec validation -------------------------------------------------------
-
-  // TCP transport is declared in the proto but not yet implemented; the
-  // engine currently only supports UDS.
-  private def validateTransportSupport(): Unit = {
-    val props = workerSpec.getDirect.getProperties
-    require(props.hasConnection,
-      "DirectWorker.properties.connection must be set")
-    val conn = props.getConnection
-    require(conn.hasUnixDomainSocket,
-      "DirectWorker currently only supports UNIX domain socket transport, " +
-        s"got ${conn.getTransportCase}")
-  }
 
   // Verification exists to short-circuit installation when the environment
   // is already prepared, so requiring installation alongside verification

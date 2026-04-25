@@ -30,20 +30,18 @@ import org.apache.spark.udf.worker.{
   DirectWorker, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
   UDFWorkerSpecification, UnixDomainSocket, WorkerConnectionSpec,
   WorkerEnvironment}
-import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher,
+import org.apache.spark.udf.worker.core.direct.{DirectUnixSocketWorkerDispatcher,
   DirectWorkerException, DirectWorkerProcess, DirectWorkerSession,
   DirectWorkerTimeoutException}
 
 /**
  * A [[WorkerConnection]] test implementation that considers the connection
- * active as long as the socket file exists on disk.
+ * active as long as the socket file exists on disk. Inherits socket-file
+ * deletion from [[UnixSocketWorkerConnection.close]].
  */
-class SocketFileConnection(socketPath: String) extends WorkerConnection {
+class SocketFileConnection(socketPath: String)
+    extends UnixSocketWorkerConnection(socketPath) {
   override def isActive: Boolean = new File(socketPath).exists()
-  override def close(): Unit = {
-    val f = new File(socketPath)
-    if (f.exists()) f.delete()
-  }
 }
 
 /**
@@ -70,20 +68,20 @@ class StubWorkerSession(
 }
 
 /**
- * A [[DirectWorkerDispatcher]] subclass for testing that uses a socket-file
- * connection and stub sessions instead of a real protocol implementation.
+ * A [[DirectUnixSocketWorkerDispatcher]] subclass for testing that uses
+ * a socket-file connection and stub sessions instead of a real protocol
+ * implementation.
  */
 class TestDirectWorkerDispatcher(spec: UDFWorkerSpecification)
-    extends DirectWorkerDispatcher(spec) {
+    extends DirectUnixSocketWorkerDispatcher(spec) {
 
-  override protected def createConnection(socketPath: String): WorkerConnection = {
+  override protected def createConnection(
+      socketPath: String): UnixSocketWorkerConnection =
     new SocketFileConnection(socketPath)
-  }
 
   override protected def createSessionForWorker(
-      worker: DirectWorkerProcess): WorkerSession = {
+      worker: DirectWorkerProcess): WorkerSession =
     new StubWorkerSession(worker)
-  }
 }
 
 /**
@@ -157,6 +155,14 @@ class DirectWorkerDispatcherSuite
         s"Expected StubWorkerSession, got ${other.getClass.getSimpleName}")
     }
 
+  // The whole suite uses UDS as the only transport, so reaching past the
+  // generic WorkerConnection abstraction to read the socket path is fine.
+  private def udsPath(w: DirectWorkerProcess): String = w.connection match {
+    case uds: UnixSocketWorkerConnection => uds.socketPath
+    case other => fail(
+      s"Expected UnixSocketWorkerConnection, got ${other.getClass.getSimpleName}")
+  }
+
   test("creates a worker and session") {
     dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
 
@@ -165,7 +171,7 @@ class DirectWorkerDispatcherSuite
 
     assert(worker.isAlive, "worker should be alive after creation")
     assert(worker.activeSessions == 1, "should have 1 active session")
-    assert(new File(worker.socketPath).exists(), "socket file should exist")
+    assert(new File(udsPath(worker)).exists(), "socket file should exist")
 
     session.close()
     assert(worker.activeSessions == 0, "should have 0 sessions after close")
@@ -208,7 +214,7 @@ class DirectWorkerDispatcherSuite
     // that accidentally shared underlying transport resources could still
     // hand out distinct DirectWorkerProcess wrappers pointing at the same
     // socket. Verify socket paths are unique too.
-    val socketPaths = workerObjects.map(_.socketPath)
+    val socketPaths = workerObjects.map(udsPath)
     assert(socketPaths.distinct.length == threads,
       s"each worker should have its own socket path, got $socketPaths")
 
@@ -286,7 +292,7 @@ class DirectWorkerDispatcherSuite
 
     val session = createStubSession()
     val worker = session.workerProcess
-    val socketFile = new File(worker.socketPath)
+    val socketFile = new File(udsPath(worker))
 
     assert(worker.process.isAlive, "worker should be alive before session close")
     assert(socketFile.exists(), "socket file should exist before session close")
@@ -341,7 +347,7 @@ class DirectWorkerDispatcherSuite
       s"unexpected errors during concurrent close: ${errors.toArray.mkString(", ")}")
     workers.foreach { w =>
       assert(!w.process.isAlive,
-        s"worker at ${w.socketPath} should be terminated after concurrent close")
+        s"worker at ${udsPath(w)} should be terminated after concurrent close")
     }
   }
 
@@ -356,8 +362,9 @@ class DirectWorkerDispatcherSuite
     val releaseLatch = new java.util.concurrent.CountDownLatch(1)
     val capturedWorkers =
       new java.util.concurrent.ConcurrentLinkedQueue[DirectWorkerProcess]()
-    val racing = new DirectWorkerDispatcher(specWithRunner(defaultRunner)) {
-      override protected def createConnection(socketPath: String): WorkerConnection =
+    val racing = new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner)) {
+      override protected def createConnection(
+          socketPath: String): UnixSocketWorkerConnection =
         new SocketFileConnection(socketPath)
       override protected def createSessionForWorker(
           worker: DirectWorkerProcess): WorkerSession = {
@@ -372,7 +379,8 @@ class DirectWorkerDispatcherSuite
       }
     }
     try {
-      val outcome = new java.util.concurrent.atomic.AtomicReference[Either[Throwable, WorkerSession]]()
+      val outcome =
+        new java.util.concurrent.atomic.AtomicReference[Either[Throwable, WorkerSession]]()
       val createThread = new Thread(() => {
         try {
           val s = racing.createSession(None)
@@ -428,10 +436,11 @@ class DirectWorkerDispatcherSuite
       while (worker.process.isAlive && System.currentTimeMillis() < deadline) {
         Thread.sleep(50)
       }
+      val sockPath = udsPath(worker)
       assert(!worker.process.isAlive,
-        s"worker process should be terminated after close, still alive at ${worker.socketPath}")
-      assert(!new java.io.File(worker.socketPath).exists(),
-        s"socket file ${worker.socketPath} should have been removed")
+        s"worker process should be terminated after close, still alive at $sockPath")
+      assert(!new java.io.File(sockPath).exists(),
+        s"socket file $sockPath should have been removed")
     } finally {
       releaseLatch.countDown()
       racing.close()
@@ -490,9 +499,9 @@ class DirectWorkerDispatcherSuite
   test("socket directory is owner-only (0700) on POSIX") {
     dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     // Drive one createSession so a worker (and therefore the socket dir) is
-    // observable via session.workerProcess.socketPath.
+    // observable via the UDS connection's path.
     val session = createStubSession()
-    val socketDir: Path = new File(session.workerProcess.socketPath).toPath.getParent
+    val socketDir: Path = new File(udsPath(session.workerProcess)).toPath.getParent
     session.close()
 
     val view = Files.getFileAttributeView(socketDir, classOf[PosixFileAttributeView])
@@ -510,7 +519,7 @@ class DirectWorkerDispatcherSuite
   test("socket directory is removed after dispatcher.close") {
     dispatcher = new TestDirectWorkerDispatcher(specWithRunner(defaultRunner))
     val session = createStubSession()
-    val socketDir = new File(session.workerProcess.socketPath).toPath.getParent.toFile
+    val socketDir = new File(udsPath(session.workerProcess)).toPath.getParent.toFile
     assert(socketDir.exists(),
       s"socket directory $socketDir should exist while a session is open")
     session.close()
@@ -528,15 +537,17 @@ class DirectWorkerDispatcherSuite
     // A dispatcher whose createSessionForWorker always throws. The spawned
     // worker must be terminated rather than leaked until dispatcher.close().
     var capturedWorker: DirectWorkerProcess = null
-    val failingDispatcher = new DirectWorkerDispatcher(specWithRunner(defaultRunner)) {
-      override protected def createConnection(socketPath: String): WorkerConnection =
-        new SocketFileConnection(socketPath)
-      override protected def createSessionForWorker(
-          worker: DirectWorkerProcess): WorkerSession = {
-        capturedWorker = worker
-        throw new RuntimeException("session creation failed")
+    val failingDispatcher =
+      new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner)) {
+        override protected def createConnection(
+            socketPath: String): UnixSocketWorkerConnection =
+          new SocketFileConnection(socketPath)
+        override protected def createSessionForWorker(
+            worker: DirectWorkerProcess): WorkerSession = {
+          capturedWorker = worker
+          throw new RuntimeException("session creation failed")
+        }
       }
-    }
 
     try {
       val ex = intercept[RuntimeException] {
@@ -582,15 +593,17 @@ class DirectWorkerDispatcherSuite
 
   test("socket file is cleaned up when createConnection throws") {
     val capturedSocketPaths = new java.util.concurrent.ConcurrentLinkedQueue[String]()
-    val failingDispatcher = new DirectWorkerDispatcher(specWithRunner(defaultRunner)) {
-      override protected def createConnection(socketPath: String): WorkerConnection = {
-        capturedSocketPaths.add(socketPath)
-        throw new RuntimeException("connection creation failed")
+    val failingDispatcher =
+      new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner)) {
+        override protected def createConnection(
+            socketPath: String): UnixSocketWorkerConnection = {
+          capturedSocketPaths.add(socketPath)
+          throw new RuntimeException("connection creation failed")
+        }
+        override protected def createSessionForWorker(
+            worker: DirectWorkerProcess): WorkerSession =
+          new StubWorkerSession(worker)
       }
-      override protected def createSessionForWorker(
-          worker: DirectWorkerProcess): WorkerSession =
-        new StubWorkerSession(worker)
-    }
     try {
       val ex = intercept[RuntimeException] {
         failingDispatcher.createSession(None)
@@ -747,9 +760,10 @@ class DirectWorkerDispatcherSuite
       .addCommand("sleep 30").build()
     val env = WorkerEnvironment.newBuilder().setInstallation(slowInstall).build()
     val shortTimeoutDispatcher =
-      new DirectWorkerDispatcher(specWithEnv(env = env)) {
+      new DirectUnixSocketWorkerDispatcher(specWithEnv(env = env)) {
         override protected def callableTimeoutMs: Long = 500L
-        override protected def createConnection(socketPath: String): WorkerConnection =
+        override protected def createConnection(
+            socketPath: String): UnixSocketWorkerConnection =
           new SocketFileConnection(socketPath)
         override protected def createSessionForWorker(
             worker: DirectWorkerProcess): WorkerSession =
@@ -882,14 +896,16 @@ class DirectWorkerDispatcherSuite
         .addCommand(
           s"echo invoked >> ${counterFile.getAbsolutePath}; sleep 30").build())
       .build()
-    val timeoutDispatcher = new DirectWorkerDispatcher(specWithEnv(env = env)) {
-      override protected def callableTimeoutMs: Long = 500L
-      override protected def createConnection(socketPath: String): WorkerConnection =
-        new SocketFileConnection(socketPath)
-      override protected def createSessionForWorker(
-          worker: DirectWorkerProcess): WorkerSession =
-        new StubWorkerSession(worker)
-    }
+    val timeoutDispatcher =
+      new DirectUnixSocketWorkerDispatcher(specWithEnv(env = env)) {
+        override protected def callableTimeoutMs: Long = 500L
+        override protected def createConnection(
+            socketPath: String): UnixSocketWorkerConnection =
+          new SocketFileConnection(socketPath)
+        override protected def createSessionForWorker(
+            worker: DirectWorkerProcess): WorkerSession =
+          new StubWorkerSession(worker)
+      }
     try {
       val first = intercept[DirectWorkerTimeoutException] {
         timeoutDispatcher.createSession(None)

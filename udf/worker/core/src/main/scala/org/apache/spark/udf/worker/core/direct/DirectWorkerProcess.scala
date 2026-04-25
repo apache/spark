@@ -16,7 +16,6 @@
  */
 package org.apache.spark.udf.worker.core.direct
 
-import java.io.File
 import java.nio.file.{Files, Path}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
@@ -30,16 +29,15 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger}
  * :: Experimental ::
  * A locally-spawned OS process running a UDF worker, together with its
  * transport connection. Wraps a [[WorkerArtifacts]] bundle (process +
- * socket file + output log) and a [[WorkerConnection]], plus a session
- * ref-count scaffolding for future pooling -- today one process per
- * session.
+ * connection + output log) plus a session ref-count scaffolding for
+ * future pooling -- today one process per session.
  *
  * Closing sends SIGTERM, waits up to [[gracefulTimeoutMs]], then
- * delegates forced kill + file cleanup to [[WorkerArtifacts.close]].
+ * delegates connection close + forced kill + file cleanup to
+ * [[WorkerArtifacts.close]].
  *
  * @param id stable worker identifier (UUID passed to the binary as `--id`).
- * @param artifacts process + socket + output-log, disposed together.
- * @param connection transport channel to this worker.
+ * @param artifacts process + connection + output-log, disposed together.
  * @param gracefulTimeoutMs wait after SIGTERM before escalating to SIGKILL.
  * @param logger [[WorkerLogger]] for process-level messages.
  * @param onLastSessionReleased fires when the ref-count hits 0. Runs on
@@ -52,7 +50,6 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger}
 class DirectWorkerProcess(
     val id: String,
     private[direct] val artifacts: WorkerArtifacts,
-    val connection: WorkerConnection,
     val gracefulTimeoutMs: Long,
     protected val logger: WorkerLogger = WorkerLogger.NoOp,
     private[direct] val onLastSessionReleased: DirectWorkerProcess => Unit = _ => ())
@@ -66,8 +63,8 @@ class DirectWorkerProcess(
   /** The OS process handle for this worker. */
   def process: Process = artifacts.process
 
-  /** The UDS socket path used by this worker. */
-  def socketPath: String = artifacts.socketPath
+  /** The transport connection for this worker. */
+  def connection: WorkerConnection = artifacts.connection
 
   /** Path to the merged stdout/stderr log for this worker. */
   def outputFile: Path = artifacts.outputFile
@@ -102,19 +99,12 @@ class DirectWorkerProcess(
   def isAlive: Boolean = process.isAlive && connection.isActive
 
   /**
-   * Shuts down the connection, sends SIGTERM, waits up to
-   * [[gracefulTimeoutMs]], then disposes artifacts (SIGKILL + file
+   * Sends SIGTERM, waits up to [[gracefulTimeoutMs]] for the worker to
+   * exit, then disposes artifacts (connection close + SIGKILL + file
    * cleanup). Idempotent via CAS.
    */
   override def close(): Unit = {
     if (!closed.compareAndSet(false, true)) return
-
-    try {
-      connection.close()
-    } catch {
-      case NonFatal(e) =>
-        logger.warn(s"Error closing connection to worker at $socketPath", e)
-    }
 
     if (process.isAlive) {
       process.destroy() // SIGTERM
@@ -134,37 +124,35 @@ class DirectWorkerProcess(
 
 /**
  * Closeable bundle of per-worker OS resources: the child [[Process]], its
- * UDS socket file, and its merged stdout/stderr log. [[close]] always
- * SIGKILL-reaps then deletes the files; graceful SIGTERM is the higher
- * layer's responsibility (see [[DirectWorkerProcess#close]]).
- *
- * One dispose implementation shared by the happy-path teardown and the
- * spawn-failure path (which runs before a `DirectWorkerProcess` wrapper
- * exists).
+ * transport [[WorkerConnection]], and its merged stdout/stderr log.
+ * [[close]] runs connection close (which for UDS removes the socket
+ * file), then SIGKILL-reaps the process, then deletes the output log.
+ * Graceful SIGTERM is the higher layer's responsibility (see
+ * [[DirectWorkerProcess#close]]).
  */
 private[direct] final class WorkerArtifacts(
     val process: Process,
-    val socketPath: String,
+    val connection: WorkerConnection,
     val outputFile: Path,
     private[this] val logger: WorkerLogger) extends AutoCloseable {
 
   private[this] val closed = new AtomicBoolean(false)
 
   /**
-   * Idempotently SIGKILLs the process, deletes the socket file, deletes
-   * the output log. Each step is guarded so a failure in one does not
-   * skip the next.
+   * Idempotently closes the connection (transport teardown + any
+   * transport-specific cleanup such as deleting a UDS socket file),
+   * SIGKILL-reaps the process, and deletes the output log. Each step
+   * is guarded so a failure in one does not skip the next.
    */
   override def close(): Unit = {
     if (!closed.compareAndSet(false, true)) return
 
-    DirectWorkerDispatcher.destroyForciblyAndReap(
-      process, logger, s"worker artifacts $socketPath")
-
-    try Files.deleteIfExists(new File(socketPath).toPath) catch {
+    try connection.close() catch {
       case NonFatal(e) =>
-        logger.warn(s"Error cleaning up socket file $socketPath", e)
+        logger.warn("Error closing worker connection", e)
     }
+
+    DirectWorkerDispatcher.destroyForciblyAndReap(process, logger, "worker artifacts")
 
     try Files.deleteIfExists(outputFile) catch {
       case NonFatal(e) =>
