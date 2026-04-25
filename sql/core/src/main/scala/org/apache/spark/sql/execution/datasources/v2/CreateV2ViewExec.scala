@@ -111,18 +111,6 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 
   protected def viewAlreadyExists(): Throwable =
     QueryCompilationErrors.viewAlreadyExistsError(fullNameParts)
-
-  // For mixed catalogs (also TableCatalog), reject if the identifier names a non-view table:
-  // CREATE VIEW must not silently destroy a table's data, and CREATE OR REPLACE VIEW must not
-  // either.
-  protected def rejectIfTable(): Unit = catalog match {
-    case tc: TableCatalog if tc.tableExists(identifier) =>
-      throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
-        fullNameParts, replaceArg)
-    case _ =>
-  }
-
-  protected def replaceArg: Boolean
 }
 
 /**
@@ -145,18 +133,31 @@ case class CreateV2ViewExec(
     viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
 
   override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
-  override protected def replaceArg: Boolean = replace
 
   override protected def run(): Seq[InternalRow] = {
     // Probe before preparing the view body so `IF NOT EXISTS` and the type-collision check can
     // short-circuit before running `aliasPlan` / config capture (matches v1
     // `CreateViewCommand.run`). Cyclic-reference detection runs at analysis time in
     // `CheckViewReferences`.
+    //
+    // For mixed catalogs (also implementing `TableCatalog`), also probe `tableExists` so:
+    //   * `CREATE VIEW IF NOT EXISTS` over a non-view table is a no-op (v1 parity, see
+    //     `SQLViewSuite` "existing a table with the duplicate name when CREATE VIEW IF NOT
+    //     EXISTS"), and
+    //   * a non-IF-NOT-EXISTS CREATE / OR REPLACE surfaces the dedicated
+    //     `EXPECT_VIEW_NOT_TABLE` / `TABLE_OR_VIEW_ALREADY_EXISTS` error before any view write.
     val viewExists = catalog.viewExists(identifier)
-    if (allowExisting && viewExists) {
+    val tableExists = catalog match {
+      case tc: TableCatalog => tc.tableExists(identifier)
+      case _ => false
+    }
+    if (allowExisting && (viewExists || tableExists)) {
       return Seq.empty
     }
-    rejectIfTable()
+    if (tableExists) {
+      throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
+        fullNameParts, replace)
+    }
     if (viewExists && !replace) throw viewAlreadyExists()
 
     val info = buildViewInfo()

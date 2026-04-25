@@ -927,18 +927,18 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         .build())
   }
 
-  test("SHOW TABLES on a v2 catalog includes views (v1 parity)") {
-    // v1 SHOW TABLES returns both tables and views; the `isTemporary` column distinguishes
-    // temp views from everything else. v2 catalogs have no temp views, so `isTemporary` is
-    // always false -- tables and permanent views are indistinguishable at the row level, but
-    // both must appear (callers that want only tables should use listTableSummaries and
-    // filter).
+  test("SHOW TABLES on a v2 catalog returns only tables") {
+    // Per the new `TableCatalog.listTables` contract, SHOW TABLES returns table identifiers
+    // only -- views (in mixed catalogs) are listed via SHOW VIEWS / `ViewCatalog.listViews`.
+    // This is an intentional divergence from v1 SHOW TABLES (which includes both tables and
+    // views in a single listing); v2 catalogs separate the two so callers can target either
+    // kind without filtering.
     seedV2View("v_in_show_tables")
     seedV2Table("t_in_show_tables")
     val rows = sql("SHOW TABLES IN view_catalog.default").collect()
     val names = rows.map(_.getString(1)).toSet
-    assert(names.contains("v_in_show_tables"), s"view missing from SHOW TABLES: $names")
     assert(names.contains("t_in_show_tables"), s"table missing from SHOW TABLES: $names")
+    assert(!names.contains("v_in_show_tables"), s"view leaked into SHOW TABLES: $names")
     rows.foreach(r => assert(!r.getBoolean(2), s"isTemporary must be false: $r"))
   }
 

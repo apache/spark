@@ -85,9 +85,6 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
         .map(CatalogTable.VIEW_SCHEMA_MODE -> _)
         .toMap)
 
-  // ALTER VIEW ... AS is always a replace, never a CREATE.
-  override protected def replaceArg: Boolean = true
-
   /**
    * Force-evaluate `existingView` so `NoSuchViewException` / `expectViewNotTableError`
    * surfaces before any other work (e.g. `buildViewInfo`, uncache, replace). The result is

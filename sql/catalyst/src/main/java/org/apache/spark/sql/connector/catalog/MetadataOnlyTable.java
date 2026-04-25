@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
@@ -52,8 +53,8 @@ public class MetadataOnlyTable implements Table {
    *             multi-part form used elsewhere for v2 identifiers.
    */
   public MetadataOnlyTable(TableInfo info, String name) {
-    this.info = info;
-    this.name = name;
+    this.info = Objects.requireNonNull(info, "info should not be null");
+    this.name = Objects.requireNonNull(name, "name should not be null");
   }
 
   public TableInfo getTableInfo() {
