@@ -8845,7 +8845,8 @@ object functions {
     Column.fn("array_prepend", column, lit(element))
 
   /**
-   * Removes duplicate values from the array.
+   * Removes duplicate values from the array. The order of elements in the result is the same as
+   * the order of their first occurrence in the input.
    * @group array_funcs
    * @since 2.4.0
    */
@@ -8853,7 +8854,7 @@ object functions {
 
   /**
    * Returns an array of the elements in the intersection of the given two arrays, without
-   * duplicates.
+   * duplicates. The result preserves the order of elements from the first array.
    *
    * @group array_funcs
    * @since 2.4.0
@@ -8872,6 +8873,8 @@ object functions {
 
   /**
    * Returns an array of the elements in the union of the given two arrays, without duplicates.
+   * The result preserves the order of elements from the first array, followed by elements from
+   * the second array that are not in the first.
    *
    * @group array_funcs
    * @since 2.4.0
@@ -8881,7 +8884,7 @@ object functions {
 
   /**
    * Returns an array of the elements in the first array but not in the second array, without
-   * duplicates. The order of elements in the result is not determined
+   * duplicates. The result preserves the order of elements from the first array.
    *
    * @group array_funcs
    * @since 2.4.0

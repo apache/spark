@@ -4200,9 +4200,13 @@ trait ArraySetLike {
 
 /**
  * Removes duplicate values from the array.
+ * The order of elements in the result is the same as the order of their first occurrence
+ * in the input.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array) - Removes duplicate values from the array.",
+  usage = """_FUNC_(array) - Removes duplicate values from the array.
+    The order of elements in the result is the same as the order of their first occurrence
+    in the input.""",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
@@ -4391,12 +4395,16 @@ trait ArrayBinaryLike
 }
 
 /**
- * Returns an array of the elements in the union of x and y, without duplicates
+ * Returns an array of the elements in the union of x and y, without duplicates.
+ * The result preserves the order of elements from the first array, followed by elements
+ * from the second array that are not in the first.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
       without duplicates.
+      The result preserves the order of elements from the first array, followed by elements
+      from the second array that are not in the first.
   """,
   examples = """
     Examples:
@@ -4568,12 +4576,14 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in the intersect of x and y, without duplicates.
+ * The result preserves the order of elements from the first array.
  */
 @ExpressionDescription(
   usage = """
   _FUNC_(array1, array2) - Returns an array of the elements in the intersection of array1 and
     array2, without duplicates.
+    The result preserves the order of elements from the first array.
   """,
   examples = """
     Examples:
@@ -4800,12 +4810,14 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in array1 but not in array2, without duplicates.
+ * The result preserves the order of elements from the first array.
  */
 @ExpressionDescription(
   usage = """
   _FUNC_(array1, array2) - Returns an array of the elements in array1 but not in array2,
     without duplicates.
+    The result preserves the order of elements from the first array.
   """,
   examples = """
     Examples:
