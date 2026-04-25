@@ -24,17 +24,18 @@ import java.util.Objects;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A {@link TableInfo} specialization for views. Views are a kind of table: they share the
- * {@link Table} abstraction and flow through the same {@link TableCatalog#createTable} write
- * path and the same {@link TableCatalog#loadTable} read path. {@code ViewInfo} carries the
- * view-specific fields that cannot be represented as string table properties -- the query
- * text, captured creation-time resolution context, captured SQL configs, schema-binding mode,
- * and the query output column names.
+ * View metadata DTO -- the typed payload returned by {@link ViewCatalog#loadView} and accepted
+ * by {@link ViewCatalog#createView} / {@link ViewCatalog#replaceView}. Carries the
+ * view-specific fields that cannot be represented as string table properties: the query text,
+ * captured creation-time resolution context, captured SQL configs, schema-binding mode, and
+ * query output column names. Schema and user TBLPROPERTIES are inherited from {@link TableInfo}
+ * via the typed builder.
  * <p>
- * Catalogs that declare {@link TableCatalogCapability#SUPPORTS_VIEW} recognize a
- * {@code ViewInfo} argument to {@code createTable} (and the {@link StagingTableCatalog}
- * staging variants) as a view write, and return a {@link MetadataOnlyTable} wrapping a
- * {@code ViewInfo} from {@code loadTable} for a view identifier.
+ * {@code ViewInfo} extends {@link TableInfo} so that a mixed catalog (one implementing both
+ * {@link TableCatalog} and {@link ViewCatalog}) can opt into the perf optimization of returning
+ * a {@link MetadataOnlyTable} wrapping a {@code ViewInfo} from {@link TableCatalog#loadTable}
+ * for a view identifier. Pure {@link ViewCatalog} implementations never see {@code TableInfo};
+ * the typed setters on {@link Builder} cover everything they need to construct.
  *
  * @since 4.2.0
  */

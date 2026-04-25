@@ -1104,9 +1104,16 @@ class Analyzer(
      * for resolving DDL and misc commands. UnresolvedView callers reject non-view results
      * downstream via `expectViewNotTableError`.
      *
-     * When `viewOnly=true`, non-session catalogs that do not declare SUPPORTS_VIEW are
-     * rejected up front with MISSING_CATALOG_ABILITY.VIEWS -- they cannot host views at
-     * all, so surfacing a downstream "view not found" would hide the real reason.
+     * When `viewOnly=true`, non-session catalogs that do not implement [[ViewCatalog]] are
+     * rejected up front with MISSING_CATALOG_ABILITY.VIEWS -- they cannot host views at all,
+     * so surfacing a downstream "view not found" would hide the real reason.
+     *
+     * Lookup order against a non-session catalog:
+     *   1. [[TableCatalog.loadTable]] if implemented. A returned [[MetadataOnlyTable]] wrapping
+     *      a [[ViewInfo]] is interpreted as a view (perf opt-in for mixed catalogs that prefer
+     *      to answer in a single RPC); other results are tables.
+     *   2. If `loadTable` did not produce a result and the catalog is a [[ViewCatalog]],
+     *      [[ViewCatalog.loadView]] is called as the fallback view-resolution path.
      */
     private def lookupTableOrView(
         identifier: Seq[String],
@@ -1117,10 +1124,10 @@ class Analyzer(
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
-                !CatalogV2Util.supportsView(catalog)) {
+                !catalog.isInstanceOf[ViewCatalog]) {
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
-            CatalogV2Util.loadTable(catalog, ident).map {
+            val tableResolved: Option[LogicalPlan] = CatalogV2Util.loadTable(catalog, ident).map {
               case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
                 v1Table.v1Table.tableType == CatalogTableType.VIEW =>
                 val v1Ident = v1Table.catalogTable.identifier
@@ -1132,6 +1139,19 @@ class Analyzer(
                 ResolvedPersistentView(catalog, ident, catalogTable)
               case table =>
                 ResolvedTable.create(catalog.asTableCatalog, ident, table)
+            }
+            tableResolved.orElse {
+              catalog match {
+                case vc: ViewCatalog =>
+                  try {
+                    val viewInfo = vc.loadView(ident)
+                    val catalogTable = V1Table.toCatalogTable(catalog, ident, viewInfo)
+                    Some(ResolvedPersistentView(catalog, ident, catalogTable))
+                  } catch {
+                    case _: NoSuchViewException => None
+                  }
+                case _ => None
+              }
             }
           case _ => None
         }

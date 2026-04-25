@@ -20,23 +20,21 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, ResolvedIdentifier, TableAlreadyExistsException, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ResolvedIdentifier, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.util.Utils
 
 /**
- * Shared bits for the v2 ALTER VIEW ... AS execs. Loads the existing view once via
- * `existingView` and uses it to preserve user-set properties, comment, collation, schema
- * binding mode, and owner when constructing the replacement [[ViewInfo]]. A racing DDL
- * between analysis and exec can change the target out from under us (dropped, or replaced
- * with a non-view table); in that case we surface a regular no-such-table / not-a-view
- * analysis error rather than propagating a stale analyzer decision.
+ * Shared bits for the v2 ALTER VIEW ... AS exec. Loads the existing view once via
+ * `existingView` and uses it to preserve user-set TBLPROPERTIES, comment, collation, owner,
+ * and schema binding mode when constructing the replacement [[ViewInfo]]. A racing DDL between
+ * analysis and exec can change the target out from under us (dropped, or replaced with a
+ * non-view table); in that case we surface a regular no-such-view / not-a-view analysis error
+ * rather than propagating a stale analyzer decision.
  *
  * Transient fields (SQL configs, query column names, schema mode) are re-captured from the
  * current session by [[V2ViewPreparation.buildViewInfo]], matching v1
@@ -44,29 +42,22 @@ import org.apache.spark.util.Utils
  * unchanged.
  */
 private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
-  // Reuses `tryLoadTable` / `isViewTable` from the parent trait. A racing DDL between
-  // analysis and exec (drop, or replace with a non-view table) can invalidate the analyzer's
-  // ResolvedPersistentView decision -- we re-check here and surface user-facing errors
-  // rather than propagate the stale resolution.
-  protected lazy val existingView: ViewInfo = tryLoadTable() match {
-    case None =>
-      throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
-    case Some(mot: MetadataOnlyTable) =>
-      mot.getTableInfo match {
-        case v: ViewInfo => v
-        case _ =>
+  protected lazy val existingView: ViewInfo = try {
+    catalog.loadView(identifier)
+  } catch {
+    case _: NoSuchViewException =>
+      // Race: the view disappeared after analysis. Surface no-such-view, or
+      // expect-view-not-table if a colliding non-view table appeared in a mixed catalog.
+      catalog match {
+        case tc: TableCatalog if tc.tableExists(identifier) =>
           throw QueryCompilationErrors.expectViewNotTableError(
             (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
             cmd = "ALTER VIEW ... AS",
             suggestAlternative = false,
             t = this)
+        case _ =>
+          throw new NoSuchViewException(identifier)
       }
-    case _ =>
-      throw QueryCompilationErrors.expectViewNotTableError(
-        (catalog.name() +: identifier.asMultipartIdentifier).toSeq,
-        cmd = "ALTER VIEW ... AS",
-        suggestAlternative = false,
-        t = this)
   }
 
   protected lazy val existingProps: Map[String, String] =
@@ -94,9 +85,12 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
         .map(CatalogTable.VIEW_SCHEMA_MODE -> _)
         .toMap)
 
+  // ALTER VIEW ... AS is always a replace, never a CREATE.
+  override protected def replaceArg: Boolean = true
+
   /**
-   * Force-evaluate `existingView` so `NoSuchTableException` / `expectViewNotTableError`
-   * surfaces before any other work (e.g. `buildViewInfo`, uncache, drop). The result is
+   * Force-evaluate `existingView` so `NoSuchViewException` / `expectViewNotTableError`
+   * surfaces before any other work (e.g. `buildViewInfo`, uncache, replace). The result is
    * intentionally discarded; call this purely for its side effect of materializing the
    * lazy val.
    */
@@ -104,12 +98,11 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
 }
 
 /**
- * Non-atomic ALTER VIEW for a plain [[TableCatalog]]: load existing, build replacement,
- * check cyclic reference, uncache, drop, create. Between drop and create the view does not
- * exist -- catalogs that need atomicity should also implement [[StagingTableCatalog]].
+ * Physical plan node for ALTER VIEW ... AS on a v2 [[ViewCatalog]]. Dispatches to
+ * [[ViewCatalog#replaceView]], which is contractually atomic.
  */
 case class AlterV2ViewExec(
-    catalog: TableCatalog,
+    catalog: ViewCatalog,
     identifier: Identifier,
     originalText: String,
     query: LogicalPlan) extends V2AlterViewPreparation {
@@ -119,47 +112,7 @@ case class AlterV2ViewExec(
     val info = buildViewInfo()
     // Cyclic reference detection is done at analysis time in CheckViewReferences.
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
-    catalog.dropTable(identifier)
-    try {
-      catalog.createTable(identifier, info)
-    } catch {
-      case _: TableAlreadyExistsException => throw viewAlreadyExists()
-    }
-    Seq.empty
-  }
-}
-
-/**
- * Atomic ALTER VIEW for a [[StagingTableCatalog]]: uses `stageReplace` + commit so the view
- * metadata swap is atomic against concurrent readers. `stageReplace` throws
- * [[NoSuchTableException]] when the view does not exist; we surface that as the standard
- * no-such-table error.
- */
-case class AtomicAlterV2ViewExec(
-    catalog: StagingTableCatalog,
-    identifier: Identifier,
-    originalText: String,
-    query: LogicalPlan) extends V2AlterViewPreparation {
-
-  override val metrics: Map[String, SQLMetric] =
-    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
-
-  override protected def run(): Seq[InternalRow] = {
-    requireExistingView()
-    val info = buildViewInfo()
-    // Cyclic reference detection is done at analysis time in CheckViewReferences.
-    CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
-    val staged: StagedTable = try {
-      catalog.stageReplace(identifier, info)
-    } catch {
-      case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(catalog.name(), identifier)
-    }
-    Utils.tryWithSafeFinallyAndFailureCallbacks({
-      DataSourceV2Utils.commitStagedChanges(sparkContext, staged, metrics)
-    })(catchBlock = {
-      staged.abortStagedChanges()
-    })
+    catalog.replaceView(identifier, info)
     Seq.empty
   }
 }

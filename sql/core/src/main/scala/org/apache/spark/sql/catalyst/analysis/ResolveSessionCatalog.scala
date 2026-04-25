@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -327,12 +327,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    // SUPPORTS_VIEW catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
-    // `TableCatalog.dropTable` (contractually required to drop views for such catalogs). Other
-    // non-session catalogs get `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from
-    // `CheckViewReferences` for CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
+    // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
+    // `ViewCatalog.dropView`. Other non-session catalogs get `MISSING_CATALOG_ABILITY.VIEWS`,
+    // matching the error raised from `CheckViewReferences` for CREATE/ALTER VIEW and from the
+    // analyzer gate on UnresolvedView.
     case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
-        if !CatalogV2Util.supportsView(catalog) =>
+        if !catalog.isInstanceOf[ViewCatalog] =>
       if (catalog == FakeSystemCatalog) {
         DropTempViewCommand(ident, ifExists)
       } else {
@@ -550,11 +550,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    // SUPPORTS_VIEW catalogs are handled by the v2 strategy (enumerates via
-    // listTableSummaries); we skip the match here so the plan flows through unchanged. Only
-    // non-session, non-SUPPORTS_VIEW catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
+    // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
+    // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog
+    // catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
     case ShowViews(ns: ResolvedNamespace, pattern, output)
-        if !CatalogV2Util.supportsView(ns.catalog) =>
+        if !ns.catalog.isInstanceOf[ViewCatalog] =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>

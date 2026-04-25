@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableCatalogCapability, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -301,30 +301,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
-    // The SUPPORTS_VIEW capability gate runs earlier in `CheckViewReferences`, so by the time
-    // these strategy cases fire the catalog is guaranteed to be a TableCatalog with the flag.
+    // CheckViewReferences guarantees the catalog is a ViewCatalog by the time these strategy
+    // cases fire (it throws MISSING_CATALOG_ABILITY.VIEWS otherwise).
     case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
         collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
         _, _) =>
       val sqlText = originalText.getOrElse {
         throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
       }
-      catalog.asTableCatalog match {
-        case staging: StagingTableCatalog =>
-          AtomicCreateV2ViewExec(staging, ident, userSpecifiedColumns, comment, collation,
-            properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
-        case tableCatalog =>
-          CreateV2ViewExec(tableCatalog, ident, userSpecifiedColumns, comment, collation,
-            properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
-      }
+      CreateV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, userSpecifiedColumns, comment,
+        collation, properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
 
     case AlterViewAs(ResolvedPersistentView(catalog, ident, _), originalText, query, _, _) =>
-      catalog.asTableCatalog match {
-        case staging: StagingTableCatalog =>
-          AtomicAlterV2ViewExec(staging, ident, originalText, query) :: Nil
-        case tableCatalog =>
-          AlterV2ViewExec(tableCatalog, ident, originalText, query) :: Nil
-      }
+      AlterV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, originalText, query) :: Nil
 
     // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
     // `ResolveSessionCatalog` can't handle. These are tracked as follow-up work in SPARK-52729;
@@ -389,14 +378,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // `UnresolvedTable` (not `UnresolvedTableOrView`), so `CheckAnalysis` surfaces
     // `EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE` before planning. No strategy case needed.
 
-    // DROP VIEW on a non-session SUPPORTS_VIEW catalog. The v1 rewrite in `ResolveSessionCatalog`
-    // skips SUPPORTS_VIEW catalogs (its DropView case has a `!supportsView(catalog)` guard), so
-    // they fall through here. `DropViewExec` verifies the target is a view before calling
-    // `dropTable`, mirroring v1's `DropTableCommand(isView = true)` safety net.
-    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
-        if CatalogV2Util.supportsView(catalog) =>
+    // DROP VIEW on a non-session ViewCatalog. The v1 rewrite in `ResolveSessionCatalog` skips
+    // ViewCatalog catalogs, so they fall through here. `DropViewExec` calls
+    // `ViewCatalog.dropView` and surfaces `EXPECT_VIEW_NOT_TABLE` if the identifier resolves to
+    // a table in a mixed catalog.
+    case DropView(r @ ResolvedIdentifier(catalog: ViewCatalog, ident), ifExists) =>
       val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
-      DropViewExec(catalog.asTableCatalog, ident, ifExists, invalidateFunc) :: Nil
+      DropViewExec(catalog, ident, ifExists, invalidateFunc) :: Nil
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec: TableSpec, options, orCreate, true) =>
@@ -590,11 +578,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
-    // SHOW VIEWS on a non-session v2 catalog. Session-catalog targets are rewritten to v1
-    // `ShowViewsCommand` by `ResolveSessionCatalog`; non-SUPPORTS_VIEW catalogs are rejected
-    // there too. This case only sees non-session SUPPORTS_VIEW catalogs.
-    case ShowViews(ResolvedNamespace(catalog: TableCatalog, ns, _), pattern, output)
-        if catalog.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW) =>
+    // SHOW VIEWS on a non-session v2 ViewCatalog. Session-catalog targets are rewritten to v1
+    // `ShowViewsCommand` by `ResolveSessionCatalog`; non-ViewCatalog catalogs are rejected
+    // there too. This case only sees non-session ViewCatalog catalogs.
+    case ShowViews(ResolvedNamespace(catalog: ViewCatalog, ns, _), pattern, output) =>
       ShowViewsExec(output, catalog, ns, pattern) :: Nil
 
     case ShowTablesExtended(

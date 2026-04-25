@@ -78,13 +78,6 @@ private[sql] object CatalogV2Util {
       SupportsNamespaces.PROP_LOCATION,
       SupportsNamespaces.PROP_OWNER)
 
-  // Whether the given catalog is a TableCatalog that declares
-  // TableCatalogCapability.SUPPORTS_VIEW. Returns false for non-TableCatalog plugins.
-  def supportsView(catalog: CatalogPlugin): Boolean = catalog match {
-    case tc: TableCatalog => tc.capabilities().contains(TableCatalogCapability.SUPPORTS_VIEW)
-    case _ => false
-  }
-
   /**
    * Apply properties changes to a map and return the result.
    */

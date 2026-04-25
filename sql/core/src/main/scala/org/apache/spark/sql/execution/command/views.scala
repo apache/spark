@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, NamespaceHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -902,14 +902,14 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
 
 /**
  * Post-analysis check for v2 CREATE VIEW / ALTER VIEW. First rejects catalogs that do not
- * declare [[TableCatalogCapability.SUPPORTS_VIEW]] with `MISSING_CATALOG_ABILITY.VIEWS` -- we
- * do this before the temp-object and auto-alias checks so a catalog that cannot host views at
- * all surfaces the correct root cause instead of a misleading "references temp" error. Then
- * rejects permanent views that reference temporary objects and view bodies with auto-generated
- * aliases. `referredTempFunctions` is captured by the command's `markAsAnalyzed` before this
- * rule runs. The v1 counterparts [[CreateViewCommand]] and [[AlterViewAsCommand]] keep their
- * existing exec-time checks -- Dataset-built commands bypass the analyzer's re-capture path,
- * so the exec-time safety net must stay for v1.
+ * implement [[ViewCatalog]] with `MISSING_CATALOG_ABILITY.VIEWS` -- we do this before the
+ * temp-object and auto-alias checks so a catalog that cannot host views at all surfaces the
+ * correct root cause instead of a misleading "references temp" error. Then rejects permanent
+ * views that reference temporary objects and view bodies with auto-generated aliases.
+ * `referredTempFunctions` is captured by the command's `markAsAnalyzed` before this rule runs.
+ * The v1 counterparts [[CreateViewCommand]] and [[AlterViewAsCommand]] keep their existing
+ * exec-time checks -- Dataset-built commands bypass the analyzer's re-capture path, so the
+ * exec-time safety net must stay for v1.
  */
 object CheckViewReferences extends (LogicalPlan => Unit) {
   import ViewHelper._
@@ -931,18 +931,18 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
     catalog.name() +: ident.asMultipartIdentifier
   }
 
-  // Fail fast if the catalog cannot host views. Gate non-TableCatalog plugins here too so
-  // callers get the VIEWS-specific error rather than a generic cast failure later.
-  private def requireSupportsView(resolved: LogicalPlan): Unit = {
+  // Fail fast if the catalog cannot host views. Gate non-ViewCatalog plugins here so callers
+  // get the VIEWS-specific error rather than a generic cast failure later.
+  private def requireViewCatalog(resolved: LogicalPlan): Unit = {
     val (catalog, _) = catalogAndIdent(resolved)
-    if (!CatalogV2Util.supportsView(catalog)) {
+    if (!catalog.isInstanceOf[ViewCatalog]) {
       throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
     }
   }
 
   override def apply(plan: LogicalPlan): Unit = plan.foreach {
     case cv: CreateView if cv.isAnalyzed =>
-      requireSupportsView(cv.child)
+      requireViewCatalog(cv.child)
       val fullIdent = fullIdentFor(cv.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, fullIdent, cv.query, cv.referredTempFunctions)
@@ -956,8 +956,8 @@ object CheckViewReferences extends (LogicalPlan => Unit) {
 
     case av: AlterViewAs if av.isAnalyzed =>
       // No capability check here: `Analyzer.lookupTableOrView(identifier, viewOnly=true)`
-      // already rejects non-SUPPORTS_VIEW catalogs upstream for `UnresolvedView`, so by the
-      // time an AlterViewAs reaches this rule the catalog is guaranteed to support views.
+      // already rejects non-ViewCatalog catalogs upstream for `UnresolvedView`, so by the time
+      // an AlterViewAs reaches this rule the catalog is guaranteed to be a ViewCatalog.
       val fullIdent = fullIdentFor(av.child)
       verifyTemporaryObjectsNotExists(
         isTemporary = false, fullIdent, av.query, av.referredTempFunctions)

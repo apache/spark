@@ -165,7 +165,7 @@ private[sql] object V1Table {
     )
   }
 
-  private def toCatalogTable(
+  def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
       info: ViewInfo): CatalogTable = {

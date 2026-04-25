@@ -18,45 +18,40 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.NoSuchViewException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Physical plan node for DROP VIEW on a v2 `TableCatalog` that declares
- * [[org.apache.spark.sql.connector.catalog.TableCatalogCapability#SUPPORTS_VIEW]]. Loads the
- * target entry once to verify it is a view (a [[MetadataOnlyTable]] wrapping a [[ViewInfo]])
- * before calling [[TableCatalog#dropTable]]. Matching the v1 path's
- * `DropTableCommand(isView = true)` safety net keeps `DROP VIEW some_table` from silently
- * destroying a non-view table on a SUPPORTS_VIEW catalog.
+ * Physical plan node for DROP VIEW on a v2 [[ViewCatalog]]. Calls [[ViewCatalog#dropView]]; if
+ * it returns false and the catalog also implements [[TableCatalog]] with a table at this
+ * identifier, surfaces the dedicated `EXPECT_VIEW_NOT_TABLE` error rather than a generic
+ * "view not found" -- matching v1 `DropTableCommand(isView = true)`.
  */
 case class DropViewExec(
-    catalog: TableCatalog,
+    catalog: ViewCatalog,
     ident: Identifier,
     ifExists: Boolean,
     invalidateCache: () => Unit) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    val loaded = try {
-      Some(catalog.loadTable(ident))
-    } catch {
-      case _: NoSuchTableException => None
-    }
-    val nameParts =
-      (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
-    loaded match {
-      case Some(mot: MetadataOnlyTable) if mot.getTableInfo.isInstanceOf[ViewInfo] =>
-        invalidateCache()
-        catalog.dropTable(ident)
-      case Some(_) =>
-        throw QueryCompilationErrors.expectViewNotTableError(
-          nameParts, cmd = "DROP VIEW", suggestAlternative = false, t = this)
-      case None if !ifExists =>
-        throw QueryCompilationErrors.noSuchTableError(nameParts)
-      case None =>
-      // IF EXISTS: no-op.
+    val dropped = catalog.dropView(ident)
+    if (dropped) {
+      invalidateCache()
+    } else {
+      val nameParts =
+        (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
+      catalog match {
+        case tc: TableCatalog if tc.tableExists(ident) =>
+          throw QueryCompilationErrors.expectViewNotTableError(
+            nameParts, cmd = "DROP VIEW", suggestAlternative = false, t = this)
+        case _ if !ifExists =>
+          throw new NoSuchViewException(ident)
+        case _ =>
+        // IF EXISTS: no-op.
+      }
     }
     Seq.empty
   }

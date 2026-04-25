@@ -92,32 +92,5 @@ public enum TableCatalogCapability {
    * {@link TableCatalog#createTable}.
    * See {@link Column#identityColumnSpec()}.
    */
-  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
-
-  /**
-   * Signals that the TableCatalog supports views. Views flow through the same write methods as
-   * tables, using {@link ViewInfo} (a {@link TableInfo} subtype carrying the view-specific
-   * fields -- query text, captured current catalog/namespace, captured SQL configs, schema
-   * binding mode, query output column names) as the DTO. Catalogs declaring this capability
-   * must:
-   * <ul>
-   *   <li>Persist a view when {@link TableCatalog#createTable} (or the
-   *       {@link StagingTableCatalog} staging variants) receives a {@code ViewInfo}.
-   *       Implementations should branch on {@code info instanceof ViewInfo}.</li>
-   *   <li>Return a {@link MetadataOnlyTable} wrapping a {@code ViewInfo} from
-   *       {@link TableCatalog#loadTable} for a view identifier, so Spark's view resolution
-   *       path can expand the view text.</li>
-   *   <li>Drop views through {@link TableCatalog#dropTable} and report view existence through
-   *       {@link TableCatalog#tableExists}.</li>
-   *   <li>Include views in {@link TableCatalog#listTables} output.</li>
-   * </ul>
-   * Spark routes the view DDL through the standard write APIs: {@code CREATE VIEW} uses
-   * {@code createTable} (or {@code stageCreate}); {@code CREATE OR REPLACE VIEW} uses
-   * {@code createTable} (after {@code dropTable}) or {@code stageCreateOrReplace};
-   * {@code ALTER VIEW ... AS} uses {@code createTable} (after {@code dropTable}) or
-   * {@code stageReplace}. Without this capability, Spark rejects {@code CREATE VIEW} and
-   * {@code ALTER VIEW} statements targeting the catalog up front rather than letting the
-   * catalog silently persist a table entry that cannot be read as a view.
-   */
-  SUPPORTS_VIEW
+  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
 }

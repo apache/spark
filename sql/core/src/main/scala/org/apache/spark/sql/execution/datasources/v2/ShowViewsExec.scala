@@ -22,32 +22,27 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.connector.catalog.{TableCatalog, TableSummary}
+import org.apache.spark.sql.connector.catalog.ViewCatalog
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
- * Physical plan node for SHOW VIEWS on a v2 catalog that declares
- * [[org.apache.spark.sql.connector.catalog.TableCatalogCapability#SUPPORTS_VIEW]].
- *
- * Enumerates via [[TableCatalog#listTableSummaries]] and filters to
- * [[TableSummary#VIEW_TABLE_TYPE]]. v2 catalogs have no temp views, so the `isTemporary`
- * column is always false -- mirroring v1 `ShowViewsCommand`, which sets `isTemporary=true`
+ * Physical plan node for SHOW VIEWS on a v2 [[ViewCatalog]]. Enumerates view identifiers via
+ * [[ViewCatalog#listViews]]. v2 catalogs have no temp views, so the {@code isTemporary} column
+ * is always false -- mirroring v1 {@code ShowViewsCommand}, which sets {@code isTemporary=true}
  * only for local/global temp views that live in the session catalog.
  */
 case class ShowViewsExec(
     output: Seq[Attribute],
-    catalog: TableCatalog,
+    catalog: ViewCatalog,
     namespace: Seq[String],
     pattern: Option[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val summaries = catalog.listTableSummaries(namespace.toArray)
-    summaries.foreach { summary =>
-      val ident = summary.identifier
+    catalog.listViews(namespace.toArray).foreach { ident =>
       val nameMatches =
         pattern.forall(p => StringUtils.filterPattern(Seq(ident.name), p).nonEmpty)
-      if (TableSummary.VIEW_TABLE_TYPE == summary.tableType && nameMatches) {
+      if (nameMatches) {
         rows += toCatalystRow(ident.namespace().quoted, ident.name(), false)
       }
     }
