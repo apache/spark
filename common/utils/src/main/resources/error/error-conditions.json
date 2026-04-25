@@ -4657,6 +4657,12 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TABLE_STATS_VALUE" : {
+    "message" : [
+      "The value <value> for table statistics property <key> is not a valid numeric value."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TEMP_OBJ_QUALIFIER" : {
     "message" : [
       "Temporary <objectType> <objectName> cannot be qualified with <qualifier>. Temporary objects can only be qualified with SESSION or SYSTEM.SESSION."

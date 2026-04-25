@@ -30,7 +30,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
@@ -321,6 +321,15 @@ case class AlterTableSetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
+    // SPARK-47444: Validate that stats-related properties have numeric values.
+    val numericStatsKeys = Set("numRows", "totalSize", "rawDataSize")
+    properties.foreach { case (key, value) =>
+      if (numericStatsKeys.contains(key) && scala.util.Try(BigInt(value)).isFailure) {
+        throw new AnalysisException(
+          errorClass = "INVALID_TABLE_STATS_VALUE",
+          messageParameters = Map("key" -> toSQLId(key), "value" -> s"'$value'"))
+      }
+    }
     // This overrides old properties and update the comment parameter of CatalogTable
     // with the newly added/modified comment since CatalogTable also holds comment as its
     // direct property.

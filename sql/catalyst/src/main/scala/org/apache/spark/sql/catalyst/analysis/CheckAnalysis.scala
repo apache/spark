@@ -1203,6 +1203,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
           case _ =>
         }
+      // SPARK-47444: Validate that stats-related properties have numeric values.
+      case SetTableProperties(_, properties) =>
+        val numericStatsKeys = Set("numRows", "totalSize", "rawDataSize")
+        properties.foreach { case (key, value) =>
+          if (numericStatsKeys.contains(key) && scala.util.Try(BigInt(value)).isFailure) {
+            throw new AnalysisException(
+              errorClass = "INVALID_TABLE_STATS_VALUE",
+              messageParameters = Map("key" -> toSQLId(key), "value" -> s"'$value'"))
+          }
+        }
       case _ =>
     }
   }

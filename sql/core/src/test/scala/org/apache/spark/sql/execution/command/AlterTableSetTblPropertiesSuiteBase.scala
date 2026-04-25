@@ -126,4 +126,29 @@ trait AlterTableSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestU
       }
     }
   }
+
+  test("SPARK-47444: reject non-numeric values for table stats properties") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
+      Seq("numRows", "totalSize", "rawDataSize").foreach { key =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t SET TBLPROPERTIES ('$key'='')")
+          },
+          condition = "INVALID_TABLE_STATS_VALUE",
+          parameters = Map("key" -> s"`$key`", "value" -> "''")
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t SET TBLPROPERTIES ('$key'='abc')")
+          },
+          condition = "INVALID_TABLE_STATS_VALUE",
+          parameters = Map("key" -> s"`$key`", "value" -> "'abc'")
+        )
+      }
+      // Valid numeric values should succeed
+      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('numRows'='100', 'totalSize'='5000')")
+    }
+  }
+
 }
