@@ -115,8 +115,8 @@ public class TableInfo {
 
     // Convenience setters below write reserved keys into the current `properties` map. Pair
     // each with a preceding `withProperties(...)` call if you want to start from a user map;
-    // calling `withProperties` after a convenience setter discards the convenience setter's
-    // write.
+    // calling `withProperties` after a convenience setter discards the value the convenience
+    // setter wrote.
 
     /** Writes {@link TableCatalog#PROP_PROVIDER} into the current properties map. */
     public B withProvider(String provider) {

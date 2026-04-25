@@ -35,7 +35,8 @@ import org.apache.spark.annotation.Evolving;
  * {@link TableCatalog} and {@link ViewCatalog}) can opt into the perf optimization of returning
  * a {@link MetadataOnlyTable} wrapping a {@code ViewInfo} from {@link TableCatalog#loadTable}
  * for a view identifier. Pure {@link ViewCatalog} implementations never see {@code TableInfo};
- * the typed setters on {@link Builder} cover everything they need to construct.
+ * the typed setters on {@link Builder} cover everything they need to construct a
+ * {@code ViewInfo}.
  *
  * @since 4.2.0
  */
