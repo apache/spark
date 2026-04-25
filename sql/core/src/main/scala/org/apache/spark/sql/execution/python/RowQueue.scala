@@ -43,54 +43,47 @@ trait RowQueue extends Queue[UnsafeRow]
  * A RowQueue that is based on in-memory page. UnsafeRows are appended into it until it's full.
  * Another thread could read from it at the same time (behind the writer).
  *
- * Thread safety: this queue is designed for SPSC (single-producer single-consumer) usage.
- * The writer only updates `writeOffset` and the reader only updates `readOffset`.
- * In the pipelined Python UDF execution mode, add() runs in the writer thread and remove()
- * runs in the task main thread. Memory visibility between threads is guaranteed by the
- * socket I/O that separates them: the reader only calls remove() after Python has processed
- * the corresponding input sent by the writer via blocking socket write.
+ * When `lockFree` is false (default), add() and remove() use synchronized for thread safety.
+ * When `lockFree` is true (pipelined Python UDF mode), synchronized is skipped because
+ * memory visibility is guaranteed by the blocking socket I/O that separates the writer thread
+ * and reader thread: the reader only calls remove() after Python has processed the input
+ * sent by the writer's channel.write(), which provides a happens-before guarantee.
  *
  * The format of UnsafeRow in page:
  * [4 bytes to hold length of record (N)] [N bytes to hold record] [...]
  *
  * -1 length means end of page.
  */
-private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields: Int)
+private[python] abstract class InMemoryRowQueue(
+    val page: MemoryBlock, numFields: Int, lockFree: Boolean = false)
   extends RowQueue {
   private val base: AnyRef = page.getBaseObject
   private val endOfPage: Long = page.getBaseOffset + page.size
-  // the first location where a new row would be written (only updated by producer).
-  // Not volatile: memory visibility is guaranteed by the socket I/O that separates
-  // the writer and reader -- the reader only calls remove() after Python has processed
-  // the corresponding input, which requires the writer's channel.write() to have completed.
+  // the first location where a new row would be written
   private var writeOffset = page.getBaseOffset
-  // points to the start of the next row to read (only updated by consumer)
+  // points to the start of the next row to read
   private var readOffset = page.getBaseOffset
   private val resultRow = new UnsafeRow(numFields)
 
-  def add(row: UnsafeRow): Boolean = {
-    val currentWriteOffset = writeOffset
+  private def doAdd(row: UnsafeRow): Boolean = {
     val size = row.getSizeInBytes
-    if (currentWriteOffset + 4 + size > endOfPage) {
-      if (currentWriteOffset + 4 <= endOfPage) {
-        Platform.putInt(base, currentWriteOffset, -1)
+    if (writeOffset + 4 + size > endOfPage) {
+      // if there is not enough space in this page to hold the new record
+      if (writeOffset + 4 <= endOfPage) {
+        // if there's extra space at the end of the page, store a special "end-of-page" length (-1)
+        Platform.putInt(base, writeOffset, -1)
       }
       false
     } else {
-      Platform.putInt(base, currentWriteOffset, size)
-      Platform.copyMemory(row.getBaseObject, row.getBaseOffset,
-        base, currentWriteOffset + 4, size)
-      // Volatile write ensures all prior stores (row data) are visible to the reader
-      // before the reader sees the updated offset.
-      writeOffset = currentWriteOffset + 4 + size
+      Platform.putInt(base, writeOffset, size)
+      Platform.copyMemory(row.getBaseObject, row.getBaseOffset, base, writeOffset + 4, size)
+      writeOffset += 4 + size
       true
     }
   }
 
-  def remove(): UnsafeRow = {
-    // Read the volatile writeOffset to see the latest data from the producer.
-    val currentWriteOffset = writeOffset
-    assert(readOffset <= currentWriteOffset, "reader should not go beyond writer")
+  private def doRemove(): UnsafeRow = {
+    assert(readOffset <= writeOffset, "reader should not go beyond writer")
     if (readOffset + 4 > endOfPage || Platform.getInt(base, readOffset) < 0) {
       null
     } else {
@@ -100,6 +93,12 @@ private[python] abstract class InMemoryRowQueue(val page: MemoryBlock, numFields
       resultRow
     }
   }
+
+  def add(row: UnsafeRow): Boolean =
+    if (lockFree) doAdd(row) else synchronized { doAdd(row) }
+
+  def remove(): UnsafeRow =
+    if (lockFree) doRemove() else synchronized { doRemove() }
 }
 
 /**
@@ -170,7 +169,8 @@ case class HybridRowQueue(
     memManager: TaskMemoryManager,
     tempDir: File,
     numFields: Int,
-    serMgr: SerializerManager)
+    serMgr: SerializerManager,
+    lockFree: Boolean = false)
   extends HybridQueue[UnsafeRow, RowQueue](memManager, tempDir, serMgr) {
 
   override protected def createDiskQueue(): RowQueue = {
@@ -178,7 +178,7 @@ case class HybridRowQueue(
   }
 
   override protected def createInMemoryQueue(page: MemoryBlock): RowQueue = {
-    new InMemoryRowQueue(page, numFields) {
+    new InMemoryRowQueue(page, numFields, lockFree) {
       override def close(): Unit = {
         freePage(this.page)
       }
@@ -197,6 +197,14 @@ case class HybridRowQueue(
 object HybridRowQueue {
   def apply(taskMemoryMgr: TaskMemoryManager, file: File, fields: Int): HybridRowQueue = {
     HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager)
+  }
+
+  def apply(
+      taskMemoryMgr: TaskMemoryManager,
+      file: File,
+      fields: Int,
+      lockFree: Boolean): HybridRowQueue = {
+    HybridRowQueue(taskMemoryMgr, file, fields, SparkEnv.get.serializerManager, lockFree)
   }
 
   def apply(taskMemoryMgr: TaskMemoryManager, fields: Int): HybridRowQueue = {

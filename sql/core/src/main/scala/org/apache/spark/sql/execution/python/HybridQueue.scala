@@ -43,13 +43,6 @@ trait Queue[T] {
 /**
  * A generic base class for hybrid queues that can store data either in memory or on disk.
  * This class contains common logic for queue management, spilling, and memory management.
- *
- * Thread safety: this queue is designed for single-writer single-reader usage. The `add()` method
- * must only be called from one thread, and the `remove()` method must only be called from one
- * (potentially different) thread. The `queues` linked list is protected by `synchronized` blocks
- * when both writer and reader access it (in `createNewQueue` and `remove`). The `writing` and
- * `reading` fields are only accessed by the writer and reader respectively, so they do not need
- * cross-thread synchronization.
  */
 abstract class HybridQueue[T, Q <: Queue[T]](
     memManager: TaskMemoryManager,

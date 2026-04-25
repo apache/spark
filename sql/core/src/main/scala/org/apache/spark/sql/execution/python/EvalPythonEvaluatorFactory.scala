@@ -67,10 +67,16 @@ abstract class EvalPythonEvaluatorFactory(
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
+      // In pipelined mode, add() runs in the writer thread and remove() in the task thread.
+      // Use lock-free mode to avoid synchronized overhead (memory visibility is guaranteed
+      // by the blocking socket I/O between the two threads).
+      val pipelined = SparkEnv.get.conf.get(
+        org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(
         context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length)
+        childOutput.length,
+        lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { ctx =>
         queue.close()
       }
