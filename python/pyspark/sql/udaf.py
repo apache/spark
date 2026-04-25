@@ -247,10 +247,8 @@ class UserDefinedAggregateFunction:
         )
         # Serialize aggregator for use in Arrow functions
         # Use cloudpickle to ensure proper serialization of classes
-        try:
-            import cloudpickle  # type: ignore[import-untyped]
-        except ImportError:
-            import pickle as cloudpickle
+        from pyspark import cloudpickle
+
         self._serialized_aggregator = cloudpickle.dumps(aggregator)
 
     @property
@@ -616,8 +614,9 @@ def _create_reduce_func(
 
     def reduce_func(iterator: Iterator[Any]) -> Iterator[Any]:
         import pyarrow as pa
-        import cloudpickle
         import random
+
+        from pyspark import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
         group_buffers = {}
@@ -680,7 +679,7 @@ def _create_merge_func(
         When called via Python-only path (applyInArrow), batches contain all columns
         (key at 0, buffer at 1).
         """
-        import cloudpickle
+        from pyspark import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
         group_buffers = {}
@@ -720,7 +719,8 @@ def _create_final_merge_func(
 ) -> Callable[[Iterator[Any]], Iterator[Any]]:
     """Create final merge function for applyInArrow using iterator API."""
     import pyarrow as pa
-    import cloudpickle
+
+    from pyspark import cloudpickle
 
     # Serialize return_type for use in worker
     serialized_return_type = cloudpickle.dumps(return_type)
@@ -750,7 +750,7 @@ def _create_final_merge_func(
         When called via Python-only path (applyInArrow), batches contain all columns
         (final_key at 0, buffer at 1).
         """
-        import cloudpickle
+        from pyspark import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
 
