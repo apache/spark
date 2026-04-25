@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.catalog.{
   LookupCatalog,
   MetadataOnlyTable,
   Table,
+  TableCatalog,
   V1Table,
   V2TableWithV1Fallback,
   ViewCatalog
