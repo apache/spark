@@ -29,7 +29,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * Tests for the view side of [[MetadataOnlyTable]]: view-text expansion on read, and
  * CREATE VIEW / ALTER VIEW ... AS going through the v2 write path
- * (`CreateV2ViewExec` / `AlterV2ViewExec` and their atomic staging variants).
+ * (`CreateV2ViewExec` / `AlterV2ViewExec`). View writes route through
+ * [[ViewCatalog#createView]] / [[ViewCatalog#replaceView]]; there is no separate staging
+ * variant for views (the `StagingTableCatalog` `stage*` API is table-only).
  * Data-source-table read paths live in
  * [[org.apache.spark.sql.connector.DataSourceV2MetadataOnlyTableSuite]].
  *
@@ -297,35 +299,38 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   // --- CREATE VIEW on a StagingTableCatalog -------------------------------
 
-  test("CREATE VIEW on a StagingTableCatalog uses the atomic exec") {
+  // The view exec routes everything through `ViewCatalog.createView` / `replaceView` regardless
+  // of whether the catalog also implements `StagingTableCatalog` -- views have no separate
+  // staging variant. These tests just confirm the view CRUD still works on a catalog that
+  // happens to mix in `StagingTableCatalog`; they do NOT exercise `stageCreate` /
+  // `stageCreateOrReplace` (which are table-only paths).
+  test("CREATE VIEW on a mixed StagingTableCatalog + ViewCatalog routes through createView") {
     withSQLConf(
       "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
       withTable("spark_catalog.default.t") {
         Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
 
-        // Plain CREATE -- exercises stageCreate.
         sql("CREATE VIEW staging_catalog.default.v_atomic AS " +
           "SELECT x FROM spark_catalog.default.t WHERE x > 1")
         checkAnswer(
           spark.table("staging_catalog.default.v_atomic"),
           Seq(Row(2), Row(3)))
 
-        // Second CREATE without IF NOT EXISTS -- should surface viewAlreadyExistsError
-        // (TestingStagingCatalog's stageCreate throws TableAlreadyExistsException, which the
-        // exec wraps).
+        // Second CREATE without IF NOT EXISTS surfaces the viewAlreadyExists error from
+        // ViewCatalog.createView.
         val ex = intercept[AnalysisException] {
           sql("CREATE VIEW staging_catalog.default.v_atomic AS " +
             "SELECT x FROM spark_catalog.default.t WHERE x > 1")
         }
         assert(ex.getMessage.toLowerCase(java.util.Locale.ROOT).contains("already exists"))
 
-        // CREATE OR REPLACE -- exercises stageCreateOrReplace.
+        // CREATE OR REPLACE routes through ViewCatalog.replaceView.
         sql("CREATE OR REPLACE VIEW staging_catalog.default.v_atomic AS " +
           "SELECT x FROM spark_catalog.default.t WHERE x > 2")
         checkAnswer(spark.table("staging_catalog.default.v_atomic"), Row(3))
 
-        // CREATE IF NOT EXISTS on an existing view -- no-op; the atomic exec short-circuits on
-        // tryLoadTable() before buildViewInfo, matching the non-atomic path.
+        // CREATE IF NOT EXISTS on an existing view -- no-op; the exec short-circuits on
+        // viewExists before buildViewInfo.
         sql("CREATE VIEW IF NOT EXISTS staging_catalog.default.v_atomic AS " +
           "SELECT x + 100 AS x FROM spark_catalog.default.t")
         // Value unchanged -- IF NOT EXISTS was a no-op.
@@ -334,7 +339,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("CREATE VIEW over a non-view table entry is rejected (StagingTableCatalog)") {
+  test("CREATE VIEW over a non-view table entry is rejected (mixed StagingTableCatalog)") {
     withSQLConf(
       "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
       val stagingCatalog = spark.sessionState.catalogManager.catalog("staging_catalog")
@@ -349,9 +354,9 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         withTable("spark_catalog.default.t") {
           Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
 
-          // CREATE OR REPLACE VIEW must not silently destroy a non-view table. On a staging
-          // catalog this specifically guards against `stageCreateOrReplace` committing over
-          // the table.
+          // CREATE OR REPLACE VIEW must not silently destroy a non-view table. The exec's
+          // `rejectIfTable` short-circuits before any view-write call (no `stage*` involved --
+          // views are written via `ViewCatalog.replaceView`, not the staging API).
           val replaceEx = intercept[AnalysisException] {
             sql("CREATE OR REPLACE VIEW staging_catalog.default.v_existing_table AS " +
               "SELECT x FROM spark_catalog.default.t")
@@ -556,7 +561,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("ALTER VIEW on a StagingTableCatalog uses the atomic exec (stageReplace)") {
+  test("ALTER VIEW on a mixed StagingTableCatalog + ViewCatalog routes through replaceView") {
     withSQLConf(
       "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
       withTable("spark_catalog.default.t") {
@@ -588,6 +593,37 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         sql("ALTER VIEW no_view_catalog.default.v AS SELECT 1 AS x")
       }
       assert(ex.getCondition == "MISSING_CATALOG_ABILITY.VIEWS")
+    }
+  }
+
+  // --- Pure ViewCatalog (no TableCatalog mixin) ---------------------------
+
+  test("read view from a pure ViewCatalog (no TableCatalog mixin)") {
+    // The analyzer's table-side lookup must skip `loadTable` entirely for catalogs that don't
+    // implement `TableCatalog`; otherwise `asTableCatalog` would throw
+    // MISSING_CATALOG_ABILITY.TABLES and the legitimate `loadView` fallback would never run.
+    withSQLConf(
+      "spark.sql.catalog.view_only" -> classOf[TestingViewOnlyCatalog].getName) {
+      withTable("spark_catalog.default.t") {
+        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+        // The fixture stores a `pure_v` view whose body filters spark_catalog.default.t.
+        checkAnswer(spark.table("view_only.default.pure_v"), Seq(Row(2), Row(3)))
+      }
+    }
+  }
+
+  test("ALTER VIEW on a pure ViewCatalog (no TableCatalog mixin)") {
+    withSQLConf(
+      "spark.sql.catalog.view_only" -> classOf[TestingViewOnlyCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("view_only")
+        .asInstanceOf[TestingViewOnlyCatalog]
+      withTable("spark_catalog.default.t") {
+        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
+        sql("ALTER VIEW view_only.default.pure_v AS " +
+          "SELECT x FROM spark_catalog.default.t WHERE x > 2")
+        assert(catalog.loadView(Identifier.of(Array("default"), "pure_v")).queryText() ==
+          "SELECT x FROM spark_catalog.default.t WHERE x > 2")
+      }
     }
   }
 
@@ -1158,22 +1194,15 @@ class TestingStagingCatalog extends StagingTableCatalog with ViewCatalog {
     new MetadataOnlyTable(info, ident.toString)
   }
 
-  override def stageCreate(ident: Identifier, info: TableInfo): StagedTable = {
-    if (views.containsKey(keyOf(ident))) throw new TableAlreadyExistsException(ident)
-    new RecordingStagedTable(
-      info, ident.toString, () => views.put(keyOf(ident), info), () => ())
-  }
-
-  override def stageReplace(ident: Identifier, info: TableInfo): StagedTable = {
-    if (!views.containsKey(keyOf(ident))) throw new NoSuchTableException(ident)
-    new RecordingStagedTable(
-      info, ident.toString, () => views.put(keyOf(ident), info), () => ())
-  }
-
-  override def stageCreateOrReplace(ident: Identifier, info: TableInfo): StagedTable = {
-    new RecordingStagedTable(
-      info, ident.toString, () => views.put(keyOf(ident), info), () => ())
-  }
+  // Staging methods are required by `StagingTableCatalog` but should never be invoked by view
+  // DDL (views write through `ViewCatalog.createView` / `replaceView`, not the staging API).
+  // Throwing here turns any accidental routing into a clear test failure.
+  override def stageCreate(ident: Identifier, info: TableInfo): StagedTable =
+    throw new RuntimeException("stageCreate must not be invoked by view DDL")
+  override def stageReplace(ident: Identifier, info: TableInfo): StagedTable =
+    throw new RuntimeException("stageReplace must not be invoked by view DDL")
+  override def stageCreateOrReplace(ident: Identifier, info: TableInfo): StagedTable =
+    throw new RuntimeException("stageCreateOrReplace must not be invoked by view DDL")
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
     throw new RuntimeException("shouldn't be called")
@@ -1233,15 +1262,6 @@ class TestingStagingCatalog extends StagingTableCatalog with ViewCatalog {
   override def name(): String = catalogName
 }
 
-private class RecordingStagedTable(
-    info: TableInfo,
-    name: String,
-    onCommit: () => Unit,
-    onAbort: () => Unit) extends MetadataOnlyTable(info, name) with StagedTable {
-  override def commitStagedChanges(): Unit = onCommit()
-  override def abortStagedChanges(): Unit = onAbort()
-}
-
 /**
  * A v2 catalog that does not implement ViewCatalog. Used by capability-gate tests. The
  * gate actually fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
@@ -1271,6 +1291,71 @@ class TestingTableOnlyCatalog extends TableCatalog {
   private var catalogName = ""
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     catalogName = name
+  }
+  override def name(): String = catalogName
+}
+
+/**
+ * A pure [[ViewCatalog]] (no [[TableCatalog]] mixin). Used to exercise that the analyzer's
+ * resolution paths skip the `loadTable` step and fall through to `loadView` for catalogs that
+ * cannot host tables. Pre-seeds a single mutable view at `default.pure_v` so the read and
+ * ALTER VIEW tests can both reach it.
+ */
+class TestingViewOnlyCatalog extends ViewCatalog {
+  private val store =
+    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), ViewInfo]()
+
+  // Seeded on first `initialize`. Filters `spark_catalog.default.t` so the read test can
+  // assert deterministic output. ALTER VIEW tests overwrite it via `replaceView`.
+  private def seedDefault(): Unit = {
+    val key = (Seq("default"), "pure_v")
+    if (!store.containsKey(key)) {
+      val info = new ViewInfo.Builder()
+        .withSchema(new StructType().add("x", "int"))
+        .withQueryText("SELECT x FROM spark_catalog.default.t WHERE x > 1")
+        .build()
+      store.put(key, info)
+    }
+  }
+
+  override def listViews(namespace: Array[String]): Array[Identifier] = {
+    val target = namespace.toSeq
+    val ids = new java.util.ArrayList[Identifier]()
+    store.forEach { (key, _) =>
+      if (key._1 == target) ids.add(Identifier.of(key._1.toArray, key._2))
+    }
+    ids.toArray(new Array[Identifier](0))
+  }
+
+  override def loadView(ident: Identifier): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    Option(store.get(key)).getOrElse(throw new NoSuchViewException(ident))
+  }
+
+  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    if (store.putIfAbsent(key, info) != null) {
+      throw new ViewAlreadyExistsException(ident)
+    }
+    info
+  }
+
+  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    if (!store.containsKey(key)) throw new NoSuchViewException(ident)
+    store.put(key, info)
+    info
+  }
+
+  override def dropView(ident: Identifier): Boolean = {
+    val key = (ident.namespace().toSeq, ident.name())
+    store.remove(key) != null
+  }
+
+  private var catalogName = ""
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    catalogName = name
+    seedDefault()
   }
   override def name(): String = catalogName
 }

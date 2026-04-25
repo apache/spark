@@ -1127,18 +1127,27 @@ class Analyzer(
                 !catalog.isInstanceOf[ViewCatalog]) {
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
-            val tableResolved: Option[LogicalPlan] = CatalogV2Util.loadTable(catalog, ident).map {
-              case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                val v1Ident = v1Table.catalogTable.identifier
-                val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                ResolvedPersistentView(
-                  catalog, v2Ident, v1Table.catalogTable)
-              case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
-                val catalogTable = V1Table.toCatalogTable(catalog, ident, t)
-                ResolvedPersistentView(catalog, ident, catalogTable)
-              case table =>
-                ResolvedTable.create(catalog.asTableCatalog, ident, table)
+            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog` mixin):
+            // `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
+            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
+            val tableResolved: Option[LogicalPlan] = if (
+              CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+            ) {
+              CatalogV2Util.loadTable(catalog, ident).map {
+                case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+                  v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                  val v1Ident = v1Table.catalogTable.identifier
+                  val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+                  ResolvedPersistentView(
+                    catalog, v2Ident, v1Table.catalogTable)
+                case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
+                  val catalogTable = V1Table.toCatalogTable(catalog, ident, t)
+                  ResolvedPersistentView(catalog, ident, catalogTable)
+                case table =>
+                  ResolvedTable.create(catalog.asTableCatalog, ident, table)
+              }
+            } else {
+              None
             }
             tableResolved.orElse {
               catalog match {

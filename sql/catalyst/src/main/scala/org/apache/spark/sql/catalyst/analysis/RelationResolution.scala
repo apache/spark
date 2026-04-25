@@ -40,7 +40,8 @@ import org.apache.spark.sql.connector.catalog.{
   MetadataOnlyTable,
   Table,
   V1Table,
-  V2TableWithV1Fallback
+  V2TableWithV1Fallback,
+  ViewCatalog
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
@@ -229,11 +230,39 @@ class RelationResolution(
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
             val finalOptions = u.clearWritePrivileges.options
-            val table = CatalogV2Util.loadTable(
-              catalog,
-              ident,
-              finalTimeTravelSpec,
-              Option(writePrivileges))
+            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog` mixin):
+            // `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
+            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path. A pure
+            // `ViewCatalog`'s view is resolved below via the `loadView` fallback.
+            val table: Option[Table] = if (
+              CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+            ) {
+              CatalogV2Util.loadTable(
+                catalog,
+                ident,
+                finalTimeTravelSpec,
+                Option(writePrivileges))
+            } else {
+              None
+            }
+            // Fallback to ViewCatalog for catalogs that host views but where loadTable returned
+            // None (or was skipped because there's no TableCatalog mixin). Time-travel / write
+            // privileges only apply to tables, not views, so the fallback is gated on neither.
+            val tableOrView: Option[Table] = table.orElse {
+              if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
+                catalog match {
+                  case vc: ViewCatalog =>
+                    try {
+                      Some(new MetadataOnlyTable(vc.loadView(ident), ident.toString))
+                    } catch {
+                      case _: NoSuchViewException => None
+                    }
+                  case _ => None
+                }
+              } else {
+                None
+              }
+            }
 
             val sharedRelationCacheMatch = for {
               t <- table
@@ -251,7 +280,7 @@ class RelationResolution(
               val loaded = createRelation(
                 catalog,
                 ident,
-                table,
+                tableOrView,
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)
