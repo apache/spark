@@ -171,51 +171,63 @@ end
 # already shows what's wrong.
 def diagnose_unidoc_failure(log_file)
   return unless File.exist?(log_file)
-  lines = File.readlines(log_file)
+  begin
+    lines = File.readlines(log_file)
 
-  javadoc_exit_idx = lines.rindex { |l| l.include?("javadoc exited with exit code") }
-  last_generating = nil
-  if javadoc_exit_idx
-    # Strip ANSI color codes so the regex matches sbt-coloured output too.
-    ansi = /\e\[[0-9;]*[A-Za-z]/
-    lines[0...javadoc_exit_idx].reverse_each do |line|
-      if line.gsub(ansi, '') =~ %r{Generating .+/javaunidoc/(\S+?\.html)\.\.\.}
-        last_generating = $1
-        break
+    javadoc_exit_idx = lines.rindex { |l| l.include?("javadoc exited with exit code") }
+    last_generating = nil
+    if javadoc_exit_idx
+      # Strip ANSI color codes so the regex matches sbt-coloured output too.
+      ansi = /\e\[[0-9;]*[A-Za-z]/
+      lines[0...javadoc_exit_idx].reverse_each do |line|
+        if line.gsub(ansi, '') =~ %r{Generating .+/javaunidoc/(\S+?\.html)\.\.\.}
+          last_generating = $1
+          break
+        end
       end
     end
-  end
 
-  banner = "=" * 78
-  $stderr.puts ""
-  $stderr.puts banner
-  $stderr.puts "Unidoc failed -- diagnostic summary"
-  $stderr.puts banner
-  if last_generating
-    class_path = last_generating.sub(/\.html$/, '')
-    class_name = class_path.tr('/', '.')
+    banner = "=" * 78
     $stderr.puts ""
-    $stderr.puts "  Javadoc crashed while generating: #{last_generating}"
-    $stderr.puts "  Likely culprit: doc comment in #{class_name}"
+    $stderr.puts banner
+    $stderr.puts "Unidoc failed -- diagnostic summary"
+    $stderr.puts banner
+    if last_generating
+      class_path = last_generating.sub(/\.html$/, '')
+      class_name = class_path.tr('/', '.')
+      $stderr.puts ""
+      $stderr.puts "  Javadoc crashed while generating: #{last_generating}"
+      $stderr.puts "  Likely culprit: doc comment in #{class_name}"
+      $stderr.puts ""
+      $stderr.puts "  Javadoc can hard-exit (not just warn) on specific scaladoc"
+      $stderr.puts "  patterns once they have been passed through genjavadoc --"
+      $stderr.puts "  wiki-style `[[Class]]` / `[[method]]` links or inline-backticked"
+      $stderr.puts "  code refs in the Scala source for the class above are common"
+      $stderr.puts "  triggers. Start by auditing any recent doc-string changes in"
+      $stderr.puts "  that source file."
+      $stderr.puts ""
+      $stderr.puts "  NOTE: the '[error]' lines above on files under"
+      $stderr.puts "  target/java/... are benign genjavadoc stubs -- every PR"
+      $stderr.puts "  emits them and they do not cause the exit. Ignore them."
+    elsif javadoc_exit_idx
+      $stderr.puts ""
+      $stderr.puts "  Javadoc exited but no class HTML generation was in progress;"
+      $stderr.puts "  the crash predates HTML output -- likely a CLI / classpath /"
+      $stderr.puts "  setup issue. See the full sbt output above."
+    else
+      $stderr.puts ""
+      $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
+      $stderr.puts "  the log; the failure is likely outside the javaunidoc step"
+      $stderr.puts "  (scaladoc / sbt / build env). See the full sbt output above."
+    end
+    $stderr.puts banner
     $stderr.puts ""
-    $stderr.puts "  Javadoc can hard-exit (not just warn) on specific scaladoc"
-    $stderr.puts "  patterns once they have been passed through genjavadoc --"
-    $stderr.puts "  wiki-style `[[Class]]` / `[[method]]` links or inline-backticked"
-    $stderr.puts "  code refs in the Scala source for the class above are common"
-    $stderr.puts "  triggers. Start by auditing any recent doc-string changes in"
-    $stderr.puts "  that source file."
-    $stderr.puts ""
-    $stderr.puts "  NOTE: the 100 '[error]' lines above, all on files under"
-    $stderr.puts "  target/java/..., are benign genjavadoc stubs -- every PR"
-    $stderr.puts "  emits them and they do not cause the exit. Ignore them."
-  else
-    $stderr.puts ""
-    $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
-    $stderr.puts "  the log; the failure is likely outside the javaunidoc step"
-    $stderr.puts "  (scaladoc / sbt / build env). See the full sbt output above."
+  rescue => e
+    # Never let the diagnostic helper itself obscure the underlying unidoc
+    # failure: if anything here goes wrong (e.g. encoding error reading the
+    # log), report it briefly and let the caller raise the real error.
+    $stderr.puts "(diagnostic helper failed: #{e.class}: #{e.message})"
   end
-  $stderr.puts banner
-  $stderr.puts ""
 end
 
 def build_scala_and_java_docs
