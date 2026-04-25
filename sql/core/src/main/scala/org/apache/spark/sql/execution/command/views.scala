@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, NamespaceHelper}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
