@@ -7275,7 +7275,9 @@ object SQLConf {
       .internal()
       .doc("If enabled, allow INSERT INTO WITH SCHEMA EVOLUTION to fill missing nested " +
         "struct fields with null when the source has fewer nested fields than the target " +
-        "table. This is experimental and the semantics may change.")
+        "table. Also relaxes by-position column-count enforcement so trailing missing " +
+        "top-level columns are filled with their default value (or null). This is " +
+        "experimental and the semantics may change.")
       .version("4.2.0")
       .booleanConf
       .createWithDefault(false)

@@ -41,9 +41,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
   /**
    * Modes for filling in default or null values for missing columns.
-   * If FILL, fill missing top-level columns with their default values.
-   * If RECURSE, fill missing top-level columns and also recurse into nested struct
-   * fields to fill null.
+   * If FILL, fill missing top-level columns with their default values (by-name reorder path).
+   * If RECURSE, fill missing top-level columns (including trailing columns on the by-position
+   * path for INSERT with schema evolution when enabled) and recurse into nested structs,
+   * arrays, and maps to fill missing struct fields with null or defaults.
    * If NONE, do not fill any missing columns.
    */
   object DefaultValueFillMode extends Enumeration {
@@ -435,7 +436,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val defaults = if (fillDefaultValue) {
       actualExpectedCols.drop(inputCols.size).flatMap { expectedCol =>
         getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
-          .map(expr => Alias(expr, expectedCol.name)())
+          .map(expr => applyColumnMetadata(expr, expectedCol))
       }
     } else {
       Nil
@@ -519,7 +520,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
         defaultValueMode)
     } else {
-      resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath, fillDefaultValue)
     }
     if (res.length == 1) {
       val castedArray =
@@ -556,7 +558,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
         defaultValueFillMode)
     } else {
-      resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath, fillDefaultValue)
     }
 
     val valueParam =
@@ -568,7 +571,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         defaultValueFillMode)
     } else {
       resolveColumnsByPosition(
-        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
+        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath, fillDefaultValue)
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
