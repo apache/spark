@@ -32,6 +32,9 @@ private[connect] class CustomSparkConnectBlockingStub(
 
   private val stub = SparkConnectServiceGrpc.newBlockingStub(channel)
 
+  // Build a fresh deadline-bound stub on every call so each retry gets a full budget.
+  // gRPC deadlines are absolute (fixed at stub construction); a shared stub would let
+  // later attempts inherit an already-elapsed deadline and time out prematurely.
   private def withDeadline(
       d: Option[FiniteDuration]): SparkConnectServiceGrpc.SparkConnectServiceBlockingStub =
     d.map(dur => stub.withDeadline(Deadline.after(dur.toMillis, TimeUnit.MILLISECONDS)))

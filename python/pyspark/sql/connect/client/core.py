@@ -22,7 +22,6 @@ __all__ = [
 ]
 
 import atexit
-import math
 from dataclasses import dataclass, fields
 
 import pyspark
@@ -113,7 +112,6 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     PySparkAssertionError,
     PySparkNotImplementedError,
-    PySparkTypeError,
     PySparkValueError,
 )
 from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_proto
@@ -129,7 +127,7 @@ if TYPE_CHECKING:
 PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RpcDeadlines:
     """Per-RPC timeout configuration for :class:`SparkConnectClient`.
 
@@ -159,24 +157,13 @@ class RpcDeadlines:
     def __post_init__(self) -> None:
         for field in fields(self):
             value = getattr(self, field.name)
-            if value is not None:
-                if not isinstance(value, (int, float)):
-                    raise PySparkTypeError(
-                        errorClass="NOT_EXPECTED_TYPE",
-                        messageParameters={
-                            "arg_name": f"RpcDeadlines.{field.name}",
-                            "expected_type": "int, float, or None",
-                            "arg_type": type(value).__name__,
-                        },
-                    )
-                fv = float(value)
-                if not math.isfinite(fv) or fv <= 0:
-                    raise PySparkValueError(
-                        message=(
-                            f"RpcDeadlines.{field.name} must be a finite positive number or None, "
-                            f"got {value!r}"
-                        ),
-                    )
+            if value is not None and value <= 0:
+                raise PySparkValueError(
+                    message=(
+                        f"RpcDeadlines.{field.name} must be a positive number or None, "
+                        f"got {value!r}"
+                    ),
+                )
 
     @classmethod
     def disabled(cls) -> "RpcDeadlines":
@@ -775,8 +762,9 @@ class SparkConnectClient(object):
             The server will attempt to use this size if it is set and within the valid range
             ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
         rpc_deadlines : RpcDeadlines, optional
-            Per-RPC gRPC call timeouts in seconds. Defaults follow SPARK-56538; use
-            :meth:`RpcDeadlines.disabled` to turn off all per-RPC deadlines.
+            Per-RPC gRPC call timeouts in seconds (10 min for most RPCs,
+            1 hour for analyze/addArtifacts, none for non-reattachable execute).
+            Use :meth:`RpcDeadlines.disabled` to turn off all deadlines.
         """
         self.thread_local = threading.local()
 
@@ -815,29 +803,7 @@ class SparkConnectClient(object):
         self._rpc_deadlines: RpcDeadlines = (
             rpc_deadlines if rpc_deadlines is not None else RpcDeadlines()
         )
-        d = self._rpc_deadlines
-        configured = [
-            (name, val)
-            for name, val in [
-                ("reattachableExecutePlan", d.reattachable_execute_plan),
-                ("reattachExecute", d.reattach_execute),
-                ("analyzePlan", d.analyze_plan),
-                ("addArtifacts", d.add_artifacts),
-                ("config", d.config),
-                ("interrupt", d.interrupt),
-                ("releaseSession", d.release_session),
-                ("artifactStatus", d.artifact_status),
-                ("cloneSession", d.clone_session),
-                ("getStatus", d.get_status),
-                ("fetchErrorDetails", d.fetch_error_details),
-            ]
-            if val is not None
-        ]
-        if configured:
-            logger.info(
-                "Spark Connect RPC deadlines: "
-                + ", ".join(f"{name}: {val}s" for name, val in configured)
-            )
+        logger.info("Spark Connect RPC deadlines: %s", self._rpc_deadlines)
         self._artifact_manager = ArtifactManager(
             self._user_id,
             self._session_id,

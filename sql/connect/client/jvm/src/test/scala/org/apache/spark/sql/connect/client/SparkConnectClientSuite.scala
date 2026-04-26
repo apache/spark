@@ -826,32 +826,73 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
-  test("analyzePlan deadline fires on slow server") {
+  test("one-shot RPC deadlines fire on slow server") {
     val latch = new CountDownLatch(1)
     val slowService = new DummySparkConnectService {
       override def analyzePlan(
           request: AnalyzePlanRequest,
           responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
-        latch.await(5, TimeUnit.SECONDS)
+        latch.await(250, TimeUnit.MILLISECONDS)
         super.analyzePlan(request, responseObserver)
+      }
+      override def config(
+          request: proto.ConfigRequest,
+          responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.config(request, responseObserver)
+      }
+      override def interrupt(
+          request: proto.InterruptRequest,
+          responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.interrupt(request, responseObserver)
+      }
+      override def releaseSession(
+          request: proto.ReleaseSessionRequest,
+          responseObserver: StreamObserver[proto.ReleaseSessionResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        responseObserver.onNext(
+          proto.ReleaseSessionResponse
+            .newBuilder()
+            .setSessionId(request.getSessionId)
+            .build())
+        responseObserver.onCompleted()
       }
     }
     server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
     service = slowService
+    val d = FiniteDuration(50, TimeUnit.MILLISECONDS)
     client = SparkConnectClient
       .builder()
       .connectionString(s"sc://localhost:${server.getPort}")
-      .rpcDeadlines(RpcDeadlines(analyzePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
+      .rpcDeadlines(
+        RpcDeadlines(
+          analyzePlan = Some(d),
+          config = Some(d),
+          interrupt = Some(d),
+          releaseSession = Some(d)))
       .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
       .build()
-    try {
-      val ex = intercept[SparkException] {
-        client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
-      }
+
+    def expectDeadlineExceeded(thunk: => Any): Unit = {
+      val ex = intercept[SparkException] { thunk }
       assert(ex.getCause.isInstanceOf[StatusRuntimeException])
       assert(
         ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
           Status.Code.DEADLINE_EXCEEDED)
+    }
+
+    try {
+      expectDeadlineExceeded(
+        client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()))
+      val configOp = proto.ConfigRequest.Operation
+        .newBuilder()
+        .setGetOption(
+          proto.ConfigRequest.GetOption.newBuilder().addKeys("spark.sql.shuffle.partitions"))
+        .build()
+      expectDeadlineExceeded(client.config(configOp))
+      expectDeadlineExceeded(client.interruptAll())
+      expectDeadlineExceeded(client.releaseSession())
     } finally {
       latch.countDown()
     }
@@ -863,7 +904,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       override def analyzePlan(
           request: AnalyzePlanRequest,
           responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
-        latch.await(5, TimeUnit.SECONDS)
+        latch.await(250, TimeUnit.MILLISECONDS)
         super.analyzePlan(request, responseObserver)
       }
     }
@@ -877,14 +918,17 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       .rpcDeadlines(RpcDeadlines(analyzePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
       .retryPolicy(noRetry)
       .build()
-    val ex = intercept[SparkException] {
-      client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+    try {
+      val ex = intercept[SparkException] {
+        client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+      }
+      assert(
+        ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+          Status.Code.DEADLINE_EXCEEDED)
+      client.shutdown()
+    } finally {
+      latch.countDown()
     }
-    assert(
-      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
-        Status.Code.DEADLINE_EXCEEDED)
-    client.shutdown()
-    latch.countDown()
 
     client = SparkConnectClient
       .builder()
@@ -915,7 +959,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
             .setOperationId(operationId)
             .setResponseId("r1")
             .build())
-        executeLatch.await(5, TimeUnit.SECONDS)
+        executeLatch.await(250, TimeUnit.MILLISECONDS)
         responseObserver.onCompleted()
       }
 
@@ -956,13 +1000,16 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       .enableReattachableExecute()
       .build()
 
-    val iter = client.execute(buildPlan("select 1"))
-    val reattachableIter = ExecutePlanResponseReattachableIterator.fromIterator(iter)
-    iter.foreach(_ => ())
-    executeLatch.countDown()
+    try {
+      val iter = client.execute(buildPlan("select 1"))
+      val reattachableIter = ExecutePlanResponseReattachableIterator.fromIterator(iter)
+      iter.foreach(_ => ())
 
-    assert(reattachableIter.resultComplete, "iterator should complete after reattach")
-    assert(reattachCalled, "ReattachExecute should have been called")
+      assert(reattachableIter.resultComplete, "iterator should complete after reattach")
+      assert(reattachCalled, "ReattachExecute should have been called")
+    } finally {
+      executeLatch.countDown()
+    }
   }
 
   test("non-reattachable executePlan has no client-side deadline") {
@@ -971,7 +1018,7 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       override def executePlan(
           request: ExecutePlanRequest,
           responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
-        latch.await(150, TimeUnit.MILLISECONDS)
+        latch.await(250, TimeUnit.MILLISECONDS)
         super.executePlan(request, responseObserver)
       }
     }
@@ -985,108 +1032,13 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         RpcDeadlines(reattachableExecutePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
       .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
       .build()
-    val iter = client.execute(buildPlan("select 1"))
-    iter.foreach(_ => ())
+    try {
+      val iter = client.execute(buildPlan("select 1"))
+      iter.foreach(_ => ())
+    } finally {
+      latch.countDown()
+    }
   }
-
-  test("config deadline fires on slow server") {
-    val latch = new CountDownLatch(1)
-    val slowService = new DummySparkConnectService {
-      override def config(
-          request: proto.ConfigRequest,
-          responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
-        latch.await(5, TimeUnit.SECONDS)
-        super.config(request, responseObserver)
-      }
-    }
-    server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
-    service = slowService
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .rpcDeadlines(RpcDeadlines(config = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
-      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
-      .build()
-    val op = proto.ConfigRequest.Operation
-      .newBuilder()
-      .setGetOption(
-        proto.ConfigRequest.GetOption.newBuilder().addKeys("spark.sql.shuffle.partitions"))
-      .build()
-    val ex = intercept[SparkException] {
-      client.config(op)
-    }
-    assert(ex.getCause.isInstanceOf[StatusRuntimeException])
-    assert(
-      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
-        Status.Code.DEADLINE_EXCEEDED)
-    latch.countDown()
-  }
-
-  test("interrupt deadline fires on slow server") {
-    val latch = new CountDownLatch(1)
-    val slowService = new DummySparkConnectService {
-      override def interrupt(
-          request: proto.InterruptRequest,
-          responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
-        latch.await(5, TimeUnit.SECONDS)
-        super.interrupt(request, responseObserver)
-      }
-    }
-    server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
-    service = slowService
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .rpcDeadlines(RpcDeadlines(interrupt = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
-      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
-      .build()
-    val ex = intercept[SparkException] {
-      client.interruptAll()
-    }
-    assert(ex.getCause.isInstanceOf[StatusRuntimeException])
-    assert(
-      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
-        Status.Code.DEADLINE_EXCEEDED)
-    latch.countDown()
-  }
-
-  test("releaseSession deadline fires on slow server") {
-    val latch = new CountDownLatch(1)
-    val slowService = new DummySparkConnectService {
-      override def releaseSession(
-          request: proto.ReleaseSessionRequest,
-          responseObserver: StreamObserver[proto.ReleaseSessionResponse]): Unit = {
-        latch.await(5, TimeUnit.SECONDS)
-        responseObserver.onNext(
-          proto.ReleaseSessionResponse
-            .newBuilder()
-            .setSessionId(request.getSessionId)
-            .build())
-        responseObserver.onCompleted()
-      }
-    }
-    server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
-    service = slowService
-    client = SparkConnectClient
-      .builder()
-      .connectionString(s"sc://localhost:${server.getPort}")
-      .rpcDeadlines(
-        RpcDeadlines(releaseSession = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
-      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
-      .build()
-    val ex = intercept[SparkException] {
-      client.releaseSession()
-    }
-    assert(ex.getCause.isInstanceOf[StatusRuntimeException])
-    assert(
-      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
-        Status.Code.DEADLINE_EXCEEDED)
-    latch.countDown()
-  }
-
-  // Note: artifactStatus, addArtifacts, cloneSession, getStatus, and fetchErrorDetails deadlines
-  // use the same withDeadline() mechanism as analyzePlan/config/interrupt above. They are
-  // exercised through ArtifactManager or internal flows that are harder to unit-test in isolation.
 
   test("SPARK-56538: RpcDeadlines.disabled has no configured deadlines in toString") {
     assert(RpcDeadlines.disabled.toString === "RpcDeadlines(all disabled)")
@@ -1094,8 +1046,6 @@ class SparkConnectClientSuite extends ConnectFunSuite {
 }
 
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
-
-  @volatile var analyzePlanAwait: Option[CountDownLatch] = None
 
   private var inputPlan: proto.Plan = _
   private val inputArtifactRequests: mutable.ListBuffer[AddArtifactsRequest] =
@@ -1177,7 +1127,6 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
   override def analyzePlan(
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
-    analyzePlanAwait.foreach(_.await())
     // Reply with a dummy response using the same client ID
     val requestSessionId = request.getSessionId
     synchronized {

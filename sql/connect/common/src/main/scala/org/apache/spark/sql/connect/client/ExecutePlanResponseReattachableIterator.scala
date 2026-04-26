@@ -116,9 +116,6 @@ class ExecutePlanResponseReattachableIterator(
   private[connect] var iter: Option[java.util.Iterator[proto.ExecutePlanResponse]] =
     Some(stubWithDeadline(reattachableExecutePlanDeadline).executePlan(initialRequest))
 
-  // When true, an empty iterator triggers a fresh ExecutePlan instead of ReattachExecute.
-  private var restartExecutionOnNextRetry: Boolean = false
-
   // Server side session ID, used to detect if the server side session changed. This is set upon
   // receiving the first response from the server.
   private var serverSideSessionId: Option[String] = None
@@ -243,10 +240,7 @@ class ExecutePlanResponseReattachableIterator(
    */
   private def callIter[V](iterFun: java.util.Iterator[proto.ExecutePlanResponse] => V) = {
     try {
-      if (iter.isEmpty && restartExecutionOnNextRetry) {
-        iter = Some(stubWithDeadline(reattachableExecutePlanDeadline).executePlan(initialRequest))
-        restartExecutionOnNextRetry = false
-      } else if (iter.isEmpty) {
+      if (iter.isEmpty) {
         iter = Some(
           stubWithDeadline(reattachExecuteDeadline)
             .reattachExecute(createReattachExecuteRequest()))
@@ -266,8 +260,7 @@ class ExecutePlanResponseReattachableIterator(
             ex)
         }
         // Try a new ExecutePlan, and throw upstream for retry.
-        iter = None
-        restartExecutionOnNextRetry = true
+        iter = Some(stubWithDeadline(reattachableExecutePlanDeadline).executePlan(initialRequest))
         val error = new RetryException()
         error.addSuppressed(ex)
         throw error
@@ -279,7 +272,6 @@ class ExecutePlanResponseReattachableIterator(
           s"Deadline exceeded on stream for operation $operationId; will reattach. " +
             s"(last response: $lastReturnedResponseId)")
         iter = None
-        restartExecutionOnNextRetry = false // defensive: deadline != operation lost
         val error = new RetryException()
         error.addSuppressed(ex)
         throw error

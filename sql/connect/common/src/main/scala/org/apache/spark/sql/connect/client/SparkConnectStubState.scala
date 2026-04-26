@@ -33,10 +33,8 @@ class SparkConnectStubState(
 
   val rpcDeadlines: RpcDeadlines = configuration.rpcDeadlines
 
-  {
-    if (log.isInfoEnabled) {
-      logInfo(s"Spark Connect RPC deadlines: $rpcDeadlines")
-    }
+  if (log.isInfoEnabled) {
+    logInfo(s"Spark Connect RPC deadlines: $rpcDeadlines")
   }
 
   // Manages the retry handler logic used by the stubs.

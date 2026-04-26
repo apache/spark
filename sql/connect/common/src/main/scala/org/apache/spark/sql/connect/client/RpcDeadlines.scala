@@ -46,7 +46,7 @@ private[sql] case class RpcDeadlines(
     fetchErrorDetails: Option[FiniteDuration] = Some(10.minutes)) {
 
   // Validate all fields: each must be a positive duration or None.
-  private lazy val namedFields: Seq[(String, Option[FiniteDuration])] =
+  private val namedFields: Seq[(String, Option[FiniteDuration])] =
     productElementNames.toSeq.zip(
       productIterator.map(_.asInstanceOf[Option[FiniteDuration]]).toSeq)
 

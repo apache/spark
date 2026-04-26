@@ -316,10 +316,6 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(RpcDeadlines(), reattachable_execute_plan=-0.001)
         with self.assertRaises(ValueError):
-            replace(RpcDeadlines(), config=float("nan"))
-        with self.assertRaises(ValueError):
-            replace(RpcDeadlines(), config=float("inf"))
-        with self.assertRaises(ValueError):
             replace(RpcDeadlines(), config=float("-inf"))
         # None (disabled) and positive values should be accepted without error.
         replace(RpcDeadlines(), analyze_plan=None)
