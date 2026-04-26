@@ -1028,8 +1028,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = pushLimitOneThroughGroupOnlyAggregate(le, a)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
+    // Fold the merged limit here so that this rule alone produces a plannable plan:
+    // BasicOperators only plans LocalLimit(IntegerLiteral, _), so an unfolded `limit + offset`
+    // would fail physical planning when ConstantFolding is excluded.
     case LocalLimit(le, Offset(oe, grandChild)) =>
-      Offset(oe, LocalLimit(Add(le, oe), grandChild))
+      Offset(oe, LocalLimit(ConstantFolding.constantFolding(Add(le, oe)), grandChild))
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
