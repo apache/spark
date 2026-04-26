@@ -973,8 +973,19 @@ object LimitPushDown extends Rule[LogicalPlan] {
       val newAgg = EliminateSorts(a.copy(child = LocalLimit(le, a.child))).asInstanceOf[Aggregate]
       Limit(le, p.copy(child = Project(newAgg.aggregateExpressions, newAgg.child)))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
+    // Fold the sum eagerly when both operands are integer literals so this rule produces a
+    // planable logical plan in a single application. Otherwise physical planning
+    // (BasicOperators in SparkStrategies) would fail with `AssertionError: No plan for
+    // LocalLimit (a + b)` when ConstantFolding is excluded from the optimizer pipeline, since
+    // BasicOperators only matches LocalLimit(IntegerLiteral, _). In practice both operands
+    // come from `LIMIT N OFFSET M` clauses (already folded to literals) so this single-case
+    // fold covers all realistic inputs.
     case LocalLimit(le, Offset(oe, grandChild)) =>
-      Offset(oe, LocalLimit(Add(le, oe), grandChild))
+      val mergedLimit = (le, oe) match {
+        case (IntegerLiteral(l), IntegerLiteral(o)) => Literal(l + o, IntegerType)
+        case _ => Add(le, oe)
+      }
+      Offset(oe, LocalLimit(mergedLimit, grandChild))
     // Push down local limit 1 if join type is LeftSemiOrAnti and join condition is empty.
     case j @ Join(_, right, LeftSemiOrAnti(_), None, _) if !right.maxRows.exists(_ <= 1) =>
       j.copy(right = maybePushLocalLimit(Literal(1, IntegerType), right))
