@@ -26,7 +26,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Physical plan node for dropping a table.
  *
- * Issues `dropTable` (or `purgeTable`) directly and inspects its return; this saves the
+ * Issues `dropTable` (or `purgeTable`) directly and inspects its return value; this saves the
  * upfront `tableExists` probe (1 RPC on the happy path). On `false`, falls back to
  * `viewExists` for catalogs that also implement [[ViewCatalog]] -- distinguishes
  * "wrong type" from "missing" so a `DROP TABLE someView` on a mixed catalog surfaces the
