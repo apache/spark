@@ -307,6 +307,7 @@ object SQLConf {
     buildConf("spark.sql.analyzer.strictDataFrameColumnResolution")
       .internal()
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc(
         "When true (default), enforce strict resolution of Spark Connect DataFrame columns " +
         "(UnresolvedAttribute carrying a plan id tag) via plan-id-based resolution. When " +
