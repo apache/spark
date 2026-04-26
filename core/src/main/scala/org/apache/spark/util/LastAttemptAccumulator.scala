@@ -76,7 +76,7 @@ import org.apache.spark.scheduler.TaskInfo
  *        fully re-executed.
  *    - Due to the async nature of cancellation, there can be tasks from previous attempts that
  *      arrive later than the last attempt. Therefore, we need to track and compare stageId and
- *      stageAttemptId of every computed RDD partition, in order to discard late comers.
+ *      stageAttemptId of every computed RDD partition, in order to discard latecomers.
  *
  *  2. Spark SQL.
  *  =============

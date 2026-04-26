@@ -240,8 +240,8 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
    * @note The output of this method is undefined if this metric was used inside a part of the plan
    *       which was either checkpointed (e.g. df.localCheckpoint(), df.checkpoint()) or cached
    *       (e.g. df.cache(), df.persist()).
-   *       [[lastAttemptValueForHighestRDDId()]] should return the value from when the execution in
-   *       which the plan was cached/checkpointed.
+   *       [[lastAttemptValueForHighestRDDId()]] should be used instead, which returns the
+   *       value from the execution in which the plan was cached/checkpointed.
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
@@ -253,7 +253,7 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
       case Some(acc) => return Some(driverAccValue(acc))
       case None => // pass
     }
-    // Otherwise, gather the RDD scoped from the plan and find metric updates from these scopes.
+    // Otherwise, gather the RDD scopes from the plan and find metric updates from these scopes.
     val scopes = SQLLastAttemptAccumulator.extractStageRDDScopes(qe.executedPlan)
     scopes match {
       case Left(bailOutReason) =>
@@ -273,8 +273,8 @@ trait SQLLastAttemptAccumulator[IN, OUT, PARTIAL, DRIVER_ACC]
    * @note The output of this method is undefined if this metric was used inside a part of the plan
    *       which was either checkpointed (e.g. df.localCheckpoint(), df.checkpoint()) or cached
    *       (e.g. df.cache(), df.persist()).
-   *       [[lastAttemptValueForHighestRDDId()]] should return the value from when the execution in
-   *       which the plan was cached/checkpointed.
+   *       [[lastAttemptValueForHighestRDDId()]] should be used instead, which returns the
+   *       value from the execution in which the plan was cached/checkpointed.
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
