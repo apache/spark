@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, StagedTable, StagingTableCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, RelationCatalog, StagedTable, StagingTableCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -988,64 +988,81 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 }
 
 /**
- * A [[TableCatalog]] implementing ViewCatalog: round-trips [[MetadataOnlyTable]] for created
- * views and tables (via `createTable` / `dropTable` / `tableExists` / `listTables`) and exposes
- * two canned read-only fixtures (`test_view`, `test_unqualified_view`) used by the view-read
- * tests. Entries created via `createTable` can be either tables or views -- their
- * [[TableCatalog#PROP_TABLE_TYPE]] property is what distinguishes them.
+ * A [[RelationCatalog]]: round-trips [[MetadataOnlyTable]] for created views and tables and
+ * exposes a few canned read-only view fixtures (`test_view`, `test_unqualified_view`,
+ * `test_unqualified_multi`, plus an unqualified-target view at `ns1.ns2.t`) used by the
+ * view-read tests. Entries created via `createTable` / `createView` are distinguished by the
+ * stored value's runtime type (ViewInfo vs TableInfo). The single-RPC perf entry point
+ * [[loadRelation]] returns either kind; [[loadTable]] is tables-only per the
+ * [[TableCatalog#loadTable]] contract.
  */
-class TestingViewCatalog extends TableCatalog with ViewCatalog {
+class TestingViewCatalog extends RelationCatalog {
 
   // Holds entries (views and tables) created via createTable / createView within the session.
   // Keyed by (namespace, name); the stored value's runtime type (ViewInfo vs TableInfo)
   // distinguishes views from tables. Mixed-catalog: shared identifier namespace per the
-  // ViewCatalog contract.
+  // RelationCatalog contract.
   private val createdViews =
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
 
+  // Canned read-only view fixtures, exposed only via the perf path (loadRelation). loadView
+  // does not need to expose them because the resolver routes RelationCatalog reads through
+  // loadRelation.
+  private def fixtureView(ident: Identifier): Option[ViewInfo] = ident.name() match {
+    case "test_view" =>
+      Some(new ViewInfo.Builder()
+        .withSchema(new StructType().add("col", "string").add("i", "int"))
+        .withQueryText(
+          "SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
+        .withSqlConfigs(java.util.Collections.singletonMap(
+          SQLConf.ANSI_ENABLED.key, (ident.namespace().head == "ansi").toString))
+        .build())
+    case "test_unqualified_view" =>
+      Some(new ViewInfo.Builder()
+        .withSchema(new StructType().add("col", "string"))
+        .withQueryText("SELECT col FROM t WHERE col = 'b'")
+        .withCurrentCatalog("spark_catalog")
+        .withCurrentNamespace(Array("default"))
+        .build())
+    case "test_unqualified_multi" =>
+      // View whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part). The
+      // unqualified `t` in the body must resolve via that captured context to
+      // view_catalog.ns1.ns2.t, which this catalog also serves (see `t` case below).
+      Some(new ViewInfo.Builder()
+        .withSchema(new StructType().add("col", "string"))
+        .withQueryText("SELECT col FROM t")
+        .withCurrentCatalog("view_catalog")
+        .withCurrentNamespace(Array("ns1", "ns2"))
+        .build())
+    case "t" if ident.namespace().toSeq == Seq("ns1", "ns2") =>
+      // Target of test_unqualified_multi's unqualified reference. Self-contained view so
+      // the test doesn't need external data.
+      Some(new ViewInfo.Builder()
+        .withSchema(new StructType().add("col", "string"))
+        .withQueryText("SELECT 'multi' AS col")
+        .build())
+    case _ => None
+  }
+
   override def loadTable(ident: Identifier): Table = {
+    // Tables only -- views must be loaded via loadView / loadRelation per the new contract.
     val key = (ident.namespace().toSeq, ident.name())
-    Option(createdViews.get(key)).map(new MetadataOnlyTable(_, ident.toString)).getOrElse {
-      ident.name() match {
-        case "test_view" =>
-          val info = new ViewInfo.Builder()
-            .withSchema(new StructType().add("col", "string").add("i", "int"))
-            .withQueryText(
-              "SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
-            .withSqlConfigs(java.util.Collections.singletonMap(
-              SQLConf.ANSI_ENABLED.key, (ident.namespace().head == "ansi").toString))
-            .build()
-          new MetadataOnlyTable(info, ident.toString)
-        case "test_unqualified_view" =>
-          val info = new ViewInfo.Builder()
-            .withSchema(new StructType().add("col", "string"))
-            .withQueryText("SELECT col FROM t WHERE col = 'b'")
-            .withCurrentCatalog("spark_catalog")
-            .withCurrentNamespace(Array("default"))
-            .build()
-          new MetadataOnlyTable(info, ident.toString)
-        case "test_unqualified_multi" =>
-          // View whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part). The
-          // unqualified `t` in the body must resolve via that captured context to
-          // view_catalog.ns1.ns2.t, which this catalog also serves (see `t` case below).
-          val info = new ViewInfo.Builder()
-            .withSchema(new StructType().add("col", "string"))
-            .withQueryText("SELECT col FROM t")
-            .withCurrentCatalog("view_catalog")
-            .withCurrentNamespace(Array("ns1", "ns2"))
-            .build()
-          new MetadataOnlyTable(info, ident.toString)
-        case "t" if ident.namespace().toSeq == Seq("ns1", "ns2") =>
-          // Target of test_unqualified_multi's unqualified reference. Self-contained view so
-          // the test doesn't need external data.
-          val info = new ViewInfo.Builder()
-            .withSchema(new StructType().add("col", "string"))
-            .withQueryText("SELECT 'multi' AS col")
-            .build()
-          new MetadataOnlyTable(info, ident.toString)
-        case _ => throw new NoSuchTableException(ident)
-      }
+    Option(createdViews.get(key)) match {
+      case Some(info) if !info.isInstanceOf[ViewInfo] =>
+        new MetadataOnlyTable(info, ident.toString)
+      case _ => throw new NoSuchTableException(ident)
     }
+  }
+
+  override def loadRelation(ident: Identifier): Table = {
+    // Single-RPC perf path: returns tables AND views (as MetadataOnlyTable). Stored entries
+    // win over fixture views (the fixture name space is read-only and disjoint from
+    // createdViews in practice).
+    val key = (ident.namespace().toSeq, ident.name())
+    Option(createdViews.get(key))
+      .orElse(fixtureView(ident))
+      .map(new MetadataOnlyTable(_, ident.toString))
+      .getOrElse(throw new NoSuchTableException(ident))
   }
 
   override def tableExists(ident: Identifier): Boolean = {
@@ -1161,11 +1178,11 @@ class TestingViewCatalog extends TableCatalog with ViewCatalog {
 }
 
 /**
- * A minimal mixed [[StagingTableCatalog]] + [[ViewCatalog]]. View DDL routes through the
+ * A minimal mixed [[StagingTableCatalog]] + [[RelationCatalog]]. View DDL routes through the
  * ViewCatalog API (no separate staging variant for views in the new design). The staging
  * methods cover table CTAS / RTAS only.
  */
-class TestingStagingCatalog extends StagingTableCatalog with ViewCatalog {
+class TestingStagingCatalog extends StagingTableCatalog with RelationCatalog {
 
   private val views =
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
@@ -1174,6 +1191,15 @@ class TestingStagingCatalog extends StagingTableCatalog with ViewCatalog {
     (ident.namespace().toSeq, ident.name())
 
   override def loadTable(ident: Identifier): Table = {
+    // Tables only -- per the new contract, views must be loaded via loadView / loadRelation.
+    Option(views.get(keyOf(ident))) match {
+      case Some(info) if !info.isInstanceOf[ViewInfo] =>
+        new MetadataOnlyTable(info, ident.toString)
+      case _ => throw new NoSuchTableException(ident)
+    }
+  }
+
+  override def loadRelation(ident: Identifier): Table = {
     Option(views.get(keyOf(ident))).map(new MetadataOnlyTable(_, ident.toString))
       .getOrElse(throw new NoSuchTableException(ident))
   }
@@ -1263,24 +1289,13 @@ class TestingStagingCatalog extends StagingTableCatalog with ViewCatalog {
 }
 
 /**
- * A v2 catalog that does not implement ViewCatalog. Used by capability-gate tests. The
- * gate actually fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
+ * A v2 catalog that does not implement ViewCatalog. Used by capability-gate tests: the gate
+ * fires in `Analyzer.lookupTableOrView(viewOnly=true)` for ALTER VIEW and in
  * [[CheckViewReferences]] for CREATE VIEW -- in both cases before `loadTable` is called --
- * so the pre-seeded view fixture is effectively unused on the happy-path-error flow. It's
- * kept to make future tests that deliberately bypass the upstream gate easy to write.
+ * so this catalog's content is intentionally empty.
  */
 class TestingTableOnlyCatalog extends TableCatalog {
-  private val fixtureView: ViewInfo = new ViewInfo.Builder()
-    .withSchema(new StructType().add("x", "int"))
-    .withQueryText("SELECT 1 AS x")
-    .build()
-
-  override def loadTable(ident: Identifier): Table =
-    if (ident.namespace().toSeq == Seq("default") && ident.name() == "v") {
-      new MetadataOnlyTable(fixtureView, ident.toString)
-    } else {
-      throw new NoSuchTableException(ident)
-    }
+  override def loadTable(ident: Identifier): Table = throw new NoSuchTableException(ident)
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table =
     throw new RuntimeException("shouldn't be called")

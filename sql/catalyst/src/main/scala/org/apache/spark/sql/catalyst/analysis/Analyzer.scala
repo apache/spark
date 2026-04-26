@@ -1109,11 +1109,11 @@ class Analyzer(
      * so surfacing a downstream "view not found" would hide the real reason.
      *
      * Lookup order against a non-session catalog:
-     *   1. [[TableCatalog.loadTable]] if implemented. A returned [[MetadataOnlyTable]] wrapping
-     *      a [[ViewInfo]] is interpreted as a view (perf opt-in for mixed catalogs that prefer
-     *      to answer in a single RPC); other results are tables.
-     *   2. If `loadTable` did not produce a result and the catalog is a [[ViewCatalog]],
-     *      [[ViewCatalog.loadView]] is called as the fallback view-resolution path.
+     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called once.
+     *      A returned [[MetadataOnlyTable]] wrapping a [[ViewInfo]] is interpreted as a view;
+     *      other results are tables.
+     *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
+     *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
      */
     private def lookupTableOrView(
         identifier: Seq[String],
@@ -1127,40 +1127,56 @@ class Analyzer(
                 !catalog.isInstanceOf[ViewCatalog]) {
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
-            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog` mixin):
-            // `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
-            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
-            val tableResolved: Option[LogicalPlan] = if (
-              CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
-            ) {
-              CatalogV2Util.loadTable(catalog, ident).map {
-                case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                  v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                  val v1Ident = v1Table.catalogTable.identifier
-                  val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                  ResolvedPersistentView(
-                    catalog, v2Ident, v1Table.catalogTable)
-                case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
-                  val catalogTable = V1Table.toCatalogTable(catalog, ident, t)
-                  ResolvedPersistentView(catalog, ident, catalogTable)
-                case table =>
-                  ResolvedTable.create(catalog.asTableCatalog, ident, table)
-              }
-            } else {
-              None
-            }
-            tableResolved.orElse {
-              catalog match {
-                case vc: ViewCatalog =>
-                  try {
-                    val viewInfo = vc.loadView(ident)
-                    val catalogTable = V1Table.toCatalogTable(catalog, ident, viewInfo)
-                    Some(ResolvedPersistentView(catalog, ident, catalogTable))
-                  } catch {
-                    case _: NoSuchViewException => None
+            catalog match {
+              case mc: RelationCatalog =>
+                // Single-RPC perf path: loadRelation returns a Table for a table or a
+                // MetadataOnlyTable wrapping a ViewInfo for a view. NoSuchTable means
+                // neither exists.
+                try {
+                  Some(mc.loadRelation(ident) match {
+                    case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
+                      ResolvedPersistentView(
+                        catalog, ident, V1Table.toCatalogTable(catalog, ident, t))
+                    case table =>
+                      ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                  })
+                } catch {
+                  case _: NoSuchTableException => None
+                }
+              case _ =>
+                // Skip the table-side lookup entirely for view-only catalogs (no
+                // `TableCatalog` mixin): `CatalogV2Util.loadTable` would call `asTableCatalog`
+                // and throw MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-
+                // resolution path.
+                val tableResolved: Option[LogicalPlan] = if (
+                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+                ) {
+                  CatalogV2Util.loadTable(catalog, ident).map {
+                    case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+                      v1Table.v1Table.tableType == CatalogTableType.VIEW =>
+                      val v1Ident = v1Table.catalogTable.identifier
+                      val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+                      ResolvedPersistentView(
+                        catalog, v2Ident, v1Table.catalogTable)
+                    case table =>
+                      ResolvedTable.create(catalog.asTableCatalog, ident, table)
                   }
-                case _ => None
-              }
+                } else {
+                  None
+                }
+                tableResolved.orElse {
+                  catalog match {
+                    case vc: ViewCatalog =>
+                      try {
+                        val viewInfo = vc.loadView(ident)
+                        val catalogTable = V1Table.toCatalogTable(catalog, ident, viewInfo)
+                        Some(ResolvedPersistentView(catalog, ident, catalogTable))
+                      } catch {
+                        case _: NoSuchViewException => None
+                      }
+                    case _ => None
+                  }
+                }
             }
           case _ => None
         }

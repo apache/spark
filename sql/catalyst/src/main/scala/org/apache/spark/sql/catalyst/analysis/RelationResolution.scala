@@ -38,11 +38,13 @@ import org.apache.spark.sql.connector.catalog.{
   Identifier,
   LookupCatalog,
   MetadataOnlyTable,
+  RelationCatalog,
   Table,
   TableCatalog,
   V1Table,
   V2TableWithV1Fallback,
-  ViewCatalog
+  ViewCatalog,
+  ViewInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
@@ -231,38 +233,59 @@ class RelationResolution(
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
             val finalOptions = u.clearWritePrivileges.options
-            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog` mixin):
-            // `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
-            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path. A pure
-            // `ViewCatalog`'s view is resolved below via the `loadView` fallback.
-            val table: Option[Table] = if (
-              CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
-            ) {
-              CatalogV2Util.loadTable(
-                catalog,
-                ident,
-                finalTimeTravelSpec,
-                Option(writePrivileges))
-            } else {
-              None
-            }
-            // Fallback to ViewCatalog for catalogs that host views but where loadTable returned
-            // None (or was skipped because there's no TableCatalog mixin). Time-travel / write
-            // privileges only apply to tables, not views, so the fallback is gated on neither.
-            val tableOrView: Option[Table] = table.orElse {
-              if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
-                catalog match {
-                  case vc: ViewCatalog =>
-                    try {
-                      Some(new MetadataOnlyTable(vc.loadView(ident), ident.toString))
-                    } catch {
-                      case _: NoSuchViewException => None
-                    }
-                  case _ => None
+            // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
+            // `loadRelation` answers both "is there a table?" and "is there a view?" in one
+            // call. Time-travel and write privileges apply to tables only, so for those the
+            // lookup falls through to the table-only `loadTable` path below; views are not
+            // reachable via the v2 fallback in those cases.
+            //
+            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
+            // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
+            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
+            val tableOrView: Option[Table] = catalog match {
+              case mc: RelationCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+                try {
+                  Some(mc.loadRelation(ident))
+                } catch {
+                  case _: NoSuchTableException => None
                 }
-              } else {
-                None
-              }
+              case _ =>
+                val tableSide: Option[Table] = if (
+                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+                ) {
+                  CatalogV2Util.loadTable(
+                    catalog,
+                    ident,
+                    finalTimeTravelSpec,
+                    Option(writePrivileges))
+                } else {
+                  None
+                }
+                // Fallback to ViewCatalog for catalogs that host views but where loadTable
+                // returned None (or was skipped because there's no TableCatalog mixin).
+                // Time-travel / write privileges only apply to tables, not views, so the
+                // fallback is gated on neither.
+                tableSide.orElse {
+                  if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
+                    catalog match {
+                      case vc: ViewCatalog =>
+                        try {
+                          Some(new MetadataOnlyTable(vc.loadView(ident), ident.toString))
+                        } catch {
+                          case _: NoSuchViewException => None
+                        }
+                      case _ => None
+                    }
+                  } else {
+                    None
+                  }
+                }
+            }
+            // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
+            // we don't share-cache views.
+            val table: Option[Table] = tableOrView.filter {
+              case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
+              case _ => true
             }
 
             val sharedRelationCacheMatch = for {

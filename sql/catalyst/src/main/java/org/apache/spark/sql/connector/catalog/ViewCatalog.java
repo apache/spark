@@ -22,40 +22,15 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
 import org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException;
 
 /**
- * Catalog API for read and write access to views.
+ * Catalog API for connectors that expose views.
  * <p>
- * A connector that wants to expose views implements this interface. The interface is independent
- * from {@link TableCatalog}: a connector can implement just {@code ViewCatalog} (a view-only
- * catalog), just {@code TableCatalog} (a table-only catalog), or both. There is no capability
- * flag to declare; the presence of {@code ViewCatalog} on the catalog plugin <i>is</i> the
- * signal that it supports views.
- *
- * <h3>Mixed catalogs (implementing both {@code TableCatalog} and {@code ViewCatalog})</h3>
- *
- * The two interfaces are independent: every {@code TableCatalog} method behaves as if views did
- * not exist, and every {@code ViewCatalog} method behaves as if tables did not exist. The only
- * cross-cutting invariant is that <b>tables and views share a single identifier namespace</b> in
- * the catalog: the same identifier cannot resolve to both a table and a view at the same time.
- * That invariant manifests in two places:
- * <ul>
- *   <li>{@link TableCatalog#createTable} must reject (with
- *       {@link org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException}) if the
- *       identifier already names a view.</li>
- *   <li>{@link #createView} must reject (with {@link ViewAlreadyExistsException}) if the
- *       identifier already names a table.</li>
- * </ul>
- *
- * <h3>Resolution and the optional perf opt-in for mixed catalogs</h3>
- *
- * Spark resolves an identifier by calling {@link TableCatalog#loadTable} first; on
- * {@link org.apache.spark.sql.catalyst.analysis.NoSuchTableException} it falls back to
- * {@link #loadView} when the catalog also implements {@code ViewCatalog}. That fallback costs an
- * extra RPC per cold-cache view lookup. To skip it, a perf-conscious mixed catalog may return a
- * {@link MetadataOnlyTable} wrapping the {@link ViewInfo} from
- * {@link TableCatalog#loadTable} when the identifier resolves to a view; Spark recognizes the
- * {@code ViewInfo} payload and routes through view resolution without a follow-up
- * {@code loadView} call. {@code loadView} is still used directly for view DDL paths
- * (DROP VIEW, ALTER VIEW, SHOW CREATE TABLE, etc.).
+ * Connectors that expose <i>only</i> views implement this interface. Connectors that expose
+ * both tables and views must implement {@link RelationCatalog} (which extends both this
+ * interface and {@link TableCatalog} and adds the cross-cutting contract for the combined
+ * case); the methods on this interface remain view-only -- they do not interact with tables.
+ * <p>
+ * The presence of {@code ViewCatalog} on the catalog plugin <i>is</i> the signal that it
+ * supports views; there is no capability flag to declare.
  *
  * @since 4.2.0
  */
@@ -64,9 +39,6 @@ public interface ViewCatalog extends CatalogPlugin {
 
   /**
    * List the views in a namespace from the catalog.
-   * <p>
-   * For mixed catalogs, this must return identifiers for views only (tables are listed via
-   * {@link TableCatalog#listTables}).
    *
    * @param namespace a multi-part namespace
    * @return an array of identifiers for views
@@ -76,14 +48,10 @@ public interface ViewCatalog extends CatalogPlugin {
 
   /**
    * Load view metadata by identifier.
-   * <p>
-   * For mixed catalogs, throws {@link NoSuchViewException} when {@code ident} resolves to a
-   * table rather than a view.
    *
    * @param ident a view identifier
    * @return the view metadata
-   * @throws NoSuchViewException if the view does not exist (or {@code ident} is a table in a
-   *                             mixed catalog)
+   * @throws NoSuchViewException if the view does not exist
    */
   ViewInfo loadView(Identifier ident) throws NoSuchViewException;
 
@@ -118,14 +86,11 @@ public interface ViewCatalog extends CatalogPlugin {
 
   /**
    * Create a view.
-   * <p>
-   * In mixed catalogs, must throw {@link ViewAlreadyExistsException} if {@code ident} already
-   * names a table or a view.
    *
    * @param ident the view identifier
    * @param info  the view metadata
    * @return the metadata of the newly created view; may equal {@code info}
-   * @throws ViewAlreadyExistsException if a view or table already exists at {@code ident}
+   * @throws ViewAlreadyExistsException if a view already exists at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
   ViewInfo createView(Identifier ident, ViewInfo info)
@@ -141,8 +106,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @param ident the view identifier
    * @param info  the new view metadata
    * @return the metadata of the replaced view; may equal {@code info}
-   * @throws NoSuchViewException if no view exists at {@code ident} (or {@code ident} is a table
-   *                             in a mixed catalog)
+   * @throws NoSuchViewException if no view exists at {@code ident}
    */
   ViewInfo replaceView(Identifier ident, ViewInfo info) throws NoSuchViewException;
 
@@ -154,14 +118,15 @@ public interface ViewCatalog extends CatalogPlugin {
    * {@link NoSuchViewException}. The fallback is non-atomic across the two calls (a concurrent
    * drop or create can race), so catalogs that can answer the upsert in a single transactional
    * call should override this method to collapse to one RPC and to make the swap atomic.
-   * <p>
-   * In mixed catalogs, must throw {@link ViewAlreadyExistsException} if {@code ident} resolves
-   * to a non-view table (cross-type collision is rejected; the table is not touched).
    *
    * @param ident the view identifier
    * @param info  the view metadata
    * @return the metadata of the created or replaced view; may equal {@code info}
-   * @throws ViewAlreadyExistsException if {@code ident} resolves to a table in a mixed catalog
+   * @throws ViewAlreadyExistsException if {@code ident} cannot host this view -- either a
+   *                                    concurrent {@code CREATE VIEW} won the race in the
+   *                                    default impl's gap between {@link #replaceView} and
+   *                                    the fallback {@link #createView}, or, in a
+   *                                    {@link RelationCatalog}, a table sits at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
   default ViewInfo createOrReplaceView(Identifier ident, ViewInfo info)
@@ -175,12 +140,6 @@ public interface ViewCatalog extends CatalogPlugin {
 
   /**
    * Drop a view.
-   * <p>
-   * Returns {@code true} if a view was dropped at {@code ident}, {@code false} otherwise. In
-   * mixed catalogs, returns {@code false} if {@code ident} is a table (the table is not
-   * touched). Spark's resolver guards the call site so that {@code DROP VIEW} on a table or
-   * {@code DROP TABLE} on a view surfaces the dedicated {@code EXPECT_VIEW_NOT_TABLE} /
-   * {@code EXPECT_TABLE_NOT_VIEW} error before this method is invoked.
    *
    * @param ident a view identifier
    * @return true if a view was dropped, false otherwise

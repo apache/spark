@@ -33,9 +33,12 @@ import org.apache.spark.sql.connector.expressions.Transform;
  * (for views) at read time.
  * <p>
  * Catalogs build the metadata via {@link TableInfo.Builder} (for data-source tables) or
- * {@link ViewInfo.Builder} (for views) and wrap the result in a {@code MetadataOnlyTable} to
- * return from {@link TableCatalog#loadTable(Identifier)}. Downstream consumers distinguish
- * the two by checking {@code getTableInfo() instanceof ViewInfo}.
+ * {@link ViewInfo.Builder} (for views). A {@code MetadataOnlyTable} wrapping a
+ * {@link TableInfo} can be returned from {@link TableCatalog#loadTable(Identifier)} for a
+ * data-source table; a {@code MetadataOnlyTable} wrapping a {@link ViewInfo} can be returned
+ * from {@link RelationCatalog#loadRelation(Identifier)} as the single-RPC perf opt-in for a view.
+ * Downstream consumers distinguish the two by checking
+ * {@code getTableInfo() instanceof ViewInfo}.
  *
  * @since 4.2.0
  */
@@ -48,9 +51,10 @@ public class MetadataOnlyTable implements Table {
    * @param info metadata for the table or view. Pass a {@link ViewInfo} for a view.
    * @param name human-readable name for this table, used by places that read {@link #name()}
    *             (e.g. the {@code Name} row of {@code DESCRIBE TABLE EXTENDED}). Catalogs
-   *             returning a {@code MetadataOnlyTable} from {@link TableCatalog#loadTable}
-   *             should typically pass {@code ident.toString()}, matching the quoted
-   *             multi-part form used elsewhere for v2 identifiers.
+   *             returning a {@code MetadataOnlyTable} from {@link TableCatalog#loadTable} or
+   *             {@link RelationCatalog#loadRelation} should typically pass
+   *             {@code ident.toString()}, matching the quoted multi-part form used elsewhere
+   *             for v2 identifiers.
    */
   public MetadataOnlyTable(TableInfo info, String name) {
     this.info = Objects.requireNonNull(info, "info should not be null");

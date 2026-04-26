@@ -31,12 +31,11 @@ import org.apache.spark.annotation.Evolving;
  * query output column names. Schema and user TBLPROPERTIES are inherited from {@link TableInfo}
  * via the typed builder.
  * <p>
- * {@code ViewInfo} extends {@link TableInfo} so that a mixed catalog (one implementing both
- * {@link TableCatalog} and {@link ViewCatalog}) can opt into the perf optimization of returning
- * a {@link MetadataOnlyTable} wrapping a {@code ViewInfo} from {@link TableCatalog#loadTable}
- * for a view identifier. Pure {@link ViewCatalog} implementations never see {@code TableInfo};
- * the typed setters on {@link Builder} cover everything they need to construct a
- * {@code ViewInfo}.
+ * {@code ViewInfo} extends {@link TableInfo} so that a {@link RelationCatalog} can opt into the
+ * single-RPC perf path by returning a {@link MetadataOnlyTable} wrapping a {@code ViewInfo}
+ * from {@link RelationCatalog#loadRelation} for a view identifier. Pure {@link ViewCatalog}
+ * implementations never see {@code TableInfo}; the typed setters on {@link Builder} cover
+ * everything they need to construct a {@code ViewInfo}.
  *
  * @since 4.2.0
  */
