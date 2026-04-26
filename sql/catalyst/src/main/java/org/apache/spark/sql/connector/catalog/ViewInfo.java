@@ -61,7 +61,7 @@ public class ViewInfo extends TableInfo {
     // Force PROP_TABLE_TYPE = VIEW so that `properties()` reflects the typed ViewInfo
     // classification. Catalogs and generic viewers reading PROP_TABLE_TYPE from the properties
     // bag (e.g. TableCatalog.listTableSummaries default impl, DESCRIBE) see "VIEW" without
-    // requiring authors to remember withTableType(VIEW).
+    // requiring authors to remember to call withTableType(VIEW).
     properties().put(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
   }
 
