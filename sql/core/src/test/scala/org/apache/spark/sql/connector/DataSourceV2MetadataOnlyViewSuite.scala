@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, RelationCatalog, StagedTable, StagingTableCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, RelationCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -30,8 +30,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Tests for the view side of [[MetadataOnlyTable]]: view-text expansion on read, and
  * CREATE VIEW / ALTER VIEW ... AS going through the v2 write path
  * (`CreateV2ViewExec` / `AlterV2ViewExec`). View writes route through
- * [[ViewCatalog#createView]] / [[ViewCatalog#replaceView]]; there is no separate staging
- * variant for views (the `StagingTableCatalog` `stage*` API is table-only).
+ * [[ViewCatalog#createView]] / [[ViewCatalog#replaceView]].
  * Data-source-table read paths live in
  * [[org.apache.spark.sql.connector.DataSourceV2MetadataOnlyTableSuite]].
  *
@@ -45,7 +44,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.view_catalog", classOf[TestingViewCatalog].getName)
+    .set("spark.sql.catalog.view_catalog", classOf[TestingRelationCatalog].getName)
 
   // --- View read path -----------------------------------------------------
 
@@ -73,7 +72,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     // End-to-end coverage of the v2 encoder -> parser round-trip: test_unqualified_multi is a
     // view whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part namespace) and
     // whose body references `t` unqualified. At read time the unqualified `t` must expand to
-    // view_catalog.ns1.ns2.t via the captured context -- which TestingViewCatalog resolves to
+    // view_catalog.ns1.ns2.t via the captured context -- which TestingRelationCatalog resolves to
     // its own `t` fixture at that namespace.
     checkAnswer(
       spark.table("view_catalog.outer_ns.test_unqualified_multi"),
@@ -233,10 +232,10 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       Seq("a", "b").toDF("col").write.saveAsTable("spark_catalog.default.t")
       sql("CREATE VIEW view_catalog.default.v_coll DEFAULT COLLATION UTF8_BINARY AS " +
         "SELECT col FROM spark_catalog.default.t")
-      // TestingViewCatalog stores the TableInfo verbatim, so the collation property is
+      // TestingRelationCatalog stores the TableInfo verbatim, so the collation property is
       // observable via the catalog-stored builder output.
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       val info = catalog.getStoredView(Array("default"), "v_coll")
       assert(info.properties().get(TableCatalog.PROP_COLLATION) == "UTF8_BINARY")
     }
@@ -259,7 +258,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   test("CREATE VIEW over a non-view table entry is rejected (plain TableCatalog)") {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     val tableIdent = Identifier.of(Array("default"), "v_existing_table")
     val tableInfo = new TableInfo.Builder()
       .withSchema(new StructType().add("col", "string"))
@@ -294,90 +293,6 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       }
     } finally {
       catalog.dropTable(tableIdent)
-    }
-  }
-
-  // --- CREATE VIEW on a StagingTableCatalog -------------------------------
-
-  // The view exec routes everything through `ViewCatalog.createView` / `replaceView` regardless
-  // of whether the catalog also implements `StagingTableCatalog` -- views have no separate
-  // staging variant. These tests just confirm the view CRUD still works on a catalog that
-  // happens to mix in `StagingTableCatalog`; they do NOT exercise `stageCreate` /
-  // `stageCreateOrReplace` (which are table-only paths).
-  test("CREATE VIEW on a mixed StagingTableCatalog + ViewCatalog routes through createView") {
-    withSQLConf(
-      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
-      withTable("spark_catalog.default.t") {
-        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
-
-        sql("CREATE VIEW staging_catalog.default.v_atomic AS " +
-          "SELECT x FROM spark_catalog.default.t WHERE x > 1")
-        checkAnswer(
-          spark.table("staging_catalog.default.v_atomic"),
-          Seq(Row(2), Row(3)))
-
-        // Second CREATE without IF NOT EXISTS surfaces the viewAlreadyExists error from
-        // ViewCatalog.createView.
-        val ex = intercept[AnalysisException] {
-          sql("CREATE VIEW staging_catalog.default.v_atomic AS " +
-            "SELECT x FROM spark_catalog.default.t WHERE x > 1")
-        }
-        assert(ex.getMessage.toLowerCase(java.util.Locale.ROOT).contains("already exists"))
-
-        // CREATE OR REPLACE routes through ViewCatalog.replaceView.
-        sql("CREATE OR REPLACE VIEW staging_catalog.default.v_atomic AS " +
-          "SELECT x FROM spark_catalog.default.t WHERE x > 2")
-        checkAnswer(spark.table("staging_catalog.default.v_atomic"), Row(3))
-
-        // CREATE IF NOT EXISTS on an existing view -- no-op; the exec short-circuits on
-        // viewExists before buildViewInfo.
-        sql("CREATE VIEW IF NOT EXISTS staging_catalog.default.v_atomic AS " +
-          "SELECT x + 100 AS x FROM spark_catalog.default.t")
-        // Value unchanged -- IF NOT EXISTS was a no-op.
-        checkAnswer(spark.table("staging_catalog.default.v_atomic"), Row(3))
-      }
-    }
-  }
-
-  test("CREATE VIEW over a non-view table entry is rejected (mixed StagingTableCatalog)") {
-    withSQLConf(
-      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
-      val stagingCatalog = spark.sessionState.catalogManager.catalog("staging_catalog")
-        .asInstanceOf[TestingStagingCatalog]
-      val tableIdent = Identifier.of(Array("default"), "v_existing_table")
-      val tableInfo = new TableInfo.Builder()
-        .withSchema(new StructType().add("col", "string"))
-        .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
-        .build()
-      stagingCatalog.createTable(tableIdent, tableInfo)
-      try {
-        withTable("spark_catalog.default.t") {
-          Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
-
-          // CREATE OR REPLACE VIEW must not silently destroy a non-view table. The exec's
-          // `rejectIfTable` short-circuits before any view-write call (no `stage*` involved --
-          // views are written via `ViewCatalog.replaceView`, not the staging API).
-          val replaceEx = intercept[AnalysisException] {
-            sql("CREATE OR REPLACE VIEW staging_catalog.default.v_existing_table AS " +
-              "SELECT x FROM spark_catalog.default.t")
-          }
-          assert(replaceEx.getCondition == "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE")
-
-          val createEx = intercept[AnalysisException] {
-            sql("CREATE VIEW staging_catalog.default.v_existing_table AS " +
-              "SELECT x FROM spark_catalog.default.t")
-          }
-          assert(createEx.getCondition == "TABLE_OR_VIEW_ALREADY_EXISTS")
-
-          sql("CREATE VIEW IF NOT EXISTS staging_catalog.default.v_existing_table AS " +
-            "SELECT x FROM spark_catalog.default.t")
-          val loaded = stagingCatalog.loadTable(tableIdent).asInstanceOf[MetadataOnlyTable]
-          assert(loaded.getTableInfo.properties.get(TableCatalog.PROP_TABLE_TYPE) ==
-            TableSummary.EXTERNAL_TABLE_TYPE)
-        }
-      } finally {
-        stagingCatalog.dropTable(tableIdent)
-      }
     }
   }
 
@@ -459,7 +374,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         "SELECT x + 1 AS x FROM spark_catalog.default.t")
 
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       val info = catalog.getStoredView(Array("default"), "v_preserve")
       assert(info.properties().get("mykey") == "myvalue")
     }
@@ -472,7 +387,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         "SELECT x FROM spark_catalog.default.t")
 
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       val info = catalog.getStoredView(Array("default"), "v_owner_create")
       // v2 CREATE VIEW stamps the current user into PROP_OWNER, matching v2 CREATE TABLE
       // (via CatalogV2Util.withDefaultOwnership) and v1 CREATE VIEW (via CatalogTable.owner's
@@ -485,7 +400,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   test("ALTER VIEW preserves PROP_OWNER (v1-parity)") {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     val viewIdent = Identifier.of(Array("default"), "v_owner")
     // Pre-seed a view whose stored ViewInfo carries an explicit owner.
     val initialInfo = new ViewInfo.Builder()
@@ -520,7 +435,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
         "SELECT x + 1 AS x FROM spark_catalog.default.t")
 
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       assert(catalog.getStoredView(Array("default"), "v_evo").schemaMode() == "EVOLUTION")
     }
   }
@@ -533,7 +448,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
           "SELECT col FROM spark_catalog.default.t")
       }
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       assert(catalog.getStoredView(Array("default"), "v_configs")
         .sqlConfigs().get(SQLConf.ANSI_ENABLED.key) == "true")
 
@@ -558,24 +473,6 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
           "SELECT * FROM spark_catalog.default.does_not_exist")
       }
       assert(ex.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
-    }
-  }
-
-  test("ALTER VIEW on a mixed StagingTableCatalog + ViewCatalog routes through replaceView") {
-    withSQLConf(
-      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
-      withTable("spark_catalog.default.t") {
-        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
-        sql("CREATE VIEW staging_catalog.default.v_atomic_alter AS " +
-          "SELECT x FROM spark_catalog.default.t WHERE x > 10")
-        checkAnswer(spark.table("staging_catalog.default.v_atomic_alter"), Seq.empty[Row])
-
-        sql("ALTER VIEW staging_catalog.default.v_atomic_alter AS " +
-          "SELECT x FROM spark_catalog.default.t WHERE x > 1")
-        checkAnswer(
-          spark.table("staging_catalog.default.v_atomic_alter"),
-          Seq(Row(2), Row(3)))
-      }
     }
   }
 
@@ -674,7 +571,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
       // `unsupportedCreateOrReplaceViewOnTableError`. Pre-seed a non-view entry at a
       // multi-level-namespace identifier to exercise the rendering.
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       val tblIdent = Identifier.of(Array("ns1", "inner"), "t_err")
       catalog.createTable(
         tblIdent,
@@ -845,7 +742,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   test("DROP VIEW on a ViewCatalog drops the view") {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     withTable("spark_catalog.default.t") {
       Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
       sql("CREATE VIEW view_catalog.default.v_drop AS " +
@@ -867,7 +764,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     // `wrongCommandForObjectTypeError`. The v2 path must also refuse -- otherwise
     // `DROP VIEW view_catalog.default.<table>` would silently destroy the table's entry.
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     val tableIdent = Identifier.of(Array("default"), "t_not_a_view")
     catalog.createTable(
       tableIdent,
@@ -887,22 +784,6 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
     }
   }
 
-  test("DROP VIEW on a StagingTableCatalog drops the view") {
-    withSQLConf(
-      "spark.sql.catalog.staging_catalog" -> classOf[TestingStagingCatalog].getName) {
-      val catalog = spark.sessionState.catalogManager.catalog("staging_catalog")
-        .asInstanceOf[TestingStagingCatalog]
-      withTable("spark_catalog.default.t") {
-        Seq(1, 2, 3).toDF("x").write.saveAsTable("spark_catalog.default.t")
-        sql("CREATE VIEW staging_catalog.default.v_drop_atomic AS " +
-          "SELECT x FROM spark_catalog.default.t")
-        assert(catalog.viewExists(Identifier.of(Array("default"), "v_drop_atomic")))
-        sql("DROP VIEW staging_catalog.default.v_drop_atomic")
-        assert(!catalog.viewExists(Identifier.of(Array("default"), "v_drop_atomic")))
-      }
-    }
-  }
-
   test("DROP VIEW on a catalog without ViewCatalog is rejected") {
     withSQLConf(
       "spark.sql.catalog.no_view_catalog" -> classOf[TestingTableOnlyCatalog].getName) {
@@ -918,7 +799,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
 
   private def seedV2Table(name: String): Unit = {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     catalog.createTable(
       Identifier.of(Array("default"), name),
       new TableInfo.Builder()
@@ -996,7 +877,7 @@ class DataSourceV2MetadataOnlyViewSuite extends QueryTest with SharedSparkSessio
  * [[loadRelation]] returns either kind; [[loadTable]] is tables-only per the
  * [[TableCatalog#loadTable]] contract.
  */
-class TestingViewCatalog extends RelationCatalog {
+class TestingRelationCatalog extends RelationCatalog {
 
   // Holds entries (views and tables) created via createTable / createView within the session.
   // Keyed by (namespace, name); the stored value's runtime type (ViewInfo vs TableInfo)
@@ -1057,12 +938,9 @@ class TestingViewCatalog extends RelationCatalog {
   }
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {
-    // Per the mixed-catalog contract: createTable must reject if the ident is already a view.
-    if (info.isInstanceOf[ViewInfo]) {
-      throw new IllegalStateException(
-        "TestingViewCatalog.createTable should not be called with a ViewInfo; views go through " +
-          "ViewCatalog.createView")
-    }
+    // Mixed-catalog contract: createTable rejects when a view sits at ident with
+    // TableAlreadyExistsException. The shared `createdViews` keyspace makes `putIfAbsent`
+    // throw uniformly for both table-at-ident and view-at-ident collisions.
     val key = (ident.namespace().toSeq, ident.name())
     if (createdViews.putIfAbsent(key, info) != null) {
       throw new TableAlreadyExistsException(ident)
@@ -1145,99 +1023,6 @@ class TestingViewCatalog extends RelationCatalog {
     val existing = createdViews.get(key)
     if (existing == null || !existing.isInstanceOf[ViewInfo]) return false
     createdViews.remove(key) != null
-  }
-
-  private var catalogName = ""
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
-    catalogName = name
-  }
-  override def name(): String = catalogName
-}
-
-/**
- * A minimal mixed [[StagingTableCatalog]] + [[RelationCatalog]]. View DDL routes through the
- * ViewCatalog API (no separate staging variant for views in the new design). The staging
- * methods cover table CTAS / RTAS only.
- */
-class TestingStagingCatalog extends StagingTableCatalog with RelationCatalog {
-
-  private val views =
-    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
-
-  private def keyOf(ident: Identifier): (Seq[String], String) =
-    (ident.namespace().toSeq, ident.name())
-
-  override def loadRelation(ident: Identifier): Table = {
-    // loadTable, loadView, tableExists, viewExists derive from this via RelationCatalog defaults.
-    Option(views.get(keyOf(ident))).map(new MetadataOnlyTable(_, ident.toString))
-      .getOrElse(throw new NoSuchTableException(ident))
-  }
-
-  override def createTable(ident: Identifier, info: TableInfo): Table = {
-    if (info.isInstanceOf[ViewInfo]) {
-      throw new IllegalStateException(
-        "TestingStagingCatalog.createTable should not be called with a ViewInfo")
-    }
-    if (views.putIfAbsent(keyOf(ident), info) != null) {
-      throw new TableAlreadyExistsException(ident)
-    }
-    new MetadataOnlyTable(info, ident.toString)
-  }
-
-  // Staging methods are required by `StagingTableCatalog` but should never be invoked by view
-  // DDL (views write through `ViewCatalog.createView` / `replaceView`, not the staging API).
-  // Throwing here turns any accidental routing into a clear test failure.
-  override def stageCreate(ident: Identifier, info: TableInfo): StagedTable =
-    throw new RuntimeException("stageCreate must not be invoked by view DDL")
-  override def stageReplace(ident: Identifier, info: TableInfo): StagedTable =
-    throw new RuntimeException("stageReplace must not be invoked by view DDL")
-  override def stageCreateOrReplace(ident: Identifier, info: TableInfo): StagedTable =
-    throw new RuntimeException("stageCreateOrReplace must not be invoked by view DDL")
-
-  override def alterTable(ident: Identifier, changes: TableChange*): Table =
-    throw new RuntimeException("shouldn't be called")
-  override def dropTable(ident: Identifier): Boolean = {
-    val v = views.get(keyOf(ident))
-    if (v == null || v.isInstanceOf[ViewInfo]) return false
-    views.remove(keyOf(ident)) != null
-  }
-  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit =
-    throw new RuntimeException("shouldn't be called")
-  override def listTables(namespace: Array[String]): Array[Identifier] = Array.empty
-
-  // ViewCatalog methods -- shared storage with the table side.
-
-  override def listViews(namespace: Array[String]): Array[Identifier] = {
-    val targetNs = namespace.toSeq
-    val ids = new java.util.ArrayList[Identifier]()
-    views.forEach { (key, info) =>
-      if (key._1 == targetNs && info.isInstanceOf[ViewInfo]) {
-        ids.add(Identifier.of(key._1.toArray, key._2))
-      }
-    }
-    ids.toArray(new Array[Identifier](0))
-  }
-
-  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
-    if (views.putIfAbsent(keyOf(ident), info) != null) {
-      throw new ViewAlreadyExistsException(ident)
-    }
-    info
-  }
-
-  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
-    val existing = views.get(keyOf(ident))
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
-      throw new NoSuchViewException(ident)
-    }
-    views.put(keyOf(ident), info)
-    info
-  }
-
-  override def dropView(ident: Identifier): Boolean = {
-    val existing = views.get(keyOf(ident))
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) return false
-    views.remove(keyOf(ident)) != null
   }
 
   private var catalogName = ""

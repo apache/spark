@@ -264,7 +264,7 @@ class RelationResolution(
                 // Fallback to ViewCatalog for catalogs that host views but where loadTable
                 // returned None (or was skipped because there's no TableCatalog mixin).
                 // Time-travel / write privileges only apply to tables, not views, so the
-                // fallback is gated on neither.
+                // fallback only fires when both are absent.
                 tableSide.orElse {
                   if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
                     catalog match {

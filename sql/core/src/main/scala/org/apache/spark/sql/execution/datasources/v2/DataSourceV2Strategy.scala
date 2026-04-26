@@ -578,9 +578,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
-    // SHOW VIEWS on a non-session v2 ViewCatalog. Session-catalog targets are rewritten to v1
-    // `ShowViewsCommand` by `ResolveSessionCatalog`; non-ViewCatalog catalogs are rejected
-    // there too. This case only sees non-session ViewCatalog catalogs.
+    // SHOW VIEWS on a v2 ViewCatalog. `ResolveSessionCatalog` rewrites the SHOW VIEWS plan to
+    // v1 `ShowViewsCommand` only when the catalog is NOT a `ViewCatalog`; non-`ViewCatalog`
+    // catalogs (session or not) are rejected with `MISSING_CATALOG_ABILITY.VIEWS` there. So
+    // this case sees `ViewCatalog` catalogs (typically non-session, since the default
+    // `V2SessionCatalog` is not a `ViewCatalog`; a session-catalog override that mixes in
+    // `ViewCatalog` would also reach here).
     case ShowViews(ResolvedNamespace(catalog: ViewCatalog, ns, _), pattern, output) =>
       ShowViewsExec(output, catalog, ns, pattern) :: Nil
 
