@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ResolvedIdentifier, SchemaEvolution, ViewAlreadyExistsException, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvolution, ViewAlreadyExistsException, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -115,9 +115,9 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 
 /**
  * Physical plan node for CREATE VIEW on a v2 [[ViewCatalog]]. Dispatches to
- * [[ViewCatalog#createView]] for plain CREATE / `IF NOT EXISTS`, and to
- * [[ViewCatalog#replaceView]] for `OR REPLACE`. CREATE OR REPLACE on a non-existent view falls
- * back to `createView`.
+ * [[ViewCatalog#createView]] for plain CREATE, [[ViewCatalog#createOrReplaceView]] for
+ * `OR REPLACE`, and short-circuits `IF NOT EXISTS` early via [[ViewCatalog#viewExists]] so
+ * the view body isn't analyzed when the view already exists.
  */
 case class CreateV2ViewExec(
     catalog: ViewCatalog,
@@ -135,50 +135,40 @@ case class CreateV2ViewExec(
   override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
 
   override protected def run(): Seq[InternalRow] = {
-    // Probe before preparing the view body so `IF NOT EXISTS` and the type-collision check can
-    // short-circuit before running `aliasPlan` / config capture (matches v1
-    // `CreateViewCommand.run`). Cyclic-reference detection runs at analysis time in
-    // `CheckViewReferences`.
-    //
-    // For mixed catalogs (also implementing `TableCatalog`), also probe `tableExists` so:
-    //   * `CREATE VIEW IF NOT EXISTS` over a non-view table is a no-op (v1 parity, see
-    //     `SQLViewSuite` "existing a table with the duplicate name when CREATE VIEW IF NOT
-    //     EXISTS"), and
-    //   * a non-IF-NOT-EXISTS CREATE / OR REPLACE surfaces the dedicated
-    //     `EXPECT_VIEW_NOT_TABLE` / `TABLE_OR_VIEW_ALREADY_EXISTS` error before any view write.
-    val viewExists = catalog.viewExists(identifier)
-    val tableExists = catalog match {
-      case tc: TableCatalog => tc.tableExists(identifier)
-      case _ => false
-    }
-    if (allowExisting && (viewExists || tableExists)) {
-      return Seq.empty
-    }
-    if (tableExists) {
-      throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
-        fullNameParts, replace)
-    }
-    if (viewExists && !replace) throw viewAlreadyExists()
+    // CREATE VIEW IF NOT EXISTS: short-circuit before `buildViewInfo` if a view already sits
+    // at the ident -- avoids `aliasPlan` / config capture for the common no-op case (matches
+    // v1 `CreateViewCommand.run`). The mixed-catalog "table at ident" no-op is handled in the
+    // catch block below; that case is rare enough that paying for `buildViewInfo` is fine.
+    if (allowExisting && catalog.viewExists(identifier)) return Seq.empty
 
     val info = buildViewInfo()
-    if (replace && viewExists) {
-      // CREATE OR REPLACE on an existing view: replaceView is the single atomic-swap call.
-      CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
-      try {
-        catalog.replaceView(identifier, info)
-      } catch {
-        case _: NoSuchViewException =>
-          // Race: the view disappeared between the existence probe and replaceView. Fall back
-          // to createView to honor REPLACE-or-create semantics.
-          catalog.createView(identifier, info)
-      }
-    } else {
-      // Plain CREATE (or CREATE OR REPLACE on a non-existent view).
-      try {
+    try {
+      if (replace) {
+        CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
+        catalog.createOrReplaceView(identifier, info)
+      } else {
         catalog.createView(identifier, info)
-      } catch {
-        case _: ViewAlreadyExistsException => throw viewAlreadyExists()
       }
+    } catch {
+      case _: ViewAlreadyExistsException =>
+        // Catalog refused: something already occupies the ident. Decode whether it's a table
+        // (cross-type collision) or a view (race for plain CREATE / OR REPLACE), and emit the
+        // precise error -- or no-op for IF NOT EXISTS.
+        val isTable = catalog match {
+          case tc: TableCatalog => tc.tableExists(identifier)
+          case _ => false
+        }
+        if (isTable) {
+          if (!allowExisting) {
+            throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
+              fullNameParts, replace)
+          }
+          // CREATE VIEW IF NOT EXISTS over a table is a no-op (v1 parity).
+        } else if (!allowExisting) {
+          throw viewAlreadyExists()
+        }
+        // else: a view appeared between our viewExists probe and createView; IF NOT EXISTS
+        // semantics make this a no-op.
     }
     Seq.empty
   }

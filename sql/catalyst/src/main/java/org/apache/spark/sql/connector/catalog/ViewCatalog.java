@@ -134,10 +134,9 @@ public interface ViewCatalog extends CatalogPlugin {
   /**
    * Atomically replace an existing view's metadata.
    * <p>
-   * Used by {@code ALTER VIEW ... AS} and as the replace branch of {@code CREATE OR REPLACE
-   * VIEW}. Implementations should commit the new metadata atomically; views carry no data, so a
-   * single transactional metastore call (or equivalent) is sufficient -- there is no separate
-   * staging API.
+   * Used by {@code ALTER VIEW ... AS}. Implementations should commit the new metadata
+   * atomically; views carry no data, so a single transactional metastore call (or equivalent)
+   * is sufficient -- there is no separate staging API.
    *
    * @param ident the view identifier
    * @param info  the new view metadata
@@ -146,6 +145,33 @@ public interface ViewCatalog extends CatalogPlugin {
    *                             in a mixed catalog)
    */
   ViewInfo replaceView(Identifier ident, ViewInfo info) throws NoSuchViewException;
+
+  /**
+   * Create a view if one does not exist at {@code ident}, or atomically replace it if one does.
+   * <p>
+   * Used by {@code CREATE OR REPLACE VIEW}. The default implementation calls
+   * {@link #replaceView}, falling back to {@link #createView} on
+   * {@link NoSuchViewException}. The fallback is non-atomic across the two calls (a concurrent
+   * drop or create can race), so catalogs that can answer the upsert in a single transactional
+   * call should override this method to collapse to one RPC and to make the swap atomic.
+   * <p>
+   * In mixed catalogs, must throw {@link ViewAlreadyExistsException} if {@code ident} resolves
+   * to a non-view table (cross-type collision is rejected; the table is not touched).
+   *
+   * @param ident the view identifier
+   * @param info  the view metadata
+   * @return the metadata of the created or replaced view; may equal {@code info}
+   * @throws ViewAlreadyExistsException if {@code ident} resolves to a table in a mixed catalog
+   * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
+   */
+  default ViewInfo createOrReplaceView(Identifier ident, ViewInfo info)
+      throws ViewAlreadyExistsException, NoSuchNamespaceException {
+    try {
+      return replaceView(ident, info);
+    } catch (NoSuchViewException e) {
+      return createView(ident, info);
+    }
+  }
 
   /**
    * Drop a view.
