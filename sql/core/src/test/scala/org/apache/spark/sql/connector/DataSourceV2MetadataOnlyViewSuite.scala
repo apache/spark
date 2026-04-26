@@ -1044,31 +1044,16 @@ class TestingViewCatalog extends RelationCatalog {
     case _ => None
   }
 
-  override def loadTable(ident: Identifier): Table = {
-    // Tables only -- views must be loaded via loadView / loadRelation per the new contract.
-    val key = (ident.namespace().toSeq, ident.name())
-    Option(createdViews.get(key)) match {
-      case Some(info) if !info.isInstanceOf[ViewInfo] =>
-        new MetadataOnlyTable(info, ident.toString)
-      case _ => throw new NoSuchTableException(ident)
-    }
-  }
-
   override def loadRelation(ident: Identifier): Table = {
     // Single-RPC perf path: returns tables AND views (as MetadataOnlyTable). Stored entries
     // win over fixture views (the fixture name space is read-only and disjoint from
-    // createdViews in practice).
+    // createdViews in practice). loadTable, loadView, tableExists, viewExists all derive
+    // from this via the RelationCatalog default impls.
     val key = (ident.namespace().toSeq, ident.name())
     Option(createdViews.get(key))
       .orElse(fixtureView(ident))
       .map(new MetadataOnlyTable(_, ident.toString))
       .getOrElse(throw new NoSuchTableException(ident))
-  }
-
-  override def tableExists(ident: Identifier): Boolean = {
-    val key = (ident.namespace().toSeq, ident.name())
-    val existing = createdViews.get(key)
-    existing != null && !existing.isInstanceOf[ViewInfo]
   }
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {
@@ -1137,14 +1122,6 @@ class TestingViewCatalog extends RelationCatalog {
     ids.toArray(new Array[Identifier](0))
   }
 
-  override def loadView(ident: Identifier): ViewInfo = {
-    val key = (ident.namespace().toSeq, ident.name())
-    Option(createdViews.get(key)) match {
-      case Some(v: ViewInfo) => v
-      case _ => throw new NoSuchViewException(ident)
-    }
-  }
-
   override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
     val key = (ident.namespace().toSeq, ident.name())
     if (createdViews.putIfAbsent(key, info) != null) {
@@ -1190,23 +1167,10 @@ class TestingStagingCatalog extends StagingTableCatalog with RelationCatalog {
   private def keyOf(ident: Identifier): (Seq[String], String) =
     (ident.namespace().toSeq, ident.name())
 
-  override def loadTable(ident: Identifier): Table = {
-    // Tables only -- per the new contract, views must be loaded via loadView / loadRelation.
-    Option(views.get(keyOf(ident))) match {
-      case Some(info) if !info.isInstanceOf[ViewInfo] =>
-        new MetadataOnlyTable(info, ident.toString)
-      case _ => throw new NoSuchTableException(ident)
-    }
-  }
-
   override def loadRelation(ident: Identifier): Table = {
+    // loadTable, loadView, tableExists, viewExists derive from this via RelationCatalog defaults.
     Option(views.get(keyOf(ident))).map(new MetadataOnlyTable(_, ident.toString))
       .getOrElse(throw new NoSuchTableException(ident))
-  }
-
-  override def tableExists(ident: Identifier): Boolean = {
-    val v = views.get(keyOf(ident))
-    v != null && !v.isInstanceOf[ViewInfo]
   }
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {
@@ -1252,11 +1216,6 @@ class TestingStagingCatalog extends StagingTableCatalog with RelationCatalog {
       }
     }
     ids.toArray(new Array[Identifier](0))
-  }
-
-  override def loadView(ident: Identifier): ViewInfo = views.get(keyOf(ident)) match {
-    case v: ViewInfo => v
-    case _ => throw new NoSuchViewException(ident)
   }
 
   override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {

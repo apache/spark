@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
+import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
 
 /**
  * Catalog API for connectors that expose both tables and views in a single shared identifier
@@ -103,7 +104,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
  *       a regular {@link Table} for a table, or a {@link MetadataOnlyTable} wrapping a
  *       {@link ViewInfo} for a view. Saves the {@code loadTable} -> {@code loadView} fallback
  *       on a cold cache.</li>
- *   <li>{@link #listRelations(String[])} -- a unified listing of tables and views with the
+ *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views with the
  *       kind preserved on each {@link TableSummary}. Default impl performs both
  *       {@link TableCatalog#listTableSummaries} and {@link ViewCatalog#listViews}; override to
  *       fetch in one round trip.</li>
@@ -143,7 +144,7 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * @throws NoSuchTableException if a table listed by the underlying enumeration disappears
    *                              before its summary can be assembled (default impl only)
    */
-  default TableSummary[] listRelations(String[] namespace)
+  default TableSummary[] listRelationSummaries(String[] namespace)
       throws NoSuchNamespaceException, NoSuchTableException {
     TableSummary[] tableSummaries = listTableSummaries(namespace);
     Identifier[] viewIdentifiers = listViews(namespace);
@@ -156,5 +157,75 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
       all.add(TableSummary.of(id, TableSummary.VIEW_TABLE_TYPE));
     }
     return all.toArray(TableSummary[]::new);
+  }
+
+  /**
+   * @inheritDoc
+   * <p>
+   * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
+   * wrapping a {@link ViewInfo} is rejected as not-a-table; anything else is returned. Override
+   * only if a tables-only path is materially cheaper than the unified one.
+   */
+  @Override
+  default Table loadTable(Identifier ident) throws NoSuchTableException {
+    Table t = loadRelation(ident);
+    if (t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo) {
+      throw new NoSuchTableException(ident);
+    }
+    return t;
+  }
+
+  /**
+   * @inheritDoc
+   * <p>
+   * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
+   * wrapping a {@link ViewInfo} is unwrapped and returned; anything else (table or absent) is
+   * surfaced as {@link NoSuchViewException}. Override only if a views-only path is materially
+   * cheaper than the unified one.
+   */
+  @Override
+  default ViewInfo loadView(Identifier ident) throws NoSuchViewException {
+    Table t;
+    try {
+      t = loadRelation(ident);
+    } catch (NoSuchTableException e) {
+      throw new NoSuchViewException(ident);
+    }
+    if (t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo vi) {
+      return vi;
+    }
+    throw new NoSuchViewException(ident);
+  }
+
+  /**
+   * @inheritDoc
+   * <p>
+   * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
+   * the entry exists and is not a view. Override only if a cheaper existence-check path exists.
+   */
+  @Override
+  default boolean tableExists(Identifier ident) {
+    try {
+      Table t = loadRelation(ident);
+      return !(t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo);
+    } catch (NoSuchTableException e) {
+      return false;
+    }
+  }
+
+  /**
+   * @inheritDoc
+   * <p>
+   * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
+   * the entry exists and is a view. Override only if a cheaper existence-check path exists.
+   */
+  @Override
+  default boolean viewExists(Identifier ident) {
+    try {
+      Table t = loadRelation(ident);
+      return t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo;
+    } catch (NoSuchTableException e) {
+      return false;
+    }
   }
 }
