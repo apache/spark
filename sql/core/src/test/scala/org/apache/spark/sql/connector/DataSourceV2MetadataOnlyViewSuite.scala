@@ -927,7 +927,7 @@ class TestingRelationCatalog extends RelationCatalog {
 
   override def loadRelation(ident: Identifier): Table = {
     // Single-RPC perf path: returns tables AND views (as MetadataOnlyTable). Stored entries
-    // win over fixture views (the fixture name space is read-only and disjoint from
+    // win over fixture views (the fixture namespace is read-only and disjoint from
     // createdViews in practice). loadTable, loadView, tableExists, viewExists all derive
     // from this via the RelationCatalog default impls.
     val key = (ident.namespace().toSeq, ident.name())
