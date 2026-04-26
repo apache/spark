@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
  * non-view table); in that case we surface a regular no-such-view / not-a-view analysis error
  * rather than propagating a stale analyzer decision.
  *
- * Transient fields (SQL configs, query column names, schema mode) are re-captured from the
+ * Transient fields (SQL configs, query column names) are re-captured from the
  * current session by [[V2ViewPreparation.buildViewInfo]], matching v1
  * `AlterViewAsCommand.alterPermanentView`. PROP_OWNER and user TBLPROPERTIES flow through
  * unchanged.
