@@ -1699,7 +1699,12 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        "--ignore-source-errors", "-notree"
+        "--ignore-source-errors", "-notree",
+        // DEBUG (revert before merge): force JVM-level exception logging so
+        // any NPE / RuntimeException in the doclet's tree builder shows a
+        // stack trace; today the failure is silent ("Building tree -> exit 1"
+        // with no further output), which leaves no actionable signal.
+        "-J-Xlog:exceptions=info"
       )
     },
 
