@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{LongType, StringType}
  * Tests for the CDC (Change Data Capture) analyzer resolution path:
  * RelationChanges -> resolveChangelog -> DataSourceV2Relation(ChangelogTable).
  */
-class ChangelogResolutionSuite extends QueryTest with SharedSparkSession {
+class ChangelogResolutionSuite extends SharedSparkSession {
 
   private val cdcCatalogName = "cdc_catalog"
   private val noCdcCatalogName = "no_cdc_catalog"

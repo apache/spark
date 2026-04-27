@@ -188,6 +188,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
+  val UNRESOLVED_QUALIFY: Value = Value
   val UNRESOLVED_FUNC: Value = Value
   val UNRESOLVED_PROCEDURE: Value = Value
   val UNRESOLVED_RELATION: Value = Value

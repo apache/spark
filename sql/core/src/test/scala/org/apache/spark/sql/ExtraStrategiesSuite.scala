@@ -46,7 +46,7 @@ object TestStrategy extends Strategy {
   }
 }
 
-class ExtraStrategiesSuite extends QueryTest with SharedSparkSession {
+class ExtraStrategiesSuite extends SharedSparkSession {
   import testImplicits._
 
   test("insert an extraStrategy") {

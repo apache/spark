@@ -18,7 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  *  results are returned in expected manner, config flags are applied properly, etc.
  * For full functionality tests, see SqlScriptingParserSuite and SqlScriptingInterpreterSuite.
  */
-class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingE2eSuite extends SharedSparkSession {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

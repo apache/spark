@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * End-to-end tests for percentile aggregate function.
  */
-class PercentileQuerySuite extends QueryTest with SharedSparkSession {
+class PercentileQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   private val table = "percentile_test"

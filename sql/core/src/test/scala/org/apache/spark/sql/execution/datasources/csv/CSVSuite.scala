@@ -50,8 +50,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 abstract class CSVSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with TestCsvData
   with CommonFileDataSourceSuite {
 

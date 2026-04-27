@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.{SparkArithmeticException, SparkConf}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -34,7 +34,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Output from the interpreter (iterator over executable statements) is then checked - statements
  *   are executed and output DataFrames are compared with expected outputs.
  */
-class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingExecutionSuite extends SharedSparkSession {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

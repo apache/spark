@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpr
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -339,7 +340,8 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
       session,
       viewMeta.viewQueryColumnNames.toArray,
       viewMeta.schema.fieldNames,
-      viewSchemaMode)
+      viewSchemaMode,
+      captureNewPath = false)
 
     val updatedViewMeta = viewMeta.copy(properties = newProperties)
 
@@ -450,6 +452,13 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   }
 
   /**
+   * Remove the frozen resolution path from `properties` so it can be recomputed.
+   */
+  private def removeResolutionPath(properties: Map[String, String]): Map[String, String] = {
+    properties.filterNot { case (key, _) => key == VIEW_RESOLUTION_PATH }
+  }
+
+  /**
    * Remove the temporary object names in `properties`.
    */
   private def removeReferredTempNames(properties: Map[String, String]): Map[String, String] = {
@@ -473,6 +482,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
    * @param properties the `properties` in CatalogTable.
    * @param session the spark session.
    * @param analyzedPlan the analyzed logical plan that represents the child of a view.
+   * @param stripSystemSessionFromStoredPath when true (persisted views), omit `system.session`
+   *                                           from [[VIEW_RESOLUTION_PATH]]; temporary views keep
+   *                                           it so nested temp resolution still works.
    * @return new view properties including view default database and query column names properties.
    */
   def generateViewProperties(
@@ -483,7 +495,9 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
       viewSchemaMode: ViewSchemaMode,
       tempViewNames: Seq[Seq[String]] = Seq.empty,
       tempFunctionNames: Seq[String] = Seq.empty,
-      tempVariableNames: Seq[Seq[String]] = Seq.empty): Map[String, String] = {
+      tempVariableNames: Seq[Seq[String]] = Seq.empty,
+      stripSystemSessionFromStoredPath: Boolean = true,
+      captureNewPath: Boolean = true): Map[String, String] = {
 
     val conf = session.sessionState.conf
 
@@ -501,13 +515,34 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
 
     // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
-    removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
+    // Capture the effective resolution path at view creation time so the view body
+    // resolves with the same path regardless of the caller's session path later.
+    // When captureNewPath is false (e.g. ALTER VIEW SCHEMA BINDING), preserve the
+    // existing frozen path instead of overwriting with the current session path.
+    val resolutionPathProps = if (captureNewPath) {
+      val expandedPathEntries = CatalogManager.pathEntriesForPersistence(
+        manager, conf, stripSession = stripSystemSessionFromStoredPath)
+      if (expandedPathEntries.nonEmpty) {
+        Map(VIEW_RESOLUTION_PATH -> CatalogManager.serializePathEntries(expandedPathEntries))
+      } else {
+        Map.empty[String, String]
+      }
+    } else {
+      properties.get(VIEW_RESOLUTION_PATH) match {
+        case Some(v) => Map(VIEW_RESOLUTION_PATH -> v)
+        case None => Map.empty[String, String]
+      }
+    }
+
+    removeResolutionPath(
+      removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties)))) ++
       catalogAndNamespaceToProps(
         manager.currentCatalog.name, manager.currentNamespace.toImmutableArraySeq) ++
       sqlConfigsToProps(conf, VIEW_SQL_CONFIG_PREFIX) ++
       queryColumnNameProps ++
       referredTempNamesToProps(tempViewNames, tempFunctionNames, tempVariableNames) ++
-      viewSchemaModeToProps(viewSchemaMode)
+      viewSchemaModeToProps(viewSchemaMode) ++
+      resolutionPathProps
   }
 
   /**
@@ -743,8 +778,15 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
     // generating temporary view properties
     val newProperties = generateViewProperties(
-      Map.empty, session, analyzedPlan.schema.fieldNames, viewSchema.fieldNames, SchemaUnsupported,
-      tempViews, tempFunctions, tempVariables)
+      Map.empty,
+      session,
+      analyzedPlan.schema.fieldNames,
+      viewSchema.fieldNames,
+      SchemaUnsupported,
+      tempViews,
+      tempFunctions,
+      tempVariables,
+      stripSystemSessionFromStoredPath = false)
 
     CatalogTable(
       identifier = viewName,

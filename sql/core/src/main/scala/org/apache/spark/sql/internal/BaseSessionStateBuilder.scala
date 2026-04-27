@@ -160,7 +160,11 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
-  protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
+  protected lazy val catalogManager = {
+    val cm = new CatalogManager(v2SessionCatalog, catalog)
+    parentState.foreach(ps => cm.copySessionPathFrom(ps.catalogManager))
+    cm
+  }
 
   protected lazy val sharedRelationCache = session.sharedState.relationCache
 

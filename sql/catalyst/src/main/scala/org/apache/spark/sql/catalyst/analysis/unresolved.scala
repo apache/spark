@@ -1136,6 +1136,18 @@ case class UnresolvedHaving(
 }
 
 /**
+ * Represents an unresolved QUALIFY clause. It is resolved by the analyzer into a Filter
+ * placed after window functions have been materialized.
+ */
+case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedQualify =
+    copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_QUALIFY)
+}
+
+/**
  * A place holder expression used in random functions, will be replaced after analyze.
  */
 case object UnresolvedSeed extends LeafExpression with Unevaluable {

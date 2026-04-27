@@ -5126,31 +5126,33 @@ case class ArrayInsert(
 
       new GenericArrayData(newArray)
     } else {
-      var posInt = pos.asInstanceOf[Int]
-      if (posInt == 0) {
+      // Widen `pos` to Long to avoid overflow (e.g. `-Int.MinValue` wraps back to `Int.MinValue`).
+      var posLong: Long = pos.asInstanceOf[Int].toLong
+      if (posLong == 0L) {
         throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
       }
 
-      val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
+      val newPosExtendsArrayLeft = (posLong < 0) && (-posLong > baseArr.numElements())
 
       if (newPosExtendsArrayLeft) {
-        val baseOffset = if (legacyNegativeIndex) 1 else 0
+        val baseOffset: Long = if (legacyNegativeIndex) 1L else 0L
         // special case- if the new position is negative but larger than the current array size
         // place the new item at start of array, place the current array contents at the end
         // and fill the newly created array elements inbetween with a null
 
-        val newArrayLength = -posInt + baseOffset
+        val newArrayLength: Long = -posLong + baseOffset
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
             prettyName, newArrayLength)
         }
 
-        val newArray = new Array[Any](newArrayLength)
+        val newArray = new Array[Any](newArrayLength.toInt)
 
         baseArr.foreach(elementType, (i, v) => {
           // current position, offset by new item + new null array elements
-          val elementPosition = i + baseOffset + math.abs(posInt + baseArr.numElements())
+          val elementPosition =
+            (i + baseOffset + math.abs(posLong + baseArr.numElements())).toInt
           newArray(elementPosition) = v
         })
 
@@ -5158,20 +5160,21 @@ case class ArrayInsert(
 
         new GenericArrayData(newArray)
       } else {
-        if (posInt < 0) {
-          posInt = posInt + baseArr.numElements() + (if (legacyNegativeIndex) 0 else 1)
-        } else if (posInt > 0) {
-          posInt = posInt - 1
+        if (posLong < 0) {
+          posLong = posLong + baseArr.numElements() + (if (legacyNegativeIndex) 0 else 1)
+        } else if (posLong > 0) {
+          posLong = posLong - 1
         }
 
-        val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
+        val newArrayLength: Long = math.max(baseArr.numElements() + 1L, posLong + 1L)
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
             prettyName, newArrayLength)
         }
 
-        val newArray = new Array[Any](newArrayLength)
+        val newArray = new Array[Any](newArrayLength.toInt)
+        val posInt = posLong.toInt
 
         baseArr.foreach(elementType, (i, v) => {
           if (i >= posInt) {
@@ -5238,23 +5241,29 @@ case class ArrayInsert(
       } else {
         val pos = posExpr.value
         val baseOffset = if (legacyNegativeIndex) 1 else 0
+        // Widen `pos` arithmetic to long so that `Int.MIN_VALUE` doesn't silently overflow
+        // (e.g. `Math.abs(Int.MIN_VALUE)` returns `Int.MIN_VALUE`).
+        val posLong = ctx.freshName("posLong")
+        val resLengthLong = ctx.freshName("resLengthLong")
         s"""
+           |long $posLong = (long) $pos;
            |int $itemInsertionIndex = 0;
            |int $resLength = 0;
            |int $adjustedAllocIdx = 0;
            |boolean $insertedItemIsNull = ${itemExpr.isNull};
            |
-           |if ($pos == 0) {
+           |if ($posLong == 0L) {
            |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
            |}
            |
-           |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
+           |if ($posLong < 0L && (-$posLong > $arr.numElements())) {
            |
-           |  $resLength = java.lang.Math.abs($pos) + $baseOffset;
-           |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+           |  long $resLengthLong = -$posLong + ${baseOffset}L;
+           |  if ($resLengthLong > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
            |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
-           |      "$prettyName", $resLength);
+           |      "$prettyName", $resLengthLong);
            |  }
+           |  $resLength = (int) $resLengthLong;
            |
            |  $allocation
            |  for (int $i = 0; $i < $arr.numElements(); $i ++) {

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
@@ -57,6 +57,16 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
     refs.map(ref => resolveRef[T](ref, plan))
+  }
+
+  /**
+   * Resolves [[NamedReference]]s against the given output and returns them as an [[AttributeSet]].
+   */
+  def resolveAttributeRefs(
+      refs: Array[NamedReference],
+      output: Seq[Attribute]): AttributeSet = {
+    val plan = LocalRelation(output)
+    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
   }
 
   /**

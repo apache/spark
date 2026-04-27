@@ -27,10 +27,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader}
 
-class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class HiveUtilsSuite extends QueryTest with TestHiveSingleton {
 
   test("newTemporaryConfiguration overwrites listener configurations") {
     Seq(true, false).foreach { useInMemoryDerby =>
