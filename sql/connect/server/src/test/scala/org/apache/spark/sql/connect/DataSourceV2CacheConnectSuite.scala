@@ -27,15 +27,14 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier,
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
- * DSv2 CACHE TABLE tests for Spark Connect covering five cross-session
- * cache scenarios (S1 through S5).
+ * DSv2 CACHE TABLE tests for Spark Connect covering five cross-session cache scenarios (S1
+ * through S5).
  *
- * Uses an in-process Connect server ([[SparkConnectServerTest]]) so that
- * the test can access the server's catalog directly. A Connect client
- * performs cache and SQL operations; external writes go through the
- * catalog API ([[InMemoryBaseTable.withData]]), which bypasses the
- * [[CacheManager]]. This simulates a truly external writer whose
- * changes are invisible to cached reads.
+ * Uses an in-process Connect server ([[SparkConnectServerTest]]) so that the test can access the
+ * server's catalog directly. A Connect client performs cache and SQL operations; external writes
+ * go through the catalog API ([[InMemoryBaseTable.withData]]), which bypasses the
+ * [[CacheManager]]. This simulates a truly external writer whose changes are invisible to cached
+ * reads.
  */
 class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
@@ -49,7 +48,8 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   /** Get the catalog from the server-side session. */
   private def serverCatalog(serverSession: classic.SparkSession): InMemoryTableCatalog =
     serverSession.sessionState.catalogManager
-      .catalog("testcat").asInstanceOf[InMemoryTableCatalog]
+      .catalog("testcat")
+      .asInstanceOf[InMemoryTableCatalog]
 
   // Scenario 1: external write after CACHE TABLE is invisible (cache pinned).
   // Scenario 2: session write invalidates cache; subsequent external write
@@ -69,10 +69,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       // (bypasses this session's CacheManager)
       val schema = StructType.fromDDL("id INT, salary INT")
       val cat = serverCatalog(serverSession)
-      val extTable = cat.loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
+      val extTable = cat
+        .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
 
       // cache is pinned, external write invisible
       assertCached(serverSession.table(T))
@@ -90,10 +90,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
 
       // external writer adds (4, 400) via direct catalog API
-      val extTable2 = cat.loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
+      val extTable2 = cat
+        .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable2.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(4, 400))))
+      extTable2.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(4, 400))))
 
       // cache is re-pinned, external write invisible
       assertCached(serverSession.table(T))
@@ -122,10 +122,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
       // external writer adds (2, 200, -1)
       val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-      val extTable = cat.loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
+      val extTable = cat
+        .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
 
       // cache stays pinned at original 2-column schema
       assertCached(serverSession.table(T))
@@ -160,10 +161,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       // external writer adds (2, 200, -1) via catalog API
       val cat = serverCatalog(serverSession)
       val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-      val extTable = cat.loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
+      val extTable = cat
+        .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
 
       // external write invisible: cache still shows (1, 100, null)
       assertCached(serverSession.table(T))
@@ -194,9 +196,7 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       cat.dropTable(ident)
       cat.createTable(
         ident,
-        Array(
-          Column.create("id", IntegerType),
-          Column.create("salary", IntegerType)),
+        Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
         Array.empty,
         Collections.emptyMap[String, String])
 
