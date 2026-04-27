@@ -411,9 +411,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Set socket read timeout for idle timeout detection in pipelined mode.
       // In sync mode, the NIO Selector's select(timeout) handles this. In pipelined
       // mode, we use SO_TIMEOUT on the blocking socket instead.
-      if (idleTimeoutSeconds > 0) {
-        worker.channel.socket().setSoTimeout(idleTimeoutSeconds.toInt * 1000)
-      }
+      // Always set explicitly (including 0 = no timeout) because reused workers may
+      // retain a stale SO_TIMEOUT from a previous task that had a different setting.
+      worker.channel.socket().setSoTimeout(
+        if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
 
       // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
       // - Log warning on each timeout
