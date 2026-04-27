@@ -169,6 +169,54 @@ def exec_sbt(sbt_args=()):
         b"^.*[info].*Resolving" + b"|" + b"^.*[warn].*Merging" + b"|" + b"^.*[info].*Including"
     )
 
+    # When running under GitHub Actions, also re-emit Scala/Java compile errors
+    # in workflow `::error` syntax so they show up inline on the PR's "Files
+    # changed" tab. A compile error in `catalyst` cascades into ~7 red CI
+    # checks (every job that needs catalyst), each surfacing only a generic
+    # "exit code 1" annotation; without inline annotations the user has to
+    # download a full job log to find file/line. The matcher targets sbt's
+    # canonical `[error] PATH:LINE:COL[:] message` shape and ignores the
+    # genjavadoc-stub error spam under `target/java/...`, which is benign.
+    in_github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
+    workspace = os.environ.get("GITHUB_WORKSPACE", "").rstrip("/")
+    sbt_compile_error_re = re.compile(
+        rb"^\[error\]\s+(?P<file>(?:/[^:\s]+)+):(?P<line>\d+):(?:(?P<col>\d+):)?\s+(?P<msg>.+)$"
+    )
+
+    def emit_annotation_if_compile_error(line_bytes):
+        if not in_github_actions:
+            return
+        m = sbt_compile_error_re.match(line_bytes.rstrip(b"\r\n"))
+        if not m:
+            return
+        try:
+            file_path = m.group("file").decode("utf-8")
+            # `target/java/...` paths are genjavadoc-generated stubs; their
+            # errors come from public-API references to package-private types
+            # and are intentionally non-fatal (`--ignore-source-errors` is set
+            # for unidoc). Filtering them keeps the PR annotations focused on
+            # actual user-fixable compile errors.
+            if "/target/java/" in file_path or file_path.endswith(".java") and "/target/" in file_path:
+                return
+            line_no = m.group("line").decode("utf-8")
+            msg = m.group("msg").decode("utf-8", errors="replace")
+            # Strip the workspace prefix so the annotation references a
+            # repo-relative path; otherwise GitHub can't anchor the inline UI.
+            if workspace and file_path.startswith(workspace + "/"):
+                file_path = file_path[len(workspace) + 1 :]
+            # Escape the characters GitHub reserves in annotation values.
+            msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(
+                "::error file={f},line={ln},title=Compile error::{m}".format(
+                    f=file_path, ln=line_no, m=msg
+                )
+            )
+        except Exception:
+            # The annotation helper must never obscure the underlying sbt
+            # output -- swallow any parsing slip and let the original line
+            # continue to the user.
+            pass
+
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
     # input either q, r, etc to quit or retry. This echo is there to make it
@@ -179,6 +227,7 @@ def exec_sbt(sbt_args=()):
     for line in iter(sbt_proc.stdout.readline, b""):
         if not sbt_output_filter.match(line):
             print(line.decode("utf-8"), end="")
+            emit_annotation_if_compile_error(line)
     print()  # print a new line because the code above does not guarantee a new line
     retcode = sbt_proc.wait()
 

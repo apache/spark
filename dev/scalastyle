@@ -30,6 +30,36 @@ ERRORS=$(echo -e "q\n" \
 
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
+    # When running under GitHub Actions, also emit each scalastyle violation as
+    # a workflow `::error` annotation so it appears inline on the PR's "Files
+    # changed" tab. Without this, a violation cascades into ~7 red CI checks
+    # (Linters, Java 17/25 Maven build, Documentation generation, sparkr,
+    # Docker integration, TPC-DS) -- all needing catalyst to compile -- and
+    # each only surfaces a generic "exit code 1" with no file/line, forcing
+    # the user to download a full job log to find the actual violation.
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        printf '%s\n' "$ERRORS" | while IFS= read -r raw; do
+            # scalastyle's native console format is:
+            #   error file=<path> message=<text> line=<n>
+            # The path has no spaces, the message can; line is always last.
+            if [[ "$raw" =~ ^error[[:space:]]+file=([^[:space:]]+)[[:space:]]+message=(.*)[[:space:]]+line=([0-9]+)$ ]]; then
+                file="${BASH_REMATCH[1]}"
+                msg="${BASH_REMATCH[2]}"
+                lineno="${BASH_REMATCH[3]}"
+                # Strip the GitHub Actions workspace prefix so the annotation
+                # references the path as it appears in the repo.
+                file_rel="${file#${GITHUB_WORKSPACE:-}/}"
+                # Escape the few characters GitHub reserves in annotation
+                # values: %, \r, \n. (`,` and `:` need not be escaped in the
+                # message body, only inside parameter values, which we don't use.)
+                msg_escaped="${msg//%/%25}"
+                msg_escaped="${msg_escaped//$'\r'/%0D}"
+                msg_escaped="${msg_escaped//$'\n'/%0A}"
+                printf '::error file=%s,line=%s,title=Scalastyle::%s\n' \
+                    "$file_rel" "$lineno" "$msg_escaped"
+            fi
+        done
+    fi
     exit 1
 else
     echo -e "Scalastyle checks passed."
