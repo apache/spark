@@ -1143,6 +1143,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           Thread.currentThread().interrupt()
         case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
           writer._exception = t
+          // Shut down the socket output so Python receives EOF and terminates.
+          // This unblocks the reader thread which is waiting on socket input:
+          // Python will exit, closing its end of the socket, causing the reader's
+          // read() to return -1. The ReaderIterator will then check writer.exception
+          // and propagate the failure.
+          if (worker.channel.isConnected) {
+            Utils.tryLog(worker.channel.shutdownOutput())
+          }
       } finally {
         TaskContext.unset()
         InputFileBlockHolder.unset()
