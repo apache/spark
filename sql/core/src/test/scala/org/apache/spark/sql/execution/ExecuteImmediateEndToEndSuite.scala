@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
+class ExecuteImmediateEndToEndSuite extends SharedSparkSession {
 
   test("SPARK-47033: EXECUTE IMMEDIATE USING does not recognize session variable names") {
     try {

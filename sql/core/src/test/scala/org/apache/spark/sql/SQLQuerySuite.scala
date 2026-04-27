@@ -62,7 +62,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.{ResetSystemProperties, SparkTestUtils, Utils}
 
 @ExtendedSQLTest
-class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     with ResetSystemProperties {
   import testImplicits._
 

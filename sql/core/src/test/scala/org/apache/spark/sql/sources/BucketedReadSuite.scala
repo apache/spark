@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.collection.BitSet
 
@@ -48,7 +48,7 @@ class BucketedReadWithoutHiveSupportSuite
 }
 
 
-abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with AdaptiveSparkPlanHelper {
+abstract class BucketedReadSuite extends QueryTest with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {

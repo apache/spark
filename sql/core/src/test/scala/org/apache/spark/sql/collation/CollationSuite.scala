@@ -2724,4 +2724,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("array_position respects schema-level non-binary collation") {
+    val q =
+      """SELECT array_position(a, 'HELLO') AS pos
+        |FROM (
+        |  SELECT CAST(array(
+        |           CASE id WHEN 0 THEN 'hello'
+        |                   WHEN 1 THEN 'HELLO'
+        |                   ELSE 'world'
+        |           END
+        |         ) AS ARRAY<STRING COLLATE UTF8_LCASE>) AS a
+        |  FROM range(3)
+        |)""".stripMargin
+    checkAnswer(sql(q), Seq(Row(1L), Row(1L), Row(0L)))
+  }
 }

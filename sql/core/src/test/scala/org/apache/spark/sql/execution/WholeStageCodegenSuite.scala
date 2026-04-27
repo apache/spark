@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.{Dataset, Row, SaveMode}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -32,10 +33,10 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
+class WholeStageCodegenSuite extends SharedSparkSession
   with DisableAdaptiveExecutionSuite {
 
   import testImplicits._
@@ -993,6 +994,173 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       assert(cseAddCount < noCseAddCount,
         s"CSE should reduce repeated evaluation (splitThreshold=$splitThreshold): " +
           s"addExact appears $cseAddCount times with CSE vs $noCseAddCount times without")
+    }
+  }
+
+  test("SPARK-56431: CSE in FilterExec preserves null guards for notNull columns") {
+    // The CSE precomputation in FilterExec runs BEFORE IsNotNull short-circuits.
+    // If the CSE-bound expressions use the tightened output nullability
+    // (notNullAttributes marked non-null), the generated code omits null
+    // checks and crashes on types whose arithmetic NPEs on null (Decimal).
+    val schema = StructType(Seq(
+      StructField("a", DecimalType(10, 2), nullable = true),
+      StructField("b", DecimalType(10, 2), nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(null, new JBigDecimal("100.00")),
+      Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
+      Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.createDataFrame(data, schema)
+      // abs(b - a) appears twice, creating a CSE candidate.
+      // a IS NOT NULL puts a in FilterExec.notNullAttributes.
+      // Without the fix the first row (a=null) causes NPE in the
+      // CSE precomputation because Decimal.subtract skips null check.
+      val filtered = df.where(
+        "a IS NOT NULL AND abs(b - a) > 0.10 AND abs(b - a) < 1000.00")
+      val plan = filtered.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      checkAnswer(filtered, Seq(
+        Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
+        Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE defers throw-capable notNullPred past guard otherPred") {
+    // `InferFiltersFromConstraints` can add a throw-capable `IsNotNull(cast(s as int))`
+    // alongside an earlier guard otherPred (`kind = 'numeric'`). The non-CSE path
+    // defers leftover notNullPreds to after the otherPreds so the guard short-circuits
+    // before the cast runs; the CSE branch must preserve that ordering.
+    // AQE is disabled here and in the sibling test below so each FilterExec is directly
+    // visible for the plan-shape assertions, rather than wrapped inside an
+    // AdaptiveSparkPlan.
+    val t = Seq(("3", "numeric"), ("abc", "text")).toDF("s", "kind")
+    val idx = Seq(1, 2).toDF("i")
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("spark_56032_t", "spark_56032_idx") {
+        t.createOrReplaceTempView("spark_56032_t")
+        idx.createOrReplaceTempView("spark_56032_idx")
+        val query =
+          """
+            |WITH guarded AS (SELECT s FROM spark_56032_t WHERE kind = 'numeric'),
+            |     derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
+            |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
+            |SELECT s, i FROM pairs
+            |""".stripMargin
+        val df = spark.sql(query)
+        val plan = df.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        // Guard against optimizer drift: require a single rolled-up FilterExec carrying
+        // both `IsNotNull(Cast(s AS INT))` and a non-IsNotNull guard conjunct -- without
+        // this, `checkAnswer` alone would silently pass even if the buggy ordering
+        // returned.
+        def conjuncts(e: Expression): Seq[Expression] = e match {
+          case And(l, r) => conjuncts(l) ++ conjuncts(r)
+          case other => Seq(other)
+        }
+        val matchingFilter = plan.collect {
+          case f: FilterExec =>
+            val cs = conjuncts(f.condition)
+            val hasThrowingIsNotNull = cs.exists {
+              case IsNotNull(_: Cast) => true
+              case _ => false
+            }
+            val hasGuardOtherPred = cs.exists {
+              case _: IsNotNull => false
+              case _ => true
+            }
+            hasThrowingIsNotNull && hasGuardOtherPred
+        }.exists(identity)
+        assert(matchingFilter,
+          "expected a FilterExec whose condition carries both IsNotNull(Cast(...)) " +
+            "and a non-IsNotNull guard conjunct")
+        checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
+        // Cross-check the codegen path against the interpreted path.
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          checkAnswer(spark.sql(query), Seq(Row("3", 1), Row("3", 2)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE handles shared otherPred refs with guard") {
+    // Filter shape: kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100.
+    // Exercises invariant (b) on a shape where two cast otherPreds share a ref: the
+    // guard must short-circuit before either cast runs (so the 'abc'/'text' row never
+    // throws under ANSI), and the null-s row must be filtered by the IsNotNull check
+    // emitted ahead of the cast otherPreds rather than reaching the tightened-output
+    // binding. See the sibling test above for the AQE-off rationale.
+    val schema = StructType(Seq(
+      StructField("s", StringType, nullable = true),
+      StructField("kind", StringType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row("3", "numeric"),
+      Row("7", "numeric"),
+      Row(null, "numeric"),
+      Row("abc", "text")))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema).where(
+        "kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      // Guard against optimizer drift: require the rolled-up filter to still carry
+      // both `cast(s as int)` conjuncts so the shared-ref path is exercised.
+      val castCount = plan.collectFirst { case f: FilterExec =>
+        f.condition.collect { case c: Cast => c }.size
+      }.getOrElse(0)
+      assert(castCount >= 2,
+        s"expected a FilterExec condition with at least 2 Cast expressions, got $castCount")
+      checkAnswer(df, Seq(Row("3", "numeric"), Row("7", "numeric")))
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE preserves short-circuit across predicates") {
+    // A CSE'd subexpression must not be hoisted above an earlier otherPred's short-circuit,
+    // otherwise rows an earlier otherPred would have rejected still pay the cost of the
+    // later predicate's throw-prone expression. Two shapes worth exercising:
+    //   - CSE within one conjunct: `x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)` --
+    //     `100 / x` appears twice inside otherPreds(1) only.
+    //   - CSE across two conjuncts: `x > 0 AND (100 / x) > 0 AND (100 / x) < 1000` --
+    //     `100 / x` is shared between otherPreds(1) and otherPreds(2); the precompute
+    //     must be emitted just before otherPreds(1), not at the top of the do { } block.
+    // In both shapes, hoisting to the top of the do { } block evaluates 100 / 0 on the
+    // x=0 row under ANSI and throws before x > 0 rejects.
+    val schema = StructType(Seq(
+      StructField("x", IntegerType, nullable = false)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(0), Row(2), Row(4)))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema)
+      Seq(
+        "x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)",
+        "x > 0 AND (100 / x) > 0 AND (100 / x) < 1000"
+      ).foreach { predicate =>
+        val filtered = df.where(predicate)
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          s"Filter should be in whole-stage codegen for: $predicate")
+        checkAnswer(filtered, Seq(Row(2), Row(4)))
+      }
     }
   }
 }

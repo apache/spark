@@ -19,9 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -29,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class SparkPlanSuite extends QueryTest with SharedSparkSession {
+class SparkPlanSuite extends SharedSparkSession {
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
@@ -126,6 +125,29 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
       Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
+  }
+
+  test("BatchScanExec hashCode includes keyGroupedPartitioning") {
+    // hashCode must include all fields used in equals.
+    // Previously keyGroupedPartitioning was in equals but missing from hashCode,
+    // violating the contract that equal objects must have equal hash codes.
+    val exec1 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(1)))
+    )
+    val exec2 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(2)))
+    )
+    // With null batch, equals returns false (by design, see SPARK-42745),
+    // so we only verify that hashCode differs for different keyGroupedPartitioning.
+    assert(exec1.hashCode() != exec2.hashCode())
   }
 
   test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {

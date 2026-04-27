@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.vectorized
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
@@ -259,6 +261,71 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       val utf8 = s"str$i".getBytes("utf8")
       assert(array.get(i, BinaryType) === utf8)
       assert(arrayCopy.get(i, BinaryType) === utf8)
+    }
+  }
+
+  testVectors("putByteArray from ByteBuffer", 10, BinaryType) { testVector =>
+    def verifyPutByteArray(testVector: WritableColumnVector): Unit = {
+      (0 until 10).foreach { i =>
+        assert(testVector.getBinary(i) === s"str$i".getBytes("utf8"))
+      }
+    }
+
+    // Heap ByteBuffer
+    (0 until 10).foreach { i =>
+      val bytes = s"str$i".getBytes("utf8")
+      testVector.putByteArray(i, ByteBuffer.wrap(bytes), 0, bytes.length)
+    }
+    verifyPutByteArray(testVector)
+
+    // Direct ByteBuffer
+    testVector.reset()
+    (0 until 10).foreach { i =>
+      val bytes = s"str$i".getBytes("utf8")
+      val buf = ByteBuffer.allocateDirect(bytes.length)
+      buf.put(bytes)
+      testVector.putByteArray(i, buf, 0, bytes.length)
+    }
+    verifyPutByteArray(testVector)
+
+    // Read-only ByteBuffer (hasArray=false, isDirect=false)
+    testVector.reset()
+    (0 until 10).foreach { i =>
+      val bytes = s"str$i".getBytes("utf8")
+      val buf = ByteBuffer.wrap(bytes).asReadOnlyBuffer()
+      testVector.putByteArray(i, buf, 0, bytes.length)
+    }
+    verifyPutByteArray(testVector)
+  }
+
+  testVectors("putBytes from ByteBuffer", 16, ByteType) { testVector =>
+    val data = Array[Byte](10, 20, 30, 40, 50, 60, 70, 80)
+
+    // Heap ByteBuffer
+    testVector.putBytes(0, data.length, ByteBuffer.wrap(data), 0)
+    (0 until data.length).foreach { i =>
+      assert(testVector.getByte(i) === data(i))
+    }
+
+    // Direct ByteBuffer
+    val directBuf = ByteBuffer.allocateDirect(data.length)
+    directBuf.put(data)
+    testVector.putBytes(0, data.length, directBuf, 0)
+    (0 until data.length).foreach { i =>
+      assert(testVector.getByte(i) === data(i))
+    }
+
+    // Read-only ByteBuffer (hasArray=false, isDirect=false)
+    val readOnlyBuf = ByteBuffer.wrap(data).asReadOnlyBuffer()
+    testVector.putBytes(0, data.length, readOnlyBuf, 0)
+    (0 until data.length).foreach { i =>
+      assert(testVector.getByte(i) === data(i))
+    }
+
+    // With srcIndex offset
+    testVector.putBytes(0, 4, ByteBuffer.wrap(data), 4)
+    (0 until 4).foreach { i =>
+      assert(testVector.getByte(i) === data(i + 4))
     }
   }
 

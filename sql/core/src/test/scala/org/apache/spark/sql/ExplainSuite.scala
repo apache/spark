@@ -30,7 +30,7 @@ import org.apache.spark.sql.sources.TestOptionsSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
+trait ExplainSuiteHelper extends SharedSparkSession {
 
   protected def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()

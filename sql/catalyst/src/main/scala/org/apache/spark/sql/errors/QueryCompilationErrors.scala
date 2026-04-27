@@ -867,6 +867,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("clauseName" -> clauseName))
   }
 
+  def qualifyRequiresWindowFunctionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "QUALIFY_REQUIRES_WINDOW_FUNCTION",
+      messageParameters = Map.empty)
+  }
+
+  def aggregateInQualifyNotAllowedError(aggregateExpr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "QUALIFY_AGGREGATE_NOT_ALLOWED",
+      messageParameters = Map("aggregateExpr" -> toSQLExpr(aggregateExpr)),
+      origin = aggregateExpr.origin)
+  }
+
   def cannotSpecifyWindowFrameError(prettyName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1035",
@@ -884,8 +897,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def windowFunctionWithWindowFrameNotOrderedError(wf: WindowFunction): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1037",
-      messageParameters = Map("wf" -> wf.toString))
+      errorClass = "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+      messageParameters = Map(
+        "wf_name" -> wf.prettyName,
+        "wf_expr" -> wf.sql))
   }
 
   def multiTimeWindowExpressionsNotSupportedError(t: TreeNode[_]): Throwable = {
@@ -954,9 +969,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
    *
    * @param quotedResolutionPathEntries each string is already a display-ready path entry (typically
    *        `toSQLId` of each segment from `SQLConf.resolutionSearchPath`). They are joined with
-   *        ", " inside square brackets. This differs from [[noSuchTableError]](nameParts:
-   *        Seq[String]), which builds one dotted bracketed path from `nameParts.dropRight(1)` via
-   *        [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]].
+   *        ", " inside square brackets. This differs from
+   *        [[org.apache.spark.sql.catalyst.analysis.NoSuchItemExceptionHelper.formatSearchPath]],
+   *        which builds one dotted bracketed path from a single search path.
    */
   def tableOrViewNotFoundWithSearchPath(
       name: Seq[String],
@@ -1551,12 +1566,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "table" -> table.name,
         "filters" -> filters.mkString("[", ", ", "]")))
-  }
-
-  def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1111",
-      messageParameters = Map.empty)
   }
 
   def cannotReplaceMissingTableError(
@@ -2456,6 +2465,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "method" -> method,
         "config" -> SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key))
+  }
+
+  def invalidSqlPathSchemaReferenceError(qualifiedName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SQL_PATH_SCHEMA_REFERENCE",
+      messageParameters = Map("qualifiedName" -> qualifiedName))
   }
 
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
@@ -3496,9 +3511,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def parseInputNotStringTypeError(dataType: DataType): Throwable = {
+  def dataframeInputNotSingleColumnError(numColumns: Int): Throwable = {
     new AnalysisException(
-      errorClass = "PARSE_INPUT_NOT_STRING_TYPE",
+      errorClass = "DATAFRAME_INPUT_NOT_SINGLE_COLUMN",
+      messageParameters = Map("numColumns" -> numColumns.toString))
+  }
+
+  def dataframeInputNotStringTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "DATAFRAME_INPUT_NOT_STRING_TYPE",
       messageParameters = Map("dataType" -> toSQLType(dataType)))
   }
 

@@ -1457,6 +1457,18 @@
     ],
     "sqlState" : "KD011"
   },
+  "DATAFRAME_INPUT_NOT_SINGLE_COLUMN" : {
+    "message" : [
+      "Input DataFrame must have exactly one column, but got <numColumns>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "DATAFRAME_INPUT_NOT_STRING_TYPE" : {
+    "message" : [
+      "Input DataFrame column must be StringType, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
+  },
   "DATATYPE_CANNOT_ORDER" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -2048,6 +2060,12 @@
       "Found duplicate column(s) in the RETURNS clause column list of the user-defined routine <routineName>: <columns>."
     ],
     "sqlState" : "42711"
+  },
+  "DUPLICATE_SQL_PATH_ENTRY" : {
+    "message" : [
+      "Duplicate SQL path entry <pathEntry>. The session SQL path cannot contain the same namespace more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
+    ],
+    "sqlState" : "42732"
   },
   "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
@@ -4463,6 +4481,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "INVALID_SQL_PATH_SCHEMA_REFERENCE" : {
+    "message" : [
+      "Invalid schema reference in SET PATH: <qualifiedName>. Use at least two name parts (catalog.schema); multi-level namespaces are allowed."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax:"
@@ -5652,12 +5676,6 @@
     ],
     "sqlState" : "42617"
   },
-  "PARSE_INPUT_NOT_STRING_TYPE" : {
-    "message" : [
-      "Input DataFrame column must be StringType, but got <dataType>."
-    ],
-    "sqlState" : "42K09"
-  },
   "PARSE_MODE_UNSUPPORTED" : {
     "message" : [
       "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
@@ -5867,6 +5885,18 @@
       "Failed when Python streaming data source perform <action>: <msg>"
     ],
     "sqlState" : "38000"
+  },
+  "QUALIFY_AGGREGATE_NOT_ALLOWED" : {
+    "message" : [
+      "Aggregate functions are not supported in QUALIFY: <aggregateExpr>."
+    ],
+    "sqlState" : "42903"
+  },
+  "QUALIFY_REQUIRES_WINDOW_FUNCTION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function in the current SELECT list or the QUALIFY condition."
+    ],
+    "sqlState" : "42903"
   },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
@@ -6863,6 +6893,11 @@
           "Value at index <valueIndex> is null while numValues is <numValues>.",
           "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
           "Enable <configKey> as a workaround to skip null values."
+        ]
+      },
+      "RANGE_SCAN_TIMESTAMP_OUT_OF_RANGE" : {
+        "message" : [
+          "Range scan returned a row with timestamp <timestamp> outside the expected range [<minTimestamp>, <maxTimestamp>]."
         ]
       }
     },
@@ -7878,6 +7913,11 @@
           "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "SET_PATH_WHEN_DISABLED" : {
+        "message" : [
+          "SET PATH is disabled. Set <config> to true to enable it."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
@@ -8502,6 +8542,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_FRAME_NOT_ORDERED" : {
+    "message" : [
+      "Window function <wf_name> requires the window to be ordered. You need to add an ORDER BY clause. For example: SELECT <wf_expr> OVER (PARTITION BY window_partition ORDER BY window_ordering) FROM table."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
     "message" : [
       "It is not allowed to use window functions inside <clauseName> clause."
@@ -8773,11 +8819,6 @@
       "Window Frame <wf> must match the required frame <required>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1037" : {
-    "message" : [
-      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1039" : {
     "message" : [
       "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
@@ -8936,11 +8977,6 @@
   "_LEGACY_ERROR_TEMP_1110" : {
     "message" : [
       "Cannot delete from table <table> where <filters>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1111" : {
-    "message" : [
-      "DESCRIBE does not support partition for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1114" : {

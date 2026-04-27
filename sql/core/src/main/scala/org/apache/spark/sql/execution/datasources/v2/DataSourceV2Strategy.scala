@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
@@ -42,7 +43,7 @@ import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan, SparkStrategy => Strategy}
+import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -155,10 +156,26 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val (runtimeFilters, postScanFilters) = filters.partition {
+      val (dynamicFilters, postScanFilters) = filters.partition {
         case _: DynamicPruning => true
         case _ => false
       }
+
+      // Extract scalar subquery filters on runtime-filterable columns for runtime pushdown.
+      // These filters stay in postScanFilters for correctness (FilterExec above scan),
+      // but are also routed into runtimeFilters so BatchScanExec can use them for
+      // partition pruning via SupportsRuntimeV2Filtering.filter().
+      val scalarSubqueryFilters = if (relation.runtimeFilterAttrs.nonEmpty) {
+        postScanFilters.filter { f =>
+          f.containsPattern(SCALAR_SUBQUERY) &&
+            f.references.nonEmpty &&
+            f.references.subsetOf(relation.runtimeFilterAttrs)
+        }
+      } else {
+        Seq.empty
+      }
+      val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
+
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
       DataSourceV2Strategy.withProjectAndFilter(
@@ -378,15 +395,23 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
-    case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections, _,
-        Some(write)) =>
-      // use the original relation to refresh the cache
-      ReplaceDataExec(planLater(query), refreshCache(r), projections, write) :: Nil
+    case rd @ ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+        _, Some(write)) =>
+      ReplaceDataExec(
+        planLater(query),
+        refreshCache(r), // use the original relation to refresh the cache
+        projections,
+        write,
+        rd.operation.command) :: Nil
 
-    case WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
+    case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         Some(write)) =>
-      // use the original relation to refresh the cache
-      WriteDeltaExec(planLater(query), refreshCache(r), projections, write) :: Nil
+      WriteDeltaExec(
+        planLater(query),
+        refreshCache(r), // use the original relation to refresh the cache
+        projections,
+        write,
+        wd.operation.command) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>
@@ -400,11 +425,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeNamespace(ResolvedNamespace(catalog, ns, _), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
-    case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
-      if (partitionSpec.nonEmpty) {
-        throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
-      }
+    case DescribeRelation(r: ResolvedTable, isExtended, output) =>
       DescribeTableExec(output, r.table, isExtended) :: Nil
+
+    case DescribeTablePartition(r: ResolvedTable, part, isExtended, output) =>
+      DescribeTablePartitionExec(output, r.table.asPartitionable, r.identifier,
+        Seq(part).asResolvedPartitionSpecs.head, isExtended) :: Nil
 
     case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>
       column match {
@@ -744,6 +770,19 @@ private[sql] object DataSourceV2Strategy extends Logging {
     case other =>
       logWarning(log"Can't translate ${MDC(EXPR, other)} to source filter, unsupported expression")
       None
+  }
+
+  /**
+   * Literalizes scalar subqueries in the given expression and translates the result to a V2
+   * [[Predicate]]. Used at runtime in [[BatchScanExec]] after scalar subqueries have been
+   * evaluated.
+   */
+  protected[sql] def translateScalarSubqueryFilterV2(
+      expr: Expression): Option[Predicate] = {
+    val literalized = expr.transform {
+      case s: ExecScalarSubquery => s.toLiteral
+    }
+    translateFilterV2(literalized)
   }
 
   /**

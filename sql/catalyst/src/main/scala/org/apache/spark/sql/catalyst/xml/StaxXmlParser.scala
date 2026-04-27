@@ -1262,6 +1262,13 @@ object StaxXmlParser {
       return
     }
 
+    // Skip type inference when the user has disabled it via inferSchema=false, gated by
+    // spark.sql.xml.variant.respectInferSchema so existing workloads keep inferring by default.
+    if (!options.inferSchema && options.respectVariantInferSchema) {
+      builder.appendString(value)
+      return
+    }
+
     // Try parsing the value as boolean first
     if (value.toLowerCase(Locale.ROOT) == "true") {
       builder.appendBoolean(true)

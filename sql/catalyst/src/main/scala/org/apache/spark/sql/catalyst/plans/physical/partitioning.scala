@@ -380,24 +380,17 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *   unique partition keys, or (2) `GroupPartitionsExec` coalesces partitions with duplicate keys.
  *
  * == Distribution Satisfaction and Grouping ==
- * The `satisfies()` method returns true if this partitioning can satisfy a distribution,
- * regardless of whether the partitioning is actually grouped. The method delegates to:
- * - `nonGroupedSatisfies()`: Returns true for basic distributions (UnspecifiedDistribution,
- *   AllTuples when single partition)
- * - `groupedSatisfies()`: Returns true for distributions requiring grouped partitioning
- *   (ClusteredDistribution, OrderedDistribution)
+ * Besides the default `satisfies()`, `KeyedPartitioning` exposes two additional methods used by
+ * `EnsureRequirements` to handle grouped and non-grouped KPs separately:
  *
- * If `satisfies()` returns true but `isGrouped == false`, the partitioning does NOT actually
- * satisfy the distribution yet. The `EnsureRequirements` rule must insert `GroupPartitionsExec` to
- * coalesce duplicate partition keys before the distribution requirement is truly satisfied.
+ * - `nonGroupedSatisfies()`: called on non-grouped KPs to check as-is satisfaction (without
+ *   inserting `GroupPartitionsExec`).
+ * - `groupedSatisfies()`: called on non-grouped KPs to check whether inserting
+ *   `GroupPartitionsExec` would satisfy the distribution. When it returns true, the distribution
+ *   is NOT yet satisfied -- `EnsureRequirements` will insert `GroupPartitionsExec` to coalesce
+ *   duplicate partition keys.
  *
- * For example, an ungrouped KeyedPartitioning with keys `[1, 2, 2, 3]` will return
- * `satisfies(ClusteredDistribution(...)) == true` because it can satisfy the distribution after
- * grouping. However, `EnsureRequirements` must add `GroupPartitionsExec` to produce grouped keys
- * `[1, 2, 3]` before the distribution is actually satisfied.
- *
- * Similarly, for `OrderedDistribution`, even if `satisfies()` returns true, `GroupPartitionsExec`
- * must be added to both group the partitions AND sort the partition keys according to the
+ * For `OrderedDistribution`, `GroupPartitionsExec` must also sort the partition keys to meet the
  * ordering requirement.
  *
  * == Example ==
@@ -405,20 +398,21 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *
  * '''Before GroupPartitionsExec''' (ungrouped):
  * {{{
- *   expressions:           [years(ts_col)]
- *   partitionKeys:         [0, 1, 2, 2]    // partitions 2 and 3 have the same key
- *   numPartitions:         4
- *   isGrouped:             false
- *   satisfies(ClusteredDistribution(...)) == true   // CAN satisfy after grouping
+ *   expressions:                                 [years(ts_col)]
+ *   partitionKeys:                               [0, 1, 2, 2]  // partitions 2 and 3 share a key
+ *   numPartitions:                               4
+ *   isGrouped:                                   false
+ *   satisfies(ClusteredDistribution(...))        == false      // isGrouped guards groupedSatisfies
+ *   groupedSatisfies(ClusteredDistribution(...)) == true       // would satisfy after grouping
  * }}}
  *
  * '''After GroupPartitionsExec''' (grouped):
  * {{{
- *   expressions:           [years(ts_col)]
- *   partitionKeys:         [0, 1, 2]       // duplicates removed, partitions coalesced
- *   numPartitions:         3
- *   isGrouped:             true
- *   satisfies(ClusteredDistribution(...)) == true   // ACTUALLY satisfies now
+ *   expressions:                                [years(ts_col)]
+ *   partitionKeys:                              [0, 1, 2]      // duplicates removed
+ *   numPartitions:                              3
+ *   isGrouped:                                  true
+ *   satisfies(ClusteredDistribution(...))       == true        // satisfies now
  * }}}
  *
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
@@ -472,7 +466,7 @@ case class KeyedPartitioning(
     KeyedPartitioning.reduceKeys(partitionKeys, expressionDataTypes, reducers)
 
   override def satisfies0(required: Distribution): Boolean = {
-    nonGroupedSatisfies(required) || groupedSatisfies(required)
+    nonGroupedSatisfies(required) || (isGrouped && groupedSatisfies(required))
   }
 
   def nonGroupedSatisfies(required: Distribution): Boolean = super.satisfies0(required)

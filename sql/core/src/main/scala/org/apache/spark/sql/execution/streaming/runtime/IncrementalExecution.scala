@@ -384,6 +384,7 @@ class IncrementalExecution(
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           hasInitialState = hasInitialState
@@ -394,6 +395,7 @@ class IncrementalExecution(
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           hasInitialState = hasInitialState
@@ -411,7 +413,8 @@ class IncrementalExecution(
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
+          eventTimeWatermarkForEviction = None,
+          outputMode = Some(outputMode)
         )
 
       case l: StreamingGlobalLimitExec =>
@@ -528,13 +531,31 @@ class IncrementalExecution(
       case j: StreamingSymmetricHashJoinExec =>
         val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
         val iwEviction = inputWatermarkForEviction(j.stateInfo.get)
+        // Use the late-events watermark as the scan lower bound only when we can prove that
+        // it equals the previous batch's eviction watermark for this operator. That holds
+        // when STATEFUL_OPERATOR_ALLOW_MULTIPLE is true.
+        //
+        // When STATEFUL_OPERATOR_ALLOW_MULTIPLE is false (legacy mode), lateEvents == eviction
+        // for the same batch, so using it would collapse the eviction range to (wm, wm] = empty
+        // and silently stop state eviction. Fall back to None (full scan) in that mode, as we
+        // don't expect the legacy mode to be used by many users.
+        //
+        // The prevOffsetSeqMetadata.isDefined check guards against the first batch, where
+        // watermark propagation yields Some(0) for late events even though no state has been
+        // evicted yet, which would incorrectly skip entries at timestamp 0.
+        val prevBatchLateEventsWm =
+          if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators) {
+            iwLateEvents
+          } else {
+            None
+          }
         j.copy(
           eventTimeWatermarkForLateEvents = iwLateEvents,
           eventTimeWatermarkForEviction = iwEviction,
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, !allowMultipleStatefulOperators)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
         )
     }
   }

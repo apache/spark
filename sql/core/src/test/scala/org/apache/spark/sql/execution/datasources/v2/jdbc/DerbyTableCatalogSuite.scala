@@ -17,12 +17,12 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.util.Utils
 
-class DerbyTableCatalogSuite extends QueryTest with SharedSparkSession {
+class DerbyTableCatalogSuite extends SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:derby:memory:${tempDir.getCanonicalPath};create=true"

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{CollationAwareMurmur3Hash, Expression, Literal, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -390,5 +390,24 @@ class DistributionSuite extends SparkFunSuite {
       UnknownPartitioning(10),
       StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
       false)
+  }
+
+  test("SPARK-56615: non-grouped KeyedPartitioning does not satisfy ClusteredDistribution") {
+    val x = AttributeReference("x", IntegerType)()
+
+    // Non-grouped: duplicate partition key (1 appears twice), so isGrouped=false.
+    val nonGroupedKP =
+      KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    assert(!nonGroupedKP.isGrouped)
+    // satisfies() must return false: the partitions are not yet grouped.
+    checkSatisfied(nonGroupedKP, ClusteredDistribution(Seq(x)), false)
+    // groupedSatisfies() returns true: it CAN satisfy once GroupPartitionsExec groups them.
+    assert(nonGroupedKP.groupedSatisfies(ClusteredDistribution(Seq(x))))
+
+    // Grouped: all distinct keys, so isGrouped=true and satisfies() delegates to
+    // groupedSatisfies().
+    val groupedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+    assert(groupedKP.isGrouped)
+    checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
   }
 }

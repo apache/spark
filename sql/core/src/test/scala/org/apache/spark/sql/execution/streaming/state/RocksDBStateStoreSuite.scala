@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.File
 import java.util.UUID
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,6 +27,7 @@ import scala.util.Random
 
 import org.apache.avro.AvroTypeException
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
 import org.scalatest.matchers.should.Matchers
@@ -37,6 +40,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, ChecksumCheckpointFileManager, ChecksumFile}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
@@ -1629,6 +1633,229 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  private val diverseTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+    -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L,
+    -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
+
+  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - rangeScan",
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+        }
+
+        diverseTimestamps.foreach { ts =>
+          store.put(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(ts.toInt), cfName)
+        }
+
+        // Bounded positive range [0, 100)
+        val boundedIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(0L, "a")),
+          Some(dataToKeyRowWithRangeScan(100L, "a")), cfName)
+        val boundedResults = boundedIter.map { pair =>
+          (pair.key.getLong(0), pair.value.getInt(0))
+        }.toList
+        boundedIter.close()
+        val expectedBoundedTs = diverseTimestamps.filter(ts => ts >= 0 && ts < 100).sorted
+        assert(boundedResults.map(_._1) === expectedBoundedTs)
+        assert(boundedResults.map(_._2) === expectedBoundedTs.map(_.toInt))
+
+        // Exact bound: startKey is inclusive, endKey is exclusive.
+        // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
+        // Scan [9, 90) should include 9 but exclude 90.
+        val exactIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(9L, "a")),
+          Some(dataToKeyRowWithRangeScan(90L, "a")), cfName)
+        val exactResults = exactIter.map(_.key.getLong(0)).toList
+        exactIter.close()
+        assert(exactResults === diverseTimestamps.filter(ts => ts >= 9 && ts < 90).sorted)
+        assert(exactResults.contains(9L))
+        assert(!exactResults.contains(90L))
+
+        // None startKey scans from beginning to 0
+        val noneStartIter = store.rangeScan(
+          None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+        val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
+        noneStartIter.close()
+        assert(noneStartResults === diverseTimestamps.filter(_ < 0).sorted)
+
+        // None endKey scans from 1000 to end
+        val noneEndIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
+        val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
+        noneEndIter.close()
+        assert(noneEndResults === diverseTimestamps.filter(_ >= 1000).sorted)
+
+        // Empty range [10, 31) - no entries between 9 and 32
+        val emptyIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(10L, "a")),
+          Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
+        assert(!emptyIter.hasNext)
+        emptyIter.close()
+
+        // Bounded negative range [-300, 0)
+        val negIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(-300L, "a")),
+          Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+        val negResults = negIter.map(_.key.getLong(0)).toList
+        negIter.close()
+        assert(negResults === diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted)
+
+        // Both None: scan entire column family
+        val allIter = store.rangeScan(None, None, cfName)
+        val allResults = allIter.map(_.key.getLong(0)).toList
+        allIter.close()
+        assert(allResults === diverseTimestamps.sorted)
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "rocksdb range scan - scan with multiple key2 values within same key1 range",
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+        }
+
+        Seq("a", "b", "c").foreach { key2 =>
+          Seq(100L, 200L, 300L).foreach { ts =>
+            store.put(dataToKeyRowWithRangeScan(ts, key2), dataToValueRow(ts.toInt), cfName)
+          }
+        }
+
+        val startKey = dataToKeyRowWithRangeScan(100L, "a")
+        val endKey = dataToKeyRowWithRangeScan(201L, "a")
+        val iter = store.rangeScan(Some(startKey), Some(endKey), cfName)
+        val results = iter.map { pair =>
+          (pair.key.getLong(0), pair.key.getUTF8String(1).toString)
+        }.toList
+        iter.close()
+
+        val expectedResults = Seq(
+          (100L, "a"), (100L, "b"), (100L, "c"),
+          (200L, "a"), (200L, "b"), (200L, "c"))
+        assert(results === expectedResults)
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "rocksdb range scan - rangeScanWithMultiValues",
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
+
+    if (colFamiliesEnabled) {
+      tryWithProviderResource(newStoreProvider(
+        StateStoreId(newDir(), Random.nextInt(), 0),
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        keySchema = keySchemaWithRangeScan,
+        useColumnFamilies = colFamiliesEnabled,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+        try {
+          val cfName = "testColFamily"
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+            useMultipleValuesPerKey = true)
+
+          diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
+            store.putList(dataToKeyRowWithRangeScan(ts, "a"),
+              Array(dataToValueRow(idx * 10), dataToValueRow(idx * 10 + 1)), cfName)
+          }
+
+          // Bounded range [0, 1001)
+          val boundedIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(0L, "a")),
+            Some(dataToKeyRowWithRangeScan(1001L, "a")), cfName)
+          val boundedResults = boundedIter.map { pair =>
+            (pair.key.getLong(0), pair.value.getInt(0))
+          }.toList
+          boundedIter.close()
+
+          val expectedTimestamps = diverseTimestamps.filter(ts => ts >= 0 && ts <= 1000).sorted
+          assert(boundedResults.map(_._1).distinct === expectedTimestamps)
+          val expectedValues = diverseTimestamps.zipWithIndex
+            .filter { case (ts, _) => ts >= 0 && ts <= 1000 }
+            .sortBy(_._1)
+            .flatMap { case (_, idx) => Seq(idx * 10, idx * 10 + 1) }
+          assert(boundedResults.map(_._2) === expectedValues)
+
+          // Exact bound: startKey is inclusive, endKey is exclusive.
+          // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
+          val exactIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(9L, "a")),
+            Some(dataToKeyRowWithRangeScan(90L, "a")), cfName)
+          val exactResults = exactIter.map(_.key.getLong(0)).toList
+          exactIter.close()
+          val exactResultsDistinct = exactResults.distinct
+          assert(exactResultsDistinct === diverseTimestamps
+            .filter(ts => ts >= 9 && ts < 90).sorted)
+          assert(exactResultsDistinct.contains(9L))
+          assert(!exactResultsDistinct.contains(90L))
+
+          // None startKey scans from beginning to 0
+          val noneStartIter = store.rangeScanWithMultiValues(
+            None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+          val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
+          noneStartIter.close()
+          assert(noneStartResults.distinct === diverseTimestamps.filter(_ < 0).sorted)
+
+          // None endKey scans from 1000 to end
+          val noneEndIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
+          val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
+          noneEndIter.close()
+          assert(noneEndResults.distinct === diverseTimestamps.filter(_ >= 1000).sorted)
+
+          // Empty range [10, 31) - no entries between 9 and 32
+          val emptyIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(10L, "a")),
+            Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
+          assert(!emptyIter.hasNext)
+          emptyIter.close()
+
+          // Bounded negative range [-300, 0)
+          val negIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(-300L, "a")),
+            Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+          val negResults = negIter.map(_.key.getLong(0)).toList
+          negIter.close()
+          assert(negResults.distinct === diverseTimestamps
+            .filter(ts => ts >= -300 && ts < 0).sorted)
+
+          // Both None: scan entire column family
+          val allIter = store.rangeScanWithMultiValues(None, None, cfName)
+          val allResults = allIter.map(_.key.getLong(0)).toList
+          allIter.close()
+          assert(allResults.distinct === diverseTimestamps.sorted)
+        } finally {
+          if (!store.hasCommitted) store.abort()
+        }
+      }
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb key and value schema encoders for column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
@@ -2474,6 +2701,62 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("SPARK-56476: RocksDBStateStore.creatingProvider tracks the originating provider") {
+    // Verify that a RocksDBStateStore correctly tracks which provider created it.
+    val storeId = StateStoreId(newDir(), 0L, 1)
+
+    tryWithProviderResource(newStoreProvider(storeId)) { provider1 =>
+      val store = provider1.getStore(0)
+      put(store, "a", 0, 1)
+      store.commit()
+
+      val readStore = provider1.getReadStore(1)
+        .asInstanceOf[provider1.RocksDBStateStore]
+      assert(readStore.creatingProvider eq provider1,
+        "creatingProvider should be the provider that created the store")
+
+      tryWithProviderResource(newStoreProvider(storeId)) { provider2 =>
+        assert(readStore.creatingProvider ne provider2,
+          "creatingProvider should NOT match a different provider instance")
+      }
+      readStore.abort()
+    }
+  }
+
+  test("SPARK-56476: upgradeReadStoreToWriteStore delegates to original provider " +
+    "when called on a different provider") {
+    // This test verifies the fix: when upgradeReadStoreToWriteStore detects that the read
+    // store was created by a different provider, it delegates to that provider so the
+    // upgrade succeeds instead of failing with StateStoreInvalidStamp.
+    val storeId = StateStoreId(newDir(), 0L, 1)
+
+    tryWithProviderResource(newStoreProvider(storeId)) { provider1 =>
+      // Write version 0
+      val store = provider1.getStore(0)
+      put(store, "a", 0, 1)
+      store.commit()
+
+      // Get a read store from provider1
+      val readStore = provider1.getReadStore(1)
+
+      // Create a brand-new provider (simulating eviction from loadedProviders)
+      tryWithProviderResource(newStoreProvider(storeId)) { provider2 =>
+        // Without the fix, this would fail with StateStoreInvalidStamp because provider2's
+        // state machine never issued provider1's read store stamp. With the fix, provider2
+        // detects the mismatch and delegates to provider1.
+        val writeStore = provider2.upgradeReadStoreToWriteStore(readStore, 1, None)
+        assert(get(writeStore, "a", 0) === Some(1))
+        put(writeStore, "a", 0, 2)
+        writeStore.commit()
+
+        // Verify the committed data via provider2
+        val verifyStore = provider2.getStore(2)
+        assert(get(verifyStore, "a", 0) === Some(2))
+        verifyStore.abort()
+      }
+    }
+  }
+
   test("verify operation validation before and after commit") {
     tryWithProviderResource(newStoreProvider(useColumnFamilies = false)) { provider =>
       val store = provider.getStore(0)
@@ -3054,6 +3337,360 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       threadId == Thread.currentThread().getId,
       s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
         s"after load but was $threadId")
+  }
+
+  private def withCheckpointFormatV2(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      f
+    }
+  }
+
+  private def verifyChecksumFiles(
+      dir: String, expectedNumFiles: Int, expectedNumChecksumFiles: Int): Unit = {
+    val allFiles = new File(dir)
+      // filter out dirs and local hdfs files
+      .listFiles().filter(f => f.isFile && !f.getName.startsWith("."))
+      .map(f => new Path(f.toURI)).toSet
+    assert(allFiles.size == expectedNumFiles)
+
+    val checksumFiles = allFiles.filter(
+      ChecksumCheckpointFileManager.isChecksumFile).map(ChecksumFile)
+    assert(checksumFiles.size == expectedNumChecksumFiles)
+
+    // verify that no orphan checksum file i.e. the respective main file should be present
+    assert(checksumFiles.forall(c => allFiles.contains(c.mainFilePath)))
+  }
+
+  /**
+   * Helper to put a value and commit, returning (newVersion, checkpointInfo).
+   * The checkpoint info carries the unique ID needed for V2 reloads.
+   */
+  private def putAndCommitStore(
+      provider: RocksDBStateStoreProvider,
+      loadVersion: Long,
+      doMaintenance: Boolean,
+      uniqueId: Option[String] = None): (Long, StateStoreCheckpointInfo) = {
+    val store = provider.getStore(loadVersion, uniqueId)
+    put(store, loadVersion.toString, loadVersion.toInt, loadVersion.toInt * 100)
+    val newVersion = store.commit()
+    val ckptInfo = store.getStateStoreCheckpointInfo()
+
+    if (doMaintenance) {
+      provider.doMaintenance()
+    }
+
+    (newVersion, ckptInfo)
+  }
+
+  testWithAllCodec("file checksum can be enabled and disabled for the same checkpoint") { _ =>
+    withCheckpointFormatV2 {
+      val storeId = StateStoreId(newDir(), 0L, 1)
+      var version = 0L
+      var lastCkptId: Option[String] = None
+
+      // Commit to store using file checksum
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          val store = provider.getStore(version)
+          put(store, "1", 11, 100)
+          put(store, "2", 22, 200)
+          version = store.commit()
+          lastCkptId = store.getStateStoreCheckpointInfo().stateStoreCkptId
+        }
+      }
+
+      // Reload the store and commit without file checksum
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          assert(version == 1)
+          val store = provider.getStore(version, lastCkptId)
+          assert(get(store, "1", 11) === Some(100))
+          assert(get(store, "2", 22) === Some(200))
+
+          put(store, "3", 33, 300)
+          put(store, "4", 44, 400)
+          version = store.commit()
+          lastCkptId = store.getStateStoreCheckpointInfo().stateStoreCkptId
+        }
+      }
+
+      // Reload the store and commit with file checksum
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          assert(version == 2)
+          val store = provider.getStore(version, lastCkptId)
+          assert(get(store, "1", 11) === Some(100))
+          assert(get(store, "2", 22) === Some(200))
+          assert(get(store, "3", 33) === Some(300))
+          assert(get(store, "4", 44) === Some(400))
+
+          put(store, "5", 55, 500)
+          version = store.commit()
+        }
+      }
+    }
+  }
+
+  test("checksum files are also cleaned up during maintenance") {
+    withCheckpointFormatV2 {
+      val storeId = StateStoreId(newDir(), 0L, 1)
+      val numBatches = 6
+      val minDeltas = 2
+      // Adding 1 to ensure snapshot is uploaded.
+      // Snapshot upload might happen at minDeltas or minDeltas + 1, depending on the provider
+      val maintFrequency = minDeltas + 1
+      var version = 0L
+      var lastCkptInfo: StateStoreCheckpointInfo = null
+
+      withSQLConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> minDeltas.toString,
+        SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1",
+        // So that RocksDB will also generate changelog files
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" ->
+          true.toString) {
+
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          var ckptId: Option[String] = None
+          (version + 1 to numBatches).foreach { i =>
+            val (v, info) = putAndCommitStore(
+              provider, loadVersion = i - 1, doMaintenance = i % maintFrequency == 0,
+              uniqueId = ckptId)
+            version = v
+            ckptId = info.stateStoreCkptId
+            lastCkptInfo = info
+          }
+
+          // For RocksDB State store, files left:
+          // 6.changelog (+ checksum file), 6.zip (+ checksum file)
+          verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+            expectedNumFiles = 4, expectedNumChecksumFiles = 2)
+        }
+
+        // turn off file checksum, and verify that the previously created checksum files
+        // will be deleted by maintenance
+        withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString) {
+          tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+            var ckptId = lastCkptInfo.stateStoreCkptId
+            (version + 1 to version + numBatches).foreach { i =>
+              val (v, info) = putAndCommitStore(
+                provider, loadVersion = i - 1, doMaintenance = i % maintFrequency == 0,
+                uniqueId = ckptId)
+              version = v
+              ckptId = info.stateStoreCkptId
+            }
+
+            // now verify no checksum files are left
+            // For RocksDB State store, files left:
+            // 12.changelog, 12.zip
+            verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+              expectedNumFiles = 2, expectedNumChecksumFiles = 0)
+          }
+        }
+      }
+    }
+  }
+
+
+  test("Load spark 4.0 golden checkpoint written without checksum") {
+    withCheckpointFormatV2 {
+      // We have Spark 4.0 golden files for each of these operations and store names.
+      // Tuple(operation name, store name, key schema, value schema)
+      val stores = Seq(
+        ("agg", StateStoreId.DEFAULT_STORE_NAME,
+          StructType(Seq(StructField("_1", IntegerType, nullable = false))),
+          StructType(Seq(StructField("count", LongType, nullable = false)))),
+        ("dedup", StateStoreId.DEFAULT_STORE_NAME,
+          StructType(Seq(StructField("_1", IntegerType, nullable = false))),
+          StructType(Seq(StructField("__dummy__", NullType)))),
+        ("join1", "left-keyToNumValues",
+          StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+          StructType(Seq(StructField("value", LongType)))),
+        ("join1", "left-keyWithIndexToValue",
+          StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+          StructType(Seq(StructField("value", LongType)))),
+        ("join1", "right-keyToNumValues",
+          StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+          StructType(Seq(StructField("value", LongType)))),
+        ("join1", "right-keyWithIndexToValue",
+          StructType(Seq(StructField("field0", IntegerType, nullable = false))),
+          StructType(Seq(StructField("value", LongType))))
+      )
+
+      // now try to load the store with checksum enabled.
+      // Golden files are V1 format (no unique IDs), loaded via snapshots.
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> true.toString) {
+        stores.foreach { case (opName, storeName, keySchema, valueSchema) =>
+          (1 to 4).foreach { version =>
+            tryWithProviderResource(newStoreProviderNoInit()) { provider =>
+              val checkpointPath = this.getClass.getResource(
+                s"/structured-streaming/checkpoint-version-4.0.0/rocksdb/$opName/state"
+              ).getPath
+
+              val conf = new Configuration()
+              conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+              provider.init(
+                StateStoreId(checkpointPath, 0, 0, storeName),
+                keySchema,
+                valueSchema,
+                NoPrefixKeyStateEncoderSpec(keySchema),
+                useColumnFamilies = false,
+                new StateStoreConf(cloneSQLConf()),
+                conf
+              )
+              val store = provider.getStore(version)
+              store.abort()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("fileChecksumThreadPoolSize propagates to ChecksumCheckpointFileManager") {
+    withCheckpointFormatV2 {
+      Seq(0, 1, 6).foreach { numThreads =>
+        val storeId = StateStoreId(newDir(), 0L, 0)
+        withSQLConf(
+          SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+          SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> numThreads.toString) {
+          tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+            val fmMethod = PrivateMethod[CheckpointFileManager](Symbol("fm"))
+            val fm = provider.rocksDB.fileManager invokePrivate fmMethod()
+            assert(fm.isInstanceOf[ChecksumCheckpointFileManager])
+            assert(fm.asInstanceOf[ChecksumCheckpointFileManager].numThreads === numThreads)
+          }
+        }
+      }
+    }
+  }
+
+  test("file checksum behavior respect checkpoint format version") {
+    val cases = Seq(
+      // (ckptFormatVersion, checksumConfEnabled, expectedResult)
+      // always disable file checksum with ckpt format v1
+      (1, true, false),
+      (1, false, false),
+      (2, true, true),
+      (2, false, false)
+    )
+
+    cases.foreach { case (version, checksumConfEnabled, expected) =>
+      val sqlConf = new SQLConf()
+      sqlConf.setConf(SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED, checksumConfEnabled)
+      sqlConf.setConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, version)
+
+      val storeConf = StateStoreConf(sqlConf)
+      assert(
+        storeConf.checkpointFileChecksumEnabled == expected,
+        s"ckptVersion = $version, checksumConf = $checksumConfEnabled, expected = $expected," +
+        s" actual = ${storeConf.checkpointFileChecksumEnabled}"
+      )
+    }
+  }
+
+  test("STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE: invalid negative value is rejected") {
+    val sqlConf = SQLConf.get.clone()
+    val ex = intercept[IllegalArgumentException] {
+      sqlConf.setConfString(SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key, "-1")
+    }
+    assert(ex.getMessage.contains("Must be a non-negative integer"))
+  }
+
+  test("fileChecksumThreadPoolSize = 0 supports sequential I/O (load, write, commit, reload)") {
+    withCheckpointFormatV2 {
+      val storeId = StateStoreId(newDir(), 0L, 0)
+      var lastCkptId: Option[String] = None
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+        SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0") {
+        // Write some state with sequential mode enabled
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          val store = provider.getStore(0)
+          put(store, "a", 0, 1)
+          put(store, "b", 0, 2)
+          store.commit()
+          lastCkptId = store.getStateStoreCheckpointInfo().stateStoreCkptId
+          // Verify that main file and checksum file were both written to disk.
+          // RocksDB produces 2 files and 1 checksum file: 1.zip, 1.zip.crc
+          verifyChecksumFiles(storeId.storeCheckpointLocation().toString,
+            expectedNumFiles = 2, expectedNumChecksumFiles = 1)
+        }
+
+        // Reload and verify state is intact
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          val store = provider.getStore(1, lastCkptId)
+          assert(get(store, "a", 0) === Some(1))
+          assert(get(store, "b", 0) === Some(2))
+          store.abort()
+        }
+      }
+    }
+  }
+
+  test(
+    "fileChecksumThreadPoolSize = 0: concurrent store commit and maintenance both complete") {
+    withCheckpointFormatV2 {
+      val storeId = StateStoreId(newDir(), 0L, 0)
+      var lastCkptId: Option[String] = None
+      withSQLConf(
+        SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> "true",
+        SQLConf.STATE_STORE_FILE_CHECKSUM_THREAD_POOL_SIZE.key -> "0",
+        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1",
+        // So that RocksDB uploads a snapshot during maintenance rather than being a no-op.
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled" -> "true") {
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          // Build up a few versions so maintenance has something to work with.
+          // With minDeltasForSnapshot=1 and changelog checkpointing enabled, doMaintenance()
+          // uploads a queued snapshot, exercising the checksum file manager concurrently.
+          var ckptId: Option[String] = None
+          (0L until 3L).foreach { version =>
+            val (_, info) = putAndCommitStore(provider, version,
+              doMaintenance = false, uniqueId = ckptId)
+            ckptId = info.stateStoreCkptId
+          }
+
+          // Load the store and prepare the write before maintenance starts, so that
+          // store.commit() (the actual file I/O) is what overlaps with doMaintenance().
+          val store = provider.getStore(3, ckptId)
+          put(store, "3", 3, 300)
+
+          val errors = new ConcurrentLinkedQueue[Throwable]()
+          val maintenanceStartedLatch = new CountDownLatch(1)
+          val maintenanceDoneLatch = new CountDownLatch(1)
+
+          val maintenanceThread = new Thread(() => {
+            try {
+              maintenanceStartedLatch.countDown()
+              provider.doMaintenance()
+            } catch {
+              case t: Throwable => errors.add(t)
+            } finally {
+              maintenanceDoneLatch.countDown()
+            }
+          })
+          maintenanceThread.setDaemon(true)
+          maintenanceThread.start()
+
+          // Wait until maintenance is running, then commit to simulate concurrency.
+          assert(maintenanceStartedLatch.await(30, TimeUnit.SECONDS),
+            "Maintenance thread did not start within 30 seconds")
+          store.commit()
+          lastCkptId = store.getStateStoreCheckpointInfo().stateStoreCkptId
+
+          assert(maintenanceDoneLatch.await(30, TimeUnit.SECONDS),
+            "Maintenance did not complete within 30 seconds")
+          assert(errors.isEmpty,
+            s"Maintenance failed with: ${Option(errors.peek()).map(_.getMessage).orNull}")
+        }
+
+        // Verify state committed concurrently with maintenance is intact.
+        tryWithProviderResource(newStoreProviderWithClonedConf(storeId)) { provider =>
+          val store = provider.getStore(4, lastCkptId)
+          assert(get(store, "3", 3) === Some(300))
+          store.abort()
+        }
+      }
+    }
   }
 }
 

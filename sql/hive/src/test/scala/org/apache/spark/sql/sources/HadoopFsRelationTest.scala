@@ -32,12 +32,11 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class HadoopFsRelationTest extends QueryTest with TestHiveSingleton {
   import spark.implicits._
 
   val dataSourceName: String

@@ -2321,7 +2321,9 @@ abstract class Dataset[T] extends Serializable {
   def withColumnsRenamed(colsMap: util.Map[String, String]): DataFrame =
     withColumnsRenamed(colsMap.asScala.toMap)
 
-  protected def withColumnsRenamed(colNames: Seq[String], newColNames: Seq[String]): DataFrame
+  protected[spark] def withColumnsRenamed(
+      colNames: Seq[String],
+      newColNames: Seq[String]): DataFrame
 
   /**
    * Returns a new Dataset by updating an existing column with metadata.

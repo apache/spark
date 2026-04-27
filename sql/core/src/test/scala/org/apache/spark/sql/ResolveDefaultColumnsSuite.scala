@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
+class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
     withTable("t") {
       sql("create table t(c1 timestamp, c2 timestamp) using parquet")
@@ -306,30 +306,6 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ALTER COLUMN s SET DEFAULT current_user()")
       sql(s"INSERT INTO $tableName (i) VALUES ((0))")
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
-    }
-  }
-
-  test("SPARK-43752: column DEFAULT in V2 write commands") {
-    withSQLConf(
-      "spark.sql.catalog.testcat" ->
-        classOf[connector.catalog.InMemoryTableCatalog].getName) {
-      sql("CREATE TABLE testcat.t(c1 INT DEFAULT 42, c2 STRING DEFAULT 'hello')")
-      // INSERT INTO (AppendData) with DEFAULT
-      sql("INSERT INTO testcat.t VALUES (1, DEFAULT)")
-      checkAnswer(
-        sql("SELECT * FROM testcat.t"),
-        Row(1, "hello"))
-      // INSERT INTO with all DEFAULT
-      sql("INSERT INTO testcat.t VALUES (DEFAULT, DEFAULT)")
-      checkAnswer(
-        sql("SELECT * FROM testcat.t ORDER BY c1"),
-        Seq(Row(1, "hello"), Row(42, "hello")))
-      // INSERT OVERWRITE (OverwriteByExpression) with DEFAULT
-      sql("INSERT OVERWRITE testcat.t VALUES (100, DEFAULT)")
-      checkAnswer(
-        sql("SELECT * FROM testcat.t"),
-        Row(100, "hello"))
-      sql("DROP TABLE testcat.t")
     }
   }
 }

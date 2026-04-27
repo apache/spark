@@ -13617,6 +13617,31 @@ def current_catalog() -> Column:
 
 
 @_try_remote_functions
+def current_path() -> Column:
+    """Returns the current SQL path as a comma-separated list of qualified schema names.
+
+    .. versionadded:: 4.2.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_schema`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_path()).show() # doctest: +SKIP
+    +----------------------------------------------------+
+    |                                      current_path()|
+    +----------------------------------------------------+
+    |system.builtin,system.session,spark_catalog.default |
+    +----------------------------------------------------+
+    """
+    return _invoke_function("current_path")
+
+
+@_try_remote_functions
 def current_database() -> Column:
     """Returns the current database.
 
@@ -22501,12 +22526,16 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 @_try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns a reversed string or an array with elements in reverse order.
+    Collection function: returns a reversed string, a binary value with bytes in reverse order,
+    or an array with elements in reverse order.
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added support for binary type.
 
     Parameters
     ----------
@@ -22516,7 +22545,8 @@ def reverse(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new column that contains a reversed string or an array with elements in reverse order.
+        A new column that contains a reversed string, a binary value with bytes in reverse order,
+        or an array with elements in reverse order.
 
     Examples
     --------
@@ -22543,6 +22573,17 @@ def reverse(col: "ColumnOrName") -> Column:
     |          [1]|
     |           []|
     +-------------+
+
+    Example 3: Reverse binary data
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytearray(b"\\xCA\\xFE"),)], "data: binary")
+    >>> df.select(sf.hex(sf.reverse(df.data))).show()
+    +------------------+
+    |hex(reverse(data))|
+    +------------------+
+    |              FECA|
+    +------------------+
     """
     return _invoke_function_over_columns("reverse", col)
 

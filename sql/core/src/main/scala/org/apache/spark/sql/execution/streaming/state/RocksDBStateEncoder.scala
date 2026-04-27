@@ -46,6 +46,7 @@ import org.apache.spark.unsafe.Platform
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
   def supportsDeleteRange: Boolean
+  def supportsRangeScan: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
@@ -1500,6 +1501,8 @@ class PrefixKeyScanStateEncoder(
   override def supportPrefixKeyScan: Boolean = true
 
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = false
 }
 
 /**
@@ -1699,6 +1702,8 @@ class RangeKeyScanStateEncoder(
   override def supportPrefixKeyScan: Boolean = true
 
   override def supportsDeleteRange: Boolean = true
+
+  override def supportsRangeScan: Boolean = true
 }
 
 /**
@@ -1730,6 +1735,8 @@ class NoPrefixKeyStateEncoder(
   override def supportPrefixKeyScan: Boolean = false
 
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = false
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
@@ -1884,6 +1891,8 @@ class TimestampAsPrefixKeyStateEncoder(
 
   // TODO: [SPARK-55491] Revisit this to support delete range if needed.
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = true
 }
 
 /**
@@ -1932,6 +1941,8 @@ class TimestampAsPostfixKeyStateEncoder(
   }
 
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = true
 }
 
 /**

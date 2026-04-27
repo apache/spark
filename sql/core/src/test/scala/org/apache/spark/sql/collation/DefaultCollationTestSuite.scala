@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
-abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
+abstract class DefaultCollationTestSuite extends SharedSparkSession {
 
   protected def resetCatalog: Boolean = false
 

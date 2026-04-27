@@ -27,10 +27,10 @@ from typing import (
     Dict,
     Iterable,
     Literal,
+    NamedTuple,
     Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
     overload,
 )
 import warnings
@@ -50,39 +50,40 @@ from pyspark.profiler import (
     PStatsParam,
 )
 
-if TYPE_CHECKING:
-    from pyspark.sql._typing import ProfileResults
+
+class ProfileResult(NamedTuple):
+    perf: Optional[pstats.Stats] = None
+    memory: Optional[CodeMapDict] = None
+
+    def __bool__(self) -> bool:
+        return self.perf is not None or self.memory is not None
+
+    def replace(self, **kwargs: Any) -> "ProfileResult":
+        return self._replace(**kwargs)
 
 
-class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
+ProfileResults = Dict[Union[int, str], ProfileResult]
+
+
+class _ProfileResultsParam(AccumulatorParam["ProfileResults"]):
     """
     AccumulatorParam for profilers.
     """
 
     @staticmethod
-    def zero(value: Optional["ProfileResults"]) -> Optional["ProfileResults"]:
-        return value
+    def zero(value: "ProfileResults") -> "ProfileResults":
+        return {}
 
     @staticmethod
-    def addInPlace(
-        value1: Optional["ProfileResults"], value2: Optional["ProfileResults"]
-    ) -> Optional["ProfileResults"]:
-        if value1 is None or len(value1) == 0:
-            value1 = {}
-        if value2 is None or len(value2) == 0:
-            value2 = {}
-
-        value = value1.copy()
-        for key, (perf, mem, *_) in value2.items():
-            if key in value1:
-                orig_perf, orig_mem, *_ = value1[key]
+    def addInPlace(value1: "ProfileResults", value2: "ProfileResults") -> "ProfileResults":
+        for key, result in value2.items():
+            if key not in value1:
+                value1[key] = result
             else:
-                orig_perf, orig_mem = (PStatsParam.zero(None), MemUsageParam.zero(None))
-            value[key] = (
-                PStatsParam.addInPlace(orig_perf, perf),
-                MemUsageParam.addInPlace(orig_mem, mem),
-            )
-        return value
+                perf = PStatsParam.addInPlace(value1[key].perf, result.perf)
+                memory = MemUsageParam.addInPlace(value1[key].memory, result.memory)
+                value1[key] = ProfileResult(perf=perf, memory=memory)
+        return value1
 
 
 ProfileResultsParam = _ProfileResultsParam()
@@ -94,7 +95,7 @@ class WorkerPerfProfiler:
     """
 
     def __init__(
-        self, accumulator: Accumulator[Optional["ProfileResults"]], result_key: Union[int, str]
+        self, accumulator: Accumulator["ProfileResults"], result_key: Union[int, str]
     ) -> None:
         self._accumulator = accumulator
         self._profiler = cProfile.Profile()
@@ -111,7 +112,7 @@ class WorkerPerfProfiler:
         # make it picklable
         st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
-        self._accumulator.add({self._result_key: (st, None)})
+        self._accumulator.add({self._result_key: ProfileResult(perf=st)})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -134,7 +135,7 @@ class WorkerMemoryProfiler:
 
     def __init__(
         self,
-        accumulator: Accumulator[Optional["ProfileResults"]],
+        accumulator: Accumulator["ProfileResults"],
         result_key: Union[int, str],
         func_or_code: Union[Callable, CodeType],
     ) -> None:
@@ -159,7 +160,7 @@ class WorkerMemoryProfiler:
             filename: list(line_iterator)
             for filename, line_iterator in self._profiler.code_map.items()
         }
-        self._accumulator.add({self._result_key: (None, codemap_dict)})
+        self._accumulator.add({self._result_key: ProfileResult(memory=codemap_dict)})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
@@ -226,9 +227,9 @@ class ProfilerCollector(ABC):
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
         with self._lock:
             return {
-                result_id: perf
-                for result_id, (perf, _, *_) in self._profile_results.items()
-                if perf is not None
+                result_id: result.perf
+                for result_id, result in self._profile_results.items()
+                if result.perf is not None
             }
 
     def show_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
@@ -272,9 +273,9 @@ class ProfilerCollector(ABC):
     def _memory_profile_results(self) -> Dict[Union[int, str], CodeMapDict]:
         with self._lock:
             return {
-                result_id: mem
-                for result_id, (_, mem, *_) in self._profile_results.items()
-                if mem is not None
+                result_id: result.memory
+                for result_id, result in self._profile_results.items()
+                if result.memory is not None
             }
 
     @property
@@ -368,15 +369,14 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *_ = self._profile_results[id]
-                    self._profile_results[id] = (None, mem, *_)
-                    if mem is None:
-                        self._profile_results.pop(id, None)
+                    self._profile_results[id] = self._profile_results[id].replace(perf=None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
             else:
-                for id, (perf, mem, *_) in list(self._profile_results.items()):
-                    self._profile_results[id] = (None, mem, *_)
-                    if mem is None:
-                        self._profile_results.pop(id, None)
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id] = self._profile_results[id].replace(perf=None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
 
     def clear_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
         """
@@ -393,15 +393,14 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *_ = self._profile_results[id]
-                    self._profile_results[id] = (perf, None, *_)
-                    if perf is None:
-                        self._profile_results.pop(id, None)
+                    self._profile_results[id] = self._profile_results[id].replace(memory=None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
             else:
-                for id, (perf, mem, *_) in list(self._profile_results.items()):
-                    self._profile_results[id] = (perf, None, *_)
-                    if perf is None:
-                        self._profile_results.pop(id, None)
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id] = self._profile_results[id].replace(memory=None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):
@@ -411,7 +410,7 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER]
         else:
             self._accumulator = Accumulator(
-                SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+                SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
             )
 
     @property

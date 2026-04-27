@@ -31,14 +31,135 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   with CommandSuiteBase {
   import testImplicits._
 
-  test("Describing a partition is not supported") {
+  test("DESCRIBE TABLE PARTITION on an existing partition") {
     withNamespaceAndTable("ns", "table") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        "PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
-      }
-      assert(e.message === "DESCRIBE does not support partition for v2 tables.")
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
+      // Non-extended describe with a valid partition spec shows schema + partition section,
+      // same output as DESCRIBE TABLE (partition spec is used only for validation).
+      checkAnswer(
+        sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)"),
+        Seq(
+          Row("id", "bigint", null),
+          Row("data", "string", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null)))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED PARTITION shows detailed partition information") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
+      val result = sql(s"DESCRIBE TABLE EXTENDED $tbl PARTITION (id = 1)").collect()
+      val colNames = result.map(_.getString(0))
+      // Must include the detailed partition section header
+      assert(colNames.contains("# Detailed Partition Information"))
+      // Must include the partition values row
+      assert(result.exists(r =>
+        r.getString(0) == "Partition Values" && r.getString(1) == "[id=1]"))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION on a non-existent partition raises an error") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 999)").collect()
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "PARTITION (`id` = 999)",
+          "tableName" -> "`ns`.`table`"))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION on a table without partition management raises an error") {
+    withNamespaceAndTable("ns", "table", nonPartitionCatalog) { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing")
+      val sqlText = s"DESCRIBE TABLE $tbl PARTITION (id = 1)"
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        parameters = Map("name" -> s"`$nonPartitionCatalog`.`ns`.`table`"),
+        queryContext = Array(ExpectedContext(
+          fragment = tbl,
+          start = sqlText.indexOf(tbl),
+          stop = sqlText.indexOf(tbl) + tbl.length - 1)))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION with partial partition spec raises an error") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, city string, data string) " +
+        s"$defaultUsing PARTITIONED BY (id, city)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1, city = 'NYC')")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (id = 1)")
+        },
+        condition = "_LEGACY_ERROR_TEMP_1232",
+        parameters = Map(
+          "specKeys" -> "id",
+          "partitionColumnNames" -> "id, city",
+          "tableName" -> s"`$catalog`.`ns`.`table`"))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION with case-insensitive partition column name") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1)")
+      // Case-insensitive partition column name should normalize.
+      checkAnswer(
+        sql(s"DESCRIBE TABLE $tbl PARTITION (ID = 1)"),
+        Seq(
+          Row("id", "bigint", null),
+          Row("data", "string", null),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "data_type", "comment"),
+          Row("id", "bigint", null)))
+    }
+  }
+
+  test("DESCRIBE TABLE PARTITION with unknown partition column raises an error") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl PARTITION (xyz = 1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`xyz`",
+          "tableName" -> s"`$catalog`.`ns`.`table`"))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED PARTITION with multi-column partition") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (data string, id bigint, city string) " +
+        s"$defaultUsing PARTITIONED BY (id, city)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = 1, city = 'NYC')")
+      val result = sql(s"DESCRIBE TABLE EXTENDED $tbl PARTITION (id = 1, city = 'NYC')").collect()
+      assert(result.exists(r =>
+        r.getString(0) == "Partition Values" && r.getString(1) == "[id=1, city=NYC]"))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED PARTITION with NULL partition value") {
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $tbl ADD PARTITION (id = null)")
+      val result = sql(s"DESCRIBE TABLE EXTENDED $tbl PARTITION (id = null)").collect()
+      val partRow = result.find(_.getString(0) == "Partition Values")
+      assert(partRow.isDefined, s"Partition Values row not found in: ${result.mkString("\n")}")
+      assert(partRow.get.getString(1) == "[id=NULL]",
+        s"Unexpected partition value: ${partRow.get.getString(1)}")
     }
   }
 

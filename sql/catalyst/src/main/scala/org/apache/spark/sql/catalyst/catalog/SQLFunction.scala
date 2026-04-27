@@ -179,9 +179,20 @@ case class SQLFunction(
     props.put(CREATE_TIME, createTimeMs.toString)
     props.toMap
   }
+
+  /** Frozen PATH string persisted when the function was created with SQL PATH enabled. */
+  def functionStoredResolutionPath: Option[String] =
+    properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH)
 }
 
 object SQLFunction {
+
+  /**
+   * Persisted frozen PATH for SQL function bodies when created with [[SQLConf.PATH_ENABLED]].
+   * Serialized as a JSON array of path entries (same format as
+   * [[CatalogTable.VIEW_RESOLUTION_PATH]]).
+   */
+  val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 

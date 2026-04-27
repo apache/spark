@@ -25,8 +25,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class STExpressionsSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with ExpressionEvalHelper {
 
   // Private common constants used across several tests.

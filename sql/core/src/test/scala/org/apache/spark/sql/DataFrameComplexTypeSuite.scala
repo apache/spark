@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
  */
-class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
+class DataFrameComplexTypeSuite extends SharedSparkSession {
   import testImplicits._
 
   test("ArrayTransform with scan input") {

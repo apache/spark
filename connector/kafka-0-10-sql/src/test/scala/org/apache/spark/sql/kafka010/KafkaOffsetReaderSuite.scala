@@ -29,14 +29,13 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, times, verify, when}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaOffsetRangeLimit.{EARLIEST, LATEST}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.StrategyOnNoMatchStartingOffset
 import org.apache.spark.sql.test.SharedSparkSession
 
-class KafkaOffsetReaderSuite extends QueryTest with SharedSparkSession with KafkaTest {
+class KafkaOffsetReaderSuite extends SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
