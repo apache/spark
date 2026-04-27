@@ -1700,8 +1700,8 @@ object Unidoc {
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree",
-        "-Xmaxerrs", "9999",
-        "-Xmaxwarns", "9999"
+        "-Xmaxerrs", "999999",
+        "-Xmaxwarns", "999999"
       )
     },
 
