@@ -251,7 +251,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   /**
    * A deterministic scope ID for RDDs created by this SparkPlan,
-   * used by [[LastAttemptAccumulator]] to track which RDD belongs
+   * used by LastAttemptAccumulator to track which RDD belongs
    * to which SparkPlan node.
    */
   private[spark] def rddScopeId: String =
