@@ -91,9 +91,12 @@ private[python] abstract class InMemoryRowQueue(
   }
 
   private def doRemove(): UnsafeRow = {
-    // Volatile load acts as an acquire fence: sees all writes from the producer
-    // that happened before the corresponding volatile store of writeOffset.
-    assert(readOffset <= writeOffset, "reader should not go beyond writer")
+    // Volatile load acts as an acquire fence: ensures all row data written by the
+    // producer (before its volatile store of writeOffset) is visible to this thread.
+    // Read unconditionally into a local val so the acquire fence is not dependent on
+    // assert being enabled.
+    val curWriteOffset = writeOffset
+    assert(readOffset <= curWriteOffset, "reader should not go beyond writer")
     if (readOffset + 4 > endOfPage || Platform.getInt(base, readOffset) < 0) {
       null
     } else {
