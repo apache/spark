@@ -434,9 +434,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     val defaults = if (fillDefaultValue) {
-      actualExpectedCols.drop(inputCols.size).flatMap { expectedCol =>
-        getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
-          .map(expr => applyColumnMetadata(expr, expectedCol))
+      actualExpectedCols.drop(inputCols.size).map { expectedCol =>
+        val defaultExpr = getDefaultValueExprOrNullLit(
+          expectedCol, conf.useNullsForMissingDefaultColumnValues)
+        if (defaultExpr.isEmpty) {
+          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+            tableName, (colPath :+ expectedCol.name).quoted)
+        }
+        applyColumnMetadata(defaultExpr.get, expectedCol)
       }
     } else {
       Nil
