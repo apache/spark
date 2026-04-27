@@ -380,24 +380,52 @@ abstract class InMemoryBaseTable(
   def alterTableWithData(
       data: Array[BufferedRows],
       newSchema: StructType): InMemoryBaseTable = {
+    val newFieldNames = newSchema.fieldNames.toSet
     data.foreach { bufferedRow =>
       val oldSchema = bufferedRow.schema
+
+      // Identify which columns from the old schema still exist in the new schema.
+      // Each entry is (StructField, original index in old row) so we can extract values later.
+      val fieldsRetainedInOldSchema = oldSchema.fields.zipWithIndex.filter {
+        case (oldField, _) => newFieldNames.contains(oldField.name)
+      }
+      val areColumnsDropped = fieldsRetainedInOldSchema.length < oldSchema.length
+
+      // Build a schema that only contains the retained columns.
+      // This becomes the write schema for the migrated rows.
+      val retainedSchemaAfterDroppedColumns = if (areColumnsDropped) {
+        StructType(fieldsRetainedInOldSchema.map(_._1))
+      } else {
+        oldSchema
+      }
+
       bufferedRow.rows.foreach { row =>
-        // handle partition evolution by re-keying all data
-        val key = getKey(row, newSchema)
+        // Physically remove dropped column values from the row so they do not
+        // survive through ALTER chains (e.g. DROP COLUMN then ADD COLUMN same name).
+        val retainedRowAfterDroppedColumns = if (areColumnsDropped) {
+          new GenericInternalRow(fieldsRetainedInOldSchema.map {
+            case (retainedField, idx) => row.get(idx, retainedField.dataType)
+          })
+        } else {
+          row
+        }
+
+        // Re-key and store the migrated row under the new partition layout.
+        val key = getKey(retainedRowAfterDroppedColumns, newSchema)
         dataMap += dataMap.get(key)
           .map { splits =>
             val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
-                (splits.last.schema != oldSchema)) {
-              splits :+ new BufferedRows(key, oldSchema)
+                (splits.last.schema != retainedSchemaAfterDroppedColumns)) {
+              splits :+ new BufferedRows(key, retainedSchemaAfterDroppedColumns)
             } else {
               splits
             }
-            newSplits.last.withRow(row)
+            newSplits.last.withRow(retainedRowAfterDroppedColumns)
             key -> newSplits
           }
           .getOrElse(key -> Seq(
-            new BufferedRows(key, oldSchema).withRow(row)))
+            new BufferedRows(key, retainedSchemaAfterDroppedColumns)
+              .withRow(retainedRowAfterDroppedColumns)))
         addPartitionKey(key)
       }
     }
