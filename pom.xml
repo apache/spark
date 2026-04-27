@@ -3235,6 +3235,11 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
       </plugin>
+      <!-- Scalastyle is intentionally NOT bound to a phase here; activate the
+           `scalastyle` profile (or run `mvn scalastyle:check` explicitly) to
+           run it. Default Maven builds skip scalastyle so that a single
+           violation does not cascade into every Maven-invoked CI job; the
+           dedicated lint job is the single source of truth for style. -->
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
@@ -3251,13 +3256,6 @@
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
-        <executions>
-          <execution>
-            <goals>
-              <goal>check</goal>
-            </goals>
-          </execution>
-        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -3394,6 +3392,32 @@
   </build>
 
   <profiles>
+
+    <!--
+      Opt-in profile that binds scalastyle:check to the `verify` phase. Used
+      by the dedicated lint job; default Maven builds intentionally skip
+      scalastyle to avoid cascading a style violation into every Maven CI job.
+    -->
+    <profile>
+      <id>scalastyle</id>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.scalastyle</groupId>
+              <artifactId>scalastyle-maven-plugin</artifactId>
+              <executions>
+                <execution>
+                  <goals>
+                    <goal>check</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
 
     <!--
       This profile is enabled automatically by the sbt build. It changes the scope for shaded
