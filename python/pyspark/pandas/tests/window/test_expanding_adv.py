@@ -23,6 +23,9 @@ from pyspark.pandas.tests.window.test_expanding import ExpandingTestingFuncMixin
 
 
 class ExpandingAdvMixin(ExpandingTestingFuncMixin):
+    def test_expanding_median(self):
+        self._test_expanding_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_expanding_quantile(self):
         self._test_expanding_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
 
