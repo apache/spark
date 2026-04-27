@@ -13136,7 +13136,7 @@ def time_bucket(
 
     Returns the start of the bucket that ``ts`` falls into, where buckets are defined by
     the given ``bucket_size`` interval aligned to ``origin``. All bucketing is performed on
-    UTC micros, the session time zone does not affect bucket alignment. For local wall-clock
+    UTC micros; the session time zone does not affect bucket alignment. For local wall-clock
     alignment in a DST zone, cast the TIMESTAMP to TIMESTAMP_NTZ.
 
     .. versionadded:: 4.2.0
@@ -13181,16 +13181,9 @@ def time_bucket(
     [Row(bucket=datetime.datetime(2024, 1, 1, 11, 20))]
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
-    from pyspark.sql.classic.column import _to_java_column
-
     if origin is None:
-        return _invoke_function("time_bucket", _to_java_column(bucket_size), _to_java_column(ts))
-    return _invoke_function(
-        "time_bucket",
-        _to_java_column(bucket_size),
-        _to_java_column(ts),
-        _to_java_column(origin),
-    )
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
 
 
 @_try_remote_functions

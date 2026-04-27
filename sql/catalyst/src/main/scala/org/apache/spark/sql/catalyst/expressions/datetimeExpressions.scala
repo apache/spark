@@ -3950,7 +3950,7 @@ case class TimeBucket(
         return DataTypeMismatch(
           errorSubClass = "VALUE_OUT_OF_RANGE",
           messageParameters = Map(
-            "exprName" -> "time_bucket",
+            "exprName" -> toSQLId("bucketSize"),
             "valueRange" -> "(0, inf)",
             "currentValue" -> toSQLValue(bucketSizeValue, bucketSize.dataType)))
       }
@@ -4019,7 +4019,7 @@ case class TimeBucket(
   usage = """
     _FUNC_(bucketSize, ts[, origin]) - Returns the start of the bucket that `ts` falls into,
       where buckets are defined by the given `bucketSize` interval aligned to `origin`. All
-      bucketing is performed on UTC micros, the session time zone does not affect bucket
+      bucketing is performed on UTC micros; the session time zone does not affect bucket
       alignment. For local wall-clock alignment in a DST zone, cast the TIMESTAMP to
       TIMESTAMP_NTZ.
   """,

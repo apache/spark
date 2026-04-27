@@ -1072,9 +1072,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
    */
   def timeBucketDTInterval(bucketMicros: Long, tsMicros: Long, originMicros: Long): Long = {
-    val diff = Math.subtractExact(tsMicros, originMicros)
-    val bucketOffset = Math.multiplyExact(Math.floorDiv(diff, bucketMicros), bucketMicros)
-    Math.addExact(originMicros, bucketOffset)
+    val diff = MathUtils.subtractExact(tsMicros, originMicros)
+    val bucketOffset =
+      MathUtils.multiplyExact(MathUtils.floorDiv(diff, bucketMicros), bucketMicros)
+    MathUtils.addExact(originMicros, bucketOffset)
   }
 
   /**
@@ -1092,24 +1093,26 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val tsDays = microsToDays(tsMicros, ZoneOffset.UTC)
     val originDays = microsToDays(originMicros, ZoneOffset.UTC)
     val originTodMicros =
-      Math.subtractExact(originMicros, daysToMicros(originDays, ZoneOffset.UTC))
+      MathUtils.subtractExact(originMicros, daysToMicros(originDays, ZoneOffset.UTC))
 
     val tsDate = daysToLocalDate(tsDays)
     val originDate = daysToLocalDate(originDays)
     val rawMonthDiff = (tsDate.getYear.toLong * 12 + tsDate.getMonthValue) -
       (originDate.getYear.toLong * 12 + originDate.getMonthValue)
 
-    var k = Math.floorDiv(rawMonthDiff, bucketMonths.toLong)
+    var k = MathUtils.floorDiv(rawMonthDiff, bucketMonths.toLong)
     var candidateDays = dateAddMonths(originDays,
-      Math.toIntExact(Math.multiplyExact(k, bucketMonths.toLong)))
-    var candidate = Math.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
+      MathUtils.toIntExact(MathUtils.multiplyExact(k, bucketMonths.toLong)))
+    var candidate =
+      MathUtils.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
 
     // End-of-month capping in dateAddMonths can overshoot; step back one bucket if so.
     if (candidate > tsMicros) {
       k -= 1
       candidateDays = dateAddMonths(originDays,
-        Math.toIntExact(Math.multiplyExact(k, bucketMonths.toLong)))
-      candidate = Math.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
+        MathUtils.toIntExact(MathUtils.multiplyExact(k, bucketMonths.toLong)))
+      candidate =
+        MathUtils.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
     }
 
     candidate

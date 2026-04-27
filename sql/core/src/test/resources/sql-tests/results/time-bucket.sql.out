@@ -379,7 +379,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '00' SECOND",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket(INTERVAL '00' SECOND, TIMESTAMP '2024-01-01 11:00:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -404,7 +404,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '0' MONTH",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket(INTERVAL '0' MONTH, TIMESTAMP '2024-01-01 11:00:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -429,7 +429,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '0' YEAR",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket(INTERVAL '0' YEAR, TIMESTAMP '2024-01-01 11:00:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -454,7 +454,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '-15' MINUTE",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket(INTERVAL '-15' MINUTE, TIMESTAMP '2024-01-01 11:00:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -479,7 +479,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '-1' MONTH",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket(INTERVAL '-1' MONTH, TIMESTAMP '2024-01-01 11:00:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -504,7 +504,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '-1' YEAR",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket(INTERVAL '-1' YEAR, TIMESTAMP '2024-01-01 11:00:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -529,7 +529,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '00' MINUTE",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket((INTERVAL '15' MINUTE - INTERVAL '15' MINUTE), TIMESTAMP '2024-06-20 09:47:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -554,7 +554,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '-10' MINUTE",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket((INTERVAL '05' MINUTE - INTERVAL '15' MINUTE), TIMESTAMP '2024-06-20 09:47:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -579,7 +579,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '0' MONTH",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket((INTERVAL '3' MONTH - INTERVAL '3' MONTH), TIMESTAMP '2024-06-20 09:47:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
@@ -604,7 +604,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "INTERVAL '-2' MONTH",
-    "exprName" : "time_bucket",
+    "exprName" : "`bucketSize`",
     "sqlExpr" : "\"time_bucket((INTERVAL '1' MONTH - INTERVAL '3' MONTH), TIMESTAMP '2024-06-20 09:47:00', TIMESTAMP '1970-01-01 00:00:00')\"",
     "valueRange" : "(0, inf)"
   },
