@@ -44,7 +44,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 
 
 SPARK_HOME = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../..")
