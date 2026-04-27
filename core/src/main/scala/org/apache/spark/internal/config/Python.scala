@@ -159,6 +159,7 @@ private[spark] object Python {
         "directions to overlap for improved throughput. " +
         "This is particularly beneficial for compute-heavy UDFs (e.g., ML inference).")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -169,6 +170,7 @@ private[spark] object Python {
         "more data to be buffered ahead, at the cost of increased memory usage. " +
         "Only effective when spark.python.udf.pipelined.enabled is true.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "Queue depth must be positive.")
       .createWithDefault(2)
