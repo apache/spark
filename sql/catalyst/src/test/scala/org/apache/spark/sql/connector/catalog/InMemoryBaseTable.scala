@@ -380,45 +380,24 @@ abstract class InMemoryBaseTable(
   def alterTableWithData(
       data: Array[BufferedRows],
       newSchema: StructType): InMemoryBaseTable = {
-    val newFieldNames = newSchema.fieldNames.toSet
     data.foreach { bufferedRow =>
       val oldSchema = bufferedRow.schema
-      // Shrink rows when columns are dropped: remove values for fields
-      // not in newSchema. This ensures drop+re-add same column returns
-      // null (reader sees column missing in writeSchema). Leave all other
-      // evolution (additions, type widening, defaults) to the reader.
-      val keepFields = oldSchema.fields.zipWithIndex.filter {
-        case (f, _) => newFieldNames.contains(f.name)
-      }
-      val needsShrink = keepFields.length < oldSchema.length
-      val effectiveSchema = if (needsShrink) {
-        StructType(keepFields.map(_._1))
-      } else {
-        oldSchema
-      }
-
       bufferedRow.rows.foreach { row =>
-        val effectiveRow = if (needsShrink) {
-          new GenericInternalRow(keepFields.map { case (f, i) =>
-            row.get(i, f.dataType)
-          })
-        } else {
-          row
-        }
-        val key = getKey(effectiveRow, newSchema)
+        // handle partition evolution by re-keying all data
+        val key = getKey(row, newSchema)
         dataMap += dataMap.get(key)
           .map { splits =>
             val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
-                (splits.last.schema != effectiveSchema)) {
-              splits :+ new BufferedRows(key, effectiveSchema)
+                (splits.last.schema != oldSchema)) {
+              splits :+ new BufferedRows(key, oldSchema)
             } else {
               splits
             }
-            newSplits.last.withRow(effectiveRow)
+            newSplits.last.withRow(row)
             key -> newSplits
           }
           .getOrElse(key -> Seq(
-            new BufferedRows(key, effectiveSchema).withRow(effectiveRow)))
+            new BufferedRows(key, oldSchema).withRow(row)))
         addPartitionKey(key)
       }
     }
