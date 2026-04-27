@@ -165,9 +165,9 @@ private[spark] object Python {
 
   val PYTHON_UDF_PIPELINED_QUEUE_DEPTH =
     ConfigBuilder("spark.python.udf.pipelined.queueDepth")
-      .doc("The number of serialized data buffers to allow in the pipelined execution queue " +
-        "between the JVM writer thread and the NIO selector thread. A higher value allows " +
-        "more data to be buffered ahead, at the cost of increased memory usage. " +
+      .doc("The maximum number of input batches the Python worker's background reader thread " +
+        "can pre-fetch ahead of UDF computation. A higher value allows more overlap between " +
+        "input reading and UDF processing, at the cost of increased memory usage. " +
         "Only effective when spark.python.udf.pipelined.enabled is true.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
