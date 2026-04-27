@@ -179,6 +179,10 @@ def exec_sbt(sbt_args=()):
     # genjavadoc-stub error spam under `target/java/...`, which is benign.
     in_github_actions = os.environ.get("GITHUB_ACTIONS") == "true"
     workspace = os.environ.get("GITHUB_WORKSPACE", "").rstrip("/")
+    # Strip ANSI color codes before matching so the regex still works if sbt
+    # is ever configured to colorize output (e.g. `-Dsbt.color=always`). The
+    # unidoc diagnostic helper does the same.
+    ansi_re = re.compile(rb"\x1b\[[0-9;]*[A-Za-z]")
     sbt_compile_error_re = re.compile(
         rb"^\[error\]\s+(?P<file>(?:/[^:\s]+)+):(?P<line>\d+):(?:(?P<col>\d+):)?\s+(?P<msg>.+)$"
     )
@@ -186,7 +190,7 @@ def exec_sbt(sbt_args=()):
     def emit_annotation_if_compile_error(line_bytes):
         if not in_github_actions:
             return
-        m = sbt_compile_error_re.match(line_bytes.rstrip(b"\r\n"))
+        m = sbt_compile_error_re.match(ansi_re.sub(b"", line_bytes.rstrip(b"\r\n")))
         if not m:
             return
         try:
@@ -196,7 +200,7 @@ def exec_sbt(sbt_args=()):
             # and are intentionally non-fatal (`--ignore-source-errors` is set
             # for unidoc). Filtering them keeps the PR annotations focused on
             # actual user-fixable compile errors.
-            if "/target/java/" in file_path or file_path.endswith(".java") and "/target/" in file_path:
+            if "/target/java/" in file_path:
                 return
             line_no = m.group("line").decode("utf-8")
             msg = m.group("msg").decode("utf-8", errors="replace")
