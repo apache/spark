@@ -26,16 +26,15 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Physical plan node for dropping a table.
  *
- * For plain DROP TABLE, calls `dropTable` directly and inspects its return value; this saves
- * the upfront `tableExists` probe (1 RPC on the happy path). For DROP TABLE ... PURGE, keeps
- * the upfront `tableExists` probe so `IF EXISTS` over a missing table is a clean no-op even
- * on catalogs whose `purgeTable` is the default impl that throws unconditionally.
+ * Probes `tableExists` upfront so `IF EXISTS` over a missing table is a clean no-op even
+ * on catalogs whose `dropTable` / `purgeTable` does not honor the "return false on missing"
+ * contract (e.g. JDBC catalogs that throw a SQL syntax error, or the default `purgeTable`
+ * that throws `UNSUPPORTED_FEATURE.PURGE_TABLE` unconditionally).
  *
- * On a `dropTable` returning false, falls back to `viewExists` for catalogs that also
- * implement [[ViewCatalog]] -- distinguishes "wrong type" from "missing" so a
- * `DROP TABLE someView` on a mixed catalog surfaces the dedicated `EXPECT_TABLE_NOT_VIEW`
- * error rather than a generic "table not found", matching the v1
- * `DropTableCommand(isView = false)` behavior.
+ * When the table is absent, falls back to `viewExists` for catalogs that also implement
+ * [[ViewCatalog]] -- distinguishes "wrong type" from "missing" so a `DROP TABLE someView`
+ * on a mixed catalog surfaces the dedicated `EXPECT_TABLE_NOT_VIEW` error rather than a
+ * generic "table not found", matching the v1 `DropTableCommand(isView = false)` behavior.
  */
 case class DropTableExec(
     catalog: TableCatalog,
@@ -45,16 +44,9 @@ case class DropTableExec(
     invalidateCache: () => Unit) extends LeafV2CommandExec {
 
   override def run(): Seq[InternalRow] = {
-    val dropped = if (purge) {
-      // Guard `purgeTable` behind `tableExists` so the default impl (which throws
-      // UNSUPPORTED_FEATURE.PURGE_TABLE unconditionally) doesn't fire for `IF EXISTS` over a
-      // missing table; the IF EXISTS contract should suppress "missing" cleanly here.
-      if (catalog.tableExists(ident)) catalog.purgeTable(ident) else false
-    } else {
-      catalog.dropTable(ident)
-    }
-    if (dropped) {
+    if (catalog.tableExists(ident)) {
       invalidateCache()
+      if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else {
       val nameParts =
         (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
