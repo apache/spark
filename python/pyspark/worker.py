@@ -3701,6 +3701,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             _SENTINEL = object()
             input_queue = queue.Queue(maxsize=queue_depth)
             reader_error = [None]
+            stop_event = threading.Event()
 
             def _reader_thread():
                 try:
@@ -3711,11 +3712,27 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         # main thread can consume them without touching infile.
                         if hasattr(batch, "__next__"):
                             batch = list(batch)
-                        input_queue.put(batch)
+                        # Use timeout put so we can check stop_event periodically.
+                        # This prevents the reader from blocking forever if the main
+                        # thread stops consuming (e.g., due to UDF exception).
+                        while not stop_event.is_set():
+                            try:
+                                input_queue.put(batch, timeout=1)
+                                break
+                            except queue.Full:
+                                continue
+                        if stop_event.is_set():
+                            return
                 except Exception as e:
                     reader_error[0] = e
                 finally:
-                    input_queue.put(_SENTINEL)
+                    # Use the same timeout put pattern for the sentinel.
+                    while not stop_event.is_set():
+                        try:
+                            input_queue.put(_SENTINEL, timeout=1)
+                            break
+                        except queue.Full:
+                            continue
 
             t = threading.Thread(target=_reader_thread, name="pyspark-pipelined-reader", daemon=True)
             t.start()
@@ -3735,6 +3752,14 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             finally:
                 if hasattr(out_iter, "close"):
                     out_iter.close()
+                # Signal reader thread to stop, drain the queue so it can unblock,
+                # then wait for it to finish.
+                stop_event.set()
+                try:
+                    while not input_queue.empty():
+                        input_queue.get_nowait()
+                except Exception:
+                    pass
                 t.join(timeout=5)
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
