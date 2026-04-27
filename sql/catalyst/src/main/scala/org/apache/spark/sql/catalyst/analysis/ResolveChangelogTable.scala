@@ -195,9 +195,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     val partitionByCols = rowIdExprs ++ Seq(commitVersionAttr)
     val windowSpec = WindowSpecDefinition(partitionByCols, Nil, UnspecifiedFrame)
 
-    val insertIf = If(EqualTo(changeTypeAttr, Literal("insert")),
+    val insertIf = If(EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_INSERT)),
       Literal(1), Literal(null, IntegerType))
-    val deleteIf = If(EqualTo(changeTypeAttr, Literal("delete")),
+    val deleteIf = If(EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_DELETE)),
       Literal(1), Literal(null, IntegerType))
 
     val insCntAlias = Alias(WindowExpression(
@@ -255,8 +255,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       EqualTo(delCnt, Literal(1L)),
       EqualTo(insCnt, Literal(1L)))
     val isInvalid = Or(GreaterThan(delCnt, Literal(1L)), GreaterThan(insCnt, Literal(1L)))
-    val updateType = If(EqualTo(changeTypeAttr, Literal("insert")),
-      Literal("update_postimage"), Literal("update_preimage"))
+    val updateType = If(EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_INSERT)),
+      Literal(Changelog.CHANGE_TYPE_UPDATE_POSTIMAGE),
+      Literal(Changelog.CHANGE_TYPE_UPDATE_PREIMAGE))
 
     val raiseInvalid = RaiseError(
       Literal("CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION"),
