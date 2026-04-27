@@ -1702,7 +1702,7 @@ object Unidoc {
         "--ignore-source-errors", "-notree",
         "-Xmaxerrs", "999999",
         "-Xmaxwarns", "999999",
-        "-Xdoclint:all,-reference"
+        "-Xdoclint:reference"
       )
     },
 
