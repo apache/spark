@@ -416,7 +416,11 @@ case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     refreshCache: () => Unit,
     query: SparkPlan,
-    writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
+    writeMetrics: Seq[CustomMetric],
+    transaction: Option[Transaction] = None) extends V2TableWriteExec with TransactionalExec {
+
+  override def withTransaction(txn: Option[Transaction]): WriteToDataSourceV2Exec =
+    copy(transaction = txn)
 
   override def stringArgs: Iterator[Any] = Iterator(batchWrite, query)
 
@@ -426,6 +430,7 @@ case class WriteToDataSourceV2Exec(
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(batchWrite)
+    transaction.foreach(TransactionUtils.commit)
     refreshCache()
     writtenRows
   }

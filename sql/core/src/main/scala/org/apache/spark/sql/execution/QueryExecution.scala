@@ -496,17 +496,24 @@ class QueryExecution(
     }
   }
 
+  /**
+   * Returns the QueryExecution to use when generating an explain string.
+   * Overridden by IncrementalExecution to reuse `this` so that the already-open transaction and
+   * cached executedPlan are not duplicated.
+   */
+  protected def queryExecutionForExplain: QueryExecution = if (logical.isStreaming) {
+    // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
+    // output mode does not matter since there is no `Sink`.
+    new IncrementalExecution(
+      sparkSession, logical, OutputMode.Append(), "<unknown>",
+      UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
+      WatermarkPropagator.noop(), false, mode = this.mode)
+  } else {
+    this
+  }
+
   private def explainString(mode: ExplainMode, maxFields: Int, append: String => Unit): Unit = {
-    val queryExecution = if (logical.isStreaming) {
-      // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
-      // output mode does not matter since there is no `Sink`.
-      new IncrementalExecution(
-        sparkSession, logical, OutputMode.Append(), "<unknown>",
-        UUID.randomUUID, UUID.randomUUID, 0, None, OffsetSeqMetadata(0, 0),
-        WatermarkPropagator.noop(), false, mode = this.mode)
-    } else {
-      this
-    }
+    val queryExecution = queryExecutionForExplain
 
     mode match {
       case SimpleMode =>

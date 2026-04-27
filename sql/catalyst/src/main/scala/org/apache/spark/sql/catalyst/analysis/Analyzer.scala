@@ -1055,6 +1055,28 @@ class Analyzer(
       }
     }
 
+    // Resolve the write target of a V2 write command (batch or streaming).
+    private def resolveWriteTarget(
+        write: LogicalPlan,
+        table: NamedRelation,
+        withNewTable: NamedRelation => LogicalPlan): LogicalPlan = {
+      table match {
+        case u: UnresolvedRelation if !u.isStreaming =>
+          resolveRelation(u).map(unwrapRelationPlan).map {
+            case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+              v.desc.identifier, write)
+            case u: UnresolvedCatalogRelation =>
+              throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
+                u.tableMeta.identifier, write)
+            case r: DataSourceV2Relation => withNewTable(r)
+            case _ =>
+              throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                u.multipartIdentifier.quoted)
+          }.getOrElse(write)
+        case _ => write
+      }
+    }
+
     // Resolve V2TableReference nodes created for:
     // 1 Temp views (via createForTempView).
     // 2. Transaction references (via createForTransaction). These are resolved by a
@@ -1084,23 +1106,11 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: StreamingV2WriteCommand =>
+        resolveWriteTarget(write, write.table, write.withNewTable)
+
       case write: V2WriteCommand =>
-        write.table match {
-          case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).map(unwrapRelationPlan).map {
-              case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                v.desc.identifier, write)
-              case u: UnresolvedCatalogRelation =>
-                throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
-                  u.tableMeta.identifier, write)
-              case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ =>
-                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                  u.multipartIdentifier.quoted)
-            }.getOrElse(write)
-          case _ => write
-        }
+        resolveWriteTarget(write, write.table, write.withNewTable)
 
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)

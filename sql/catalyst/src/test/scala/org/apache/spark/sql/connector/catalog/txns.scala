@@ -21,6 +21,7 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.sources.Filter
@@ -170,6 +171,9 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     throw new UnsupportedOperationException()
   }
 
+  // Returns all tables that participated in this transaction, keyed by identifier.
+  def txnTables: scala.collection.Map[Identifier, TxnTable] = tables.asScala
+
   // Invoke commit for all tables participated in the transaction. If a table is read-only
   // this is a no-op.
   def commit(): Unit = {
@@ -192,4 +196,32 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   }
 
   override def hashCode(): Int = name.hashCode()
+}
+
+/**
+ * An InMemoryRowLevelOperationTableCatalog that utilizes tables backed by a shared map. This
+ * simulates the behavior of real catalogs (Delta, Iceberg, etc.) where multiple instances
+ * of the catalog share the same underlying persistent storage, thus, they see the same tables.
+ *
+ * This is needed for testing execution that spans multiple Spark sessions. In particular,
+ * streaming queries execute micro-batches in cloned Spark sessions. Without this, the cloned
+ * spark session catalog will not see any tables created in the original session.
+ *
+ * Tests that use this catalog must call
+ * [[SharedTablesInMemoryRowLevelOperationTableCatalog.reset()]] in `afterEach` to clear the
+ * shared state between test cases.
+ */
+class SharedTablesInMemoryRowLevelOperationTableCatalog
+    extends InMemoryRowLevelOperationTableCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    super.initialize(name, options)
+    tables = SharedTablesInMemoryRowLevelOperationTableCatalog.sharedTables
+  }
+}
+
+object SharedTablesInMemoryRowLevelOperationTableCatalog {
+  private[catalog] val sharedTables: ConcurrentHashMap[Identifier, Table] =
+    new ConcurrentHashMap[Identifier, Table]()
+
+  def reset(): Unit = sharedTables.clear()
 }

@@ -1291,6 +1291,12 @@ trait TransactionalWrite extends LogicalPlan {
   def table: LogicalPlan
 }
 
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait StreamingV2WriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
+}
+
 /**
  * The logical plan of the DROP TABLE command.
  *

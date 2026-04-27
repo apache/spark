@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, Cus
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
@@ -412,6 +413,7 @@ abstract class InMemoryBaseTable(
 
   def baseCapabiilities: Set[TableCapability] = Set(
     TableCapability.BATCH_READ,
+    TableCapability.MICRO_BATCH_READ,
     TableCapability.BATCH_WRITE,
     TableCapability.STREAMING_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
@@ -501,6 +503,33 @@ abstract class InMemoryBaseTable(
 
   case class InMemoryHistogram(height: Double, bins: Array[HistogramBin]) extends Histogram
 
+  private class InMemoryTableOffset(val rowCount: Long) extends Offset {
+    override def json(): String = rowCount.toString
+  }
+
+  class InMemoryMicroBatchStream extends MicroBatchStream {
+    override def initialOffset(): Offset = new InMemoryTableOffset(0)
+    override def latestOffset(): Offset =
+      new InMemoryTableOffset(InMemoryBaseTable.this.rows.size.toLong)
+    override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
+      val s = start.asInstanceOf[InMemoryTableOffset].rowCount.toInt
+      val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
+      Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e)))
+    }
+    override def createReaderFactory(): PartitionReaderFactory = { partition =>
+      val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
+      new PartitionReader[InternalRow] {
+        private var idx = -1
+        override def next(): Boolean = { idx += 1; idx < rows.size }
+        override def get(): InternalRow = rows(idx)
+        override def close(): Unit = {}
+      }
+    }
+    override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
+    override def commit(end: Offset): Unit = {}
+    override def stop(): Unit = {}
+  }
+
   abstract class BatchScanBaseClass(
       var data: Seq[InputPartition],
       readSchema: StructType,
@@ -586,6 +615,9 @@ abstract class InMemoryBaseTable(
     override def supportedCustomMetrics(): Array[CustomMetric] = {
       Array(new RowsReadCustomMetric)
     }
+
+    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+      new InMemoryMicroBatchStream
   }
 
   case class InMemoryBatchScan(
@@ -805,6 +837,13 @@ object InMemoryBaseTable {
     }
   }
 }
+
+/**
+ * A partition for [[InMemoryBaseTable]] micro-batch streaming reads, holding a slice of rows.
+ * Defined at the top level (not as an inner class) so that Java serialization to executors
+ * does not attempt to serialize the enclosing [[InMemoryBaseTable]] instance.
+ */
+case class InMemoryMicroBatchPartition(rows: Seq[InternalRow]) extends InputPartition
 
 /**
  * Represent a set of rows buffered in memory for a given partition key.
