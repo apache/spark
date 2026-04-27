@@ -41,8 +41,7 @@ case class ComplexClass(a: Long, b: StringLongClass)
 case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
-  extends QueryTest
-  with QueryErrorsBase
+  extends QueryErrorsBase
   with SharedSparkSession {
   import testImplicits._
 
