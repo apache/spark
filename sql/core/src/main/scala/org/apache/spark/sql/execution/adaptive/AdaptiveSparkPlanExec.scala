@@ -20,20 +20,32 @@ package org.apache.spark.sql.execution.adaptive
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
+import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.broadcast
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  BROADCAST,
+  HintInfo,
+  Join,
+  JoinHint,
+  LogicalPlan,
+  NO_BROADCAST_HASH,
+  ResolvedHint,
+  ReturnAnswer,
+  SubqueryAlias
+}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -45,6 +57,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -224,6 +237,10 @@ case class AdaptiveSparkPlanExec(
     allChildStagesMaterialized: Boolean,
     newStages: Seq[QueryStageExec])
 
+  private case class BroadcastFallbackResult(
+    fallbackStages: Seq[BroadcastQueryStageExec],
+    fallbackErrors: Seq[Throwable])
+
   def executedPlan: SparkPlan = currentPhysicalPlan
 
   def isFinalPlan: Boolean = _isFinalPlan
@@ -279,6 +296,9 @@ case class AdaptiveSparkPlanExec(
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
       var stagesToReplace = Seq.empty[QueryStageExec]
+      // Persist failed broadcast relations across AQE iterations so later replans
+      // cannot reintroduce the same relation and re-trigger the same broadcast failure.
+      val failedBroadcastStagesBuffer = new mutable.ArrayBuffer[BroadcastQueryStageExec]()
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
         if (result.newStages.nonEmpty) {
@@ -328,12 +348,21 @@ case class AdaptiveSparkPlanExec(
         val nextMsg = events.take()
         val rem = new util.ArrayList[StageMaterializationEvent]()
         events.drainTo(rem)
-        (Seq(nextMsg) ++ rem.asScala).foreach {
-          case StageSuccess(stage, res) =>
-            stage.resultOption.set(Some(res))
-          case StageFailure(stage, ex) =>
-            stage.error.set(Some(ex))
-            errors.append(ex)
+        val stageEvents = Seq(nextMsg) ++ rem.asScala
+        val fallbackResult =
+          processStageMaterializationEvents(stageEvents, failedBroadcastStagesBuffer, errors)
+        val fallbackStages = fallbackResult.fallbackStages
+        val fallbackErrors = fallbackResult.fallbackErrors
+
+        // Do not carry failed fallback stages into the next logical-plan replacement pass.
+        // They are intentionally invalidated and must be rebuilt by replanning.
+        if (fallbackStages.nonEmpty) {
+          stagesToReplace = filterStagesToReplaceForFallback(
+            stagesToReplace,
+            failedBroadcastStagesBuffer.toSeq)
+          currentLogicalPlan = removeFailedBroadcastStagesFromLogicalPlan(
+            currentLogicalPlan,
+            failedBroadcastStagesBuffer.toSeq)
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -353,12 +382,33 @@ case class AdaptiveSparkPlanExec(
           // plans are updated, we can clear the query stage list because at this point the two
           // plans are semantically and physically in sync again.
           val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-          val afterReOptimize = reOptimize(logicalPlan)
+          val shouldBroadcastFallback = fallbackStages.nonEmpty
+          val failedBroadcastStages = failedBroadcastStagesBuffer.toSeq
+
+          val afterReOptimize = if (shouldBroadcastFallback) {
+            val targetedLogicalPlan =
+              addNoBroadcastHashHintsForFailedRelations(logicalPlan, failedBroadcastStages)
+            reOptimize(targetedLogicalPlan)
+          } else {
+            reOptimize(logicalPlan)
+          }
+
           if (afterReOptimize.isDefined) {
             val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
+            val rejectBroadcastFallbackPlan = hasFailedBroadcastRelation(
+              newPhysicalPlan, failedBroadcastStages)
             val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
             val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
-            if (newCost < origCost ||
+            if (rejectBroadcastFallbackPlan) {
+              if (shouldBroadcastFallback) {
+                logInfo("Adaptive fallback replan still contains failed broadcast relation; " +
+                  "aborting without retrying broadcast join fallback.")
+                cleanUpAndThrowException(fallbackErrors.toSeq, None)
+              } else {
+                logDebug("Rejecting AQE replan because it reintroduces a previously failed " +
+                  "broadcast relation.")
+              }
+            } else if (shouldBroadcastFallback || newCost < origCost ||
               (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
               lazy val plans = sideBySide(
                 currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
@@ -368,6 +418,8 @@ case class AdaptiveSparkPlanExec(
               currentLogicalPlan = newLogicalPlan
               stagesToReplace = Seq.empty[QueryStageExec]
             }
+          } else if (shouldBroadcastFallback) {
+            cleanUpAndThrowException(fallbackErrors.toSeq, None)
           }
         }
         // Now that some stages have finished, we can try creating new stages.
@@ -716,12 +768,7 @@ case class AdaptiveSparkPlanExec(
    * `EnsureRequirements`.
    */
   private def setLogicalLinkForNewQueryStage(stage: QueryStageExec, plan: SparkPlan): Unit = {
-    val link = plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).orElse(
-      plan.logicalLink.orElse(plan.collectFirst {
-        case p if p.containsTag(TEMP_LOGICAL_PLAN_TAG) =>
-          p.getTagValue(TEMP_LOGICAL_PLAN_TAG).get
-        case p if p.logicalLink.isDefined => p.logicalLink.get
-      }))
+    val link = resolveLogicalPlan(plan)
     assert(link.isDefined)
     stage.setLogicalLink(link.get)
   }
@@ -858,6 +905,317 @@ case class AdaptiveSparkPlanExec(
         context.qe.explainString(planDescriptionMode),
         SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
     }
+  }
+
+  private def processStageMaterializationEvents(
+      stageEvents: Seq[StageMaterializationEvent],
+      failedBroadcastStages: mutable.ArrayBuffer[BroadcastQueryStageExec],
+      errors: mutable.ArrayBuffer[Throwable]): BroadcastFallbackResult = {
+    val fallbackStages = new mutable.ArrayBuffer[BroadcastQueryStageExec]()
+    val fallbackErrors = new mutable.ArrayBuffer[Throwable]()
+
+    stageEvents.foreach {
+      case StageSuccess(stage, res) =>
+        stage.resultOption.set(Some(res))
+      case StageFailure(stage: BroadcastQueryStageExec, ex)
+          if shouldFallbackToShuffleJoin(stage, ex) =>
+        removeStageFromCache(stage)
+        logInfo("Broadcast query stage failed on table size/row limit; retrying " +
+          s"adaptive replanning with matching broadcast hash joins disabled. " +
+          s"Stage ${stage.id}")
+        registerFailedBroadcastStage(failedBroadcastStages, stage)
+        if (!fallbackStages.exists(_.eq(stage))) {
+          fallbackStages.append(stage)
+        }
+        fallbackErrors.append(ex)
+      case StageFailure(stage: BroadcastQueryStageExec, ex)
+          if shouldIgnoreStaleBroadcastStageFailure(stage, ex, failedBroadcastStages.toSeq) =>
+        logDebug("Ignoring stale broadcast query stage failure for a previously failed " +
+          s"broadcast input. Stage ${stage.id}")
+        removeStageFromCache(stage)
+      case StageFailure(stage, ex) =>
+        stage.error.set(Some(ex))
+        errors.append(ex)
+    }
+
+    BroadcastFallbackResult(fallbackStages.toSeq, fallbackErrors.toSeq)
+  }
+
+  private def shouldFallbackToShuffleJoin(stage: QueryStageExec, error: Throwable): Boolean = {
+    // Detect errors such as:
+    //   - Cannot broadcast the table over <maxBroadcastTableRows> rows: <numRows> rows.
+    //   - Cannot broadcast the table that is larger than <maxBroadcastTableBytes>: <dataSize>.
+    // Only BHJ fallback is supported here.
+    conf.adaptiveBroadcastJoinFallbackToShuffleEnabled &&
+      !isRequiredRootBroadcastStage(stage) &&
+      stage.isInstanceOf[BroadcastQueryStageExec] &&
+      usedOnlyByBroadcastHashJoin(stage.asInstanceOf[BroadcastQueryStageExec]) &&
+      hasErrorClass(error, "_LEGACY_ERROR_TEMP_2248", "_LEGACY_ERROR_TEMP_2249")
+  }
+
+  private def shouldIgnoreStaleBroadcastStageFailure(
+      stage: BroadcastQueryStageExec,
+      error: Throwable,
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): Boolean = {
+    hasErrorClass(error, "_LEGACY_ERROR_TEMP_2248", "_LEGACY_ERROR_TEMP_2249") &&
+      failedBroadcastStages.exists { failed =>
+        sameBroadcastInputPlan(failed.broadcast.child, stage.broadcast.child)
+      }
+  }
+
+  // Remove failed fallback stages from the replacement set before replanning.
+  // For broadcast stages, remove semantically equivalent siblings as well, so
+  // reused/duplicated broadcast stages for the same relation don't leak through.
+  private def filterStagesToReplaceForFallback(
+      stagesToReplace: Seq[QueryStageExec],
+      failedStages: Seq[QueryStageExec]): Seq[QueryStageExec] = {
+    if (failedStages.isEmpty) return stagesToReplace
+
+    val failedBroadcastStages = failedStages.collect {
+      case b: BroadcastQueryStageExec => b
+    }
+
+    stagesToReplace.filterNot {
+      case stage if failedStages.exists(_.eq(stage)) => true
+      case stage: BroadcastQueryStageExec =>
+        failedBroadcastStages.exists { failed =>
+          sameBroadcastInputPlan(stage.broadcast.child, failed.broadcast.child)
+        }
+      case _ => false
+    }
+  }
+
+  // Remove failed broadcast query-stage wrappers that may have been embedded in prior adopted
+  // logical plans, so fallback replanning does not keep retrying the same failed relation.
+  private def removeFailedBroadcastStagesFromLogicalPlan(
+      plan: LogicalPlan,
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): LogicalPlan = {
+    if (failedBroadcastStages.isEmpty) {
+      plan
+    } else {
+      plan.transformDown {
+        case stage: LogicalQueryStage
+            if hasFailedBroadcastRelation(stage.physicalPlan, failedBroadcastStages) =>
+          stage.logicalPlan
+      }
+    }
+  }
+
+  // Check if a Spark physical plan contains any of the previous failed broadcast stages
+  private def hasFailedBroadcastRelation(
+      plan: SparkPlan,
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): Boolean = {
+    failedBroadcastStages.nonEmpty && hasMatchingBroadcastInputPlan(plan) { child =>
+      failedBroadcastStages.exists { failed =>
+        sameBroadcastInputPlan(child, failed.broadcast.child)
+      }
+    }
+  }
+
+  // Drop stale cache entries for a failed/replaced exchange stage so AQE can rebuild it.
+  private def removeStageFromCache(stage: QueryStageExec): Unit = stage match {
+    case exchangeStage: ExchangeQueryStageExec =>
+      val planKey = exchangeStage.plan.canonicalized
+      val stageKey = exchangeStage.canonicalized
+
+      context.stageCache.remove(planKey)
+      if (stageKey != planKey) {
+        context.stageCache.remove(stageKey)
+      }
+    case _ =>
+  }
+
+  // Normalize different wrappers to the underlying broadcast child plan when present.
+  private def broadcastChildPlan(plan: SparkPlan): Option[SparkPlan] = plan match {
+    case stage: BroadcastQueryStageExec => Some(stage.broadcast.child)
+    case exchange: BroadcastExchangeLike => Some(exchange.child)
+    case ReusedExchangeExec(_, exchange: BroadcastExchangeLike) => Some(exchange.child)
+    case _ => None
+  }
+
+  // Compare full broadcast input plans (including filters/projects under the exchange)
+  // by semantic plan equivalence.
+  // Do not fall back to output-attribute equality: different plans can share
+  // output schemas while producing different relations.
+  private def sameBroadcastInputPlan(left: SparkPlan, right: SparkPlan): Boolean = {
+    left.sameResult(right)
+  }
+
+  // Track failed broadcast input plans by semantic equality so equivalent stages
+  // in later AQE replans are treated as the same failed input.
+  private def registerFailedBroadcastStage(
+      failedBroadcastStages: mutable.ArrayBuffer[BroadcastQueryStageExec],
+      failedStage: BroadcastQueryStageExec): Unit = {
+    if (!failedBroadcastStages.exists { existing =>
+      sameBroadcastInputPlan(existing.broadcast.child, failedStage.broadcast.child)
+    }) {
+      failedBroadcastStages.append(failedStage)
+    }
+  }
+
+  private def usedOnlyByBroadcastHashJoin(stage: BroadcastQueryStageExec): Boolean = {
+    val consumers = currentPhysicalPlan.collect {
+      case join: BroadcastHashJoinExec
+          if usesBroadcastInputPlan(
+            broadcastBuildPlan(join.buildSide, join.left, join.right), stage) =>
+        join
+      case join: BroadcastNestedLoopJoinExec
+          if usesBroadcastInputPlan(
+            broadcastBuildPlan(join.buildSide, join.left, join.right), stage) =>
+        join
+    }
+    // We do not support fallback for `BroadcastNestedLoopJoinExec` (BNLJ), as there is no good
+    // "hash join" replacement of it that preserves the same semantics. Under the simpler
+    // relation-based fallback scope, if the same broadcast input plan is consumed by both BHJ
+    // and BNLJ, conservatively abandon the fallback and preserve the original behavior.
+    consumers.nonEmpty && consumers.forall(_.isInstanceOf[BroadcastHashJoinExec])
+  }
+
+  private def broadcastBuildPlan(
+      buildSide: BuildSide,
+      left: SparkPlan,
+      right: SparkPlan): SparkPlan = {
+    buildSide match {
+      case BuildLeft => left
+      case BuildRight => right
+    }
+  }
+
+  // Check whether a join build side consumes the same broadcast input plan as a failed stage.
+  private def usesBroadcastInputPlan(
+      plan: SparkPlan,
+      stage: BroadcastQueryStageExec): Boolean = {
+    hasMatchingBroadcastInputPlan(plan) { child =>
+      sameBroadcastInputPlan(child, stage.broadcast.child)
+    }
+  }
+
+  private def hasMatchingBroadcastInputPlan(
+      plan: SparkPlan)(matches: SparkPlan => Boolean): Boolean = {
+    plan.exists { p =>
+      broadcastChildPlan(p).exists(matches)
+    }
+  }
+
+  // Root broadcast stages must be preserved (e.g. broadcast subquery output contract).
+  // Only exempt the actual root broadcast stage instance, not semantically equivalent relations.
+  private def isRequiredRootBroadcastStage(stage: QueryStageExec): Boolean = stage match {
+    case broadcastStage: BroadcastQueryStageExec if inputPlan.isInstanceOf[BroadcastExchangeLike] =>
+      @tailrec
+      def findRootBroadcast(current: SparkPlan): Option[BroadcastQueryStageExec] = current match {
+        case root: BroadcastQueryStageExec => Some(root)
+        case resultStage: ResultQueryStageExec => findRootBroadcast(resultStage.plan)
+        case _ => None
+      }
+      findRootBroadcast(currentPhysicalPlan).exists(_ eq broadcastStage)
+    case _ => false
+  }
+
+  // Apply NO_BROADCAST_HASH hints for joins whose input matches a previously failed
+  // broadcast relation, so targeted fallback can keep unrelated BHJs.
+  private def addNoBroadcastHashHintsForFailedRelations(
+      plan: LogicalPlan,
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): LogicalPlan = {
+    val failedLogicalPlans = extractFailedBroadcastLogicalPlans(failedBroadcastStages)
+    if (failedLogicalPlans.isEmpty) {
+      plan
+    } else {
+      plan.transformDown {
+        case join: Join =>
+          val disableLeft = shouldDisableBroadcastForJoinSide(join.left, failedLogicalPlans)
+          val disableRight = shouldDisableBroadcastForJoinSide(join.right, failedLogicalPlans)
+          if (!disableLeft && !disableRight) {
+            join
+          } else {
+            // For each failed broadcast side, add NO_BROADCAST_HASH where the join does not
+            // already carry an explicit non-broadcast strategy. This preserves existing
+            // join-strategy intent such as PREFER_SHUFFLE_HASH.
+            val newHint = JoinHint(
+              if (disableLeft) {
+                toNoBroadcastHashHint(join.hint.leftHint)
+              } else {
+                join.hint.leftHint
+              },
+              if (disableRight) {
+                toNoBroadcastHashHint(join.hint.rightHint)
+              } else {
+                join.hint.rightHint
+              })
+            if (newHint != join.hint) join.copy(hint = newHint) else join
+          }
+      }
+    }
+  }
+
+  private def extractFailedBroadcastLogicalPlans(
+      failedBroadcastStages: Seq[BroadcastQueryStageExec]): Seq[LogicalPlan] = {
+    val failedLogicalPlans = new mutable.ArrayBuffer[LogicalPlan]()
+    failedBroadcastStages.foreach { stage =>
+      Seq(stage.broadcast.child, stage.broadcast, stage)
+        .iterator
+        .flatMap(resolveLogicalPlan)
+        .foreach { logicalPlan =>
+          val normalizedPlan = normalizePlanForBroadcastFallback(logicalPlan)
+          if (!failedLogicalPlans.exists(_.sameResult(normalizedPlan))) {
+            failedLogicalPlans.append(normalizedPlan)
+          }
+      }
+    }
+    failedLogicalPlans.toSeq
+  }
+
+  private def resolveLogicalPlan(plan: SparkPlan): Option[LogicalPlan] = {
+    plan.getTagValue(TEMP_LOGICAL_PLAN_TAG).orElse(
+      plan.logicalLink.orElse(plan.collectFirst {
+        case p if p.containsTag(TEMP_LOGICAL_PLAN_TAG) =>
+          p.getTagValue(TEMP_LOGICAL_PLAN_TAG).get
+        case p if p.logicalLink.isDefined => p.logicalLink.get
+      }))
+  }
+
+  private def shouldDisableBroadcastForJoinSide(
+      side: LogicalPlan,
+      failedLogicalPlans: Seq[LogicalPlan]): Boolean = {
+    val normalizedSide = normalizePlanForBroadcastFallback(side)
+    failedLogicalPlans.exists(normalizedSide.sameResult)
+  }
+
+  private def normalizePlanForBroadcastFallback(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDown {
+      case stage: LogicalQueryStage => stage.logicalPlan
+      case ResolvedHint(child, _) => child
+      case alias: SubqueryAlias => alias.child
+    }
+  }
+
+  private def toNoBroadcastHashHint(hint: Option[HintInfo]): Option[HintInfo] = {
+    hint match {
+      // Only rewrite explicit BROADCAST hints. Preserve existing non-broadcast
+      // strategies such as NO_BROADCAST_AND_REPLICATION, SHUFFLE_HASH, etc.
+      case Some(h) if h.strategy.contains(BROADCAST) =>
+        Some(h.copy(strategy = Some(NO_BROADCAST_HASH)))
+      case Some(_) => hint
+      case None => Some(HintInfo(strategy = Some(NO_BROADCAST_HASH)))
+    }
+  }
+
+  // Walk throwable causes and return true if any SparkThrowable has one of the error classes.
+  private def hasErrorClass(error: Throwable, errorClasses: String*): Boolean = {
+    @tailrec
+    def loop(current: Throwable): Boolean = {
+      if (current == null) {
+        false
+      } else {
+        current match {
+          case sparkThrowable: SparkThrowable
+              if errorClasses.contains(sparkThrowable.getCondition) =>
+            true
+          case _ =>
+            loop(current.getCause)
+        }
+      }
+    }
+    loop(error)
   }
 
   private def assertStageNotFailed(stage: QueryStageExec): Unit = {
