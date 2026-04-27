@@ -22,13 +22,12 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 
 /**
- * DSv2 join tests for Spark Connect mirroring the classic
- * DataSourceV2DataFrameSuite join scenarios.
+ * DSv2 join tests for Spark Connect mirroring the classic DataSourceV2DataFrameSuite join
+ * scenarios.
  *
- * In Connect, both sides of a join re-analyze on every action,
- * so operations that fail in classic mode (DROP COLUMN, drop/recreate
- * table, type change) succeed here because each side gets a fresh
- * plan with the latest schema and data.
+ * In Connect, both sides of a join re-analyze on every action, so operations that fail in classic
+ * mode (DROP COLUMN, drop/recreate table, type change) succeed here because each side gets a
+ * fresh plan with the latest schema and data.
  */
 class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
@@ -41,7 +40,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
     val actualStrs = actual.map(_.toString()).toSet
     val expectedStrs = expected.map(_.toString()).toSet
-    assert(actualStrs == expectedStrs,
+    assert(
+      actualStrs == expectedStrs,
       s"Expected ${expected.mkString(", ")} but got ${actual.mkString(", ")}")
   }
 
@@ -98,9 +98,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       s.sql(s"INSERT INTO $T VALUES (2)").collect()
       val df2 = s.table(T)
 
-      assertRows(
-        df1.join(df2, df1("id") === df2("id")).collect(),
-        Seq(Row(1, 1), Row(2, 2)))
+      assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(1, 1), Row(2, 2)))
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
@@ -120,9 +118,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       s.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
       val df2 = s.table(T)
 
-      assertRows(
-        df1.join(df2, df1("id") === df2("id")).collect(),
-        Seq(Row(2, 200, 2, 200)))
+      assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(2, 200, 2, 200)))
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
