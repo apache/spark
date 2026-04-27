@@ -82,7 +82,7 @@ import org.apache.spark.scheduler.TaskInfo
  *  =============
  *  LastAttemptAccumulator offers simple tracking of the last SQL execution, by assuming that
  *  the last execution will be in the scope of an RDD with the highest id, and using
- *  [[lastAttemptValueForHighestRDDId]]. See [[SQLLastAttemptAccumulator]] for more possibilities
+ *  [[lastAttemptValueForHighestRDDId]]. See SQLLastAttemptAccumulator for more possibilities
  *  of tracking SQL execution.
  *
  *  Simple last SQL execution tracking
@@ -344,12 +344,12 @@ private case class AccumulatorPartialVal[PARTIAL](
  * unexpected behaviours in Spark.
  *
  * Implementations must implement [[partialMergeVal]] and [[partialMerge]] methods operating on
- * [[PARTIAL]] type. In regular [[AccumulatorV2]] implementations, the [[AccumulatorV2]] object
+ * PARTIAL type. In regular [[AccumulatorV2]] implementations, the [[AccumulatorV2]] object
  * itself holds the intermediate value of the accumulator, and [[AccumulatorV2.merge]] method is
  * used to merge these objects together. [[LastAttemptAccumulator]] needs to keep track of partial
  * values of every partition of every RDD that used the accumulator, and holding a full
  * [[AccumulatorV2]] object for each would have a high overhead. Therefore, an implementation should
- * be able to return [[PARTIAL]] value from [[partialMergeVal]] that represents an intermediate
+ * be able to return PARTIAL value from [[partialMergeVal]] that represents an intermediate
  * mergeable value, and a [[partialMerge]] method that can merge that value into the accumulator.
  * Implementations must also implement an [[isMergeable]] method that checks if the other
  * [[AccumulatorV2]] is of a compatible type to be merged with this using [[partialMergeVal]]. In
