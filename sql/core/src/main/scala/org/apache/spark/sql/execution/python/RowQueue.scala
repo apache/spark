@@ -78,6 +78,9 @@ private[python] abstract class InMemoryRowQueue(
       if (curOffset + 4 <= endOfPage) {
         // if there's extra space at the end of the page, store a special "end-of-page" length (-1)
         Platform.putInt(base, curOffset, -1)
+        // Volatile store to publish the end-of-page marker. The reader relies on seeing
+        // -1 to know this page is exhausted and switch to the next queue.
+        writeOffset = curOffset
       }
       false
     } else {
