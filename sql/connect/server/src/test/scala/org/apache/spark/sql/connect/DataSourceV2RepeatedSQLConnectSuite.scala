@@ -28,12 +28,11 @@ import org.apache.spark.sql.connector.catalog.{TableChange, TableWritePrivilege}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
- * Connect-mode equivalent of the repeated-sql() tests added to
- * DataSourceV2DataFrameSuite in the classic path.
+ * Connect-mode equivalent of the repeated-sql() tests added to DataSourceV2DataFrameSuite in the
+ * classic path.
  *
- * In Connect, every sql() call creates a fresh plan that is
- * re-analyzed on the server, so it always sees the latest data,
- * schema, and table identity.
+ * In Connect, every sql() call creates a fresh plan that is re-analyzed on the server, so it
+ * always sees the latest data, schema, and table identity.
  */
 class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
 
@@ -47,7 +46,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
     val actualStrs = actual.map(_.toString()).toSet
     val expectedStrs = expected.map(_.toString()).toSet
-    assert(actualStrs == expectedStrs,
+    assert(
+      actualStrs == expectedStrs,
       s"Expected ${expected.mkString(", ")} but got ${actual.mkString(", ")}")
   }
 
@@ -60,9 +60,7 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       s.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-      assertRows(
-        s.sql(s"SELECT * FROM $T").collect(),
-        Seq(Row(1, 100), Row(2, 200)))
+      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
@@ -77,16 +75,15 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // external writer adds (2, 200)
       val serverSession = getServerSession(s)
       val cat = serverSession.sessionState.catalogManager
-        .catalog("testcat").asInstanceOf[InMemoryTableCatalog]
+        .catalog("testcat")
+        .asInstanceOf[InMemoryTableCatalog]
       val schema2 = StructType.fromDDL("id INT, salary INT")
-      val extTable = cat.loadTable(ident,
-        util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema2).withRow(InternalRow(2, 200))))
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema2).withRow(InternalRow(2, 200))))
 
-      assertRows(
-        s.sql(s"SELECT * FROM $T").collect(),
-        Seq(Row(1, 100), Row(2, 200)))
+      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
@@ -102,9 +99,7 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
 
       s.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
       s.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
-      assertRows(
-        s.sql(s"SELECT * FROM $T").collect(),
-        Seq(Row(1, 100, null), Row(2, 200, -1)))
+      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
@@ -119,19 +114,19 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // external schema change + data write via catalog API
       val serverSession = getServerSession(s)
       val cat = serverSession.sessionState.catalogManager
-        .catalog("testcat").asInstanceOf[InMemoryTableCatalog]
+        .catalog("testcat")
+        .asInstanceOf[InMemoryTableCatalog]
       val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
       cat.alterTable(ident, addCol)
 
       val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
-      val extTable = cat.loadTable(ident,
-        util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
 
-      assertRows(
-        s.sql(s"SELECT * FROM $T").collect(),
-        Seq(Row(1, 100, null), Row(2, 200, -1)))
+      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
@@ -162,13 +157,12 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // external drop and recreate via catalog API
       val serverSession = getServerSession(s)
       val cat = serverSession.sessionState.catalogManager
-        .catalog("testcat").asInstanceOf[InMemoryTableCatalog]
+        .catalog("testcat")
+        .asInstanceOf[InMemoryTableCatalog]
       cat.dropTable(ident)
       cat.createTable(
         ident,
-        Array(
-          Column.create("id", IntegerType),
-          Column.create("salary", IntegerType)),
+        Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
         Array.empty,
         Collections.emptyMap[String, String])
 
