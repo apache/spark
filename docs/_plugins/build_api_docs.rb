@@ -163,71 +163,12 @@ def stream_and_capture(command, log_file)
   $?.success?
 end
 
-# Returns the diff range covering files this PR changed, or nil if we can't
-# determine a meaningful range. The CI docs job squash-merges the PR onto
-# apache/spark master and creates a single "Merged commit"; in that layout
-# `HEAD~1` is the master tip and `HEAD` carries the PR's changes. Outside CI
-# (or on apache/spark itself, where no merge happens) we have nothing to
-# compare against, so return nil and skip the scan.
-def pr_diff_range
-  return nil unless ENV['GITHUB_ACTIONS'] == 'true'
-  return nil unless system('git rev-parse --verify HEAD~1 >/dev/null 2>&1')
-  # Distinguish "PR squash-merged onto master" from "running on apache/spark
-  # master directly" by looking at HEAD's commit subject. The sync step in
-  # `.github/workflows/build_and_test.yml` always uses this exact subject.
-  subject = `git log -1 --format=%s HEAD 2>/dev/null`.strip
-  return nil unless subject == 'Merged commit'
-  'HEAD~1...HEAD'
-end
-
-# Scans Java/Scala files this PR changes for doc-tag patterns that have
-# previously crashed the standard doclet's tree builder. Returns an array of
-# {file:, line:, message:} hashes (possibly empty); returns nil if the scan
-# cannot run (e.g. the diff range is unavailable). Each hazard pattern below
-# is keyed to a real failure mode -- not a stylistic preference -- so a hit
-# is high-confidence actionable.
-def scan_pr_doc_hazards
-  range = pr_diff_range
-  return nil unless range
-  changed_raw = `git diff --name-only #{range} -- '*.java' '*.scala' 2>/dev/null`
-  changed = changed_raw.lines.map(&:strip).reject(&:empty?)
-  return [] if changed.empty?
-
-  hazards = []
-  changed.each do |path|
-    next unless File.file?(path)
-    File.foreach(path).with_index(1) do |line, lineno|
-      # Pattern: `@inheritDoc` written as a block tag on its own line.
-      # `@inheritDoc` is only valid as the inline tag `{@inheritDoc}`; Spark
-      # also registers a custom lowercase block tag `@inheritdoc` via
-      # `-tag inheritdoc` in `SparkBuild.scala`. The camelCase block form is
-      # neither -- it produces no inherited content and is silently dropped
-      # by the doclet. Surface it so a misuse caught during the unidoc
-      # failure window is fixable in one round.
-      if line =~ /^\s*\*\s*@inheritDoc\s*$/
-        hazards << {
-          file: path,
-          line: lineno,
-          message: '@inheritDoc as block tag is invalid; use {@inheritDoc} (inline) ' \
-                   'or @inheritdoc (lowercase block, registered via -tag inheritdoc)'
-        }
-      end
-    end
-  end
-  hazards
-rescue => e
-  # Never let the scan obscure the underlying unidoc failure.
-  $stderr.puts "  (PR-scope hazard scan failed: #{e.class}: #{e.message})"
-  nil
-end
-
 # Scans the captured unidoc log and prints a pointer to the most likely
 # culprit source file. The heuristic: when javadoc dies mid-HTML-generation,
 # the last "Generating .../X.html" line before "javadoc exited with exit code"
-# names the class that tripped it. When the crash predates HTML output (i.e.
-# javadoc dies during "Building tree" / "Building index"), no per-class line
-# exists -- in that case fall back to a PR-scope scan for known doc-tag
-# hazards that match this failure shape (see `scan_pr_doc_hazards`).
+# names the class that tripped it. Prints nothing actionable if the failure
+# mode doesn't match (e.g. a scaladoc error), in which case the full log above
+# already shows what's wrong.
 def diagnose_unidoc_failure(log_file)
   return unless File.exist?(log_file)
   begin
@@ -271,27 +212,8 @@ def diagnose_unidoc_failure(log_file)
     elsif javadoc_exit_idx
       $stderr.puts ""
       $stderr.puts "  Javadoc exited but no class HTML generation was in progress;"
-      $stderr.puts "  the crash predates HTML output. Most often this means a doc"
-      $stderr.puts "  tag the standard doclet's tree builder cannot dispatch on, a"
-      $stderr.puts "  malformed @link target, or (rarely) a CLI / classpath issue."
-      hazards = scan_pr_doc_hazards
-      if hazards && !hazards.empty?
-        $stderr.puts ""
-        $stderr.puts "  PR-scope scan found likely culprits in files this PR changes:"
-        hazards.each do |h|
-          $stderr.puts "    * #{h[:file]}:#{h[:line]}: #{h[:message]}"
-          # Also emit a GitHub Actions annotation so the finding shows up
-          # inline on the PR's "Files changed" tab without needing to read
-          # the full job log.
-          if ENV['GITHUB_ACTIONS'] == 'true'
-            puts "::error file=#{h[:file]},line=#{h[:line]},title=Unidoc hazard::#{h[:message]}"
-          end
-        end
-        $stderr.puts ""
-        $stderr.puts "  These doc-tag patterns are known to crash the doclet's tree"
-        $stderr.puts "  builder. Fix one and re-run; if unidoc still fails, scroll up"
-        $stderr.puts "  to the full sbt output for further clues."
-      end
+      $stderr.puts "  the crash predates HTML output -- likely a CLI / classpath /"
+      $stderr.puts "  setup issue. See the full sbt output above."
     else
       $stderr.puts ""
       $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
