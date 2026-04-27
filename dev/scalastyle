@@ -40,9 +40,11 @@ if test ! -z "$ERRORS"; then
     if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         printf '%s\n' "$ERRORS" | while IFS= read -r raw; do
             # scalastyle's native console format is:
-            #   error file=<path> message=<text> line=<n>
-            # The path has no spaces, the message can; line is always last.
-            if [[ "$raw" =~ ^error[[:space:]]+file=([^[:space:]]+)[[:space:]]+message=(.*)[[:space:]]+line=([0-9]+)$ ]]; then
+            #   error file=<path> message=<text> line=<n> [column=<n>]
+            # The path has no spaces, the message can; `column=<n>` is
+            # appended for checkers that report a column (e.g.
+            # `WhitespaceEndOfLineChecker`) and absent otherwise.
+            if [[ "$raw" =~ ^error[[:space:]]+file=([^[:space:]]+)[[:space:]]+message=(.*)[[:space:]]+line=([0-9]+)([[:space:]]+column=[0-9]+)?$ ]]; then
                 file="${BASH_REMATCH[1]}"
                 msg="${BASH_REMATCH[2]}"
                 lineno="${BASH_REMATCH[3]}"
