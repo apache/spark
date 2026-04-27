@@ -160,7 +160,7 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * @inheritDoc
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
    * wrapping a {@link ViewInfo} is rejected as not-a-table; anything else is returned. Override
@@ -176,7 +176,7 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * @inheritDoc
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
    * wrapping a {@link ViewInfo} is unwrapped and returned; anything else (table or absent) is
@@ -198,7 +198,7 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * @inheritDoc
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
    * the entry exists and is not a view. Override only if a cheaper existence-check path exists.
@@ -214,7 +214,7 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * @inheritDoc
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
    * the entry exists and is a view. Override only if a cheaper existence-check path exists.
