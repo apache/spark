@@ -120,8 +120,9 @@ private[sql] object Catalogs {
       throw new IllegalArgumentException(
         s"Catalog '$name' (${plugin.getClass.getName}) implements both TableCatalog and " +
           s"ViewCatalog directly. Catalogs that expose both tables and views must implement " +
-          s"RelationCatalog instead, which centralizes the cross-cutting rules (shared identifier " +
-          s"namespace, cross-type collision rejection, single-RPC perf entry points).")
+          s"RelationCatalog instead, which centralizes the cross-cutting rules (shared " +
+          s"identifier namespace, cross-type collision rejection, single-RPC perf entry " +
+          s"points).")
     }
   }
 }

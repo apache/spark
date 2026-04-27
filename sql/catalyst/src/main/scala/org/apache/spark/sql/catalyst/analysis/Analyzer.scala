@@ -1109,9 +1109,9 @@ class Analyzer(
      * so surfacing a downstream "view not found" would hide the real reason.
      *
      * Lookup order against a non-session catalog:
-     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called once.
-     *      A returned [[MetadataOnlyTable]] wrapping a [[ViewInfo]] is interpreted as a view;
-     *      other results are tables.
+     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
+     *      once. A returned [[MetadataOnlyTable]] wrapping a [[ViewInfo]] is interpreted as a
+     *      view; other results are tables.
      *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
      *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
      */
