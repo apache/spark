@@ -413,31 +413,66 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         worker.channel.socket().setSoTimeout(idleTimeoutSeconds.toInt * 1000)
       }
 
-      // Wrap the socket InputStream to handle idle timeout: on SocketTimeoutException,
-      // kill the worker (if configured) and throw PythonWorkerException with the same
-      // message that sync mode's ReaderInputStream produces.
+      // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
+      // - Log warning on each timeout
+      // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
+      // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
       val socketInput = new InputStream {
         private val inner = worker.channel.socket().getInputStream
+        private var pythonWorkerKilled = false
         override def read(): Int = doRead(() => inner.read())
         override def read(b: Array[Byte], off: Int, len: Int): Int =
           doRead(() => inner.read(b, off, len))
         private def doRead(op: () => Int): Int = {
-          try {
-            op()
-          } catch {
-            case _: java.net.SocketTimeoutException =>
-              if (killOnIdleTimeout) {
-                handle.foreach { h =>
-                  if (h.isAlive) h.destroy()
+          var result = 0
+          var retry = true
+          while (retry) {
+            try {
+              result = op()
+              retry = false
+            } catch {
+              case _: java.net.SocketTimeoutException =>
+                if (pythonWorkerKilled) {
+                  logWarning(
+                    log"Waiting for Python worker process to terminate after idle timeout: " +
+                    pythonWorkerStatusMessageWithContext(
+                      handle, worker, hasInputs = true))
+                } else {
+                  logWarning(
+                    log"Idle timeout reached for Python worker (timeout: " +
+                    log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+                    log"No data received from the worker process - " +
+                    pythonWorkerStatusMessageWithContext(
+                      handle, worker, hasInputs = true) +
+                    log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                  if (killOnIdleTimeout) {
+                    handle.foreach { h =>
+                      if (h.isAlive) {
+                        logWarning(
+                          log"Terminating Python worker process due to idle timeout " +
+                          log"(timeout: " +
+                          log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
+                          log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                        pythonWorkerKilled = h.destroy()
+                      }
+                    }
+                    // After killing, retry read to get EOF from the dead process
+                  } else {
+                    // Not killing: retry read, matching sync mode behavior
+                  }
                 }
-              }
-              val base = "Python worker process terminated due to idle timeout " +
-                s"(timeout: $idleTimeoutSeconds seconds)"
-              val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
-                .map(error => s"$base: $error")
-                .getOrElse(base)
-              throw new PythonWorkerException(msg)
+            }
           }
+          // If worker was killed and read returned -1 (EOF), throw the expected error
+          if (result == -1 && pythonWorkerKilled) {
+            val base = "Python worker process terminated due to idle timeout " +
+              s"(timeout: $idleTimeoutSeconds seconds)"
+            val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+              .map(error => s"$base: $error")
+              .getOrElse(base)
+            throw new PythonWorkerException(msg)
+          }
+          result
         }
       }
       new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
