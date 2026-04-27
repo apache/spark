@@ -71,10 +71,10 @@ if test ! -z "$ERRORS"; then
             #     appended for checkers that report a column (e.g.
             #     `WhitespaceEndOfLineChecker`) and absent otherwise.
             #
-            # (b) sbt's logger format (when the same `Tasks.doScalastyle` is
-            #     invoked from the `scalaStyleOnCompile` hook attached to
-            #     `Compile / compile` -- which fires first as a build
-            #     dependency, so in practice this is the format we see in CI):
+            # (b) sbt's logger format, used when `Tasks.doScalastyle` writes
+            #     through `streams.value.log.error(...)` -- which is what the
+            #     explicit `scalastyle` / `test:scalastyle` tasks invoked by
+            #     this script do, and so this is the format we see in CI:
             #         [error] <path>:<line>: <message>
             #     The leading `[error] ` plus a single `:<line>:` (with no
             #     `:<col>:` follow-up) is what tells it apart from a regular
