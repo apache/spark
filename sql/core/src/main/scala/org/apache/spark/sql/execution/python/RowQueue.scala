@@ -44,10 +44,12 @@ trait RowQueue extends Queue[UnsafeRow]
  * Another thread could read from it at the same time (behind the writer).
  *
  * When `lockFree` is false (default), add() and remove() use synchronized for thread safety.
- * When `lockFree` is true (pipelined Python UDF mode), synchronized is skipped because
- * memory visibility is guaranteed by the blocking socket I/O that separates the writer thread
- * and reader thread: the reader only calls remove() after Python has processed the input
- * sent by the writer's channel.write(), which provides a happens-before guarantee.
+ * When `lockFree` is true (pipelined Python UDF mode), synchronized is replaced by a
+ * volatile `writeOffset` using SPSC release-acquire semantics:
+ *  - add() performs a volatile store on writeOffset after writing row data (release fence),
+ *    ensuring all prior Platform.putInt/copyMemory writes are visible before the offset update.
+ *  - remove() performs a volatile load on writeOffset (acquire fence) to see the latest data.
+ *  - readOffset does not need to be volatile because the writer never reads it.
  *
  * The format of UnsafeRow in page:
  * [4 bytes to hold length of record (N)] [N bytes to hold record] [...]
@@ -60,29 +62,37 @@ private[python] abstract class InMemoryRowQueue(
   private val base: AnyRef = page.getBaseObject
   private val endOfPage: Long = page.getBaseOffset + page.size
   // the first location where a new row would be written
-  private var writeOffset = page.getBaseOffset
-  // points to the start of the next row to read
+  // When lockFree=true, this is accessed via volatile read/write for SPSC visibility.
+  // When lockFree=false, synchronized provides the memory barrier.
+  @volatile private var writeOffset = page.getBaseOffset
+  // points to the start of the next row to read (only updated by consumer)
   private var readOffset = page.getBaseOffset
   private val resultRow = new UnsafeRow(numFields)
 
   private def doAdd(row: UnsafeRow): Boolean = {
+    // Cache writeOffset in a local var to avoid repeated volatile reads in lockFree mode.
+    val curOffset = writeOffset
     val size = row.getSizeInBytes
-    if (writeOffset + 4 + size > endOfPage) {
+    if (curOffset + 4 + size > endOfPage) {
       // if there is not enough space in this page to hold the new record
-      if (writeOffset + 4 <= endOfPage) {
+      if (curOffset + 4 <= endOfPage) {
         // if there's extra space at the end of the page, store a special "end-of-page" length (-1)
-        Platform.putInt(base, writeOffset, -1)
+        Platform.putInt(base, curOffset, -1)
       }
       false
     } else {
-      Platform.putInt(base, writeOffset, size)
-      Platform.copyMemory(row.getBaseObject, row.getBaseOffset, base, writeOffset + 4, size)
-      writeOffset += 4 + size
+      Platform.putInt(base, curOffset, size)
+      Platform.copyMemory(row.getBaseObject, row.getBaseOffset, base, curOffset + 4, size)
+      // Volatile store acts as a release fence: all prior writes (row data) are visible
+      // to any thread that subsequently reads this writeOffset via volatile load.
+      writeOffset = curOffset + 4 + size
       true
     }
   }
 
   private def doRemove(): UnsafeRow = {
+    // Volatile load acts as an acquire fence: sees all writes from the producer
+    // that happened before the corresponding volatile store of writeOffset.
     assert(readOffset <= writeOffset, "reader should not go beyond writer")
     if (readOffset + 4 > endOfPage || Platform.getInt(base, readOffset) < 0) {
       null
