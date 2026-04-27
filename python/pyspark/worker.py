@@ -26,6 +26,7 @@ import time
 import inspect
 import itertools
 import json
+import collections.abc
 from typing import (
     Any,
     Callable,
@@ -37,6 +38,8 @@ from typing import (
     TypeVar,
     TYPE_CHECKING,
     Union,
+    get_args,
+    get_origin,
     overload,
 )
 
@@ -263,8 +266,8 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
     For ``Iterator[T]``, returns a lazy iterator that checks each element
     against ``T`` on consumption. Raises ``PySparkTypeError`` on mismatch.
     """
-    if getattr(expected_type, "_name", None) == "Iterator":
-        (element_type,) = expected_type.__args__
+    if get_origin(expected_type) is collections.abc.Iterator:
+        (element_type,) = get_args(expected_type)
         package = getattr(inspect.getmodule(element_type), "__package__", "")
         label = f"iterator of {package}.{element_type.__name__}"
 
@@ -2828,8 +2831,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     result = grouped_udf(key, value_batches)
 
                 # Verify, reorder, and wrap each output batch
-                for batch in result:
-                    verify_return_type(batch, pa.RecordBatch)
+                for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
                     verify_arrow_result(
                         batch, runner_conf.assign_cols_by_name, expected_cols_and_types
                     )
