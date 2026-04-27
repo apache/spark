@@ -22,9 +22,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.primitives.Longs;
 import com.google.crypto.tink.subtle.*;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.util.ReferenceCounted;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteBufferWriteableChannel;
 
@@ -37,23 +41,19 @@ import java.security.GeneralSecurityException;
 import java.security.InvalidAlgorithmParameterException;
 
 public class GcmTransportCipher implements TransportCipher {
+    private static final Logger logger = LoggerFactory.getLogger(GcmTransportCipher.class);
     private static final String HKDF_ALG = "HmacSha256";
     private static final int LENGTH_HEADER_BYTES = 8;
     @VisibleForTesting
     static final int CIPHERTEXT_BUFFER_SIZE = 32 * 1024; // 32KB
     private final SecretKeySpec aesKey;
+    private final AesGcmHkdfStreaming aesGcmHkdfStreaming;
 
-    public GcmTransportCipher(SecretKeySpec aesKey)  {
+    public GcmTransportCipher(SecretKeySpec aesKey) throws InvalidAlgorithmParameterException {
         this.aesKey = aesKey;
-    }
-
-    AesGcmHkdfStreaming getAesGcmHkdfStreaming() throws InvalidAlgorithmParameterException {
-        return new AesGcmHkdfStreaming(
-            aesKey.getEncoded(),
-            HKDF_ALG,
-            aesKey.getEncoded().length,
-            CIPHERTEXT_BUFFER_SIZE,
-            0);
+        byte[] keyBytes = aesKey.getEncoded();
+        this.aesGcmHkdfStreaming = new AesGcmHkdfStreaming(
+            keyBytes, HKDF_ALG, keyBytes.length, CIPHERTEXT_BUFFER_SIZE, 0);
     }
 
     /*
@@ -82,12 +82,6 @@ public class GcmTransportCipher implements TransportCipher {
 
     @VisibleForTesting
     class EncryptionHandler extends ChannelOutboundHandlerAdapter {
-        private final AesGcmHkdfStreaming aesGcmHkdfStreaming;
-
-        EncryptionHandler() throws InvalidAlgorithmParameterException {
-            aesGcmHkdfStreaming = getAesGcmHkdfStreaming();
-        }
-
         @Override
         public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
                 throws Exception {
@@ -121,8 +115,25 @@ public class GcmTransportCipher implements TransportCipher {
             // set its limit to 0 to indicate the first call to transferTo.
             ((Buffer) this.ciphertextBuffer).limit(0);
             this.bytesToRead = getReadableBytes();
-            this.encryptedCount =
-                    LENGTH_HEADER_BYTES + aesGcmHkdfStreaming.expectedCiphertextSize(bytesToRead);
+            // Tink's expectedCiphertextSize(P) internally adds getCiphertextOffset() (the 24-byte
+            // streaming header) to P before computing the segment count:
+            //   fullSegments = (P + getCiphertextOffset()) / plaintextSegmentSize
+            // This formula counts the header as occupying capacity in the first segment, so the
+            // effective plaintext capacity of segment 0 is (plaintextSegmentSize -
+            // getCiphertextOffset()) = 32728 bytes rather than 32752.
+            //
+            // However, transferTo() writes the streaming header separately (via headerByteBuffer)
+            // and passes all P bytes to encryptSegment() calls. For P in (32728, 32752], Tink's
+            // formula predicts two ciphertext segments but transferTo() produces only one,
+            // inflating encryptedCount by TAG_SIZE_IN_BYTES (16 bytes). The receiver then waits
+            // indefinitely for 16 bytes that were never written, causing a shuffle fetch stall.
+            //
+            // Fix: subtract getCiphertextOffset() before calling expectedCiphertextSize(), then
+            // add getHeaderLength() explicitly to account for the separately-written header.
+            this.encryptedCount = LENGTH_HEADER_BYTES
+                    + aesGcmHkdfStreaming.getHeaderLength()
+                    + aesGcmHkdfStreaming.expectedCiphertextSize(
+                            bytesToRead - aesGcmHkdfStreaming.getCiphertextOffset());
             byte[] lengthAad = Longs.toByteArray(encryptedCount);
             this.encrypter = aesGcmHkdfStreaming.newStreamSegmentEncrypter(lengthAad);
             this.headerByteBuffer = createHeaderByteBuffer();
@@ -287,7 +298,6 @@ public class GcmTransportCipher implements TransportCipher {
         private final ByteBuffer expectedLengthBuffer;
         private final ByteBuffer headerBuffer;
         private final ByteBuffer ciphertextBuffer;
-        private final AesGcmHkdfStreaming aesGcmHkdfStreaming;
         private StreamSegmentDecrypter decrypter;
         private final int headerLength;
         private final int plaintextSegmentSize;
@@ -296,9 +306,17 @@ public class GcmTransportCipher implements TransportCipher {
         private int segmentNumber = 0;
         private long expectedLength = -1;
         private long ciphertextRead = 0;
+        // Accumulates all decrypted segments for the current GCM message. Each segment is
+        // appended as a zero-copy component via addComponent(true, segment). A single
+        // ctx.fireChannelRead() fires when the message is complete, reducing N EventLoop
+        // callbacks (one per 32 KB segment) to 1. This prevents the EventLoop from being
+        // monopolised by large messages, which would starve other channels sharing the
+        // thread (including the executor–driver heartbeat channel) under concurrent shuffle
+        // load. Null between messages; ownership is transferred to downstream on
+        // fireChannelRead().
+        private CompositeByteBuf plaintextAccumulator = null;
 
         DecryptionHandler() throws GeneralSecurityException {
-            aesGcmHkdfStreaming = getAesGcmHkdfStreaming();
             headerLength = aesGcmHkdfStreaming.getHeaderLength();
             expectedLengthBuffer = ByteBuffer.allocate(LENGTH_HEADER_BYTES);
             headerBuffer = ByteBuffer.allocate(headerLength);
@@ -316,6 +334,10 @@ public class GcmTransportCipher implements TransportCipher {
          * be decrypted with a fresh StreamSegmentDecrypter.
          */
         private void resetForNextMessage() throws GeneralSecurityException {
+            logger.debug(
+                "DecryptionHandler: message complete — " +
+                "expectedLength={}, ciphertextRead={}, segmentCount={}",
+                expectedLength, ciphertextRead, segmentNumber);
             expectedLength = -1;
             expectedLengthBuffer.clear();
             headerBuffer.clear();
@@ -325,6 +347,7 @@ public class GcmTransportCipher implements TransportCipher {
             segmentNumber = 0;
             ciphertextRead = 0;
             decrypter = aesGcmHkdfStreaming.newStreamSegmentDecrypter();
+            plaintextAccumulator = null;
         }
 
         private boolean initializeExpectedLength(ByteBuf ciphertextNettyBuf) {
@@ -349,6 +372,8 @@ public class GcmTransportCipher implements TransportCipher {
                     throw new IllegalStateException("Invalid expected ciphertext length.");
                 }
                 ciphertextRead += LENGTH_HEADER_BYTES;
+                logger.debug(
+                    "DecryptionHandler: new message — expectedLength={}", expectedLength);
             }
             return true;
         }
@@ -401,6 +426,11 @@ public class GcmTransportCipher implements TransportCipher {
             // outer loop processes as many complete messages as possible from the buffer
             // before releasing it, so that bytes belonging to the next message are never
             // discarded mid-stream.
+            final int incomingBytes = ciphertextNettyBuf.readableBytes();
+            logger.debug("DecryptionHandler: channelRead — {} incoming bytes, " +
+                    "currentMessageState: expectedLength={}, ciphertextRead={}",
+                incomingBytes, expectedLength, ciphertextRead);
+            int totalPlaintextFired = 0;
             try {
                 while (true) {
                     if (!initializeExpectedLength(ciphertextNettyBuf)) {
@@ -444,7 +474,18 @@ public class GcmTransportCipher implements TransportCipher {
                             // Clear the ciphertext buffer because it's been read
                             ciphertextBuffer.clear();
                             plaintextBuffer.flip();
-                            ctx.fireChannelRead(Unpooled.wrappedBuffer(plaintextBuffer));
+                            totalPlaintextFired += plaintextBuffer.remaining();
+                            if (plaintextAccumulator == null) {
+                                // Integer.MAX_VALUE disables consolidation entirely.
+                                // CompositeByteBuf.newCompArray() always initialises the
+                                // backing array to min(16, maxNumComponents) regardless of
+                                // this value, so there is no upfront memory cost.
+                                plaintextAccumulator = Unpooled.compositeBuffer(Integer.MAX_VALUE);
+                            }
+                            // Zero-copy append: addComponent(true, ...) increases writerIndex
+                            // so the component is immediately readable from the composite.
+                            plaintextAccumulator.addComponent(
+                                true, Unpooled.wrappedBuffer(plaintextBuffer));
                         } else {
                             // Set the ciphertext buffer up to read the next chunk
                             ciphertextBuffer.limit(ciphertextBuffer.capacity());
@@ -453,7 +494,23 @@ public class GcmTransportCipher implements TransportCipher {
                     }
                     if (!completed) {
                         // Partial message: more bytes needed from the next channelRead() call.
+                        if (expectedLength < 0) {
+                            logger.debug(
+                                "DecryptionHandler: partial message — length header not yet read");
+                        } else {
+                            logger.debug(
+                                "DecryptionHandler: partial message — " +
+                                "expectedLength={}, ciphertextRead={}, still need {} bytes",
+                                expectedLength, ciphertextRead, expectedLength - ciphertextRead);
+                        }
                         break;
+                    }
+                    // Fire the entire plaintext as a single event so that downstream
+                    // handlers receive one callback per Spark message instead of one per
+                    // 32 KB segment.
+                    if (plaintextAccumulator != null) {
+                        ctx.fireChannelRead(plaintextAccumulator);
+                        plaintextAccumulator = null; // ownership transferred to downstream
                     }
                     // Current message is fully decoded. Reset state so the handler can
                     // decode the next independent GCM message on the same channel.
@@ -465,6 +522,30 @@ public class GcmTransportCipher implements TransportCipher {
                 }
             } finally {
                 ciphertextNettyBuf.release();
+            }
+            logger.debug(
+                "DecryptionHandler: channelRead done — {} incoming bytes, " +
+                "{} plaintext bytes fired",
+                incomingBytes, totalPlaintextFired);
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            releaseAccumulator();
+            ctx.fireChannelInactive();
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            logger.error("Exception in GCM DecryptionHandler", cause);
+            releaseAccumulator();
+            ctx.close();
+        }
+
+        private void releaseAccumulator() {
+            if (plaintextAccumulator != null) {
+                plaintextAccumulator.release();
+                plaintextAccumulator = null;
             }
         }
     }
