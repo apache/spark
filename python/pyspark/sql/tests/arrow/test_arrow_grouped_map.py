@@ -148,8 +148,8 @@ class ApplyInArrowTestsMixin:
 
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.RecordBatch, but is "
-                + "tuple",
+                "Return type of the user-defined function should be iterator of "
+                "pyarrow.RecordBatch, but is iterator of tuple",
             ):
                 df.groupby("id").applyInArrow(stats_iter, schema="id long, m double").collect()
 
