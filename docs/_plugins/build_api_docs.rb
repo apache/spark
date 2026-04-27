@@ -201,9 +201,9 @@ def scan_pr_doc_hazards
       # `@inheritDoc` is only valid as the inline tag `{@inheritDoc}`; Spark
       # also registers a custom lowercase block tag `@inheritdoc` via
       # `-tag inheritdoc` in `SparkBuild.scala`. The camelCase block form is
-      # neither, and javadoc 17's standard doclet has been observed to
-      # hard-exit during "Building tree" when a default-method override
-      # carries it (SPARK-56636). Suggest the standard inline form.
+      # neither -- it produces no inherited content and is silently dropped
+      # by the doclet. Surface it so a misuse caught during the unidoc
+      # failure window is fixable in one round.
       if line =~ /^\s*\*\s*@inheritDoc\s*$/
         hazards << {
           file: path,
