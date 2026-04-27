@@ -336,7 +336,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
-    if (pipelinedEnabled) {
+    // Pipelined mode is only for UDF eval types, not NON_UDF (mapPartitions/RDD path).
+    val usePipelined = pipelinedEnabled && evalType != PythonEvalType.NON_UDF
+    if (usePipelined) {
       envVars.put("SPARK_PIPELINED_UDF", "1")
       envVars.put("SPARK_PIPELINED_UDF_QUEUE_DEPTH", pipelinedQueueDepth.toString)
     }
@@ -374,7 +376,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     // Return an iterator that read lines from the process's stdout
-    val dataIn = if (pipelinedEnabled) {
+    val dataIn = if (usePipelined) {
       // Pipelined mode: true full-duplex I/O. The writer thread serializes input and
       // writes directly to the socket. The task main thread reads output from the socket.
       // TCP sockets are full-duplex, so one thread can write() while another reads()
