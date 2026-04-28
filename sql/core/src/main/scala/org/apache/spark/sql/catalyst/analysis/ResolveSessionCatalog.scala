@@ -786,7 +786,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `MetadataOnlyTable`) fall through; `AlterViewAs` is picked up by the v2
+    // (produced for `MetadataTable`) fall through; `AlterViewAs` is picked up by the v2
     // strategy, and the remaining view DDL / inspection plans (SET/UNSET TBLPROPERTIES,
     // ALTER VIEW ... WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW
     // COLUMNS, DESCRIBE [COLUMN]) are rejected with `UNSUPPORTED_FEATURE.TABLE_OPERATION` by

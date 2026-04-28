@@ -27,15 +27,15 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * Catalog API for connectors that expose both tables and views in a single shared identifier
  * namespace.
  * <p>
- * Connectors that expose <i>both</i> tables and views must implement {@code RelationCatalog};
+ * Connectors that expose <i>both</i> tables and views must implement {@code TableViewCatalog};
  * implementing {@link TableCatalog} and {@link ViewCatalog} directly without
- * {@code RelationCatalog} is rejected at catalog initialization. Connectors that expose only
+ * {@code TableViewCatalog} is rejected at catalog initialization. Connectors that expose only
  * tables implement just {@link TableCatalog}; connectors that expose only views implement just
  * {@link ViewCatalog}; this interface is not relevant to them.
  *
  * <h2>Two principles</h2>
  *
- * A {@code RelationCatalog} follows two rules that, taken together, define every cross-cutting
+ * A {@code TableViewCatalog} follows two rules that, taken together, define every cross-cutting
  * subtlety:
  * <ol>
  *   <li><b>Orthogonal interfaces.</b> Every {@link TableCatalog} method behaves as if views did
@@ -97,11 +97,11 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * <h2>Single-RPC perf entry points</h2>
  *
  * The orthogonal {@link TableCatalog} and {@link ViewCatalog} answer two cross-cutting
- * questions in two round trips each. {@code RelationCatalog} adds dedicated methods so a
+ * questions in two round trips each. {@code TableViewCatalog} adds dedicated methods so a
  * catalog can answer both in one round trip:
  * <ul>
- *   <li>{@link #loadRelation(Identifier)} -- the resolver's per-identifier read path. Returns
- *       a regular {@link Table} for a table, or a {@link MetadataOnlyTable} wrapping a
+ *   <li>{@link #loadTableOrView(Identifier)} -- the resolver's per-identifier read path. Returns
+ *       a regular {@link Table} for a table, or a {@link MetadataTable} wrapping a
  *       {@link ViewInfo} for a view. Saves the {@code loadTable} -> {@code loadView} fallback
  *       on a cold cache.</li>
  *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views with the
@@ -113,22 +113,22 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * @since 4.2.0
  */
 @Evolving
-public interface RelationCatalog extends TableCatalog, ViewCatalog {
+public interface TableViewCatalog extends TableCatalog, ViewCatalog {
 
   /**
    * Load metadata for an identifier that may resolve to either a table or a view.
    * <p>
    * For a table, returns the table's {@link Table}. For a view, returns a
-   * {@link MetadataOnlyTable} wrapping a {@link ViewInfo}; callers discriminate via
+   * {@link MetadataTable} wrapping a {@link ViewInfo}; callers discriminate via
    * {@code getTableInfo() instanceof ViewInfo}. This lets the resolver answer in a single RPC
    * instead of falling back from {@link TableCatalog#loadTable} to {@link ViewCatalog#loadView}.
    *
    * @param ident the identifier
-   * @return a {@link Table} for tables, or a {@link MetadataOnlyTable} wrapping a
+   * @return a {@link Table} for tables, or a {@link MetadataTable} wrapping a
    *         {@link ViewInfo} for views
    * @throws NoSuchTableException if neither a table nor a view exists at {@code ident}
    */
-  Table loadRelation(Identifier ident) throws NoSuchTableException;
+  Table loadTableOrView(Identifier ident) throws NoSuchTableException;
 
   /**
    * List the tables and views in a namespace, returned as {@link TableSummary} entries with
@@ -162,14 +162,14 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   /**
    * {@inheritDoc}
    * <p>
-   * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
+   * The default implementation derives from {@link #loadTableOrView}: a {@link MetadataTable}
    * wrapping a {@link ViewInfo} is rejected as not-a-table; anything else is returned. Override
    * only if a tables-only path is materially cheaper than the unified one.
    */
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
-    Table t = loadRelation(ident);
-    if (t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo) {
+    Table t = loadTableOrView(ident);
+    if (t instanceof MetadataTable mt && mt.getTableInfo() instanceof ViewInfo) {
       throw new NoSuchTableException(ident);
     }
     return t;
@@ -178,7 +178,7 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   /**
    * {@inheritDoc}
    * <p>
-   * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
+   * The default implementation derives from {@link #loadTableOrView}: a {@link MetadataTable}
    * wrapping a {@link ViewInfo} is unwrapped and returned; anything else (table or absent) is
    * surfaced as {@link NoSuchViewException}. Override only if a views-only path is materially
    * cheaper than the unified one.
@@ -187,11 +187,11 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   default ViewInfo loadView(Identifier ident) throws NoSuchViewException {
     Table t;
     try {
-      t = loadRelation(ident);
+      t = loadTableOrView(ident);
     } catch (NoSuchTableException e) {
       throw new NoSuchViewException(ident);
     }
-    if (t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo vi) {
+    if (t instanceof MetadataTable mt && mt.getTableInfo() instanceof ViewInfo vi) {
       return vi;
     }
     throw new NoSuchViewException(ident);
@@ -200,14 +200,14 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   /**
    * {@inheritDoc}
    * <p>
-   * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
+   * The default implementation derives from {@link #loadTableOrView}: returns {@code true} only if
    * the entry exists and is not a view. Override only if a cheaper existence-check path exists.
    */
   @Override
   default boolean tableExists(Identifier ident) {
     try {
-      Table t = loadRelation(ident);
-      return !(t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo);
+      Table t = loadTableOrView(ident);
+      return !(t instanceof MetadataTable mt && mt.getTableInfo() instanceof ViewInfo);
     } catch (NoSuchTableException e) {
       return false;
     }
@@ -216,14 +216,14 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   /**
    * {@inheritDoc}
    * <p>
-   * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
+   * The default implementation derives from {@link #loadTableOrView}: returns {@code true} only if
    * the entry exists and is a view. Override only if a cheaper existence-check path exists.
    */
   @Override
   default boolean viewExists(Identifier ident) {
     try {
-      Table t = loadRelation(ident);
-      return t instanceof MetadataOnlyTable mot && mot.getTableInfo() instanceof ViewInfo;
+      Table t = loadTableOrView(ident);
+      return t instanceof MetadataTable mt && mt.getTableInfo() instanceof ViewInfo;
     } catch (NoSuchTableException e) {
       return false;
     }

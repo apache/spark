@@ -1131,8 +1131,8 @@ class Analyzer(
      * so surfacing a downstream "view not found" would hide the real reason.
      *
      * Lookup order against a non-session catalog:
-     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
-     *      once. A returned [[MetadataOnlyTable]] wrapping a [[ViewInfo]] is interpreted as a
+     *   1. If the catalog is a [[TableViewCatalog]], [[TableViewCatalog.loadTableOrView]] is
+     *      called once. A returned [[MetadataTable]] wrapping a [[ViewInfo]] is interpreted as a
      *      view; other results are tables.
      *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
      *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
@@ -1150,13 +1150,13 @@ class Analyzer(
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
             catalog match {
-              case mc: RelationCatalog =>
-                // Single-RPC perf path: loadRelation returns a Table for a table or a
-                // MetadataOnlyTable wrapping a ViewInfo for a view. NoSuchTable means
+              case mc: TableViewCatalog =>
+                // Single-RPC perf path: loadTableOrView returns a Table for a table or a
+                // MetadataTable wrapping a ViewInfo for a view. NoSuchTable means
                 // neither exists.
                 try {
-                  Some(mc.loadRelation(ident) match {
-                    case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
+                  Some(mc.loadTableOrView(ident) match {
+                    case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
                       ResolvedPersistentView(
                         catalog, ident, V1Table.toCatalogTable(catalog, ident, t))
                     case table =>

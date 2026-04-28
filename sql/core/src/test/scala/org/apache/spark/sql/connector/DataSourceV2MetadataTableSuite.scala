@@ -20,18 +20,18 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataOnlyTable, Table, TableCatalog, TableChange, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Tests for the data-source-table side of [[MetadataOnlyTable]]: a v2 catalog returns
+ * Tests for the data-source-table side of [[MetadataTable]]: a v2 catalog returns
  * metadata-only tables and Spark reads / writes them via the V1 data-source path.
- * View-related paths live in [[DataSourceV2MetadataOnlyViewSuite]].
+ * View-related paths live in [[DataSourceV2MetadataViewSuite]].
  */
-class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2MetadataTableSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -83,8 +83,8 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
     checkAnswer(spark.table(tableName), 0.until(10).map(i => Row(i, -i)))
   }
 
-  test("DESCRIBE TABLE EXTENDED on a non-view MetadataOnlyTable shows the real identifier") {
-    // MetadataOnlyTable.name() is read by DescribeTableExec's "Name" row. Pin that it
+  test("DESCRIBE TABLE EXTENDED on a non-view MetadataTable shows the real identifier") {
+    // MetadataTable.name() is read by DescribeTableExec's "Name" row. Pin that it
     // reflects the catalog-supplied identifier (here TestingDataSourceTableCatalog passes
     // `ident.toString`) rather than a generic placeholder, so the DESCRIBE output is
     // meaningful for users.
@@ -129,7 +129,7 @@ class DataSourceV2MetadataOnlyTableSuite extends QueryTest with SharedSparkSessi
 }
 
 /**
- * A read-only [[TableCatalog]] that returns [[MetadataOnlyTable]] for a small set of canned
+ * A read-only [[TableCatalog]] that returns [[MetadataTable]] for a small set of canned
  * table fixtures. Used to drive the data-source-table read path (file source + v2 provider)
  * through Spark's V1 data-source machinery.
  */
@@ -142,7 +142,7 @@ class TestingDataSourceTableCatalog extends TableCatalog {
         .withLocation(ident.namespace().head)
         .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
         .build()
-      new MetadataOnlyTable(info, ident.toString)
+      new MetadataTable(info, ident.toString)
     case "test_partitioned_json" =>
       val partitioning = LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2")))
       val info = new TableInfo.Builder()
@@ -152,13 +152,13 @@ class TestingDataSourceTableCatalog extends TableCatalog {
         .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
         .withPartitions(Array(partitioning))
         .build()
-      new MetadataOnlyTable(info, ident.toString)
+      new MetadataTable(info, ident.toString)
     case "test_v2" =>
       val info = new TableInfo.Builder()
         .withSchema(FakeV2Provider.schema)
         .withProvider(classOf[FakeV2Provider].getName)
         .build()
-      new MetadataOnlyTable(info, ident.toString)
+      new MetadataTable(info, ident.toString)
     case _ => throw new NoSuchTableException(ident)
   }
 

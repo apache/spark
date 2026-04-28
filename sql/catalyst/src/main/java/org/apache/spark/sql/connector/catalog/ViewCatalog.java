@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException;
  * Catalog API for connectors that expose views.
  * <p>
  * Connectors that expose <i>only</i> views implement this interface. Connectors that expose
- * both tables and views must implement {@link RelationCatalog} (which extends both this
+ * both tables and views must implement {@link TableViewCatalog} (which extends both this
  * interface and {@link TableCatalog} and adds the cross-cutting contract for the combined
  * case); the methods on this interface remain view-only -- they do not interact with tables.
  * <p>
@@ -126,7 +126,7 @@ public interface ViewCatalog extends CatalogPlugin {
    *                                    concurrent {@code CREATE VIEW} won the race in the
    *                                    default impl's gap between {@link #replaceView} and
    *                                    the fallback {@link #createView}, or, in a
-   *                                    {@link RelationCatalog}, a table sits at {@code ident}
+   *                                    {@link TableViewCatalog}, a table sits at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
   default ViewInfo createOrReplaceView(Identifier ident, ViewInfo info)

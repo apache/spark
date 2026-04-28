@@ -34,7 +34,7 @@ import java.util.Set;
  * Catalog API for connectors that expose tables.
  * <p>
  * Connectors that expose <i>only</i> tables implement this interface. Connectors that expose
- * both tables and views must implement {@link RelationCatalog} (which extends both this
+ * both tables and views must implement {@link TableViewCatalog} (which extends both this
  * interface and {@link ViewCatalog} and adds the cross-cutting contract for the combined
  * case); the methods on this interface remain table-only -- they do not interact with views.
  * <p>
