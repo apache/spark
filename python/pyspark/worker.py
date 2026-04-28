@@ -26,12 +26,11 @@ import time
 import inspect
 import itertools
 import json
-import collections.abc
+from collections.abc import Iterator
 from typing import (
     Any,
     Callable,
     Iterable,
-    Iterator,
     Optional,
     Tuple,
     Type,
@@ -266,7 +265,7 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
     For ``Iterator[T]``, returns a lazy iterator that checks each element
     against ``T`` on consumption. Raises ``PySparkTypeError`` on mismatch.
     """
-    if get_origin(expected_type) is collections.abc.Iterator:
+    if get_origin(expected_type) is Iterator:
         (element_type,) = get_args(expected_type)
         package = getattr(inspect.getmodule(element_type), "__package__", "")
         label = f"iterator of {package}.{element_type.__name__}"
