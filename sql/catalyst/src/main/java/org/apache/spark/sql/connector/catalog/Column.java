@@ -192,13 +192,10 @@ public interface Column {
    * Returning null is per-column: a connector may return IDs for some columns and null for
    * others.
    * <p>
-   * Nested struct fields, array elements, and map keys/values do not have separate IDs
-   * through this API. A top-level-only ID will not detect same-name same-type drop+re-add
-   * of a nested field (e.g., dropping and re-adding {@code person.age} inside a struct).
-   * Connectors that track nested field IDs (e.g., Delta column mapping, Iceberg field IDs)
-   * can encode the subtree IDs into the returned string to recover nested coverage. Spark
-   * only compares string equality, so any nested change that alters the encoded string
-   * will be detected.
+   * This API covers top-level columns only. Nested struct fields, array elements, and map
+   * keys/values do not have separate IDs. Connectors that track nested field IDs can encode
+   * them into the returned top-level Column ID string to detect nested changes, since Spark
+   * only compares string equality.
    */
   @Nullable
   default String id() {
