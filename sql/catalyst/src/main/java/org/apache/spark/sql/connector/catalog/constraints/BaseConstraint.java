@@ -74,13 +74,11 @@ abstract class BaseConstraint implements Constraint {
   }
 
   public String toDescription() {
-    StringJoiner joiner = new StringJoiner(" ");
-    joiner.add(definition());
-    joiner.add(enforced ? "ENFORCED" : "NOT ENFORCED");
-    if (rely) {
-      joiner.add("RELY");
-    }
-    return joiner.toString();
+    return String.format(
+        "%s %s %s",
+        definition(),
+        enforced ? "ENFORCED" : "NOT ENFORCED",
+        rely ? "RELY" : "NORELY");
   }
 
   @Override
