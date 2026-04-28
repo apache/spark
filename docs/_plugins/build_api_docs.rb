@@ -136,13 +136,26 @@ def build_spark_scala_and_java_docs_if_necessary
 
   # Suppress genjavadoc-stub diagnostic blocks from the visible log. javadoc
   # emits ~3500 `[error]` lines per unidoc run on stubs under `target/java/`
-  # ("cannot find symbol" / "illegal combination of modifiers" on stub `T1, T2,
-  # ...` type variables) -- all benign because `--ignore-source-errors` is set,
-  # but they bury everything else. Each diagnostic is a header line followed by
-  # 3-5 `[error|warn]`-prefixed continuation lines (snippet, caret,
+  # -- all benign because `--ignore-source-errors` is set, but they bury
+  # everything else. Each diagnostic is a header line followed by 3-5
+  # `[error|warn]`-prefixed continuation lines (snippet, caret,
   # symbol/location); the state machine drops both.
+  #
+  # Match by *message text*, not just by `target/java/` path. Otherwise
+  # legitimate doclint diagnostics on stub paths (e.g. a heading-out-of-sequence
+  # in a Scala doc comment that genjavadoc preserves into the stub) would be
+  # hidden too -- those messages are the actual signal we surface unidoc-time
+  # doclint for. The patterns below are the three known-benign genjavadoc
+  # structural errors; anything else on a `target/java/` path is echoed.
   ansi = /\e\[[0-9;]*[A-Za-z]/
-  stub_header = %r{\[(?:error|warn)\]\s+\S*?/target/java/\S+\.java:\d+(?::\d+)?:\s}
+  stub_header = %r{
+    \[(?:error|warn)\]\s+
+    \S*?/target/java/\S+\.java:\d+(?::\d+)?:\s+
+    error:\s+
+    (?:cannot\s+find\s+symbol
+     |illegal\s+combination\s+of\s+modifiers
+     |non-static\s+type\s+variable\b)
+  }x
   stub_cont = %r{\A\s*\[(?:error|warn)\]\s+(?!/\S+\.java:\d+(?::\d+)?:\s)}
   in_stub = false
   IO.popen("#{command} 2>&1", 'r') do |pipe|
