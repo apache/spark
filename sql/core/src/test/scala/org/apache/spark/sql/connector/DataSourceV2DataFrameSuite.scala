@@ -1302,7 +1302,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN person.age")
 
       // The standard InMemoryTableCatalog preserves column IDs across type
-      // changes (matching Delta/Iceberg behavior). Dropping a nested field
+      // changes. Dropping a nested field
       // changes the parent struct type but keeps the same column ID, so
       // schema validation catches the type mismatch.
       checkError(
@@ -1721,7 +1721,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // The standard InMemoryTableCatalog preserves column IDs across type
-  // changes (matching Delta/Iceberg behavior). Adding a nested field keeps
+  // changes. Adding a nested field keeps
   // the same column ID but changes the struct type. Column ID check passes,
   // and since the query uses ALLOW_NEW_FIELDS mode (reads allow new fields),
   // adding a nested struct field is permitted.
@@ -1825,7 +1825,7 @@ class DataSourceV2DataFrameSuite
   //
   // ComposedColumnIdTableCatalog encodes nested field IDs into the
   // top-level Column.id() string, modeling the recommended adoption
-  // pattern for connectors with nested IDs (Delta, Iceberg). Any nested
+  // pattern for connectors with nested IDs. Any nested
   // change produces a different encoded string, so validateColumnIds
   // detects it even though Spark only compares top-level strings.
 
@@ -1936,11 +1936,17 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Column ID tests: Nested field ID preservation and composed detection
+  // Column ID tests: Top-level ID preservation across nested changes
   //
-  // These tests verify Delta/Iceberg-style behavior: parent column IDs are
-  // preserved when nested fields are added or dropped, and composed IDs
-  // detect nested drop+re-add in container types (arrays, maps).
+  // The standard InMemoryTableCatalog preserves top-level column IDs when
+  // nested fields are added or dropped (assignMissingIds matches by name
+  // only). These tests verify that behavior using the catalog API.
+
+  // Column ID tests: Composed IDs for container types (arrays, maps)
+  //
+  // ComposedColumnIdTableCatalog encodes nested field IDs into the
+  // top-level string. These tests verify detection of nested drop+re-add
+  // inside array element structs and map value structs.
 
   test("composed nested IDs detect drop+re-add in array element struct") {
     val t = "composedidcat.ns1.ns2.tbl"
@@ -1982,7 +1988,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("drop nested field preserves parent and sibling column IDs") {
+  test("standard (non-composed) catalog: top-level column ID preserved when nested field is dropped") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -2009,7 +2015,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("add nested field preserves parent and existing column IDs") {
+  test("standard (non-composed) catalog: top-level column ID preserved when nested field is added") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -2037,40 +2043,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("drop+re-add nested field with same name changes composed ID but preserves root") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, user STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-
-      val cat = catalog("composedidcat")
-      val colsBefore = cat.loadTable(ident).columns()
-      val userIdBefore = colsBefore.find(_.name() == "user").get.id()
-      val idColIdBefore = colsBefore.find(_.name() == "id").get.id()
-
-      sql(s"ALTER TABLE $t DROP COLUMN user.name")
-      sql(s"ALTER TABLE $t ADD COLUMN user.name STRING")
-
-      val colsAfter = cat.loadTable(ident).columns()
-      val userIdAfter = colsAfter.find(_.name() == "user").get.id()
-
-      // Composed ID changed (nested name field got a fresh ID)
-      assert(userIdBefore != userIdAfter,
-        "composed ID should change when a nested field is dropped and re-added")
-      // Sibling column ID is preserved
-      assert(colsAfter.find(_.name() == "id").get.id() == idColIdBefore)
-
-      // Data verification: age is intact, new name is accessible
-      sql(s"INSERT INTO $t VALUES (2, named_struct('age', 25, 'name', 'Bob'))")
-      checkAnswer(
-        sql(s"SELECT id, user.age FROM $t ORDER BY id"),
-        Seq(Row(1, 30), Row(2, 25)))
-    }
-  }
-
   // The standard InMemoryTableCatalog preserves column IDs across type
-  // widening (e.g., INT -> LONG), matching Delta/Iceberg behavior. The
+  // widening (e.g., INT -> LONG). The
   // column ID check passes but schema validation catches the type mismatch.
   test("same column ID but widened type caught by schema validation") {
     val t = "testcat.ns1.ns2.tbl"
@@ -2304,7 +2278,7 @@ class DataSourceV2DataFrameSuite
   //
   // TypeChangeResetsColIdTableCatalog assigns new column IDs when the
   // data type changes. This is the inverse of the standard InMemoryTableCatalog
-  // which preserves IDs across type changes (matching Delta/Iceberg behavior).
+  // which preserves IDs across type changes.
 
   test("type widening in reset-id catalog triggers column ID mismatch") {
     val t = "resetidcat.ns1.ns2.tbl"

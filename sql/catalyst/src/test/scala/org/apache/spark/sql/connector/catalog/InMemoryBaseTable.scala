@@ -841,10 +841,9 @@ object InMemoryBaseTable {
    * Preserves column IDs from `oldColumns` when the column name matches,
    * and assigns new IDs to columns that do not already have one.
    *
-   * IDs are preserved across type changes, matching the behavior of real connectors
-   * like Delta and Iceberg that keep the same column ID through type widening and
-   * nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides this
-   * behavior for testing scenarios where type changes should produce a new ID.
+   * IDs are preserved across type changes, keeping the same column ID through type
+   * widening and nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides
+   * this behavior for testing scenarios where type changes should produce a new ID.
    */
   def assignMissingIds(
       oldColumns: Array[Column],

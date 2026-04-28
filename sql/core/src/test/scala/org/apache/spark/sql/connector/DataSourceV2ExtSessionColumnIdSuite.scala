@@ -208,7 +208,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("external type widening detected by schema validation") {
+  test("external type widening detected by data columns validation") {
     withTable(T) {
       sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       sql(s"INSERT INTO $T VALUES (1, 100)")
@@ -217,8 +217,8 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
 
       // external session widens salary from INT to LONG
       // SharedInMemoryTableCatalog preserves the column ID across type
-      // changes (matching Delta/Iceberg behavior), so schema validation
-      // catches the type mismatch instead of the column ID check
+      // changes, so data columns validation catches the type mismatch
+      // instead of the column ID check
       withExtSession { ext =>
         ext.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE LONG").collect()
       }

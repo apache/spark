@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  * An [[InMemoryTableCatalog]] that assigns fresh column IDs when the
  * column's data type changes. This is the inverse of the default
  * [[InMemoryBaseTable.assignMissingIds]] behavior, which preserves IDs
- * across type changes to match Delta and Iceberg semantics.
+ * across type changes.
  *
  * Use this catalog for tests that need a type change to produce a new
  * column ID (e.g., verifying that adding a nested field to a container
@@ -38,15 +38,15 @@ class TypeChangeResetsColIdTableCatalog extends InMemoryTableCatalog {
     val alteredTable = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
 
     // The parent alterTable preserves column IDs across type changes.
-    // Re-mint IDs for columns whose type changed, so the column ID check
-    // detects the type change instead of the schema validation.
-    val oldByName = oldColumns
+    // Assign fresh IDs for columns whose type changed, so the column ID
+    // check detects the type change instead of the data columns validation.
+    val oldColsByName = oldColumns
       .filter(_.id() != null)
-      .map(c => c.name().toLowerCase(Locale.ROOT) -> c)
+      .map(oldCol => oldCol.name().toLowerCase(Locale.ROOT) -> oldCol)
       .toMap
     val newColsWithResetIds: Array[Column] = alteredTable.columns().map { newCol =>
       val key = newCol.name().toLowerCase(Locale.ROOT)
-      oldByName.get(key) match {
+      oldColsByName.get(key) match {
         case Some(oldCol) if oldCol.dataType() != newCol.dataType() =>
           newCol.asInstanceOf[ColumnImpl].copy(
             id = InMemoryBaseTable.nextColumnId().toString): Column
