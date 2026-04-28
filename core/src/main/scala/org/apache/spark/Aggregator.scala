@@ -28,6 +28,7 @@ import org.apache.spark.util.collection.ExternalAppendOnlyMap
  * @param mergeValue function to merge a new value into the aggregation result.
  * @param mergeCombiners function to merge outputs from multiple mergeValue function.
  */
+// VALIDATION (SPARK-56636): deliberate long line to trigger scalastyle's LineLengthChecker so we can confirm the new annotation emitter renders inline on this PR's Files-changed tab
 @DeveloperApi
 case class Aggregator[K, V, C] (
     createCombiner: V => C,
