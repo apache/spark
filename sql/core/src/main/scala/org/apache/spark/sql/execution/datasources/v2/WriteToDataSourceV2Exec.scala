@@ -350,9 +350,14 @@ case class ReplaceDataExec(
         // One of the metrics couldn't be found, also mark numDeletedRows as not found.
         -1L
       }
+
+      // SQLMetric.set call is a no-op if value is -1. Override numDeletedRows value in summary.
       metrics("numDeletedRows").set(numDeletedRows)
+      super.getWriteSummary(query)
+        .map(_.asInstanceOf[DeleteSummaryImpl].copy(numDeletedRows = numDeletedRows))
+    } else {
+      super.getWriteSummary(query)
     }
-    super.getWriteSummary(query)
   }
 }
 
