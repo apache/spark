@@ -28,8 +28,7 @@ import org.apache.spark.util.ArrayImplicits._
  * operation has executed they call [[postDriverMetrics]] with the connector's reported values so
  * they are visible in the SQL UI.
  *
- * Nodes that also expose Spark-owned metrics (for example a node-computed row counter or a
- * row-level operation's numDeletedRows) should supply them via [[sparkMetrics]]. Names in
+ * Nodes that also expose Spark-owned metrics supply them via [[sparkMetrics]]. Names in
  * [[sparkMetrics]] are reserved: if the connector happens to report a value under the same name,
  * Spark's value wins and the connector's is dropped.
  */
@@ -41,8 +40,8 @@ trait SupportsCustomDriverMetrics { self: SparkPlan =>
   def customMetrics: Map[String, SQLMetric]
 
   /**
-   * Spark-owned metrics that should appear alongside the connector-declared ones. Defaults to
-   * empty. Values under these names are owned by Spark and take precedence on a name collision.
+   * Spark-owned metrics that should appear alongside the connector-declared ones. Values under
+   * these names are owned by Spark and take precedence on a name collision.
    */
   protected def sparkMetrics: Map[String, SQLMetric] = Map.empty
 
