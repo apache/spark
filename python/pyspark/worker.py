@@ -3734,7 +3734,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         except queue.Full:
                             continue
 
-            t = threading.Thread(target=_reader_thread, name="pyspark-pipelined-reader", daemon=True)
+            t = threading.Thread(
+                target=_reader_thread, name="pyspark-pipelined-reader", daemon=True
+            )
             t.start()
 
             def _queued_iter():

@@ -53,7 +53,7 @@ QUEUE_DEPTH_CONF = "spark.python.udf.pipelined.queueDepth"
 
 # ---- Subprocess worker script template ----
 # Each benchmark scenario is run in a fresh Python process to get a fresh SparkContext.
-WORKER_TEMPLATE = '''
+WORKER_TEMPLATE = """
 import os, sys, time, json
 sys.path.insert(0, "{spark_home}")
 
@@ -93,7 +93,7 @@ for _ in range({iterations}):
 # Output results as JSON to stdout
 print("BENCH_RESULT:" + json.dumps(times))
 spark.stop()
-'''
+"""
 
 
 def run_subprocess(pipelined, udf_code, make_df_code, args):

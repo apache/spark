@@ -195,9 +195,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             return float(x.mean())
 
         df = self.spark.range(100).selectExpr("id", "id % 5 as grp")
-        result = df.groupBy("grp").agg(
-            mean_udf(col("id")).alias("avg")
-        ).orderBy("grp").collect()
+        result = df.groupBy("grp").agg(mean_udf(col("id")).alias("avg")).orderBy("grp").collect()
 
         self.assertEqual(len(result), 5)
         # grp=0: mean of 0,5,10,...,95 = 47.5
@@ -210,9 +208,12 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def add_one(x: pd.Series) -> pd.Series:
             return x + 1
 
-        result = self.spark.range(500000).select(
-            add_one(col("id")).alias("result")
-        ).agg({"result": "sum"}).collect()
+        result = (
+            self.spark.range(500000)
+            .select(add_one(col("id")).alias("result"))
+            .agg({"result": "sum"})
+            .collect()
+        )
         # sum of (1..500000) = 500000 * 500001 / 2 = 125000250000
         self.assertEqual(result[0][0], 125000250000)
 
@@ -223,9 +224,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def simple_udf(x):
             return str(x) + "_done"
 
-        result = self.spark.range(50).select(
-            col("id"), simple_udf(col("id")).alias("s")
-        ).collect()
+        result = self.spark.range(50).select(col("id"), simple_udf(col("id")).alias("s")).collect()
         for row in result:
             self.assertEqual(row.s, f"{row.id}_done")
 
