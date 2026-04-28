@@ -124,11 +124,13 @@ private[spark] object BasePythonRunner extends Logging {
   /**
    * Shared thread pool for pipelined writer tasks. Using a cached thread pool ensures that
    * writer threads are reused across tasks, which keeps JIT-compiled code, branch prediction
-   * history, and CPU caches warm. This avoids the 2-3x serialization slowdown observed when
-   * using freshly created threads.
+   * history, and CPU caches warm.
+   * Bounded by executor cores since each task uses at most one writer thread.
    */
-  private[python] lazy val pipelinedWriterThreadPool =
-    ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer")
+  private[python] lazy val pipelinedWriterThreadPool = {
+    val maxThreads = SparkEnv.get.conf.get(EXECUTOR_CORES)
+    ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer", maxThreads)
+  }
 
   private[spark] lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 
@@ -1178,6 +1180,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
       } catch {
         case _: InterruptedException =>
+          // Task cancelled via Future.cancel(true)
+          Thread.currentThread().interrupt()
+        case _: java.nio.channels.ClosedByInterruptException =>
+          // Task cancelled while blocked in channel.write(). The channel is
+          // automatically closed by the JVM, which will cause Python to receive
+          // EOF and the reader thread to get IOException.
           Thread.currentThread().interrupt()
         case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
           writer._exception = t
