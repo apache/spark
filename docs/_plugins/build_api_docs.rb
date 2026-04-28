@@ -187,39 +187,72 @@ def diagnose_unidoc_failure(log_file)
       end
     end
 
+    # Filter `[error]` lines down to the actually-fatal ones. javadoc emits
+    # ~100 errors against `target/java/.../X.java` (genjavadoc-generated
+    # stubs) which are intentionally non-fatal -- `--ignore-source-errors`
+    # is set in `JavaUnidoc / unidoc / javacOptions` for exactly this reason.
+    # The fatal errors are the ones in user source paths (doclint
+    # violations like heading-out-of-sequence, malformed @link, missing
+    # @param). javadoc reports the count in its `[done in N ms] / N errors`
+    # summary; this filter surfaces the lines themselves.
+    ansi = /\e\[[0-9;]*[A-Za-z]/
+    user_errors = lines.select do |line|
+      plain = line.gsub(ansi, '')
+      plain =~ /\[error\].*\.java:\d+/ && plain !~ %r{/target/java/}
+    end.map { |l| l.gsub(ansi, '').strip }.uniq
+
     banner = "=" * 78
     $stderr.puts ""
     $stderr.puts banner
     $stderr.puts "Unidoc failed -- diagnostic summary"
     $stderr.puts banner
-    if last_generating
+    if !user_errors.empty?
+      $stderr.puts ""
+      $stderr.puts "  Likely fatal error(s) (genjavadoc stubs filtered out):"
+      user_errors.first(10).each { |e| $stderr.puts "    #{e}" }
+      if user_errors.size > 10
+        $stderr.puts "    ... and #{user_errors.size - 10} more (see full log)"
+      end
+      $stderr.puts ""
+      $stderr.puts "  These are the '[error]' lines in user source paths --"
+      $stderr.puts "  doclint violations (e.g. heading-out-of-sequence <H3>"
+      $stderr.puts "  after <H1>, malformed @link, missing @param) are the"
+      $stderr.puts "  most common cause of `javadoc exited with exit code 1`"
+      $stderr.puts "  on this project; `--ignore-source-errors` does NOT"
+      $stderr.puts "  suppress them."
+    elsif last_generating
       class_path = last_generating.sub(/\.html$/, '')
       class_name = class_path.tr('/', '.')
       $stderr.puts ""
-      $stderr.puts "  Javadoc crashed while generating: #{last_generating}"
-      $stderr.puts "  Likely culprit: doc comment in #{class_name}"
+      $stderr.puts "  Last class HTML emitted before javadoc exit: #{last_generating}"
+      $stderr.puts "  This may be where javadoc crashed mid-generation, OR may"
+      $stderr.puts "  just be the last class processed before a non-zero exit"
+      $stderr.puts "  driven by error count (no fatal `[error]` lines were"
+      $stderr.puts "  found in user source paths above). If unrelated to the"
+      $stderr.puts "  failure, look for fatal patterns in the full sbt output."
       $stderr.puts ""
-      $stderr.puts "  Javadoc can hard-exit (not just warn) on specific scaladoc"
-      $stderr.puts "  patterns once they have been passed through genjavadoc --"
-      $stderr.puts "  wiki-style `[[Class]]` / `[[method]]` links or inline-backticked"
-      $stderr.puts "  code refs in the Scala source for the class above are common"
-      $stderr.puts "  triggers. Start by auditing any recent doc-string changes in"
-      $stderr.puts "  that source file."
-      $stderr.puts ""
-      $stderr.puts "  NOTE: the '[error]' lines above on files under"
-      $stderr.puts "  target/java/... are benign genjavadoc stubs -- every PR"
-      $stderr.puts "  emits them and they do not cause the exit. Ignore them."
+      $stderr.puts "  Common mid-class crash triggers (from genjavadoc-generated"
+      $stderr.puts "  Java stubs of #{class_name}'s Scala source): wiki-style"
+      $stderr.puts "  `[[Class]]` / `[[method]]` links or inline-backticked code"
+      $stderr.puts "  refs that the standard doclet's tree builder cannot resolve."
     elsif javadoc_exit_idx
       $stderr.puts ""
-      $stderr.puts "  Javadoc exited but no class HTML generation was in progress;"
-      $stderr.puts "  the crash predates HTML output -- likely a CLI / classpath /"
+      $stderr.puts "  Javadoc exited but no class HTML generation was in progress"
+      $stderr.puts "  and no fatal `[error]` lines were found in user source paths."
+      $stderr.puts "  The exit predates HTML output -- likely a CLI / classpath /"
       $stderr.puts "  setup issue. See the full sbt output above."
     else
       $stderr.puts ""
       $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
-      $stderr.puts "  the log; the failure is likely outside the javaunidoc step"
-      $stderr.puts "  (scaladoc / sbt / build env). See the full sbt output above."
+      $stderr.puts "  the log and no fatal `[error]` lines were found in user"
+      $stderr.puts "  source paths. The failure is likely outside the javaunidoc"
+      $stderr.puts "  step (scaladoc / sbt / build env). See the full sbt output."
     end
+    $stderr.puts ""
+    $stderr.puts "  NOTE: the ~100 `[error]` lines on files under target/java/"
+    $stderr.puts "  are benign genjavadoc stubs (intentionally non-fatal via"
+    $stderr.puts "  `--ignore-source-errors`); they look fatal but never cause"
+    $stderr.puts "  exit 1. They are filtered out of the candidates above."
     $stderr.puts banner
     $stderr.puts ""
   rescue => e
