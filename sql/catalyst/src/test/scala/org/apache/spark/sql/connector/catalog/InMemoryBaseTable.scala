@@ -714,6 +714,13 @@ abstract class InMemoryBaseTable(
       withData(messages.map(_.asInstanceOf[BufferedRows]))
       commits += Commit(Instant.now().toEpochMilli)
     }
+
+    override def commit(
+        messages: Array[WriterCommitMessage],
+        summary: WriteSummary): Unit = dataMap.synchronized {
+      withData(messages.map(_.asInstanceOf[BufferedRows]))
+      commits += Commit(Instant.now().toEpochMilli, Some(summary))
+    }
   }
 
   class DynamicOverwrite(val info: LogicalWriteInfo) extends TestBatchWrite {

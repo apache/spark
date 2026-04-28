@@ -73,7 +73,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           }
           val project = Project(projectList, joinPlan)
 
-          AppendData.byPosition(r, project)
+          AppendData.byPosition(r, project, rowLevelCommand = Some(MERGE))
 
         case _ =>
           m
@@ -114,7 +114,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             output = generateExpandOutput(r.output, outputs),
             joinPlan)
 
-          AppendData.byPosition(r, mergeRows)
+          AppendData.byPosition(r, mergeRows, rowLevelCommand = Some(MERGE))
 
         case _ =>
           m

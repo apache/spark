@@ -157,7 +157,8 @@ case class AppendData(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None,
+    rowLevelCommand: Option[RowLevelOperation.Command] = None) extends V2WriteCommand {
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
@@ -184,13 +185,15 @@ object AppendData {
       table: NamedRelation,
       query: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty,
-      withSchemaEvolution: Boolean = false): AppendData = {
+      withSchemaEvolution: Boolean = false,
+      rowLevelCommand: Option[RowLevelOperation.Command] = None): AppendData = {
     new AppendData(
       table,
       query,
       writeOptions,
       isByName = false,
-      withSchemaEvolution)
+      withSchemaEvolution,
+      rowLevelCommand = rowLevelCommand)
   }
 }
 
