@@ -240,6 +240,101 @@ class FrameDescribeMixin:
             pdf_result.b = pdf_result.b.astype(str)
         self.assert_eq(psdf[psdf.a != psdf.a].describe(), pdf_result)
 
+    def test_describe_include_exclude(self):
+        psdf = ps.DataFrame(
+            {
+                "num1": [1, 2, 3],
+                "num2": [4.0, 5.0, 6.0],
+                "str1": ["a", "b", "c"],
+            }
+        )
+        pdf = psdf._to_pandas()
+
+        # include with string-based spec should only show numeric columns
+        self.assert_eq(
+            psdf.describe(include=["int64", "float64"]),
+            pdf.describe(include=["int64", "float64"]),
+        )
+
+        # exclude with string-based spec should only show non-numeric columns
+        self.assert_eq(
+            psdf.describe(exclude=["int64", "float64"]),
+            pdf.describe(exclude=["int64", "float64"]).astype(str),
+        )
+
+        # include="all" with mixed-type DataFrame: full comparison against pandas
+        ps_result = psdf.describe(include="all")
+        pd_result = pdf.describe(include="all")
+        # pyspark.pandas returns string stats as str, so cast object columns
+        for col in pd_result.columns:
+            if pd_result[col].dtype == np.object_:
+                pd_result[col] = pd_result[col].astype(str)
+        self.assert_eq(ps_result, pd_result)
+
+        # include + exclude together: non-overlapping types
+        self.assert_eq(
+            psdf.describe(include=["int64"], exclude=["float64"]),
+            pdf.describe(include=["int64"], exclude=["float64"]),
+        )
+
+        # include="all" with exclude raises ValueError
+        with self.assertRaisesRegex(ValueError, "exclude must be None when include is 'all'"):
+            psdf.describe(include="all", exclude=["int64"])
+
+        # include with no matching columns
+        with self.assertRaisesRegex(ValueError, "Cannot describe a DataFrame without columns"):
+            psdf.describe(include=[np.datetime64])
+
+    def test_describe_include_bool(self):
+        psdf = ps.DataFrame(
+            {
+                "num": [1, 2, 3],
+                "bool": [True, False, True],
+                "str": ["a", "b", "c"],
+            }
+        )
+        pdf = psdf._to_pandas()
+
+        # include=["bool"] should only show boolean columns
+        self.assert_eq(
+            psdf.describe(include=["bool"]),
+            pdf.describe(include=["bool"]),
+        )
+
+    def test_describe_include_all_with_timestamp(self):
+        # Test include="all" with all dtype groups: numeric, string, bool, and timestamp.
+        # Only compare count/mean/min/max rows because pyspark.pandas uses approximate
+        # percentiles (percentile_approx) which differ from pandas' exact percentiles,
+        # and timestamp std/percentile handling differs between the implementations.
+        psdf = ps.DataFrame(
+            {
+                "num": [1, 2, 3],
+                "str": ["a", "b", "c"],
+                "bool": [True, False, True],
+                "ts": [
+                    pd.Timestamp("2020-01-01"),
+                    pd.Timestamp("2021-01-01"),
+                    pd.Timestamp("2022-01-01"),
+                ],
+            }
+        )
+        pdf = psdf._to_pandas()
+
+        ps_result = psdf.describe(include="all")
+        pd_result = pdf.describe(include="all")
+        # Verify all columns are present
+        self.assertEqual(set(ps_result.columns), set(pd_result.columns))
+        # Cast object and timestamp columns to str for comparison
+        for col in pd_result.columns:
+            if pd_result[col].dtype == np.object_ or pd.api.types.is_datetime64_any_dtype(
+                pd_result[col]
+            ):
+                pd_result[col] = pd_result[col].astype(str)
+        self.assert_eq(
+            ps_result.loc[["count", "mean", "min", "max"]],
+            pd_result.loc[["count", "mean", "min", "max"]],
+        )
+
 
 class FrameDescribeTests(
     FrameDescribeMixin,

@@ -9883,8 +9883,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             lambda psser: psser.rename(tuple([i + suffix for i in psser._column_label]))
         )
 
-    # TODO(SPARK-46164): include and exclude should be implemented.
-    def describe(self, percentiles: Optional[List[float]] = None) -> "DataFrame":
+    def describe(
+        self,
+        percentiles: Optional[List[float]] = None,
+        include: Optional[Union[str, List[Union[str, type]]]] = None,
+        exclude: Optional[Union[str, List[Union[str, type]]]] = None,
+    ) -> "DataFrame":
         """
         Generate descriptive statistics that summarize the central tendency,
         dispersion and shape of a dataset's distribution, excluding
@@ -9899,6 +9903,29 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         percentiles : list of ``float`` in range [0.0, 1.0], default [0.25, 0.5, 0.75]
             A list of percentiles to be computed.
+        include : 'all', list-like of dtypes or None (default), optional
+            A white list of data types to include in the result. Ignored for Series.
+            Here are the options:
+
+            .. versionadded:: 4.3.0
+
+            - 'all' : All columns of the input will be included in the output.
+            - A list-like of dtypes : Limits the results to the provided data types.
+              To limit the result to numeric types submit ``numpy.number``.
+              To limit it instead to object columns submit the ``numpy.object_`` data type.
+              Strings can also be used in the style of ``select_dtypes``
+              (e.g. ``df.describe(include=['O'])``).
+            - None (default) : The result will include all numeric columns.
+        exclude : list-like of dtypes or None (default), optional
+            A black list of data types to omit from the result. Ignored for Series.
+            Here are the options:
+
+            .. versionadded:: 4.3.0
+
+            - A list-like of dtypes : Excludes the provided data types from the result.
+              To exclude numeric types submit ``numpy.number``.
+              To exclude object columns submit the ``numpy.object_`` data type.
+            - None (default) : The result will exclude nothing.
 
         Returns
         -------
@@ -10014,9 +10041,40 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
 
+        Using ``include`` to select specific dtypes:
+
+        >>> df = ps.DataFrame({'numeric1': [1, 2, 3],
+        ...                    'numeric2': [4.0, 5.0, 6.0],
+        ...                    'object': ['a', 'b', 'c']
+        ...                   },
+        ...                   columns=['numeric1', 'numeric2', 'object'])
+        >>> df.describe(include=['int64', 'float64'])
+               numeric1  numeric2
+        count       3.0       3.0
+        mean        2.0       5.0
+        std         1.0       1.0
+        min         1.0       4.0
+        25%         1.0       4.0
+        50%         2.0       5.0
+        75%         3.0       6.0
+        max         3.0       6.0
+
+        Using ``exclude`` to remove specific dtypes:
+
+        >>> df.describe(exclude=['int64', 'float64'])
+               object
+        count       3
+        unique      3
+        top         a
+        freq        1
+
         Describing a column from a ``DataFrame`` by accessing it as
         an attribute and selecting custom percentiles.
 
+        >>> df = ps.DataFrame({'numeric1': [1, 2, 3],
+        ...                    'numeric2': [4.0, 5.0, 6.0]
+        ...                   },
+        ...                   columns=['numeric1', 'numeric2'])
         >>> df.numeric1.describe(percentiles = [0.85, 0.15])
         count    3.0
         mean     2.0
@@ -10028,6 +10086,59 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         max      3.0
         Name: numeric1, dtype: float64
         """
+        # Handle include/exclude parameters to filter columns by dtype
+        if include == "all" and exclude is not None:
+            raise ValueError("exclude must be None when include is 'all'")
+
+        if include is not None or exclude is not None:
+            if include == "all":
+                # For include="all", compute describe for each dtype group separately
+                # and join the results, matching pandas behavior.
+                results = []
+
+                numeric_df = self.select_dtypes(include=["number"])
+                if numeric_df._internal.column_labels:
+                    results.append(numeric_df.describe(percentiles=percentiles))
+
+                string_df = self.select_dtypes(include=["object"])
+                if string_df._internal.column_labels:
+                    results.append(string_df.describe(percentiles=percentiles))
+
+                bool_df = self.select_dtypes(include=["bool"])
+                if bool_df._internal.column_labels:
+                    results.append(bool_df.describe(percentiles=percentiles))
+
+                datetime_df = self.select_dtypes(include=["datetime"])
+                if datetime_df._internal.column_labels:
+                    results.append(datetime_df.describe(percentiles=percentiles))
+
+                if not results:
+                    raise ValueError("Cannot describe a DataFrame without columns")
+
+                if len(results) == 1:
+                    combined = results[0]
+                else:
+                    combined = results[0]
+                    for r in results[1:]:
+                        combined = combined.join(r, how="outer")
+
+                # Reorder columns to match original DataFrame column order
+                original_cols = [
+                    label
+                    for label in self._internal.column_labels
+                    if label in combined._internal.column_labels
+                ]
+                if original_cols:
+                    combined = combined[original_cols]
+
+                return combined
+            else:
+                psdf = self.select_dtypes(include=include, exclude=exclude)
+                if psdf._internal.column_labels:
+                    return psdf.describe(percentiles=percentiles)
+                else:
+                    raise ValueError("Cannot describe a DataFrame without columns")
+
         psser_numeric: List[Series] = []
         psser_string: List[Series] = []
         psser_timestamp: List[Series] = []
