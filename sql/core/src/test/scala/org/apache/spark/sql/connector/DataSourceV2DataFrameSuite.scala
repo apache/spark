@@ -1988,7 +1988,27 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("standard (non-composed) catalog: top-level column ID preserved when nested field is dropped") {
+  test("composed nested IDs detect rename within struct") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t RENAME COLUMN person.name TO first_name")
+
+      // The old path Seq("name") disappears and the new path
+      // Seq("first_name") gets a fresh ID, so the composed top-level
+      // string for person changes. COLUMN_ID_MISMATCH fires.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("non-composed catalog: top-level ID preserved when nested field dropped") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -2015,7 +2035,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("standard (non-composed) catalog: top-level column ID preserved when nested field is added") {
+  test("non-composed catalog: top-level ID preserved when nested field added") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
