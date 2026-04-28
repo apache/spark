@@ -34,15 +34,11 @@ case class ColumnImpl(
     metadataInJSON: String,
     override val id: String = null) extends Column {
 
-  // [[id]] is excluded from [[equals]] and [[hashCode]] because it is an auxiliary tracking
-  // identifier, not part of the column's structural identity. Including it would break existing
-  // equality comparisons that rely on schema properties (name, type, nullability, etc.) and
-  // would cause spurious mismatches when the same logical column is constructed with different IDs.
-  //
-  // A same logical column can be constructed with different IDs: when a column is dropped and
-  // re-added with the same name, the original column data is already gone, so some connectors may
-  // treat this as a different column by assigning a new ID. The column still has the same name,
-  // type, and nullability, so structurally it looks the same, but the ID differs.
+  // [[id]] is excluded from [[equals]] and [[hashCode]] because IDs only live on [[Column]],
+  // not on [[StructField]] metadata. Any code path that round-trips through [[StructType]]
+  // (e.g. [[CatalogV2Util.v2ColumnsToStructType]] followed by [[structTypeToV2Columns]])
+  // drops the ID, producing a [[Column]] with id=null for the same logical column. Including
+  // [[id]] in equality would cause spurious mismatches across these round-trips.
   // Column ID validation is performed separately by [[V2TableUtil.validateColumnIds]].
   override def equals(other: Any): Boolean = other match {
     case that: ColumnImpl =>

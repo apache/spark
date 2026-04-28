@@ -208,7 +208,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("external type widening detected as column ID mismatch") {
+  test("external type widening detected by schema validation") {
     withTable(T) {
       sql(s"CREATE TABLE $T (id INT, salary INT) USING foo")
       sql(s"INSERT INTO $T VALUES (1, 100)")
@@ -216,14 +216,16 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       val df = spark.table(T)
 
       // external session widens salary from INT to LONG
-      // SharedInMemoryTableCatalog assigns a new column ID when type changes
+      // SharedInMemoryTableCatalog preserves the column ID across type
+      // changes (matching Delta/Iceberg behavior), so schema validation
+      // catches the type mismatch instead of the column ID check
       withExtSession { ext =>
         ext.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE LONG").collect()
       }
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangePreservesColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -60,12 +60,15 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.nullcolidcat",
       classOf[NullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.preserveidcat",
-      classOf[TypeChangePreservesColIdTableCatalog].getName)
-    .set("spark.sql.catalog.preserveidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.resetidcat",
+      classOf[TypeChangeResetsColIdTableCatalog].getName)
+    .set("spark.sql.catalog.resetidcat.copyOnLoad", "true")
     .set("spark.sql.catalog.mixedcolidcat",
       classOf[MixedColumnIdTableCatalog].getName)
     .set("spark.sql.catalog.mixedcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.composedidcat",
+      classOf[ComposedColumnIdTableCatalog].getName)
+    .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
 
   after {
     spark.sessionState.catalogManager.reset()
@@ -1298,13 +1301,13 @@ class DataSourceV2DataFrameSuite
       // remove nested field from struct column
       sql(s"ALTER TABLE $t DROP COLUMN person.age")
 
-      // The standard InMemoryTableCatalog assigns new column IDs when a
-      // column's type changes. Dropping a nested field changes the parent
-      // struct type, so the parent column gets a new ID. The column ID
-      // check fires before schema validation.
+      // The standard InMemoryTableCatalog preserves column IDs across type
+      // changes (matching Delta/Iceberg behavior). Dropping a nested field
+      // changes the parent struct type but keeps the same column ID, so
+      // schema validation catches the type mismatch.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -1700,7 +1703,7 @@ class DataSourceV2DataFrameSuite
   }
 
   test("drop+re-add nested struct field rejects stale DataFrame") {
-    val t = "testcat.ns1.ns2.tbl"
+    val t = "composedidcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
@@ -1717,18 +1720,19 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // When a connector preserves column IDs across type changes, adding a
-  // nested field keeps the same column ID but changes the struct type.
-  // Column ID check passes, and since the query uses ALLOW_NEW_FIELDS mode
-  // (reads allow new fields), adding a nested struct field is permitted.
+  // The standard InMemoryTableCatalog preserves column IDs across type
+  // changes (matching Delta/Iceberg behavior). Adding a nested field keeps
+  // the same column ID but changes the struct type. Column ID check passes,
+  // and since the query uses ALLOW_NEW_FIELDS mode (reads allow new fields),
+  // adding a nested struct field is permitted.
   test("same column ID but expanded struct type: read tolerates nested field addition") {
-    val t = "preserveidcat.ns1.ns2.tbl"
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice'))")
       val df = spark.table(t)
 
-      // add nested field; TypeChangePreservesColIdTableCatalog preserves
+      // add nested field; the standard catalog preserves
       // the person column ID despite the type change
       sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
 
@@ -1739,7 +1743,7 @@ class DataSourceV2DataFrameSuite
   }
 
   test("add field to array element struct rejects stale DataFrame") {
-    val t = "testcat.ns1.ns2.tbl"
+    val t = "resetidcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, items ARRAY<STRUCT<name: STRING>>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, array(named_struct('name', 'x')))")
@@ -1756,7 +1760,7 @@ class DataSourceV2DataFrameSuite
   }
 
   test("add field to map value struct rejects stale DataFrame") {
-    val t = "testcat.ns1.ns2.tbl"
+    val t = "resetidcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<v: INT>>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, map('a', named_struct('v', 1)))")
@@ -1817,11 +1821,259 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // When a connector preserves column IDs across type widening (e.g.,
-  // INT -> LONG), the column ID check passes but schema validation
-  // catches the type mismatch.
+  // Column ID tests: Composed nested IDs
+  //
+  // ComposedColumnIdTableCatalog encodes nested field IDs into the
+  // top-level Column.id() string, modeling the recommended adoption
+  // pattern for connectors with nested IDs (Delta, Iceberg). Any nested
+  // change produces a different encoded string, so validateColumnIds
+  // detects it even though Spark only compares top-level strings.
+
+  test("composed nested IDs detect drop+re-add of nested field") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN person.age")
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
+
+      // The inner age field got a new nested ID on re-add. The composed
+      // top-level string changes, so COLUMN_ID_MISMATCH fires.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("composed nested IDs tolerate same data inserted into nested column") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      // pure data insert, no schema change: composed IDs stay the same
+      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25))")
+
+      checkAnswer(df, Seq(
+        Row(1, Row("Alice", 30)),
+        Row(2, Row("Bob", 25))))
+    }
+  }
+
+  // Column ID tests: Additional nested coverage
+  //
+  // These tests fill specific nested cells that are not covered by the
+  // coarse (testcat) or composed (composedidcat) groups above.
+
+  // Nested type change with preserved top-level ID: the standard catalog
+  // preserves the parent ID, so schema validation catches the incompatible
+  // nested type change.
+  test("nested type change with preserved ID caught by schema validation") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ALTER COLUMN person.age TYPE LONG")
+
+      // Top-level person ID is preserved (standard catalog behavior).
+      // Schema validation catches the nested type mismatch.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Depth >= 3 nesting with composed IDs: drop+re-add at depth 3 produces
+  // a different composed ID at the top level.
+  test("depth 3 nesting with composed IDs detects deep field change") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, a STRUCT<b: STRUCT<c: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('b', named_struct('c', 42)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN a.b.c")
+      sql(s"ALTER TABLE $t ADD COLUMN a.b.c INT")
+
+      // The deep nested field c got a new ID on re-add, changing the
+      // composed top-level ID for column a.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Nested rename changes the parent struct type (different field name),
+  // so schema validation catches it. The top-level ID is preserved
+  // because the standard catalog matches by column name.
+  test("nested rename triggers schema validation error with preserved ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t RENAME COLUMN person.name TO first_name")
+
+      // Top-level person ID is preserved. The struct type changed
+      // (field name differs), so schema validation fires.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Nested field ID preservation and composed detection
+  //
+  // These tests verify Delta/Iceberg-style behavior: parent column IDs are
+  // preserved when nested fields are added or dropped, and composed IDs
+  // detect nested drop+re-add in container types (arrays, maps).
+
+  test("composed nested IDs detect drop+re-add in array element struct") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, items ARRAY<STRUCT<name: STRING, price: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array(named_struct('name', 'x', 'price', 10)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN items.element.price")
+      sql(s"ALTER TABLE $t ADD COLUMN items.element.price INT")
+
+      // The nested price field got a new ID on re-add. The composed
+      // top-level ID for items changes, so COLUMN_ID_MISMATCH fires.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("composed nested IDs detect drop+re-add in map value struct") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<x: INT, y: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('k1', named_struct('x', 10, 'y', 20)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props.value.y")
+      sql(s"ALTER TABLE $t ADD COLUMN props.value.y INT")
+
+      // The nested y field got a new ID on re-add. The composed
+      // top-level ID for props changes, so COLUMN_ID_MISMATCH fires.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop nested field preserves parent and sibling column IDs") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, info STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+
+      val cat = catalog("testcat")
+      val colsBefore = cat.loadTable(ident).columns()
+      val idColId = colsBefore.find(_.name() == "id").get.id()
+      val infoColId = colsBefore.find(_.name() == "info").get.id()
+
+      sql(s"ALTER TABLE $t DROP COLUMN info.name")
+
+      val colsAfter = cat.loadTable(ident).columns()
+      // Parent struct column ID is preserved after nested field drop
+      assert(colsAfter.find(_.name() == "info").get.id() == infoColId)
+      // Sibling column ID is preserved
+      assert(colsAfter.find(_.name() == "id").get.id() == idColId)
+
+      // Data verification: age is intact after dropping name
+      checkAnswer(
+        sql(s"SELECT id, info.age FROM $t"),
+        Seq(Row(1, 30)))
+    }
+  }
+
+  test("add nested field preserves parent and existing column IDs") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, info STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+
+      val cat = catalog("testcat")
+      val colsBefore = cat.loadTable(ident).columns()
+      val idColId = colsBefore.find(_.name() == "id").get.id()
+      val infoColId = colsBefore.find(_.name() == "info").get.id()
+
+      sql(s"ALTER TABLE $t ADD COLUMN info.email STRING")
+
+      val colsAfter = cat.loadTable(ident).columns()
+      // Parent struct column ID is preserved after nested field addition
+      assert(colsAfter.find(_.name() == "info").get.id() == infoColId)
+      // Sibling column ID is preserved
+      assert(colsAfter.find(_.name() == "id").get.id() == idColId)
+
+      // Old row has NULL for new field, new row has value
+      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25, 'email', 'bob@test'))")
+      checkAnswer(
+        sql(s"SELECT id, info.name, info.age, info.email FROM $t ORDER BY id"),
+        Seq(Row(1, "Alice", 30, null), Row(2, "Bob", 25, "bob@test")))
+    }
+  }
+
+  test("drop+re-add nested field with same name changes composed ID but preserves root") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, user STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+
+      val cat = catalog("composedidcat")
+      val colsBefore = cat.loadTable(ident).columns()
+      val userIdBefore = colsBefore.find(_.name() == "user").get.id()
+      val idColIdBefore = colsBefore.find(_.name() == "id").get.id()
+
+      sql(s"ALTER TABLE $t DROP COLUMN user.name")
+      sql(s"ALTER TABLE $t ADD COLUMN user.name STRING")
+
+      val colsAfter = cat.loadTable(ident).columns()
+      val userIdAfter = colsAfter.find(_.name() == "user").get.id()
+
+      // Composed ID changed (nested name field got a fresh ID)
+      assert(userIdBefore != userIdAfter,
+        "composed ID should change when a nested field is dropped and re-added")
+      // Sibling column ID is preserved
+      assert(colsAfter.find(_.name() == "id").get.id() == idColIdBefore)
+
+      // Data verification: age is intact, new name is accessible
+      sql(s"INSERT INTO $t VALUES (2, named_struct('age', 25, 'name', 'Bob'))")
+      checkAnswer(
+        sql(s"SELECT id, user.age FROM $t ORDER BY id"),
+        Seq(Row(1, 30), Row(2, 25)))
+    }
+  }
+
+  // The standard InMemoryTableCatalog preserves column IDs across type
+  // widening (e.g., INT -> LONG), matching Delta/Iceberg behavior. The
+  // column ID check passes but schema validation catches the type mismatch.
   test("same column ID but widened type caught by schema validation") {
-    val t = "preserveidcat.ns1.ns2.tbl"
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 100)")
@@ -2048,14 +2300,14 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Column ID tests: Type change in standard catalog
+  // Column ID tests: Type change in a catalog that resets IDs on type changes
   //
-  // The standard InMemoryTableCatalog assigns new column IDs when the
-  // data type changes (assignMissingIds matches by name
-  // AND type). This is different from TypeChangePreservesColIdTableCatalog.
+  // TypeChangeResetsColIdTableCatalog assigns new column IDs when the
+  // data type changes. This is the inverse of the standard InMemoryTableCatalog
+  // which preserves IDs across type changes (matching Delta/Iceberg behavior).
 
-  test("type widening in standard catalog triggers column ID mismatch") {
-    val t = "testcat.ns1.ns2.tbl"
+  test("type widening in reset-id catalog triggers column ID mismatch") {
+    val t = "resetidcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
       sql(s"INSERT INTO $t VALUES (1, 100)")
@@ -2064,7 +2316,7 @@ class DataSourceV2DataFrameSuite
 
       sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
 
-      // standard catalog assigns a new ID for the widened column
+      // reset-id catalog assigns a new ID for the widened column
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",

@@ -838,22 +838,20 @@ object InMemoryBaseTable {
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
   /**
-   * Preserves column IDs from `oldColumns` when the column name and data type match,
+   * Preserves column IDs from `oldColumns` when the column name matches,
    * and assigns new IDs to columns that do not already have one.
    *
-   * Only the data type is compared (not nullability or other properties) because a type change
-   * represents a fundamental change to the column's nature and should produce a new ID, while
-   * nullability or comment changes are property changes that preserve column identity.
-   * [[TypeChangePreservesColIdTableCatalog]] overrides this behavior for connectors that
-   * preserve IDs even across type changes.
+   * IDs are preserved across type changes, matching the behavior of real connectors
+   * like Delta and Iceberg that keep the same column ID through type widening and
+   * nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides this
+   * behavior for testing scenarios where type changes should produce a new ID.
    */
   def assignMissingIds(
       oldColumns: Array[Column],
       newColumns: Array[Column]): Array[Column] = {
     newColumns.map { newCol =>
       oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
-        case Some(oldCol) if oldCol.id() != null &&
-            oldCol.dataType() == newCol.dataType() =>
+        case Some(oldCol) if oldCol.id() != null =>
           newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
         case _ if newCol.id() == null =>
           newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)

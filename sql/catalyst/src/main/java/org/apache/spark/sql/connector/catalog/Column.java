@@ -171,12 +171,34 @@ public interface Column {
   String metadataInJSON();
 
   /**
-   * Returns the ID of this table column. Can be used to reliably track column identity across
-   * schema changes. For example, if a column is dropped and re-added with the same name, the
-   * new column ID must be different. This method must return null if the connector does not
-   * support the notion of column ID.
+   * Returns the ID of this top-level column, or null. The ID is an opt-in signal that the
+   * connector tracks column identity beyond column name and type.
    * <p>
-   * Spark skips column identity validation for null column IDs.
+   * When a non-null ID is returned, the connector commits to the following contract:
+   * <ul>
+   *   <li>The ID is stable across renames (logical name changes preserve the ID).</li>
+   *   <li>The ID changes when a column is dropped and re-added, even with the same name
+   *       and type.</li>
+   *   <li>IDs are not reused within a table's history.</li>
+   * </ul>
+   * <p>
+   * When null is returned, Spark skips identity validation for that column. Connectors should
+   * return null when:
+   * <ul>
+   *   <li>The catalog has no notion of column identity beyond name and type, OR</li>
+   *   <li>The connector chooses to treat same-name drop+re-add as the same column (lenient
+   *       semantics: the cached DataFrame will be permitted to read the new column's data).</li>
+   * </ul>
+   * Returning null is per-column: a connector may return IDs for some columns and null for
+   * others.
+   * <p>
+   * Nested struct fields, array elements, and map keys/values do not have separate IDs
+   * through this API. A top-level-only ID will not detect same-name same-type drop+re-add
+   * of a nested field (e.g., dropping and re-adding {@code person.age} inside a struct).
+   * Connectors that track nested field IDs (e.g., Delta column mapping, Iceberg field IDs)
+   * can encode the subtree IDs into the returned string to recover nested coverage. Spark
+   * only compares string equality, so any nested change that alters the encoded string
+   * will be detected.
    */
   @Nullable
   default String id() {
