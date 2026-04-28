@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import Any, Dict, Optional
 import uuid
 
@@ -32,7 +28,6 @@ from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.observation import Observation as PySparkObservation
 import pyspark.sql.connect.plan as plan
 
-
 __all__ = ["Observation"]
 
 
@@ -41,8 +36,12 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_STR",
-                    messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": "name",
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
                 )
             if name == "":
                 raise PySparkValueError(
@@ -106,7 +105,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.observation,
         globs=globs,
         optionflags=doctest.ELLIPSIS

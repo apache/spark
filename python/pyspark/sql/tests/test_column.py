@@ -58,8 +58,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "col",
+                "arg_type": "int",
+            },
         )
 
         class A:
@@ -73,8 +77,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "col", "arg_type": "NoneType"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "col",
+                "arg_type": "NoneType",
+            },
         )
         self.assertRaises(TypeError, lambda: to_json(1))
 
@@ -210,8 +218,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "Column", "arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -219,8 +227,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STR",
-            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "str",
+                "arg_name": "fieldName",
+                "arg_type": "Column",
+            },
         )
 
     def test_drop_fields(self):
@@ -293,8 +305,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "dataType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataType or str",
+                "arg_name": "dataType",
+                "arg_type": "int",
+            },
         )
 
     def test_over_negative(self):
@@ -303,8 +319,12 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_WINDOWSPEC",
-            messageParameters={"arg_name": "window", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "WindowSpec",
+                "arg_name": "window",
+                "arg_type": "int",
+            },
         )
 
     def test_eqnullsafe_classmethod_usage(self):
@@ -501,6 +521,62 @@ class ColumnTestsMixin:
         self.assertEqual(result[0][0], 20)
         self.assertEqual(result[1][0], 40)
         self.assertEqual(result[2][0], 60)
+
+    def test_self_join(self):
+        df1 = self.spark.range(10).withColumn("a", sf.lit(0))
+        df2 = df1.withColumnRenamed("a", "b")
+        df = df1.join(df2, df1["a"] == df2["b"])
+        self.assertTrue(df.count() == 100)
+        df = df2.join(df1, df2["b"] == df1["a"])
+        self.assertTrue(df.count() == 100)
+
+    def test_self_join_II(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
+        df2 = df.select(df.a.alias("aa"), df.b)
+        df3 = df2.join(df, df2.b == df.b)
+        self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
+        self.assertTrue(df3.count() == 2)
+
+    def test_self_join_III(self):
+        df1 = self.spark.range(10).withColumn("value", sf.lit(1))
+        df2 = df1.union(df1)
+        df3 = df1.join(df2, df1.id == df2.id, "left")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_self_join_IV(self):
+        df1 = self.spark.range(10).withColumn("value", sf.lit(1))
+        df2 = df1.withColumn("value", sf.lit(2)).union(df1.withColumn("value", sf.lit(3)))
+        df3 = df1.join(df2, df1.id == df2.id, "right")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_select_join_keys(self):
+        df1 = self.spark.range(10).withColumn("v1", sf.lit(1))
+        df2 = self.spark.range(10).withColumn("v2", sf.lit(2))
+        for how in ["inner", "left", "right", "full", "cross"]:
+            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
+            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
+
+    def test_drop_notexistent_col(self):
+        df1 = self.spark.createDataFrame(
+            [("a", "b", "c")],
+            schema="colA string, colB string, colC string",
+        )
+        df2 = self.spark.createDataFrame(
+            [("c", "d", "e")],
+            schema="colC string, colD string, colE string",
+        )
+        df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
+            "colB",
+            sf.when(
+                df1["colB"] == "b", sf.concat(df1["colB"].cast("string"), sf.lit("x"))
+            ).otherwise(df1["colB"]),
+        )
+        df4 = df3.drop(df1["colB"])
+
+        self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
+        self.assertEqual(df4.count(), 1)
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

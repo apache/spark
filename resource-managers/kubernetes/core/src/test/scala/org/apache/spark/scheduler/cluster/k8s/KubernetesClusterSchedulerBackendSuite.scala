@@ -314,4 +314,36 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     endpoint.receiveAndReply(context).apply(GenerateExecID("cheeseBurger"))
     verify(context).reply("1")
   }
+
+  test("SPARK-56238: applicationId() is stable across calls when spark.app.id is not set") {
+    // Use isolated mocks so we don't mutate the shared sc/rpcEnv state.
+    val confWithoutAppId = new SparkConf(false)
+      .set("spark.executor.instances", "3")
+      .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL.key, "soLong")
+      .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE.key, "cruelWorld")
+    val localSc = mock(classOf[SparkContext])
+    val localEnv = mock(classOf[SparkEnv])
+    val localRpcEnv = mock(classOf[RpcEnv])
+    when(localSc.conf).thenReturn(confWithoutAppId)
+    when(localSc.env).thenReturn(localEnv)
+    when(localSc.resourceProfileManager).thenReturn(resourceProfileManager)
+    when(localEnv.rpcEnv).thenReturn(localRpcEnv)
+    when(localRpcEnv.setupEndpoint(any(), any())).thenReturn(driverEndpointRef)
+    val localTaskScheduler = mock(classOf[TaskSchedulerImpl])
+    when(localTaskScheduler.sc).thenReturn(localSc)
+    val backendWithoutAppId = new KubernetesClusterSchedulerBackend(
+      localTaskScheduler,
+      localSc,
+      kubernetesClient,
+      schedulerExecutorService,
+      eventQueue,
+      podAllocator,
+      lifecycleManager,
+      watchEvents,
+      pollEvents)
+    val id1 = backendWithoutAppId.applicationId()
+    val id2 = backendWithoutAppId.applicationId()
+    assert(id1 === id2, "applicationId() must return the same value on repeated calls")
+    assert(id1.startsWith("spark-"), "generated app ID should have the spark- prefix")
+  }
 }

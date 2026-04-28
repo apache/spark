@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   import testImplicits._
 
   /**
@@ -762,6 +762,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         checkAnswer(df.sort("_1"),
           Row(null) :: Row(null) :: Row(Row(1, "a")) :: Row(Row(2, null)) :: Row(Row(3, "b")) :: Nil
         )
+      }
+    }
+  }
+
+  gridTest("Read external file with UNKNOWN type annotation")(
+    Seq(true, false)
+  ) { respectUnknown =>
+    withSQLConf(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key ->
+        respectUnknown.toString
+    ) {
+      withAllParquetReaders {
+        // Parquet file column void_col has physical type INT32 and logical type UNKNOWN and was
+        // not written by Spark, so this goes through Parquet --> Spark type conversion.
+        val df = readResourceParquetFile("test-data/void_in_parquet.parquet")
+        val inferredType = df.schema("void_col").dataType
+        val expected = if (respectUnknown) NullType else IntegerType
+        assert(inferredType == expected)
       }
     }
   }

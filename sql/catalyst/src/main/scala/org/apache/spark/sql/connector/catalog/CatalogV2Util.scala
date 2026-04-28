@@ -485,6 +485,16 @@ private[sql] object CatalogV2Util {
     }
   }
 
+  /**
+   * Search path for analysis errors for a V2 table identifier: catalog name, then either the
+   * identifier's namespace (if non-empty) or the catalog's default namespace.
+   */
+  def searchPathForTableIdentifier(catalog: TableCatalog, ident: Identifier): Seq[String] = {
+    catalog.name() +: (
+      if (ident.namespace().nonEmpty) ident.namespace().toSeq
+      else catalog.defaultNamespace().toSeq)
+  }
+
   def loadFunction(catalog: CatalogPlugin, ident: Identifier): Option[UnboundFunction] = {
     try {
       Option(catalog.asFunctionCatalog.loadFunction(ident))
@@ -557,7 +567,7 @@ private[sql] object CatalogV2Util {
    *  - ROW FORMAT SERDE: hive.serde
    *  - SERDEPROPERTIES: add "option." prefix
    */
-  private def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
+  def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
     serdeInfo match {
       case Some(s) =>
         s.formatClasses.map { f =>

@@ -44,6 +44,34 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     SparkException.internalError("INSERT OVERWRITE DIRECTORY is not supported.")
   }
 
+  def insertReplaceOnNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_ON_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceOnByNameNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceUsingNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_USING_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def insertReplaceUsingByNameNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
       errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
@@ -55,8 +83,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0004", ctx.source)
   }
 
-  def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0006", ctx.notMatchedAction())
+  def insertedValueNumberNotMatchColumnNumberError(
+      expectedCount: Int,
+      actualCount: Int,
+      ctx: NotMatchedClauseContext): Throwable = {
+    new ParseException(
+      errorClass = "MERGE_INSERT_VALUE_COUNT_MISMATCH",
+      messageParameters =
+        Map("expectedCount" -> expectedCount.toString, "actualCount" -> actualCount.toString),
+      ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -618,8 +653,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def createViewWithBothIfNotExistsAndReplaceError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
+  def createViewWithBothIfNotExistsAndReplaceError(
+      viewName: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      messageParameters = Map("viewName" -> viewName),
+      ctx)
   }
 
   def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
@@ -672,6 +712,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def defineTempFuncWithIfNotExistsError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_IF_NOT_EXISTS", ctx)
+  }
+
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "INVALID_TEMP_OBJ_QUALIFIER",
+      Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)),
+      ctx)
   }
 
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: ParserRuleContext): Throwable = {

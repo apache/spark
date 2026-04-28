@@ -64,6 +64,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("TIME(6)", TimeType(6))
   checkDataType("TIME(6) WITHOUT TIME ZONE", TimeType(6))
   checkDataType("timestamp", TimestampType)
+  checkDataType("TIMESTAMP WITH LOCAL TIME ZONE", TimestampType)
   checkDataType("TIMESTAMP WITHOUT TIME ZONE", TimestampNTZType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
@@ -158,9 +159,12 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   test("Set default timestamp type") {
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
       assert(parse("timestamp") === TimestampNTZType)
+      assert(parse("timestamp with local time zone") === TimestampType)
+      assert(parse("timestamp without time zone") === TimestampNTZType)
     }
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
       assert(parse("timestamp") === TimestampType)
+      assert(parse("timestamp with local time zone") === TimestampType)
       assert(parse("timestamp without time zone") === TimestampNTZType)
     }
   }

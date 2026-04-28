@@ -23,7 +23,6 @@ from pyspark import SparkConf, SparkContext, RDD
 from pyspark.streaming import StreamingContext
 from pyspark.testing.sqlutils import search_jar
 
-
 # Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 should_skip_kinesis_tests = not os.environ.get(kinesis_test_environ_var) == "1"

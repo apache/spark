@@ -46,6 +46,7 @@ import org.apache.spark.unsafe.Platform
 sealed trait RocksDBKeyStateEncoder {
   def supportPrefixKeyScan: Boolean
   def supportsDeleteRange: Boolean
+  def supportsRangeScan: Boolean
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
@@ -624,6 +625,8 @@ class UnsafeRowDataEncoder(
         decodeToUnsafeRow(bytes, reusedKeyRow)
       case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) =>
         decodeToUnsafeRow(bytes, numFields = numColsPrefixKey)
+      case _: TimestampAsPrefixKeyStateEncoderSpec | _: TimestampAsPostfixKeyStateEncoderSpec =>
+        decodeToUnsafeRow(bytes, numFields = keySchema.length - 1)
       case _ => throw unsupportedOperationForKeyStateEncoder("decodeKey")
     }
   }
@@ -748,8 +751,15 @@ class AvroStateEncoder(
   )
 
   // Avro schema used by the avro encoders
-  private lazy val keyAvroType: Schema = SchemaConverters.toAvroTypeWithDefaults(keySchema)
-  private lazy val keyProj = UnsafeProjection.create(keySchema)
+  // For timestamp specs, the key part excludes the timestamp column (always the last field).
+  private lazy val effectiveKeySchema: StructType = keyStateEncoderSpec match {
+    case TimestampAsPrefixKeyStateEncoderSpec(s) => StructType(s.dropRight(1))
+    case TimestampAsPostfixKeyStateEncoderSpec(s) => StructType(s.dropRight(1))
+    case _ => keySchema
+  }
+  private lazy val keyAvroType: Schema =
+    SchemaConverters.toAvroTypeWithDefaults(effectiveKeySchema)
+  private lazy val keyProj = UnsafeProjection.create(effectiveKeySchema)
 
   private lazy val valueAvroType: Schema = SchemaConverters.toAvroTypeWithDefaults(valueSchema)
   private lazy val valueProj = UnsafeProjection.create(valueSchema)
@@ -847,8 +857,10 @@ class AvroStateEncoder(
           }
         }
         StructType(remainingSchema)
-      case _ =>
-        throw unsupportedOperationForKeyStateEncoder("createAvroEnc")
+      case TimestampAsPrefixKeyStateEncoderSpec(schema) =>
+        StructType(schema.dropRight(1))
+      case TimestampAsPostfixKeyStateEncoderSpec(schema) =>
+        StructType(schema.dropRight(1))
     }
 
     // Handle suffix key schema for prefix scan case
@@ -1005,6 +1017,11 @@ class AvroStateEncoder(
           StateSchemaIdRow(currentKeySchemaId, avroRow))
       case PrefixKeyScanStateEncoderSpec(_, _) =>
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, prefixKeyAvroType, out)
+      case _: TimestampAsPrefixKeyStateEncoderSpec | _: TimestampAsPostfixKeyStateEncoderSpec =>
+        val avroRow =
+          encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
+        encodeWithStateSchemaId(
+          StateSchemaIdRow(currentKeySchemaId, avroRow))
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeKey")
     }
     prependVersionByte(keyBytes)
@@ -1179,6 +1196,10 @@ class AvroStateEncoder(
       case PrefixKeyScanStateEncoderSpec(_, _) =>
         decodeFromAvroToUnsafeRow(
           bytes, avroEncoder.keyDeserializer, prefixKeyAvroType, prefixKeyProj)
+      case _: TimestampAsPrefixKeyStateEncoderSpec | _: TimestampAsPostfixKeyStateEncoderSpec =>
+        val schemaIdRow = decodeStateSchemaIdRow(bytes)
+        decodeFromAvroToUnsafeRow(
+          schemaIdRow.bytes, avroEncoder.keyDeserializer, keyAvroType, keyProj)
       case _ => throw unsupportedOperationForKeyStateEncoder("decodeKey")
     }
   }
@@ -1480,6 +1501,8 @@ class PrefixKeyScanStateEncoder(
   override def supportPrefixKeyScan: Boolean = true
 
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = false
 }
 
 /**
@@ -1679,6 +1702,8 @@ class RangeKeyScanStateEncoder(
   override def supportPrefixKeyScan: Boolean = true
 
   override def supportsDeleteRange: Boolean = true
+
+  override def supportsRangeScan: Boolean = true
 }
 
 /**
@@ -1710,6 +1735,8 @@ class NoPrefixKeyStateEncoder(
   override def supportPrefixKeyScan: Boolean = false
 
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = false
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
@@ -1782,9 +1809,7 @@ abstract class TimestampKeyStateEncoder(
       rowBytes, Platform.BYTE_ARRAY_OFFSET,
       rowBytesLength
     )
-    // The encoded row does not include the timestamp (it's stored separately),
-    // so decode with keySchema.length - 1 fields.
-    dataEncoder.decodeToUnsafeRow(rowBytes, keySchema.length - 1)
+    dataEncoder.decodeKey(rowBytes)
   }
 
   // NOTE: We reuse the ByteBuffer to avoid allocating a new one for every encoding/decoding,
@@ -1866,6 +1891,8 @@ class TimestampAsPrefixKeyStateEncoder(
 
   // TODO: [SPARK-55491] Revisit this to support delete range if needed.
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = true
 }
 
 /**
@@ -1914,6 +1941,8 @@ class TimestampAsPostfixKeyStateEncoder(
   }
 
   override def supportsDeleteRange: Boolean = false
+
+  override def supportsRangeScan: Boolean = true
 }
 
 /**

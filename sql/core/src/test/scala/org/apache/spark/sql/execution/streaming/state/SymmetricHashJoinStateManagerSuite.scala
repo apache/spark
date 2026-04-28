@@ -24,6 +24,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Expression, GenericInternalRow, JoinedRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -329,8 +330,8 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
 
   /* Test removeByValue with nulls in middle simulated by updating numValues on the state manager */
   private def testAllOperationsWithNullsInMiddle(stateFormatVersion: Int): Unit = {
-    // Test with skipNullsForStreamStreamJoins set to false which would throw a
-    // NullPointerException while iterating and also return null values as part of get
+    // Test with skipNullsForStreamStreamJoins set to false which would throw
+    // STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE while iterating
     withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) { manager =>
       implicit val mgr = manager
 
@@ -342,15 +343,9 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
         updateNumValues(40, 7) // create nulls in between and end
         removeByValue(50)
       }
-      assert(ex.isInstanceOf[NullPointerException])
-      assert(getNumValues(40) === 7)        // we should get 7 with no nulls skipped
-
-      removeByValue(300)
-      assert(getNumValues(40) === 1)         // only 400 should remain
-      assert(get(40) === Seq(400))
-      removeByValue(400)
-      assert(get(40) === Seq.empty)
-      assertNumRows(stateFormatVersion, 0)   // ensure all elements removed
+      assert(ex.isInstanceOf[SparkRuntimeException])
+      assert(ex.asInstanceOf[SparkThrowable].getCondition ==
+        "STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE")
     }
 
     // Test with skipNullsForStreamStreamJoins set to true which would skip nulls
@@ -593,8 +588,77 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
 
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - getJoinedRowsAndRemoveMatched partial") {
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
+
+        append(20, 2)
+        append(20, 3)
+        append(20, 4)
+        append(30, 10)
+
+        val dummyRow = new GenericInternalRow(0)
+        val matched = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) < 4
+        ).map(_.getInt(1)).toSeq
+        assert(matched.sorted === Seq(2, 3))
+
+        // Matched rows should be removed, unmatched should remain
+        assert(get(20) === Seq(4))
+
+        // Other keys should be unaffected
+        assert(get(30) === Seq(10))
+
+        // Calling again with same predicate should return nothing (already removed)
+        val matchedAgain = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) < 4
+        ).toSeq
+        assert(matchedAgain.isEmpty)
+
+        // Non-existent key should return empty
+        val noMatch = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(99),
+          row => new JoinedRow(row, dummyRow),
+          _ => true
+        ).toSeq
+        assert(noMatch.isEmpty)
+      }
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - getJoinedRowsAndRemoveMatched all matched") {
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
+
+        append(20, 2)
+        append(20, 3)
+
+        val dummyRow = new GenericInternalRow(0)
+        val matched = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(20),
+          row => new JoinedRow(row, dummyRow),
+          _ => true
+        ).map(_.getInt(1)).toSeq
+        assert(matched.sorted === Seq(2, 3))
+
+        // All matched, key should be fully removed
+        assert(get(20) === Seq.empty)
+      }
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - " +
-        "getJoinedRows with excludeRowsAlreadyMatched") {
+        "getJoinedRowsAndRemoveMatched evicts already-matched rows") {
       withJoinStateManager(
         inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
         implicit val mgr = manager
@@ -604,24 +668,74 @@ class SymmetricHashJoinStateManagerEventTimeInKeySuite
         append(20, 4)
 
         val dummyRow = new GenericInternalRow(0)
+        // First, mark values 2 and 3 as matched via getJoinedRows
         val firstPass = manager.getJoinedRows(
           toJoinKeyRow(20),
           row => new JoinedRow(row, dummyRow),
-          // intentionally exclude 4, which should be only returned in next pass
           jr => jr.getInt(1) < 4
         ).toSeq
         assert(firstPass.size == 2)
 
-        val secondPass = manager.getJoinedRows(
+        // getJoinedRowsAndRemoveMatched proactively evicts already-matched rows
+        // and removes+returns unmatched rows that satisfy the predicate.
+        // Value 4 (unmatched) matches the predicate, so it is removed and returned.
+        // Values 2 and 3 (already matched) are proactively evicted.
+        val matched = manager.getJoinedRowsAndRemoveMatched(
           toJoinKeyRow(20),
           row => new JoinedRow(row, dummyRow),
-          _ => true,
-          excludeRowsAlreadyMatched = true
+          _ => true
         ).map(_.getInt(1)).toSeq
-        assert(secondPass === Seq(4))
+        assert(matched === Seq(4))
+
+        // All rows should be removed: 2 and 3 were proactively evicted, 4 was matched
+        assert(get(20) === Seq.empty)
       }
     }
   }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - skipUpdatingMatchedFlag skips matched flag update") {
+      withTempDir { checkpointDir =>
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          append(20, 2)
+          append(20, 3)
+          append(30, 1)
+
+          val dummyRow = new GenericInternalRow(0)
+          val matched = manager.getJoinedRows(
+            toJoinKeyRow(20),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 2,
+            skipUpdatingMatchedFlag = true
+          ).toSeq
+          assert(matched.size == 1)
+
+          mgr.commit()
+        }
+
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          val evicted = removeAndReturnByKey(25)
+          val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
+          val matchedByValue = evictedPairs.toMap
+          // Without skipUpdatingMatchedFlag = true, the value would be true.
+          assert(matchedByValue(2) === false)
+          assert(matchedByValue(3) === false)
+
+          mgr.commit()
+        }
+      }
+    }
+  }
+
 }
 
 class SymmetricHashJoinStateManagerEventTimeInValueSuite
@@ -840,8 +954,69 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
 
   // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
   versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - getJoinedRowsAndRemoveMatched partial") {
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
+
+        appendAndTest(40, 100, 200, 300)
+        append(50, 400)
+
+        val dummyRow = new GenericInternalRow(0)
+        val matched = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) < 300
+        ).map(_.getInt(1)).toSeq
+        assert(matched.sorted === Seq(100, 200))
+
+        assert(get(40) === Seq(300))
+
+        assert(get(50) === Seq(400))
+
+        val matchedAgain = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          jr => jr.getInt(1) < 300
+        ).toSeq
+        assert(matchedAgain.isEmpty)
+
+        val noMatch = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(99),
+          row => new JoinedRow(row, dummyRow),
+          _ => true
+        ).toSeq
+        assert(noMatch.isEmpty)
+      }
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - getJoinedRowsAndRemoveMatched all matched") {
+      withJoinStateManager(
+        inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
+        implicit val mgr = manager
+
+        appendAndTest(40, 100, 200)
+
+        val dummyRow = new GenericInternalRow(0)
+        val matched = manager.getJoinedRowsAndRemoveMatched(
+          toJoinKeyRow(40),
+          row => new JoinedRow(row, dummyRow),
+          _ => true
+        ).map(_.getInt(1)).toSeq
+        assert(matched.sorted === Seq(100, 200))
+
+        assert(get(40) === Seq.empty)
+      }
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
     test(s"StreamingJoinStateManager V$ver - " +
-        "getJoinedRows with excludeRowsAlreadyMatched") {
+        "getJoinedRowsAndRemoveMatched evicts already-matched rows") {
       withJoinStateManager(
         inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver) { manager =>
         implicit val mgr = manager
@@ -849,21 +1024,202 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
         appendAndTest(40, 100, 200, 300)
 
         val dummyRow = new GenericInternalRow(0)
+        // First, mark values 100 and 200 as matched via getJoinedRows
         val firstPass = manager.getJoinedRows(
           toJoinKeyRow(40),
           row => new JoinedRow(row, dummyRow),
-          // intentionally exclude 300, which should be only returned in next pass
           jr => jr.getInt(1) < 300
         ).toSeq
         assert(firstPass.size == 2)
 
-        val secondPass = manager.getJoinedRows(
+        // getJoinedRowsAndRemoveMatched proactively evicts already-matched rows
+        // and removes+returns unmatched rows that satisfy the predicate.
+        // Value 300 (unmatched) matches the predicate, so it is removed and returned.
+        // Values 100 and 200 (already matched) are proactively evicted.
+        val matched = manager.getJoinedRowsAndRemoveMatched(
           toJoinKeyRow(40),
           row => new JoinedRow(row, dummyRow),
-          _ => true,
-          excludeRowsAlreadyMatched = true
+          _ => true
         ).map(_.getInt(1)).toSeq
-        assert(secondPass === Seq(300))
+        assert(matched === Seq(300))
+
+        // All rows should be removed: 100 and 200 were proactively evicted, 300 was matched
+        assert(get(40) === Seq.empty)
+      }
+    }
+  }
+
+  // NOTE: In practice, the predicate should contain the condition matching timestampRange.
+  // Here we intentionally use a pass-all predicate to test timestampRange filtering directly.
+  private def getJoinedRowTimestamps(
+      key: Int,
+      range: Option[(Long, Long)])(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+    val dummyRow = new GenericInternalRow(0)
+    manager.getJoinedRows(
+      toJoinKeyRow(key),
+      row => new JoinedRow(row, dummyRow),
+      _ => true,
+      timestampRange = range
+    ).map(_.getInt(1)).toSeq.sorted
+  }
+
+  test("StreamingJoinStateManager V4 - getJoinedRows with timestampRange") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      assert(getJoinedRowTimestamps(40, Some((20L, 40L))) === Seq(20, 30, 40))
+      assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20))
+      assert(getJoinedRowTimestamps(40, Some((25L, 35L))) === Seq(30))
+      assert(getJoinedRowTimestamps(40, Some((0L, 100L))) === Seq(10, 20, 30, 40, 50))
+      assert(getJoinedRowTimestamps(40, Some((10L, 30L))) === Seq(10, 20, 30))
+      assert(getJoinedRowTimestamps(40, Some((50L, 100L))) === Seq(50))
+      assert(getJoinedRowTimestamps(40, Some((60L, 100L))) === Seq.empty)
+      assert(getJoinedRowTimestamps(40, Some((0L, 5L))) === Seq.empty)
+      assert(getJoinedRowTimestamps(40, None) === Seq(10, 20, 30, 40, 50))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - timestampRange with multiple values per timestamp") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      append(40, 10)
+      append(40, 10)
+      append(40, 20)
+      append(40, 20)
+      append(40, 20)
+      append(40, 30)
+
+      assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20, 20, 20))
+      assert(getJoinedRowTimestamps(40, Some((10L, 20L))) === Seq(10, 10, 20, 20, 20))
+      assert(getJoinedRowTimestamps(40, Some((10L, 30L))) === Seq(10, 10, 20, 20, 20, 30))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - getValuesInRange boundary edge cases") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      // Exact boundary matches (both inclusive)
+      assert(getJoinedRowTimestamps(40, Some((10L, 10L))) === Seq(10))
+      assert(getJoinedRowTimestamps(40, Some((50L, 50L))) === Seq(50))
+
+      // Range with Long.MinValue / Long.MaxValue
+      assert(getJoinedRowTimestamps(40, Some((Long.MinValue, 30L))) === Seq(10, 20, 30))
+      assert(getJoinedRowTimestamps(40, Some((30L, Long.MaxValue))) === Seq(30, 40, 50))
+      assert(getJoinedRowTimestamps(40, Some((Long.MinValue, Long.MaxValue))) ===
+        Seq(10, 20, 30, 40, 50))
+
+      // Empty range (minTs > maxTs)
+      assert(getJoinedRowTimestamps(40, Some((50L, 10L))) === Seq.empty)
+
+      // Range entirely outside stored timestamps
+      assert(getJoinedRowTimestamps(40, Some((100L, 200L))) === Seq.empty)
+      assert(getJoinedRowTimestamps(40, Some((1L, 5L))) === Seq.empty)
+
+      // Full range via None (all entries)
+      assert(getJoinedRowTimestamps(40, None) === Seq(10, 20, 30, 40, 50))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - evictByTimestamp boundary edge cases") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+      val evictByTs = manager.asInstanceOf[SupportsEvictByTimestamp]
+
+      // --- Range eviction with startTimestamp (exclusive) and endTimestamp (inclusive) ---
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+      // startTimestamp=20 is exclusive, endTimestamp=40 is inclusive: evicts timestamps 30, 40
+      assert(evictByTs.evictByTimestamp(40, Some(20)) === 2)
+      assert(get(40) === Seq(10, 20, 50))
+
+      // --- evictAndReturnByTimestamp returns evicted values ---
+      Seq(30, 40).foreach(append(40, _)) // restore evicted entries
+      val evictedValues = evictByTs.evictAndReturnByTimestamp(30, Some(10))
+        .map(p => toValueInt(p.value)).toSeq.sorted
+      // startTimestamp=10 is exclusive, endTimestamp=30 is inclusive: timestamps 20 and 30
+      assert(evictedValues === Seq(20, 30))
+      assert(get(40) === Seq(10, 40, 50))
+
+      // --- start equals end: empty range (exclusive start = inclusive end) ---
+      // startTimestamp=40 (exclusive) and endTimestamp=40 (inclusive): range is empty
+      assert(evictByTs.evictByTimestamp(40, Some(40)) === 0)
+      assert(get(40) === Seq(10, 40, 50))
+
+      // --- start just below entry: evicts exactly that entry ---
+      // startTimestamp=39 (exclusive) means entries >= 40 are scanned; endTimestamp=40 inclusive
+      assert(evictByTs.evictByTimestamp(40, Some(39)) === 1)
+      assert(get(40) === Seq(10, 50))
+
+      // --- overflow boundary: endTimestamp = Long.MaxValue ---
+      // Restore entries for a clean slate
+      Seq(20, 30, 40).foreach(append(40, _))
+      // endTimestamp=Long.MaxValue with no startTimestamp: evicts all entries
+      assert(evictByTs.evictByTimestamp(Long.MaxValue) === 5)
+      assert(get(40) === Seq.empty)
+
+      // --- overflow boundary: startTimestamp = Some(Long.MinValue) ---
+      Seq(10, 20, 30).foreach(append(40, _))
+      // startTimestamp=Long.MinValue (exclusive), endTimestamp=20 (inclusive):
+      // Long.MinValue is excluded per the contract (already evicted), so the scan
+      // starts from Long.MinValue + 1. Since no real entry has timestamp Long.MinValue,
+      // this effectively scans all entries up to endTimestamp.
+      assert(evictByTs.evictByTimestamp(20, Some(Long.MinValue)) === 2)
+      assert(get(40) === Seq(30))
+
+      // --- overflow boundary: startTimestamp = Some(Long.MaxValue) ---
+      Seq(10, 20).foreach(append(40, _))
+      // startTimestamp=Long.MaxValue (exclusive) means everything <= Long.MaxValue was already
+      // evicted. Nothing can remain, so the scan returns an empty iterator immediately.
+      assert(evictByTs.evictByTimestamp(50, Some(Long.MaxValue)) === 0)
+      assert(get(40) === Seq(10, 20, 30))
+    }
+  }
+
+  // V1 excluded: V1 converter does not persist matched flags (SPARK-26154)
+  versionsInTest.filter(_ >= 2).foreach { ver =>
+    test(s"StreamingJoinStateManager V$ver - skipUpdatingMatchedFlag skips matched flag update") {
+      withTempDir { checkpointDir =>
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 0, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          appendAndTest(40, 100, 200, 300)
+
+          val dummyRow = new GenericInternalRow(0)
+          val matched = manager.getJoinedRows(
+            toJoinKeyRow(40),
+            row => new JoinedRow(row, dummyRow),
+            jr => jr.getInt(1) == 100,
+            skipUpdatingMatchedFlag = true
+          ).toSeq
+          assert(matched.size == 1)
+
+          mgr.commit()
+        }
+
+        withJoinStateManagerWithCheckpointDir(
+          inputValueAttributes, joinKeyExpressions, stateFormatVersion = ver,
+          checkpointDir, storeVersion = 1, changelogCheckpoint = false) { manager =>
+          implicit val mgr = manager
+
+          val evicted = removeAndReturnByValue(125)
+          val evictedPairs = evicted.map(p => (toValueInt(p.value), p.matched)).toSeq
+          val matchedByValue = evictedPairs.toMap
+          // Without skipUpdatingMatchedFlag = true, the value would be true.
+          assert(matchedByValue(100) === false)
+
+          mgr.commit()
+        }
       }
     }
   }

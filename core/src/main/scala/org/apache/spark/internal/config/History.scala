@@ -28,9 +28,20 @@ private[spark] object History {
 
   val HISTORY_LOG_DIR = ConfigBuilder("spark.history.fs.logDirectory")
     .version("1.1.0")
-    .doc("Directory where app logs are stored")
+    .doc("Directory where app logs are stored. Multiple directories can be specified " +
+      "as a comma-separated list to monitor event logs from multiple paths.")
     .stringConf
+    .checkValue(v => v.split(",").map(_.trim).exists(_.nonEmpty),
+      "must specify at least one non-empty directory")
     .createWithDefault(DEFAULT_LOG_DIR)
+
+  val HISTORY_LOG_DIR_NAMES = ConfigBuilder("spark.history.fs.logDirectory.names")
+    .version("4.2.0")
+    .doc("Optional comma-separated list of display names for the log directories specified " +
+      "in spark.history.fs.logDirectory. Names correspond to directories by position. " +
+      "If not set, the full path is shown in the UI.")
+    .stringConf
+    .createOptional
 
   val SAFEMODE_CHECK_INTERVAL_S = ConfigBuilder("spark.history.fs.safemodeCheck.interval")
     .version("1.6.0")
@@ -53,6 +64,21 @@ private[spark] object History {
     .intConf
     .checkValue(v => v > 0, "The update batchSize should be a positive integer.")
     .createWithDefault(Int.MaxValue)
+
+  val SCAN_DISABLED_PATH_PATTERNS =
+    ConfigBuilder("spark.history.fs.update.scanDisabledPathPatterns")
+      .doc("Comma-separated list of regular expressions matched against log directory " +
+        "paths. Directories whose full path matches any pattern will not be scanned " +
+        "periodically. Applications in these directories rely on on-demand loading " +
+        "instead of scanning and will not appear in the listing until accessed by appId. " +
+        "When accessed, accurate metadata is populated immediately. Logs that are never " +
+        "accessed are not subject to the cleaner; use external lifecycle management " +
+        "(e.g., S3 Lifecycle Policies) for those. " +
+        "Example: \"s3a://.*,gs://.*\" disables scanning for all S3 and GCS directories.")
+      .version("4.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   val CLEANER_ENABLED = ConfigBuilder("spark.history.fs.cleaner.enabled")
     .version("1.4.0")

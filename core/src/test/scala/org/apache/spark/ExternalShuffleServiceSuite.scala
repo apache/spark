@@ -110,7 +110,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
     val e = intercept[SparkException] {
       rdd.count()
     }
-    e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+    e.getMessage should include ("will not retry due to testing config.")
   }
 
   test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {

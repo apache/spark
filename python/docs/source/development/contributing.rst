@@ -142,6 +142,18 @@ Once it is set up, make sure you switch to `pyspark-dev-env` before starting the
 
 Now, you can start developing and `running the tests <testing.rst>`_.
 
+venv
+~~~~
+
+You can use Python's built-in ``venv`` module to create an isolated environment:
+
+.. code-block:: bash
+
+    # Python 3.10+ is required
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install --upgrade -r dev/requirements.txt
+
 pip
 ~~~
 

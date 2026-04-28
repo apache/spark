@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -251,7 +251,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 }
 
-trait DDLSuiteBase extends SQLTestUtils {
+trait DDLSuiteBase extends QueryTest {
 
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
@@ -317,7 +317,7 @@ trait DDLSuiteBase extends SQLTestUtils {
     spec: TablePartitionSpec,
     tableName: TableIdentifier): Unit = {
     val part = CatalogTablePartition(
-      spec, CatalogStorageFormat(None, None, None, None, None, false, Map()))
+      spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
@@ -1121,27 +1121,35 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   test("drop built-in function") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        // partition to add already exists
         checkError(
           exception = intercept[AnalysisException] {
             sql("DROP TEMPORARY FUNCTION year")
           },
-          condition = "_LEGACY_ERROR_TEMP_1255",
-          parameters = Map("functionName" -> "year")
+          condition = "FORBIDDEN_OPERATION",
+          parameters = Map(
+            "statement" -> "DROP",
+            "objectType" -> "FUNCTION",
+            "objectName" -> "`year`")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql("DROP TEMPORARY FUNCTION YeAr")
           },
-          condition = "_LEGACY_ERROR_TEMP_1255",
-          parameters = Map("functionName" -> "YeAr")
+          condition = "FORBIDDEN_OPERATION",
+          parameters = Map(
+            "statement" -> "DROP",
+            "objectType" -> "FUNCTION",
+            "objectName" -> "`YeAr`")
         )
         checkError(
           exception = intercept[AnalysisException] {
             sql("DROP TEMPORARY FUNCTION `YeAr`")
           },
-          condition = "_LEGACY_ERROR_TEMP_1255",
-          parameters = Map("functionName" -> "YeAr")
+          condition = "FORBIDDEN_OPERATION",
+          parameters = Map(
+            "statement" -> "DROP",
+            "objectType" -> "FUNCTION",
+            "objectName" -> "`YeAr`")
         )
       }
     }
@@ -2226,7 +2234,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     // TODO(SPARK-50244): ADD JAR is inside `sql()` thus isolated. This will break an existing Hive
     //  use case (one session adds JARs and another session uses them). After we sort out the Hive
     //  isolation issue we will decide if the next assert should be wrapped inside `withResources`.
-    spark.artifactManager.withResources {
+    spark.sessionState.artifactManager.withResources {
       assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
     }
   }

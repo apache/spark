@@ -67,6 +67,7 @@ case class TransformWithStateExec(
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     batchTimestampMs: Option[Long],
+    prevBatchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     child: SparkPlan,
@@ -247,6 +248,12 @@ case class TransformWithStateExec(
       timeMode: TimeMode,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val numExpiredTimers = longMetric("numExpiredTimers")
+    // SPARK-56566: Timers are always scanned without a lower bound (full scan up to the current
+    // batch timestamp / eviction watermark). We intentionally do not pass
+    // prevBatchTimestampMs / lateEventsWatermark as the exclusive lower bound here:
+    // registerTimer has no guard on the registered expiry, so a user-registered timer with expiry
+    // at or below the previous batch's lower bound would be silently dropped by a bounded scan.
+    // Revisit once registerTimer enforces ts > currentBatchTimestamp / watermark.
     timeMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
@@ -493,7 +500,7 @@ case class TransformWithStateExec(
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     withStatefulProcessorErrorHandling("init") {
@@ -509,7 +516,7 @@ case class TransformWithStateExec(
       initStateIterator: Iterator[InternalRow]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, prevBatchTimestampMs, metrics)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     withStatefulProcessorErrorHandling("init") {
@@ -579,6 +586,7 @@ object TransformWithStateExec {
       outputObjAttr,
       Some(statefulOperatorStateInfo),
       Some(System.currentTimeMillis),
+      None,
       None,
       None,
       child,

@@ -2583,7 +2583,7 @@ Project [id#x, arr#x, col1#x, col2#x]
 -- !query
 DROP VIEW array_struct
 -- !query analysis
-DropTempViewCommand array_struct
+DropTempViewCommand array_struct, false
 
 
 -- !query
@@ -2788,7 +2788,7 @@ Project [key#x, f1#x, f2#x, f3#x, f4#x, f5#x]
 -- !query
 DROP VIEW json_table
 -- !query analysis
-DropTempViewCommand json_table
+DropTempViewCommand json_table, false
 
 
 -- !query

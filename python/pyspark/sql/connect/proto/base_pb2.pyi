@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.any_pb2
@@ -4524,13 +4525,25 @@ class GetStatusResponse(google.protobuf.message.Message):
             builtins.type,
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-            OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 0
-            OPERATION_STATE_UNKNOWN: GetStatusResponse.OperationStatus._OperationState.ValueType  # 1
-            OPERATION_STATE_RUNNING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 2
-            OPERATION_STATE_TERMINATING: GetStatusResponse.OperationStatus._OperationState.ValueType  # 3
-            OPERATION_STATE_SUCCEEDED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 4
+            OPERATION_STATE_UNSPECIFIED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 0
+            OPERATION_STATE_UNKNOWN: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 1
+            OPERATION_STATE_RUNNING: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 2
+            OPERATION_STATE_TERMINATING: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 3
+            OPERATION_STATE_SUCCEEDED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 4
             OPERATION_STATE_FAILED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 5
-            OPERATION_STATE_CANCELLED: GetStatusResponse.OperationStatus._OperationState.ValueType  # 6
+            OPERATION_STATE_CANCELLED: (
+                GetStatusResponse.OperationStatus._OperationState.ValueType
+            )  # 6
 
         class OperationState(_OperationState, metaclass=_OperationStateEnumTypeWrapper): ...
         OPERATION_STATE_UNSPECIFIED: GetStatusResponse.OperationStatus.OperationState.ValueType  # 0

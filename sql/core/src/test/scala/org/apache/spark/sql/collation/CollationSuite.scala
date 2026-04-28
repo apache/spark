@@ -2249,16 +2249,493 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("ConstantPropagation does not replace attributes with non-binary-stable collation") {
-    val tableName = "t1"
-    withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c STRING COLLATE UTF8_LCASE)")
-      sql(s"INSERT INTO $tableName VALUES ('hello'), ('HELLO')")
+  test("ConstantPropagation: does not replace attributes with non-binary-stable collation") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
 
       checkAnswer(
-        sql(s"SELECT * FROM $tableName WHERE c = 'hello' AND c = 'HELLO' COLLATE UNICODE"),
+        sql("SELECT * FROM t1 WHERE 'hello' = c AND c = 'HELLO' COLLATE UNICODE"),
         Row("HELLO")
       )
     }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attributes with EqualNullSafe") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), (NULL)")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE 'hello' <=> c AND c <=> 'HELLO' COLLATE UNICODE"),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: replaces binary-stable attributes with contradicting predicates") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('world')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c = 'hello' AND c = 'world'"),
+        Seq.empty
+      )
+    }
+  }
+
+  test("ConstantPropagation: replaces binary-stable attributes across collation cast") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE c = 'hello' AND c COLLATE UTF8_LCASE = 'HELLO'"),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable " +
+    "attributes with explicit CAST collation") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql("""SELECT * FROM t1 WHERE c = 'hello'
+              |AND CAST(c AS STRING COLLATE UNICODE) = 'HELLO'""".stripMargin),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: replaces non-binary-stable attributes in same-collation comparison") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (col1 STRING COLLATE UTF8_LCASE, col2 STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello', 'hello'), ('HELLO', 'hello'), ('hello', 'world')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE col1 = 'hello' AND col1 = col2"),
+        Seq(Row("hello", "hello"), Row("HELLO", "hello"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in different-collation column comparison") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (col1 STRING COLLATE UTF8_LCASE, col2 STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello', 'hello'), ('HELLO', 'HELLO')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE col1 = 'hello' AND col1 COLLATE UNICODE = col2"),
+        Seq(Row("HELLO", "HELLO"), Row("hello", "hello"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: attribute is not propagated from inside NOT") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE NOT(c = 'world') AND c = 'HELLO' COLLATE UNICODE"),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: non-binary-stable attribute is not replaced inside NOT") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+
+      checkAnswer(
+        sql("SELECT * FROM t1 WHERE 'HELLO' = c AND NOT(c = 'HELLO' COLLATE UNICODE)"),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: predicates do not propagate across OR branches") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+
+      checkAnswer(
+        sql("""SELECT * FROM t1 WHERE (c = 'hello' AND c = 'HELLO' COLLATE UNICODE)
+              |OR c = 'world'""".stripMargin),
+        Seq(Row("HELLO"), Row("world"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: non-binary-stable join matches case-insensitively") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b WHERE t1.a = 'hello'"),
+        Seq(Row("hello"), Row("HELLO"))
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in cross-collation join condition") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b COLLATE UNICODE
+              |WHERE t1.a = 'hello'""".stripMargin),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in cross-collation join filter") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b
+              |WHERE t1.a = 'hello' AND t1.a = 'HELLO' COLLATE UNICODE""".stripMargin),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: binary-stable join correctly replaces attributes") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING)")
+      sql("CREATE TABLE t2 (b STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b WHERE t1.a = 'hello'"),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: binary-stable join replaces attributes " +
+    "across collation cast in join condition") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING)")
+      sql("CREATE TABLE t2 (b STRING)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a = t2.b COLLATE UTF8_LCASE
+              |WHERE t1.a = 'hello'""".stripMargin),
+        Row("hello")
+      )
+    }
+  }
+
+  test("ConstantPropagation: does not replace non-binary-stable attribute " +
+    "in null-safe join filter") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), (NULL)")
+      sql("INSERT INTO t2 VALUES ('hello'), (NULL)")
+
+      checkAnswer(
+        sql("""SELECT t1.a FROM t1 JOIN t2 ON t1.a <=> t2.b
+              |WHERE t1.a = 'hello' AND t1.a = 'HELLO' COLLATE UNICODE""".stripMargin),
+        Row("HELLO")
+      )
+    }
+  }
+
+  test("ConstantPropagation: non-binary-stable null-safe join condition " +
+    "matches case-insensitively") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE)")
+      sql("CREATE TABLE t2 (b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello'), ('HELLO'), ('world')")
+      sql("INSERT INTO t2 VALUES ('hello')")
+
+      checkAnswer(
+        sql("SELECT t1.a FROM t1 JOIN t2 ON t1.a <=> t2.b WHERE t1.a = 'hello'"),
+        Seq(Row("hello"), Row("HELLO"))
+      )
+    }
+  }
+
+  test("INSERT VALUES with NULLs into collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE, c2 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('a', NULL), (NULL, NULL)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a", null), Row(null, null))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with DEFAULT into collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE, c2 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('a', DEFAULT), (DEFAULT, DEFAULT)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a", null), Row(null, null))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with explicit conflicting collations") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)")
+          sql(
+            """INSERT INTO t
+              |VALUES ('c' COLLATE UTF8_LCASE), ('d' COLLATE UNICODE)
+              |AS vals(c1)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"), Row("c"), Row("d"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with CAST to conflicting collated string types") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql(
+            """INSERT INTO t VALUES
+              |  (CAST('a' AS STRING COLLATE UTF8_LCASE)),
+              |  (CAST('b' AS STRING COLLATE UNICODE))""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with mixed collations and NULLs") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t (
+              |  c1 STRING COLLATE UTF8_LCASE,
+              |  c2 STRING COLLATE UNICODE
+              |)""".stripMargin)
+          sql("INSERT INTO t VALUES ('hello', 'world'), (NULL, NULL)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("hello", "world"), Row(null, null))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT OVERWRITE VALUES with collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO t VALUES ('x')")
+          sql("INSERT OVERWRITE t VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row("a"), Row("b"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT REPLACE WHERE VALUES with collated columns") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("testcat.t") {
+          sql("CREATE TABLE testcat.t (c1 STRING COLLATE UTF8_LCASE)")
+          sql("INSERT INTO testcat.t VALUES ('x')")
+          sql(
+            """INSERT INTO testcat.t REPLACE WHERE TRUE
+              |  VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM testcat.t"),
+            Seq(Row("a"), Row("b"))
+          )
+          sql(
+            """INSERT INTO testcat.t REPLACE WHERE TRUE
+              |  VALUES ('c' COLLATE UTF8_LCASE), ('d' COLLATE UNICODE)
+              |  AS vals(c1)""".stripMargin)
+          checkAnswer(
+            sql("SELECT * FROM testcat.t"),
+            Seq(Row("c"), Row("d"))
+          )
+        }
+      }
+    }
+  }
+
+  test("INSERT VALUES with nested collated types") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 ARRAY<STRING COLLATE UTF8_LCASE>)")
+          sql("INSERT INTO t VALUES (array('a', 'b')), (array('c'))")
+          checkAnswer(
+            sql("SELECT * FROM t"),
+            Seq(Row(Seq("a", "b")), Row(Seq("c")))
+          )
+        }
+      }
+    }
+  }
+
+  test("collation stripping for type resolution must not affect expression evaluation") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 BOOLEAN)")
+          sql("INSERT INTO t VALUES ('a' COLLATE UTF8_LCASE = 'A')")
+          checkAnswer(sql("SELECT * FROM t"), Row(true))
+        }
+      }
+    }
+  }
+
+  test("INSERT SELECT FROM VALUES with conflicting collations should fail") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql("CREATE TABLE t (c1 STRING COLLATE UTF8_LCASE)")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                """INSERT INTO t
+                  |SELECT * FROM VALUES
+                  |  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)""".stripMargin)
+            },
+            condition = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+            parameters = Map("colName" -> "`c1`"),
+            queryContext = Array(ExpectedContext(
+              "VALUES\n  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
+          )
+        }
+      }
+    }
+  }
+
+  test("standalone SELECT VALUES with conflicting collations should fail") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              "SELECT * FROM VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)")
+          },
+          condition = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+          parameters = Map("colName" -> "`c1`"),
+          queryContext = Array(ExpectedContext(
+            "VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
+        )
+      }
+    }
+  }
+
+  test("CTAS with conflicting collations in VALUES should fail") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(
+                """CREATE TABLE t AS
+                  |SELECT * FROM VALUES
+                  |  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)""".stripMargin)
+            },
+            condition = "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+            parameters = Map("colName" -> "`c1`"),
+            queryContext = Array(ExpectedContext(
+              "VALUES\n  ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"))
+          )
+        }
+      }
+    }
+  }
+
+  test("CTAS with DEFAULT COLLATION and plain string literals in inline table") {
+    Seq(true, false).foreach { eagerEval =>
+      withSQLConf(
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eagerEval.toString) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
+              |SELECT * FROM VALUES ('a'), ('b') AS T(c1) WHERE c1 = 'A'
+              |""".stripMargin)
+          checkAnswer(sql("SELECT COUNT(*) FROM t"), Seq(Row(1)))
+          checkAnswer(sql("SELECT DISTINCT COLLATION(c1) FROM t"),
+            Row(s"${fullyQualifiedPrefix}UTF8_LCASE"))
+        }
+      }
+    }
+  }
+
+  test("array_position respects schema-level non-binary collation") {
+    val q =
+      """SELECT array_position(a, 'HELLO') AS pos
+        |FROM (
+        |  SELECT CAST(array(
+        |           CASE id WHEN 0 THEN 'hello'
+        |                   WHEN 1 THEN 'HELLO'
+        |                   ELSE 'world'
+        |           END
+        |         ) AS ARRAY<STRING COLLATE UTF8_LCASE>) AS a
+        |  FROM range(3)
+        |)""".stripMargin
+    checkAnswer(sql(q), Seq(Row(1L), Row(1L), Row(0L)))
   }
 }

@@ -61,7 +61,7 @@ class CreateFlowCommandSuite extends CommandSuiteBase with AnalysisTest {
     val cmd = plan.asInstanceOf[CreateFlowCommand]
     assert(cmd.right == InsertIntoStatement(
       table = UnresolvedRelation(Seq("a"))
-        .requireWritePrivileges(Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
+        .requireWritePrivileges(Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)),
       partitionSpec = Map("col1" -> None),
       userSpecifiedCols = Seq.empty,
       query = parser.parsePlan("SELECT col1, col2 FROM b"),

@@ -132,6 +132,7 @@ try:
     # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
     # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
     # Also don't forget to update python/docs/source/getting_started/install.rst,
+    # python/docs/source/tutorial/sql/arrow_pandas.rst,
     # python/packaging/classic/setup.py, and python/packaging/connect/setup.py
     _minimum_pandas_version = "2.2.0"
     _minimum_numpy_version = "1.21"
@@ -225,7 +226,6 @@ try:
             "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
-            "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",
         ],
     )

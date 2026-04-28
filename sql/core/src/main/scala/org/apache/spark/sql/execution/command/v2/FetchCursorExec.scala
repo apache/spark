@@ -180,7 +180,7 @@ case class FetchCursorExec(
     // Select the appropriate variable manager based on the catalog
     // This logic matches SetVariableExec.setVariable()
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
+    val scriptingVariableManager = SqlScriptingContextManager.get().flatMap(_.getVariableManager)
 
     val variableManager = varRef.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>

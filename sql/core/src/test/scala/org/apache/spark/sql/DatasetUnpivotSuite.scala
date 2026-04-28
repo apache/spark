@@ -25,8 +25,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Comprehensive tests for Dataset.unpivot.
  */
-class DatasetUnpivotSuite extends QueryTest
-  with SharedSparkSession {
+class DatasetUnpivotSuite extends SharedSparkSession {
 
   import testImplicits._
 

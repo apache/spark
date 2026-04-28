@@ -73,8 +73,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
 class TransformWithStateTestsMixin:
     @classmethod
     @abstractmethod
-    def use_pandas(cls) -> bool:
-        ...
+    def use_pandas(cls) -> bool: ...
 
     @classmethod
     def get_processor(cls, stateful_processor_factory) -> StatefulProcessor:
@@ -1382,9 +1381,7 @@ class TransformWithStateTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 (
                     df.groupBy("id")
                     .transformWithStateInPandas(

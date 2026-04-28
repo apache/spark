@@ -161,9 +161,7 @@ class SeriesComputeMixin:
         msg = "func must be a string or list of strings"
         with self.assertRaisesRegex(TypeError, msg):
             psser.aggregate({"x": ["min", "max"]})
-        msg = (
-            "If the given function is a list, it " "should only contains function names as strings."
-        )
+        msg = "If the given function is a list, it should only contains function names as strings."
         with self.assertRaisesRegex(ValueError, msg):
             psser.aggregate(["min", max])
 
@@ -239,6 +237,34 @@ class SeriesComputeMixin:
         pser.drop({"lama": "speed"}, inplace=True)
         self.assert_eq(psser, pser)
         self.assert_eq(psdf, pdf)
+
+    def test_drop_with_errors(self):
+        pser = pd.Series([10, 20, 30], index=["a", "b", "c"])
+        psser = ps.from_pandas(pser)
+
+        # errors='ignore' with missing index label
+        self.assert_eq(
+            psser.drop(["a", "x"], errors="ignore"),
+            pser.drop(["a", "x"], errors="ignore"),
+        )
+
+        # errors='ignore' with all-missing index labels
+        self.assert_eq(
+            psser.drop(["x", "y"], errors="ignore"),
+            pser.drop(["x", "y"], errors="ignore"),
+        )
+
+        # errors='ignore' with columns (no-op for Series)
+        self.assert_eq(
+            psser.drop(columns=["a"], errors="ignore"),
+            pser.drop(columns=["a"], errors="ignore"),
+        )
+
+        # Invalid errors value
+        self.assertRaises(
+            ValueError,
+            lambda: psser.drop("a", errors="invalid"),
+        )
 
     def test_pop(self):
         midx = pd.MultiIndex(
@@ -489,7 +515,7 @@ class SeriesComputeMixin:
             psser.between(1, 4, inclusive="right"), pser.between(1, 4, inclusive="right")
         )
         expected_err_msg = (
-            "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'"
+            "Inclusive has to be either string of 'both','left', 'right', or 'neither'"
         )
         with self.assertRaisesRegex(ValueError, expected_err_msg):
             psser.between(1, 4, inclusive="middle")

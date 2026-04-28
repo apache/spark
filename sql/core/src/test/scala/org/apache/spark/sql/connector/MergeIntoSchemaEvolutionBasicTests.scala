@@ -1245,4 +1245,24 @@ trait MergeIntoSchemaEvolutionBasicTests extends MergeIntoSchemaEvolutionSuiteBa
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`bonus` cannot be resolved"
   )
+
+  testEvolution("source has extra column with delete action")(
+    targetData = Seq((1, "hr"), (2, "software")).toDF("pk", "dep"),
+    sourceData = Seq((2, "dummy", 200), (3, "dummy", 300)).toDF("pk", "dep", "salary"),
+    clauses = Seq(delete(), insertAll()),
+    expected = Seq[(Int, String, java.lang.Integer)](
+      (1, "hr", null),
+      (3, "dummy", 300)).toDF("pk", "dep", "salary"),
+    expectedWithoutEvolution = Seq(
+      (1, "hr"),
+      (3, "dummy")).toDF("pk", "dep")
+  )
+
+  testEvolution("delete-only action does not trigger schema evolution")(
+    targetData = Seq((1, "hr"), (2, "software")).toDF("pk", "dep"),
+    sourceData = Seq((2, "dummy", 200)).toDF("pk", "dep", "salary"),
+    clauses = Seq(delete()),
+    expected = Seq((1, "hr")).toDF("pk", "dep"),
+    expectedWithoutEvolution = Seq((1, "hr")).toDF("pk", "dep")
+  )
 }

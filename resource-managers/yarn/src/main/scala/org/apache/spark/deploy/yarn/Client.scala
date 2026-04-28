@@ -1047,6 +1047,16 @@ private[spark] class Client(
 
     val javaOpts = ListBuffer[String]()
 
+    // Set Active Processor Count
+    val limitAPC = if (isClusterMode) {
+      sparkConf.get(DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)
+    } else {
+      sparkConf.get(YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)
+    }
+    if (limitAPC) {
+      javaOpts += s"-XX:ActiveProcessorCount=${amCores}"
+    }
+
     javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 
     // SPARK-37106: To start AM with Java 17, `JavaModuleOptions.defaultModuleOptions`

@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class STFunctionsSuite extends QueryTest with SharedSparkSession {
+class STFunctionsSuite extends SharedSparkSession {
 
   import testImplicits._
 

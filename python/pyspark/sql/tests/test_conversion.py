@@ -18,7 +18,7 @@ import datetime
 import unittest
 from zoneinfo import ZoneInfo
 
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.conversion import (
     ArrowArrayToPandasConversion,
     ArrowTableToRowsConversion,
@@ -32,7 +32,9 @@ from pyspark.sql.types import (
     BinaryType,
     DecimalType,
     DoubleType,
+    Geography,
     GeographyType,
+    Geometry,
     GeometryType,
     IntegerType,
     LongType,
@@ -156,6 +158,55 @@ class ArrowBatchTransformerTests(unittest.TestCase):
         self.assertEqual(wrapped.num_rows, 0)
         self.assertEqual(wrapped.num_columns, 1)
 
+    def test_enforce_schema_nested_cast(self):
+        """Nested struct and list types are cast recursively by Arrow."""
+        import pyarrow as pa
+
+        inner = pa.struct([("a", pa.int32()), ("b", pa.float32())])
+        batch = pa.RecordBatch.from_arrays(
+            [
+                pa.array([{"a": 1, "b": 2.0}], type=inner),
+                pa.array([[1, 2]], type=pa.list_(pa.int32())),
+            ],
+            names=["s", "l"],
+        )
+        target = pa.schema(
+            [
+                ("s", pa.struct([("a", pa.int64()), ("b", pa.float64())])),
+                ("l", pa.list_(pa.int64())),
+            ]
+        )
+        result = ArrowBatchTransformer.enforce_schema(batch, target)
+        self.assertEqual(result.schema, target)
+
+    def test_enforce_schema_arrow_cast_false(self):
+        """arrow_cast=False raises on type mismatch instead of casting."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([1], type=pa.int32())], names=["x"])
+        target = pa.schema([("x", pa.int64())])
+        with self.assertRaises(PySparkTypeError):
+            ArrowBatchTransformer.enforce_schema(batch, target, arrow_cast=False)
+
+    def test_enforce_schema_safecheck(self):
+        """safecheck=True rejects overflow; safecheck=False allows it."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([999], type=pa.int64())], names=["x"])
+        target = pa.schema([("x", pa.int8())])
+        with self.assertRaises(PySparkTypeError):
+            ArrowBatchTransformer.enforce_schema(batch, target, safecheck=True)
+        result = ArrowBatchTransformer.enforce_schema(batch, target, safecheck=False)
+        self.assertEqual(result.schema, target)
+
+    def test_enforce_schema_missing_column(self):
+        """Missing column raises PySparkTypeError."""
+        import pyarrow as pa
+
+        batch = pa.RecordBatch.from_arrays([pa.array([1])], names=["a"])
+        with self.assertRaises(PySparkTypeError):
+            ArrowBatchTransformer.enforce_schema(batch, pa.schema([("missing", pa.int64())]))
+
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 @unittest.skipIf(not have_pandas, pandas_requirement_message)
@@ -189,11 +240,11 @@ class PandasToArrowConversionTests(unittest.TestCase):
         result = PandasToArrowConversion.convert(df, schema)
         self.assertEqual(result.num_rows, 0)
 
-        # Empty schema (0 columns)
-        # TODO(SPARK-55350): Pandas - > PyArrow should preserve row count with 0 columns. It is a bug.
+        # Empty schema (0 columns) should preserve row count
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
         result = PandasToArrowConversion.convert(df, StructType([]))
         self.assertEqual(result.num_columns, 0)
-        self.assertEqual(result.num_rows, 0)
+        self.assertEqual(result.num_rows, 3)
 
     def test_convert_assign_cols_by_name(self):
         """Test assign_cols_by_name reorders columns to match schema."""
@@ -296,20 +347,21 @@ class PandasToArrowConversionTests(unittest.TestCase):
         data = [pd.Series(["not_int", "bad"]), pd.Series(["a", "b"])]
         with self.assertRaises((PySparkValueError, PySparkTypeError)) as ctx:
             PandasToArrowConversion.convert(data, schema)
-        # Error message should reference the schema field name, not the positional index
+        # Error message should use the new format and reference the schema field name
         self.assertIn("age", str(ctx.exception))
 
-    def test_convert_is_udtf(self):
-        """Test is_udtf=True produces PySparkRuntimeError with UDTF_ARROW_TYPE_CAST_ERROR."""
+    def test_convert_is_legacy(self):
+        """Test is_legacy=True uses the legacy error format."""
         import pandas as pd
 
         schema = StructType([StructField("val", DoubleType())])
         data = [pd.Series(["not_a_number", "bad"])]
 
         # ValueError path (string -> double)
-        with self.assertRaises(PySparkRuntimeError) as ctx:
-            PandasToArrowConversion.convert(data, schema, is_udtf=True)
-        self.assertIn("UDTF_ARROW_TYPE_CAST_ERROR", str(ctx.exception))
+        with self.assertRaises(PySparkValueError) as ctx:
+            PandasToArrowConversion.convert(data, schema, is_legacy=True)
+        self.assertIn("Exception thrown when converting pandas.Series", str(ctx.exception))
+        self.assertIn("val", str(ctx.exception))
 
         # TypeError path (int -> struct): ArrowTypeError inherits from TypeError.
         # ignore_unexpected_complex_type_values=True lets the bad value pass through
@@ -318,14 +370,15 @@ class PandasToArrowConversionTests(unittest.TestCase):
             [StructField("x", StructType([StructField("a", IntegerType())]))]
         )
         data = [pd.Series([0, 1])]
-        with self.assertRaises(PySparkRuntimeError) as ctx:
+        with self.assertRaises(PySparkTypeError) as ctx:
             PandasToArrowConversion.convert(
                 data,
                 struct_schema,
-                is_udtf=True,
+                is_legacy=True,
                 ignore_unexpected_complex_type_values=True,
             )
-        self.assertIn("UDTF_ARROW_TYPE_CAST_ERROR", str(ctx.exception))
+        self.assertIn("Exception thrown when converting pandas.Series", str(ctx.exception))
+        self.assertIn("x", str(ctx.exception))
 
     def test_convert_prefers_large_types(self):
         """Test prefers_large_types produces large Arrow types."""
@@ -653,6 +706,84 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         # empty
         result = ArrowArrayToPandasConversion.convert_numpy(
             pa.array([], type=variant_type), VariantType()
+        )
+        self.assertEqual(len(result), 0)
+
+    def test_geography_convert_numpy(self):
+        import pyarrow as pa
+
+        geography_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geography": b"true", b"srid": b"4326"},
+                ),
+            ]
+        )
+
+        # basic conversion with nulls
+        # POINT(1.0, 2.0) and POINT(17.0, 7.0) in WKB format
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                {"srid": 4326, "wkb": wkb1},
+                None,
+                {"srid": 4326, "wkb": wkb2},
+            ],
+            type=geography_type,
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, GeographyType(4326), ser_name="g")
+        self.assertEqual(result.iloc[0], Geography(wkb1, 4326))
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2], Geography(wkb2, 4326))
+        self.assertEqual(result.name, "g")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=geography_type), GeographyType(4326)
+        )
+        self.assertEqual(len(result), 0)
+
+    def test_geometry_convert_numpy(self):
+        import pyarrow as pa
+
+        geometry_type = pa.struct(
+            [
+                pa.field("srid", pa.int32(), nullable=False),
+                pa.field(
+                    "wkb",
+                    pa.binary(),
+                    nullable=False,
+                    metadata={b"geometry": b"true", b"srid": b"0"},
+                ),
+            ]
+        )
+
+        # basic conversion with nulls
+        # POINT(1.0, 2.0) and POINT(17.0, 7.0) in WKB format
+        wkb1 = bytes.fromhex("0101000000000000000000F03F0000000000000040")
+        wkb2 = bytes.fromhex("010100000000000000000031400000000000001c40")
+        arr = pa.array(
+            [
+                {"srid": 0, "wkb": wkb1},
+                None,
+                {"srid": 0, "wkb": wkb2},
+            ],
+            type=geometry_type,
+        )
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, GeometryType(0), ser_name="g")
+        self.assertEqual(result.iloc[0], Geometry(wkb1, 0))
+        self.assertIsNone(result.iloc[1])
+        self.assertEqual(result.iloc[2], Geometry(wkb2, 0))
+        self.assertEqual(result.name, "g")
+
+        # empty
+        result = ArrowArrayToPandasConversion.convert_numpy(
+            pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
 

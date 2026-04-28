@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField, Literal}
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructFiel
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Verifies the ability for a FileFormat to define custom metadata types */
-class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSession {
+class FileSourceCustomMetadataStructSuite extends SharedSparkSession {
   import FileSourceCustomMetadataStructSuite._
 
   val extraConstantMetadataFields = Seq(

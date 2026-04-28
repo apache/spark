@@ -23,8 +23,7 @@ import one.profiler.{AsyncProfiler, AsyncProfilerLoader}
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext.DRIVER_IDENTIFIER
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
@@ -45,7 +44,7 @@ private[spark] class SparkAsyncProfiler(conf: SparkConf, executorId: String) ext
   private def getAppId: Option[String] = conf.getOption("spark.app.id")
   private def getAttemptId: Option[String] = conf.getOption("spark.app.attempt.id")
 
-  private val profileFile = if (executorId == DRIVER_IDENTIFIER) {
+  private val profileFile = if (SparkContext.isDriver(executorId)) {
     s"profile-$executorId.jfr"
   } else {
     s"profile-exec-$executorId.jfr"

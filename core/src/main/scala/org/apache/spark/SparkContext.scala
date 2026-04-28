@@ -754,7 +754,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def getExecutorThreadDump(executorId: String): Option[Array[ThreadStackTrace]] = {
     try {
-      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+      if (SparkContext.isDriver(executorId)) {
         Some(Utils.getThreadDump())
       } else {
         env.blockManager.master.getExecutorEndpointRef(executorId) match {
@@ -786,7 +786,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def getExecutorHeapHistogram(executorId: String): Option[Array[String]] = {
     try {
-      if (executorId == SparkContext.DRIVER_IDENTIFIER) {
+      if (SparkContext.isDriver(executorId)) {
         Some(Utils.getHeapHistogram())
       } else {
         env.blockManager.master.getExecutorEndpointRef(executorId) match {
@@ -2849,7 +2849,6 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
     SparkClosureCleaner.clean(f, checkSerializable)
-    f
   }
 
   /**
@@ -3163,6 +3162,11 @@ object SparkContext extends Logging {
 
   /** Separator of tags in SPARK_JOB_TAGS property */
   private[spark] val SPARK_JOB_TAGS_SEP = ","
+
+  /** Returns true if the given executor ID identifies the driver. */
+  private[spark] def isDriver(executorId: String): Boolean = {
+    DRIVER_IDENTIFIER == executorId
+  }
 
   // Same rules apply to Spark Connect execution tags, see ExecuteHolder.throwIfInvalidTag
   private[spark] def throwIfInvalidTag(tag: String) = {

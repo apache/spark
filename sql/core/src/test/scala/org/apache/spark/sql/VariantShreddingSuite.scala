@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
-class VariantShreddingSuite extends QueryTest with SharedSparkSession with ParquetTest {
+class VariantShreddingSuite extends SharedSparkSession with ParquetTest {
   def parseJson(s: String): VariantVal = {
     val v = VariantBuilder.parseJson(s, false)
     new VariantVal(v.getValue, v.getMetadata)

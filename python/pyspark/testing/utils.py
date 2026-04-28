@@ -43,7 +43,6 @@ from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
@@ -103,6 +102,14 @@ grpc_status_requirement_message = "" if have_grpc_status else "No module named '
 
 have_zstandard = have_package("zstandard")
 zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
+
+have_kafka = have_package("kafka")
+kafka_requirement_message = "" if have_kafka else "No module named 'kafka'"
+
+have_testcontainers = have_package("testcontainers")
+testcontainers_requirement_message = (
+    "" if have_testcontainers else "No module named 'testcontainers'"
+)
 
 
 googleapis_common_protos_requirement_message = ""
@@ -452,12 +459,14 @@ class PySparkErrorTestUtils:
                     f"Expected message parameter key '{key}' was not found "
                     "in actual message parameters.",
                 )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+                (
+                    self.assertRegex(
+                        actual[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual[key]}'.",
+                    ),
+                )
         else:
             self.assertEqual(
                 expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
@@ -473,9 +482,9 @@ class PySparkErrorTestUtils:
                     expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -505,7 +514,7 @@ def assertSchemaEqual(
     expected : StructType
         The expected schema, for comparison with the actual schema.
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -592,13 +601,21 @@ def assertSchemaEqual(
     """
     if not isinstance(actual, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "actual",
+                "expected_type": "struct type",
+                "arg_type": type(actual).__name__,
+            },
         )
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "expected",
+                "expected_type": "struct type",
+                "arg_type": type(expected).__name__,
+            },
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
@@ -715,7 +732,7 @@ def assertDataFrameEqual(
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -1046,9 +1063,9 @@ def assertDataFrameEqual(
                 return all(compare_vals(x, y) for x, y in zip(val1, val2))
             elif isinstance(val1, dict) and isinstance(val2, dict):
                 return (
-                    len(val1.keys()) == len(val2.keys())
+                    len(val1) == len(val2)
                     and val1.keys() == val2.keys()
-                    and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
+                    and all(compare_vals(val1[k], val2[k]) for k in val1)
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
@@ -1074,7 +1091,6 @@ def assertDataFrameEqual(
         rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
     ):
         __tracebackhide__ = True
-        zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []
         has_diff_rows = False
@@ -1082,28 +1098,86 @@ def assertDataFrameEqual(
         rows_str1 = ""
         rows_str2 = ""
 
-        # count different rows
-        for r1, r2 in zipped:
-            if not compare_rows(r1, r2):
-                diff_rows_cnt += 1
-                has_diff_rows = True
-                if includeDiffRows:
-                    diff_rows.append((r1, r2))
-                rows_str1 += str(r1) + "\n"
-                rows_str2 += str(r2) + "\n"
+        def record_diff(r1, r2):
+            nonlocal diff_rows_cnt, has_diff_rows
+            diff_rows_cnt += 1
+            has_diff_rows = True
+            if includeDiffRows:
+                diff_rows.append((r1, r2))
+
+        # SPARK-54090: For checkRowOrder=False, the input lists have already
+        # been sorted by str(x).  When their lengths differ, the original
+        # zip_longest pairing causes a single missing/extra row to cascade
+        # into a mismatch on every subsequent row -- inflating both the diff
+        # count and the reported percentage.  Walk sorted lists of different
+        # lengths as a merge so only truly missing/extra rows contribute.
+        # When the lengths match, zip_longest aligns positions correctly and
+        # is preserved to keep field-level diffs reported as paired rows.
+        use_merge_walk = not checkRowOrder and len(rows1) != len(rows2)
+
+        if not use_merge_walk:
+            zipped = list(zip_longest(rows1, rows2))
+            for r1, r2 in zipped:
+                if not compare_rows(r1, r2):
+                    record_diff(r1, r2)
+                    rows_str1 += str(r1) + "\n"
+                    rows_str2 += str(r2) + "\n"
+                    if maxErrors is not None and diff_rows_cnt >= maxErrors:
+                        break
+                elif not showOnlyDiff:
+                    rows_str1 += str(r1) + "\n"
+                    rows_str2 += str(r2) + "\n"
+            total = len(zipped)
+        else:
+            i = j = 0
+            len1, len2 = len(rows1), len(rows2)
+            while i < len1 or j < len2:
+                if i < len1 and j < len2:
+                    r1, r2 = rows1[i], rows2[j]
+                    if compare_rows(r1, r2):
+                        if not showOnlyDiff:
+                            rows_str1 += str(r1) + "\n"
+                            rows_str2 += str(r2) + "\n"
+                        i += 1
+                        j += 1
+                        continue
+                    s1, s2 = str(r1), str(r2)
+                    if s1 < s2:
+                        record_diff(r1, None)
+                        rows_str1 += str(r1) + "\n"
+                        i += 1
+                    elif s1 > s2:
+                        record_diff(None, r2)
+                        rows_str2 += str(r2) + "\n"
+                        j += 1
+                    else:
+                        # Equal str() but compare_rows said they differ (e.g.
+                        # float values outside tolerance that still str-sort
+                        # identically).  Treat as a paired mismatch.
+                        record_diff(r1, r2)
+                        rows_str1 += str(r1) + "\n"
+                        rows_str2 += str(r2) + "\n"
+                        i += 1
+                        j += 1
+                elif i < len1:
+                    record_diff(rows1[i], None)
+                    rows_str1 += str(rows1[i]) + "\n"
+                    i += 1
+                else:
+                    record_diff(None, rows2[j])
+                    rows_str2 += str(rows2[j]) + "\n"
+                    j += 1
                 if maxErrors is not None and diff_rows_cnt >= maxErrors:
                     break
-            elif not showOnlyDiff:
-                rows_str1 += str(r1) + "\n"
-                rows_str2 += str(r2) + "\n"
+            total = max(len1, len2)
 
         generated_diff = _context_diff(
-            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=total
         )
 
         if has_diff_rows:
             error_msg = "Results do not match: "
-            percent_diff = (diff_rows_cnt / len(zipped)) * 100
+            percent_diff = (diff_rows_cnt / total) * 100 if total else 0
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
             data = diff_rows if includeDiffRows else None
@@ -1162,7 +1236,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

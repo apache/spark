@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.{ArrayDeque, ArrayList, HashSet}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.resolver.AliasKind._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -64,17 +68,17 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *  level 2: f, h
  *  level 3: i
  *
- * @param attributes Output attributes from currently resolved [[NameScope]], to which the registry
- *                   belongs.
  */
-class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
-    extends LateralColumnAliasRegistry {
-  private case class AliasReference(attribute: Attribute, dependencyLevel: Int)
+class LateralColumnAliasRegistryImpl extends LateralColumnAliasRegistry with SQLConfHelper {
+  private case class AliasReference(
+      attribute: Attribute,
+      dependencyLevel: Int,
+      aliasKind: AliasKind
+  )
 
   private val currentAttributeDependencyLevelStack: ArrayDeque[Int] = new ArrayDeque[Int]
 
   private val availableAttributes = new IdentifierMap[ArrayList[AliasReference]]
-  registerAllAttributes(attributes)
 
   private val referencedAliases = new HashSet[Attribute]
   private val aliasDependencyLevels = new ArrayList[ArrayList[Alias]]
@@ -83,14 +87,19 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
    * Creates a new LCA resolution scope for each [[Alias]] resolution. Executes the lambda and
    * registers top-level resolved aliases for later LCA resolution.
    */
-  def withNewLcaScope(isTopLevelAlias: Boolean)(body: => Alias): Alias = {
+  def withNewLcaScope[T <: NamedExpression](
+      aliasKind: AliasKind = AliasKind.Explicit)(body: => T): T = {
+    val isTopLevelAlias = currentAttributeDependencyLevelStack.isEmpty
     currentAttributeDependencyLevelStack.push(0)
+
     try {
-      val resolvedAlias = body
-      if (isTopLevelAlias) {
-        registerAlias(resolvedAlias)
+      val resolvedExpression = body
+      resolvedExpression match {
+        case resolvedAlias: Alias if isTopLevelAlias =>
+          registerAlias(alias = resolvedAlias, aliasKind = aliasKind)
+        case _ =>
       }
-      resolvedAlias
+      resolvedExpression
     } finally {
       currentAttributeDependencyLevelStack.pop()
     }
@@ -106,14 +115,7 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
     availableAttributes.get(attributeName) match {
       case None => None
       case Some(aliasReferenceList: ArrayList[AliasReference]) =>
-        if (aliasReferenceList.size() > 1) {
-          throw QueryCompilationErrors.ambiguousLateralColumnAliasError(
-            attributeName,
-            aliasReferenceList.size()
-          )
-        }
-
-        val aliasReference = aliasReferenceList.get(0)
+        val aliasReference = pickAliasReference(aliasReferenceList, attributeName)
         if (!currentAttributeDependencyLevelStack.isEmpty) {
           // compute new dependency as a maximum of current dependency and dependency of the
           // referenced attribute incremented by 1.
@@ -146,27 +148,53 @@ class LateralColumnAliasRegistryImpl(attributes: Seq[Attribute])
     referencedAliases.contains(attribute)
 
   /**
-   * Registers an alias for LCA resolution by adding it to correct dependency level. Additionally
-   * register an attribute for further LCA chaining.
+   * Returns all laterally referenced attributes in the current scope.
    */
-  private def registerAlias(alias: Alias): Unit = {
+  def getAllLaterallyReferencedAttributes: Seq[Attribute] =
+    referencedAliases.asScala.toSeq
+
+  /**
+   * Registers an alias for LCA resolution by adding it to correct dependency level. Additionally,
+   * register a reference to the alias for further LCA chaining.
+   */
+  private def registerAlias(alias: Alias, aliasKind: AliasKind = AliasKind.Explicit): Unit = {
     addAliasDependency(alias)
     registerAttribute(
-      alias.toAttribute,
-      currentAttributeDependencyLevelStack.peek()
+      attribute = alias.toAttribute,
+      dependencyLevel = currentAttributeDependencyLevelStack.peek(),
+      aliasKind = aliasKind
     )
   }
 
-  private def registerAllAttributes(attributes: Seq[Attribute]) =
-    attributes.foreach(attribute => registerAttribute(attribute))
+  /**
+   * Returns the [[AliasReference]] if there is only one match or throws an ambiguous LCA error
+   * otherwise.
+   */
+  private def pickAliasReference(
+      aliasReferenceList: ArrayList[AliasReference],
+      attributeName: String) = {
+    if (aliasReferenceList.size() > 1) {
+      throw QueryCompilationErrors.ambiguousLateralColumnAliasError(
+        attributeName,
+        aliasReferenceList.size()
+      )
+    }
 
-  private def registerAttribute(attribute: Attribute, dependencyLevel: Int = 0): Unit = {
+    aliasReferenceList.get(0)
+  }
+
+  private def registerAttribute(
+      attribute: Attribute,
+      dependencyLevel: Int = 0,
+      aliasKind: AliasKind = AliasKind.Explicit
+  ): Unit = {
     availableAttributes
       .computeIfAbsent(attribute.name, _ => new ArrayList[AliasReference])
       .add(
         AliasReference(
-          attribute,
-          dependencyLevel
+          attribute = attribute,
+          dependencyLevel = dependencyLevel,
+          aliasKind = aliasKind
         )
       )
   }

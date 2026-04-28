@@ -238,8 +238,14 @@ class JacksonGenerator(
 
   private def writeFields(
       row: InternalRow, schema: StructType, fieldWriters: Seq[ValueWriter]): Unit = {
-    var i = 0
-    while (i < row.numFields) {
+    val indices = if (options.sortKeys) {
+      schema.fieldNames.indices.sortBy(i => schema(i).name).toArray
+    } else {
+      null
+    }
+    var j = 0
+    while (j < row.numFields) {
+      val i = if (indices != null) indices(j) else j
       val field = schema(i)
       if (!row.isNullAt(i)) {
         gen.writeFieldName(field.name)
@@ -249,7 +255,7 @@ class JacksonGenerator(
         gen.writeFieldName(field.name)
         gen.writeNull()
       }
-      i += 1
+      j += 1
     }
   }
 
@@ -276,15 +282,21 @@ class JacksonGenerator(
       map: MapData, mapType: MapType, fieldWriter: ValueWriter): Unit = {
     val keyArray = map.keyArray()
     val valueArray = map.valueArray()
-    var i = 0
-    while (i < map.numElements()) {
+    val indices = if (options.sortKeys) {
+      (0 until map.numElements()).sortBy(i => keyArray.get(i, mapType.keyType).toString).toArray
+    } else {
+      null
+    }
+    var j = 0
+    while (j < map.numElements()) {
+      val i = if (indices != null) indices(j) else j
       gen.writeFieldName(keyArray.get(i, mapType.keyType).toString)
       if (!valueArray.isNullAt(i)) {
         fieldWriter.apply(valueArray, i)
       } else {
         gen.writeNull()
       }
-      i += 1
+      j += 1
     }
   }
 

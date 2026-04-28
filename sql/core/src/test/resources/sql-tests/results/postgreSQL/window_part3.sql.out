@@ -319,7 +319,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -393,7 +394,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -407,7 +409,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE",
+  "sqlState" : "42601",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -437,11 +440,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
+  "errorClass" : "NOT_A_SCALAR_FUNCTION",
+  "sqlState" : "42887",
   "messageParameters" : {
-    "routineName" : "`range`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+    "functionName" : "`range`"
   },
   "queryContext" : [ {
     "objectType" : "",

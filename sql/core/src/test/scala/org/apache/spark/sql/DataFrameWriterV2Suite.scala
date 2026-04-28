@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.functions._
   import testImplicits._

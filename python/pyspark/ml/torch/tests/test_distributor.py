@@ -427,7 +427,7 @@ class TorchDistributorLocalUnitTestsMixin:
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -451,7 +451,7 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
 class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -526,7 +526,7 @@ class TorchDistributorDistributedUnitTests(
 ):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_distributed_mode_conf().items():
             conf = conf.set(k, v)

@@ -183,6 +183,51 @@ trait ReadStateStore {
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
+  /**
+   * Scan key-value pairs in the range [startKey, endKey).
+   *
+   * @param startKey None to scan from the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan.
+   * @param colFamilyName The column family name.
+   *
+   * Callers must ensure the column family's key encoder produces lexicographically ordered
+   * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
+   * RangeKeyScanStateEncoder).
+   */
+  def rangeScan(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
+    throw StateStoreErrors.unsupportedOperationException("rangeScan", "")
+  }
+
+  /**
+   * Scan key-value pairs in the range [startKey, endKey), expanding multi-valued entries.
+   *
+   * @param startKey None to scan from the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan.
+   * @param colFamilyName The column family name.
+   *
+   * Callers must ensure the column family's key encoder produces lexicographically ordered
+   * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
+   * RangeKeyScanStateEncoder).
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def rangeScanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
+    throw StateStoreErrors.unsupportedOperationException("rangeScanWithMultiValues", "")
+  }
+
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
@@ -411,6 +456,20 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     store.prefixScanWithMultiValues(prefixKey, colFamilyName)
   }
 
+  override def rangeScan(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.rangeScan(startKey, endKey, colFamilyName)
+  }
+
+  override def rangeScanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.rangeScanWithMultiValues(startKey, endKey, colFamilyName)
+  }
+
   override def iteratorWithMultiValues(
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     store.iteratorWithMultiValues(colFamilyName)
@@ -611,6 +670,10 @@ object KeyStateEncoderSpec {
       case "PrefixKeyScanStateEncoderSpec" =>
         val numColsPrefixKey = m("numColsPrefixKey").asInstanceOf[BigInt].toInt
         PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey)
+      case "TimestampAsPostfixKeyStateEncoderSpec" =>
+        TimestampAsPostfixKeyStateEncoderSpec(keySchema)
+      case "TimestampAsPrefixKeyStateEncoderSpec" =>
+        TimestampAsPrefixKeyStateEncoderSpec(keySchema)
     }
   }
 }
@@ -669,7 +732,10 @@ case class RangeKeyScanStateEncoderSpec(
   }
 }
 
-/** The encoder specification for [[TimestampAsPrefixKeyStateEncoder]]. */
+/**
+ * The encoder specification for [[TimestampAsPrefixKeyStateEncoder]].
+ * The encoder expects the provided key schema to have [original key fields..., timestamp field].
+ */
 case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
@@ -684,7 +750,10 @@ case class TimestampAsPrefixKeyStateEncoderSpec(keySchema: StructType)
   }
 }
 
-/** The encoder specification for [[TimestampAsPostfixKeyStateEncoder]]. */
+/**
+ * The encoder specification for [[TimestampAsPostfixKeyStateEncoder]].
+ * The encoder expects the provided key schema to have [original key fields..., timestamp field].
+ */
 case class TimestampAsPostfixKeyStateEncoderSpec(keySchema: StructType)
   extends KeyStateEncoderSpec {
 
@@ -978,7 +1047,7 @@ object StateStoreProvider extends Logging {
   private[state] def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver = env.executorId == SparkContext.DRIVER_IDENTIFIER
+      val isDriver = SparkContext.isDriver(env.executorId)
       // If running locally, then the coordinator reference in stateStoreCoordinatorRef may have
       // become inactive as SparkContext + SparkEnv may have been restarted. Hence, when running in
       // driver, always recreate the reference.
@@ -1755,8 +1824,7 @@ object StateStore extends Logging {
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = loadedProviders.synchronized {
     val env = SparkEnv.get
     if (env != null) {
-      val isDriver =
-        env.executorId == SparkContext.DRIVER_IDENTIFIER
+      val isDriver = SparkContext.isDriver(env.executorId)
       // If running locally, then the coordinator reference in _coordRef may be have become inactive
       // as SparkContext + SparkEnv may have been restarted. Hence, when running in driver,
       // always recreate the reference.

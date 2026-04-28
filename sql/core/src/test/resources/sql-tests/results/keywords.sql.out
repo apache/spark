@@ -43,6 +43,7 @@ CAST	false
 CATALOG	false
 CATALOGS	false
 CHANGE	false
+CHANGES	false
 CHAR	false
 CHARACTER	false
 CHECK	false
@@ -53,6 +54,7 @@ CLUSTERED	false
 CODEGEN	false
 COLLATE	false
 COLLATION	false
+COLLATIONS	false
 COLLECTION	false
 COLUMN	false
 COLUMNS	false
@@ -72,7 +74,10 @@ CREATE	false
 CROSS	false
 CUBE	false
 CURRENT	false
+CURRENT_DATABASE	false
 CURRENT_DATE	false
+CURRENT_PATH	false
+CURRENT_SCHEMA	false
 CURRENT_TIME	false
 CURRENT_TIMESTAMP	false
 CURRENT_USER	false
@@ -93,6 +98,7 @@ DEC	false
 DECIMAL	false
 DECLARE	false
 DEFAULT	false
+DEFAULT_PATH	false
 DEFINED	false
 DEFINER	false
 DELAY	false
@@ -120,6 +126,7 @@ EVOLUTION	false
 EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false
+EXCLUSIVE	false
 EXECUTE	false
 EXISTS	false
 EXIT	false
@@ -168,6 +175,7 @@ IMMEDIATE	false
 IMPORT	false
 IN	false
 INCLUDE	false
+INCLUSIVE	false
 INCREMENT	false
 INDEX	false
 INDEXES	false
@@ -262,6 +270,7 @@ OVERWRITE	false
 PARTITION	false
 PARTITIONED	false
 PARTITIONS	false
+PATH	false
 PERCENT	false
 PIVOT	false
 PLACING	false
@@ -273,6 +282,7 @@ PROCEDURE	false
 PROCEDURES	false
 PROPERTIES	false
 PURGE	false
+QUALIFY	false
 QUARTER	false
 QUERY	false
 RANGE	false
@@ -343,6 +353,7 @@ STRUCT	false
 SUBSTR	false
 SUBSTRING	false
 SYNC	false
+SYSTEM_PATH	false
 SYSTEM_TIME	false
 SYSTEM_VERSION	false
 TABLE	false

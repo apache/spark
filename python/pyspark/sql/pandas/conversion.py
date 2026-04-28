@@ -254,16 +254,8 @@ def _convert_arrow_table_to_pandas(
         error_on_duplicated_field_names = True
         struct_handling_mode = "dict"
 
-    # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-    # DataFrame, as it may fail with a segmentation fault.
-    if arrow_table.num_rows == 0:
-        # For empty tables, create empty Series to preserve dtypes
-        column_data = (
-            pd.Series([], name=temp_col_names[i], dtype="object") for i in range(len(schema.fields))
-        )
-    else:
-        # For non-empty tables, convert arrow columns directly
-        column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
+    # Convert arrow columns to pandas Series
+    column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
 
     # Apply Spark-specific type converters to each column
     pdf = pd.concat(
@@ -575,14 +567,12 @@ class SparkConversionMixin:
     @overload
     def createDataFrame(
         self, data: "PandasDataFrameLike", samplingRatio: Optional[float] = ...
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
         self, data: "pa.Table", samplingRatio: Optional[float] = ...
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
@@ -590,8 +580,7 @@ class SparkConversionMixin:
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def createDataFrame(
@@ -599,8 +588,7 @@ class SparkConversionMixin:
         data: "pa.Table",
         schema: Union[StructType, str],
         verifySchema: bool = ...,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def createDataFrame(  # type: ignore[misc]
         self,
@@ -993,9 +981,11 @@ class SparkConversionMixin:
         else:
             # Any timestamps must be coerced to be compatible with Spark
             spark_types = [
-                TimestampType()
-                if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                else None
+                (
+                    TimestampType()
+                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                    else None
+                )
                 for t in pdf.dtypes
             ]
 
@@ -1131,7 +1121,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.pandas.conversion tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.pandas.conversion,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

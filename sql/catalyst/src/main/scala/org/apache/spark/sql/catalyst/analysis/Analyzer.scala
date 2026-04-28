@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
@@ -216,6 +217,12 @@ object AnalysisContext {
     try f finally { set(originContext) }
   }
 
+  def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(collation = function.collation)
+    set(context)
+    try f finally { set(originContext) }
+  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
@@ -233,29 +240,23 @@ object AnalysisContext {
 }
 
 object Analyzer {
-  // List of configurations that should be passed on when resolving views and SQL UDF.
-  private val RETAINED_ANALYSIS_FLAGS = Seq(
-    "spark.sql.view.schemaEvolution.preserveUserComments",
-    // retainedHiveConfigs
-    // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
-    // optimization phase.
-    "spark.sql.hive.convertMetastoreParquet",
-    "spark.sql.hive.convertMetastoreOrc",
-    "spark.sql.hive.convertInsertingPartitionedTable",
-    "spark.sql.hive.convertInsertingUnpartitionedTable",
-    "spark.sql.hive.convertMetastoreCtas",
-    // retainedLoggingConfigs
-    "spark.sql.planChangeLog.level",
-    "spark.sql.expressionTreeChangeLog.level"
-  )
-
+  // Configs with bindingPolicy SESSION or NOT_APPLICABLE are retained when resolving views and
+  // SQL UDFs, so that their values propagate from the active session rather than falling back to
+  // Spark defaults. Note: configs defined in lazily-loaded modules (e.g., sql/hive) will only
+  // be included if their holding Scala object has been initialized before this set is computed.
   def retainResolutionConfigsForAnalysis(
       newConf: SQLConf,
       existingConf: SQLConf,
       createSparkVersion: String = ""): Unit = {
+    val retainedConfigKeys = SQLConf.getConfigEntries().asScala
+      .filter(entry =>
+        entry.bindingPolicy.contains(ConfigBindingPolicy.SESSION) ||
+        entry.bindingPolicy.contains(ConfigBindingPolicy.NOT_APPLICABLE))
+      .map(_.key)
+      .toSet
+
     val retainedConfigs = existingConf.getAllConfs.filter { case (key, _) =>
-      // Also apply catalog configs
-      RETAINED_ANALYSIS_FLAGS.contains(key) || key.startsWith("spark.sql.catalog.")
+      retainedConfigKeys.contains(key) || key.startsWith("spark.sql.catalog.")
     }
 
     retainedConfigs.foreach { case (k, v) =>
@@ -449,7 +450,7 @@ class Analyzer(
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveCollationName ::
-      ResolveMergeIntoSchemaEvolution ::
+      ResolveSchemaEvolution ::
       ValidateEventTimeWatermarkColumn ::
       new ResolveReferences(catalogManager) ::
       // Please do not insert any other rules in between. See the TODO comments in rule
@@ -487,6 +488,7 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      ResolveQualify ::
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
@@ -1015,7 +1017,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _) =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
@@ -1060,6 +1062,9 @@ class Analyzer(
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
         val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
         resolveRelation(u, timeTravelSpec).getOrElse(r)
+
+      case r @ RelationChanges(u: UnresolvedRelation, changelogInfo) =>
+        relationResolution.resolveChangelog(u, changelogInfo).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
@@ -1148,8 +1153,18 @@ class Analyzer(
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _)
-          if i.query.resolved =>
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            i.replaceCriteriaOpt.isDefined =>
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
+          i.table.asInstanceOf[DataSourceV2Relation].table.name())
+
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[DataSourceV2Relation] &&
+            i.query.resolved &&
+            i.replaceCriteriaOpt.isEmpty =>
+        val r = i.table.asInstanceOf[DataSourceV2Relation]
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
           throw QueryCompilationErrors.unsupportedIfNotExistsError(r.table.name)
@@ -1166,9 +1181,6 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
-        val schemaEvolutionWriteOption: Map[String, String] =
-          if (i.withSchemaEvolution) Map("mergeSchema" -> "true") else Map.empty
-
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
@@ -1178,24 +1190,24 @@ class Analyzer(
             AppendData.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             AppendData.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwritePartitionsDynamic.byPosition(
               r,
               query,
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
           if (isByName) {
@@ -1203,13 +1215,13 @@ class Analyzer(
               table = r,
               df = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
               deleteExpr = staticDeleteExpression(r, staticPartitions),
-              writeOptions = schemaEvolutionWriteOption)
+              withSchemaEvolution = i.withSchemaEvolution)
           }
         }
     }
@@ -1559,15 +1571,14 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH, throws),
                   fromStar)
               case UpdateStarAction(updateCondition) =>
                 // Expand star to top level source columns.  If source has less columns than target,
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
                   // For schema evolution case, generate assignments for missing target columns.
-                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
                       UnresolvedAttribute(sourceAttr.name))
@@ -1581,8 +1592,7 @@ class Analyzer(
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws),
                   fromStar = true)
               case o => o
             }
@@ -1594,8 +1604,7 @@ class Analyzer(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
@@ -1605,7 +1614,7 @@ class Analyzer(
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
                 val assignments = if (m.schemaEvolutionEnabled) {
                   // For schema evolution case, generate assignments for missing target columns.
-                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
                       UnresolvedAttribute(sourceAttr.name))
@@ -1618,8 +1627,7 @@ class Analyzer(
                 }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE, throws))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1633,8 +1641,7 @@ class Analyzer(
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws),
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET, throws),
                   fromStar)
               case o => o
             }
@@ -1674,6 +1681,9 @@ class Analyzer(
         } else {
           Project(child.output, r.copy(resolvedFinal, newChild))
         }
+
+      // Skip the qualify clause here. It will be handled in ResolveQualify.
+      case q: UnresolvedQualify => q
 
       // Filter can host both grouping expressions/aggregate functions and missing attributes.
       // The grouping expressions/aggregate functions resolution takes precedence over missing
@@ -1824,22 +1834,45 @@ class Analyzer(
     }
 
     /**
+     * Checks if the given function name parts match the expected builtin function name.
+     * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
+     * should only apply to builtin functions, not to user-defined functions.
+     *
+     * In legacy mode (sessionOrder="first"), temp functions shadow builtins, so an
+     * unqualified name that matches a temp function should NOT be treated as builtin.
+     */
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
+      if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
+        return false
+      }
+      if (nameParts.size == 1 && conf.sessionFunctionResolutionOrder == "first") {
+        val v1Catalog = catalogManager.v1SessionCatalog
+        !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
+      } else {
+        true
+      }
+    }
+
+    /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
-          f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
+          matchesFunctionName(f0.nameParts, "count") &&
           isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
-          f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
+          // We do not normalize the name to "count"; we keep the original name parts
+          // (e.g. builtin.count, system.builtin.count) so that resolution still sees
+          // the same qualification.
+          f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.nameParts == Seq("count") &&
+              matchesFunctionName(f1.nameParts, "count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
@@ -1941,7 +1974,7 @@ class Analyzer(
     }
 
     private def containUnresolvedPipeAggregateOrdinal(e: Expression): Boolean = e match {
-      case UnresolvedAlias(_: UnresolvedPipeAggregateOrdinal, _) => true
+      case _: UnresolvedPipeAggregateOrdinal => true
       case _ => false
     }
 
@@ -1972,7 +2005,7 @@ class Analyzer(
   private def resolvePipeAggregateExpressionOrdinal(
       expr: NamedExpression,
       inputs: Seq[Attribute]): NamedExpression = expr match {
-    case UnresolvedAlias(UnresolvedPipeAggregateOrdinal(index), _) =>
+    case UnresolvedPipeAggregateOrdinal(index) =>
       // In this case, the user applied the SQL pipe aggregate operator ("|> AGGREGATE") and used
       // ordinals in its GROUP BY clause. This expression then refers to the i-th attribute of the
       // child operator (one-based). Here we resolve the ordinal to the corresponding attribute.
@@ -1987,8 +2020,13 @@ class Analyzer(
    * only performs simple existence check according to the function identifier to quickly identify
    * undefined functions without triggering relation resolution, which may incur potentially
    * expensive partition/schema discovery process in some cases.
-   * In order to avoid duplicate external functions lookup, the external function identifier will
-   * store in the local hash set externalFunctionNameSet.
+   *
+   * To avoid duplicate external catalog lookups, this rule maintains a per-plan cache of
+   * persistent function names (externalFunctionNameSet). Builtin and temporary functions are
+   * validated on every occurrence since they're fast in-memory lookups, but persistent functions
+   * are cached after the first validation to avoid repeated external catalog calls for the same
+   * function within a single plan.
+   *
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
@@ -1998,24 +2036,57 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
+          // For builtin/temp functions, we can do a quick check without catalog lookup
+          val quickCheck = if (nameParts.size == 1 ||
+              FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f))
+          } else {
+            None
+          }
+
+          if (quickCheck.isDefined) {
+            // It's a builtin or temp function - no need for catalog lookup or caching
             f
           } else {
+            // Might be a persistent function - compute full name and check cache first
             val CatalogAndIdentifier(catalog, ident) =
               relationResolution.expandIdentifier(nameParts)
-            val fullName =
-              normalizeFuncName((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
+            val fullName = normalizeFuncName(
+              (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
             if (externalFunctionNameSet.contains(fullName)) {
-              f
-            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
-              externalFunctionNameSet.add(fullName)
+              // Already validated this function exists - skip lookup
               f
             } else {
-              val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                Seq("system.builtin", "system.session", catalogPath),
-                f.origin)
+              // Not in cache - do full lookup to determine type
+              val functionType =
+                functionResolution.lookupFunctionType(nameParts, Some(f))
+
+              functionType match {
+                case FunctionType.Local =>
+                  throw SparkException.internalError(
+                    s"Logic inconsistency: Function ${nameParts.mkString(".")} was " +
+                    s"classified as $functionType by full lookup but not found by quick check. " +
+                    s"Check sessionNamespaceKind logic.")
+
+                case FunctionType.Persistent =>
+                  externalFunctionNameSet.add(fullName)
+                  f
+
+                case FunctionType.TableOnly =>
+                  throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+                case FunctionType.NotFound =>
+                  val catalogPath =
+                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
+                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
+                    .map(_.quoted)
+                  throw QueryCompilationErrors.unresolvedRoutineError(
+                    nameParts,
+                    searchPath,
+                    f.origin)
+              }
             }
           }
       }
@@ -2057,38 +2128,26 @@ class Analyzer(
       // Resolve table-valued function references.
       case u: UnresolvedTableValuedFunction if u.functionArgs.forall(_.resolved) =>
         withPosition(u) {
-          try {
-            val resolvedFunc = functionResolution.resolveBuiltinOrTempTableFunction(
-                u.name, u.functionArgs).getOrElse {
-              val CatalogAndIdentifier(catalog, ident) =
-                relationResolution.expandIdentifier(u.name)
-              if (CatalogV2Util.isSessionCatalog(catalog)) {
-                v1SessionCatalog.resolvePersistentTableFunction(
-                  ident.asFunctionIdentifier, u.functionArgs)
-              } else {
-                throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
-                  catalog)
-              }
-            }
-            resolvedFunc.transformAllExpressionsWithPruning(
-              _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
-              case t: FunctionTableSubqueryArgumentExpression =>
-                resolvedFunc match {
-                  case Generate(_: PythonUDTF, _, _, _, _, _) =>
-                  case Generate(_: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
-                  case _ =>
-                    assert(!t.hasRepartitioning,
-                      "Cannot evaluate the table-valued function call because it included the " +
-                        "PARTITION BY clause, but only Python table functions support this " +
-                        "clause")
-                }
-                t
-            }
-          } catch {
-            case _: NoSuchFunctionException =>
+          val resolvedFunc = functionResolution.resolveTableFunction(u.name, u.functionArgs)
+            .getOrElse {
               u.failAnalysis(
                 errorClass = "UNRESOLVABLE_TABLE_VALUED_FUNCTION",
                 messageParameters = Map("name" -> toSQLId(u.name)))
+            }
+
+          resolvedFunc.transformAllExpressionsWithPruning(
+            _.containsPattern(FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION))  {
+            case t: FunctionTableSubqueryArgumentExpression =>
+              resolvedFunc match {
+                case Generate(_: PythonUDTF, _, _, _, _, _) =>
+                case Generate(_: UnresolvedPolymorphicPythonUDTF, _, _, _, _, _) =>
+                case _ =>
+                  assert(!t.hasRepartitioning,
+                    "Cannot evaluate the table-valued function call because it included the " +
+                      "PARTITION BY clause, but only Python table functions support this " +
+                      "clause")
+              }
+              t
           }
         }
 
@@ -2167,18 +2226,12 @@ class Analyzer(
           ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.resolveBuiltinOrTempFunction(nameParts, arguments, u).map {
+            functionResolution.resolveFunction(u) match {
               case func: HigherOrderFunction => func
               case other => other.failAnalysis(
                 errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
                 messageParameters = Map(
                   "class" -> other.getClass.getCanonicalName))
-            }.getOrElse {
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                // We don't support persistent high-order functions yet.
-                Seq("system.builtin", "system.session"),
-                u.origin)
             }
           }
 
@@ -2297,8 +2350,10 @@ class Analyzer(
         e: SubqueryExpression,
         outer: LogicalPlan)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
-        executeSameContext(e.plan)
+      val newSubqueryPlan = SQLFunctionContext.withNewContext {
+        AnalysisContext.withOuterPlan(outer) {
+          executeSameContext(e.plan)
+        }
       }
 
       // If the subquery plan is fully resolved, pull the outer references and record
@@ -2350,6 +2405,8 @@ class Analyzer(
         // and we can't call `LateralJoin.resolveChildren` to resolve outer references. Here we
         // create a fake Project node as the outer plan.
         resolveSubQueries(j, Project(Nil, j.left))
+      // Skip the qualify clause here. It will be handled in ResolveQualify.
+      case q: UnresolvedQualify => q
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q)
@@ -2443,7 +2500,9 @@ class Analyzer(
           Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
         }
         SQLConf.withExistingConf(newConf) {
-          executeSameContext(plan)
+          AnalysisContext.withAnalysisContext(f.function) {
+            executeSameContext(plan)
+          }
         }
       }
       // Fail the analysis eagerly if a SQL function cannot be resolved using its input.
@@ -2742,7 +2801,9 @@ class Analyzer(
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
-            executeSameContext(plan)
+            AnalysisContext.withAnalysisContext(function) {
+              executeSameContext(plan)
+            }
           }
         }
         // Remove unnecessary lateral joins that are used to resolve the SQL function.
@@ -3571,7 +3632,8 @@ class Analyzer(
       case j @ Join(left, right, NaturalJoin(joinType), condition, hint)
           if j.resolvedExceptNatural =>
         // find common column names from both sides
-        val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
+        val joinNames = NaturalAndUsingJoinResolution.canonicalizedIntersect(
+            left.output.map(_.name), right.output.map(_.name))
         val project = commonNaturalJoinProcessing(
           left, right, joinType, joinNames, condition, hint)
         j.getTagValue(LogicalPlan.PLAN_ID_TAG)
@@ -3592,7 +3654,8 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(COMMAND), ruleId) {
       case v2Write: V2WriteCommand
-          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved =>
+          if v2Write.table.resolved && v2Write.query.resolved && !v2Write.outputResolved &&
+            v2Write.pendingSchemaChanges.isEmpty =>
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
@@ -3940,6 +4003,171 @@ class Analyzer(
         }
     }
   }
+
+  /**
+   * This rule resolves the QUALIFY clause. It resolves the qualify condition against the child
+   * plan's output, extracts window expressions into aliases, validates that at least one window
+   * function is present, and builds a Filter placed after window materialization.
+   *
+   * The resolution follows these steps:
+   * 1. Resolve the qualify condition using the child plan's output (Project or Aggregate).
+   * 2. Extract canonically-unique WindowExpressions from the condition into aliases.
+   * 3. Reject standalone aggregate functions in the condition.
+   * 4. Validate that at least one window function exists in SELECT or in the condition.
+   * 5. Build: Filter(newCond, Project(child.output ++ windowAliases, newChild)) and trim output.
+   *
+   * The resulting Project node contains window expressions that will be handled by
+   * ExtractWindowExpressions in a subsequent analyzer iteration.
+   */
+  object ResolveQualify extends Rule[LogicalPlan] {
+    /**
+     * Resolve subqueries in the condition expression using the fake Project pattern.
+     * This reuses the same approach as HAVING resolution (see line ~722).
+     */
+    private def resolveConditionSubqueries(
+        cond: Expression, outer: LogicalPlan): Expression = {
+      if (SubqueryExpression.hasSubquery(cond)) {
+        val fake = Project(Alias(cond, "fake")() :: Nil, outer)
+        ResolveSubquery(fake).asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
+      } else {
+        cond
+      }
+    }
+
+    /**
+     * Resolve the qualify condition by recursing through the child plan tree
+     * (Project/Aggregate/Window/Filter) and adding missing attribute references
+     * to each intermediate node so they are preserved through window extraction.
+     */
+    private def resolveQualifyCondition(
+        cond: Expression,
+        candidateAttrs: AttributeSet,
+        plan: LogicalPlan): (Expression, LogicalPlan) = plan match {
+      case agg: Aggregate =>
+        val resolved = resolveExpressionByPlanChildren(cond, agg)
+        val subqueryResolved = resolveConditionSubqueries(resolved, agg.child)
+        val extraAggExprs = mutable.ArrayBuffer.empty[NamedExpression]
+        val newCond = subqueryResolved.transform {
+          case grouping if grouping.resolved &&
+            agg.groupingExpressions.exists(grouping.semanticEquals) =>
+            val allAggExprs = agg.aggregateExpressions ++ extraAggExprs.toSeq
+            val index = allAggExprs.indexWhere {
+              case Alias(child, _) => child.semanticEquals(grouping)
+              case o => o.semanticEquals(grouping)
+            }
+            if (index >= 0) {
+              allAggExprs(index).toAttribute
+            } else {
+              grouping match {
+                case ne: NamedExpression =>
+                  extraAggExprs += ne
+                  ne.toAttribute
+                case o: Expression =>
+                  val alias = Alias(o, o.sql)()
+                  extraAggExprs += alias
+                  alias.toAttribute
+              }
+            }
+          case a: Attribute if a.resolved && !candidateAttrs.contains(a) =>
+            a.failAnalysis(
+              errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+              messageParameters = Map(
+                "objectName" -> a.sql,
+                "proposal" -> candidateAttrs.map(_.sql).mkString(", ")))
+        }
+        val newAgg = agg.copy(aggregateExpressions = agg.aggregateExpressions ++ extraAggExprs)
+        (newCond, newAgg)
+
+      case p: Project =>
+        // First resolve against this Project's children output.
+        val resolved = resolveExpressionByPlanChildren(cond, p)
+        val subqueryResolved = resolveConditionSubqueries(resolved, p.child)
+        // Recurse into child to resolve any remaining unresolved references and
+        // propagate missing attributes through intermediate nodes.
+        val (newCond, newChild) = resolveQualifyCondition(
+          subqueryResolved, candidateAttrs, p.child)
+        val missingAttrs = (newCond.references -- p.outputSet).intersect(newChild.outputSet)
+        val newProject = p.copy(projectList = p.projectList ++ missingAttrs, child = newChild)
+        (newCond, newProject)
+
+      case w: Window =>
+        val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, w.child)
+        (newCond, w.copy(child = newChild))
+
+      case f: Filter =>
+        val (newCond, newChild) = resolveQualifyCondition(cond, candidateAttrs, f.child)
+        (newCond, f.copy(child = newChild))
+
+      case other =>
+        // Base case (SubqueryAlias, View, etc.): try resolving the condition
+        // using a fake UnresolvedQualify wrapper so resolveExpressionByPlanChildren
+        // can resolve against this node's output.
+        val resolved = cond.transformUp {
+          case u: UnresolvedAttribute =>
+            other.output.resolve(u.nameParts, conf.resolver).getOrElse(u)
+        }
+        (resolved, other)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(UNRESOLVED_QUALIFY)) {
+      case q @ UnresolvedQualify(cond, child) if child.resolved =>
+        // Save the original output before missing attrs are added.
+        val originalOutput = child.output
+        val (resolvedByChildren, newChild) =
+          resolveQualifyCondition(cond, child.outputSet, child)
+        // Also try resolving by the current child's output (for SELECT aliases).
+        val maybeResolved = if (resolvedByChildren.resolved) {
+          resolvedByChildren
+        } else {
+          resolveExpressionByPlanChildren(resolvedByChildren, q)
+        }
+        val newPlan = if (maybeResolved.resolved) {
+          // Extract canonically unique window functions in the qualify condition.
+          val windowExpressionToAliasMap = new java.util.LinkedHashMap[Expression, Alias]()
+          val newCond = maybeResolved.transform {
+            case windowExpression: WindowExpression =>
+              val canonicalized = windowExpression.canonicalized
+              if (windowExpressionToAliasMap.containsKey(canonicalized)) {
+                windowExpressionToAliasMap.get(canonicalized).toAttribute
+              } else {
+                val alias = Alias(windowExpression, windowExpression.sql)()
+                windowExpressionToAliasMap.put(canonicalized, alias)
+                alias.toAttribute
+              }
+            case a: AggregateExpression =>
+              throw QueryCompilationErrors.aggregateInQualifyNotAllowedError(a)
+          }
+          // Ensure at least one window function in SELECT or QUALIFY condition.
+          if (windowExpressionToAliasMap.size() == 0 && !hasWindowInPlan(child)) {
+            throw QueryCompilationErrors.qualifyRequiresWindowFunctionError()
+          }
+          if (windowExpressionToAliasMap.size() > 0) {
+            val projectList =
+              windowExpressionToAliasMap.values().asScala.toSeq
+            Filter(newCond, Project(newChild.output ++ projectList, newChild))
+          } else {
+            Filter(newCond, newChild)
+          }
+        } else {
+          UnresolvedQualify(maybeResolved, newChild)
+        }
+        // Trim additional attributes to preserve original SELECT output.
+        if (newPlan.output.map(_.exprId) != originalOutput.map(_.exprId)) {
+          Project(originalOutput, newPlan)
+        } else {
+          newPlan
+        }
+    }
+
+    /** Check if the resolved child plan already contains a Window node (from SELECT list). */
+    private def hasWindowInPlan(plan: LogicalPlan): Boolean = plan match {
+      case _: Window => true
+      case p: Project => hasWindowInPlan(p.child)
+      case f: Filter => hasWindowInPlan(f.child)
+      case _ => false
+    }
+  }
 }
 
 /**
@@ -4027,27 +4255,28 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
  */
 object ValidateEventTimeWatermarkColumn extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
-      return plan
-    }
-    plan.resolveOperatorsWithPruning(
-      _.containsPattern(EVENT_TIME_WATERMARK)) {
-      case etw: EventTimeWatermark =>
-        etw.eventTime match {
-          case u: UnresolvedAttribute if u.nameParts.length > 1 =>
-            // Try to resolve the multi-part name against the child output.
-            // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
-            // while a nested struct field (e.g. "struct_col.field") resolves to an
-            // Alias(ExtractValue(...)) which is not an Attribute.
-            etw.child.resolve(u.nameParts, conf.resolver) match {
-              case Some(_: Attribute) => etw
-              case _ =>
-                etw.failAnalysis(
-                  errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
-                  messageParameters = Map("eventExpr" -> u.sql))
-            }
-          case _ => etw
-        }
+    if (conf.getConf(SQLConf.STREAMING_VALIDATE_EVENT_TIME_WATERMARK_COLUMN)) {
+      plan.resolveOperatorsWithPruning(_.containsPattern(EVENT_TIME_WATERMARK)) {
+        case etw: EventTimeWatermark =>
+          etw.eventTime match {
+            case u: UnresolvedAttribute if u.nameParts.length > 1 =>
+              // Try to resolve the multi-part name against the child output.
+              // An alias-qualified column (e.g. "a.eventTime") resolves to an Attribute,
+              // while a nested struct field (e.g. "struct_col.field") resolves to an
+              // Alias(ExtractValue(...)) which is not an Attribute.
+              etw.child.resolve(u.nameParts, conf.resolver) match {
+                case Some(_: Attribute) => etw
+                case _ =>
+                  etw.failAnalysis(
+                    errorClass = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+                    messageParameters = Map("eventExpr" -> u.sql)
+                  )
+              }
+            case _ => etw
+          }
+      }
+    } else {
+      plan
     }
   }
 }

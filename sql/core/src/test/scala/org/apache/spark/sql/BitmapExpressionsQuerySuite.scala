@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.functions.{bitmap_and_agg, bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, col, expr, hex, lit, substring, to_binary}
 import org.apache.spark.sql.test.SharedSparkSession
 
-class BitmapExpressionsQuerySuite extends QueryTest with SharedSparkSession {
+class BitmapExpressionsQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   test("bitmap_construct_agg") {

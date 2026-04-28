@@ -29,11 +29,10 @@ import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode.{Value => InferenceMode, _}
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 class HiveSchemaInferenceSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils {
+  extends QueryTest with TestHiveSingleton {
 
   import HiveSchemaInferenceSuite._
   import HiveExternalCatalog.DATASOURCE_SCHEMA_PREFIX
@@ -107,7 +106,6 @@ class HiveSchemaInferenceSuite
           locationUri = Option(dir.toURI),
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
-          serdeName = None,
           serde = serde.serde,
           compressed = false,
           properties = Map("serialization.format" -> "1")),

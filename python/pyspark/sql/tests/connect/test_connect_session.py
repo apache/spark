@@ -133,18 +133,14 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         ):
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": False}):
                 with self.assertRaises(SparkUpgradeException) as e:
-                    self.spark.sql(
-                        """select from_json(
-                            '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
-                    ).collect()
+                    self.spark.sql("""select from_json(
+                            '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))""").collect()
                 self.assertFalse("JVM stacktrace" in e.exception._message)
 
             with self.sql_conf({"spark.sql.connect.serverStacktrace.enabled": True}):
                 with self.assertRaises(SparkUpgradeException) as e:
-                    self.spark.sql(
-                        """select from_json(
-                            '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))"""
-                    ).collect()
+                    self.spark.sql("""select from_json(
+                            '{"d": "02-29"}', 'd date', map('dateFormat', 'MM-dd'))""").collect()
                 self.assertTrue("JVM stacktrace" in str(e.exception))
                 self.assertTrue("org.apache.spark.SparkUpgradeException" in str(e.exception))
                 self.assertTrue(

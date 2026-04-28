@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
 
-class ParametersSuite extends QueryTest with SharedSparkSession {
+class ParametersSuite extends SharedSparkSession {
 
   // Helper function to check CHAR/VARCHAR types (similar to CharVarcharTestSuite)
   private def checkColType(f: StructField, dt: DataType): Unit = {
@@ -1996,6 +1996,25 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         "statement" -> "SET CATALOG"
       )
     )
+  }
+
+  test("SET PATH with named parameter in IDENTIFIER (PATH feature enabled)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      // current_path() resolves via system.builtin; include it when PATH is not DEFAULT_PATH.
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(:ns), system.builtin", Map("ns" -> "default"))
+      val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH + IDENTIFIER(:ns); got: $pathStr")
+    }
+  }
+
+  test("SET PATH with positional parameter in IDENTIFIER (PATH feature enabled)") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      spark.sql("SET PATH = spark_catalog.IDENTIFIER(?), system.builtin", Array("default"))
+      val pathStr = spark.sql("SELECT current_path()").collect().head.getString(0)
+      assert(pathStr.contains("spark_catalog") && pathStr.contains("default"),
+        s"SET PATH + IDENTIFIER(?); got: $pathStr")
+    }
   }
 
   test("IDENTIFIER clause with parameter marker - table reference") {

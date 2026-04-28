@@ -67,3 +67,31 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
     newTable
   }
 }
+
+/**
+ * A catalog that silently ignores schema changes in alterTable (e.g. AddColumn).
+ */
+class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalog {
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    // Only apply property changes; ignore all schema/column changes so that the table
+    // schema remains unchanged. This simulates a catalog that accepts alterTable but
+    // does not support some requested changes.
+    val propertyChanges = changes.filter {
+      case _: TableChange.SetProperty => true
+      case _: TableChange.RemoveProperty => true
+      case _ => false
+    }
+    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, propertyChanges)
+    val newTable = new InMemoryRowLevelOperationTable(
+      name = table.name,
+      schema = table.schema,
+      partitioning = table.partitioning,
+      properties = properties,
+      constraints = table.constraints)
+    newTable.alterTableWithData(table.data, table.schema)
+    tables.put(ident, newTable)
+    newTable
+  }
+}

@@ -27,7 +27,7 @@ import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, RuntimeInfo}
 
 class EnvironmentPageSuite extends SparkFunSuite {
 
-  test("SPARK-43471: Handle missing hadoopProperties and metricsProperties") {
+  private def createMockPage(): (EnvironmentPage, HttpServletRequest) = {
     val environmentTab = mock(classOf[EnvironmentTab])
     when(environmentTab.appName).thenReturn("Environment")
     when(environmentTab.basePath).thenReturn("http://localhost:4040")
@@ -45,8 +45,22 @@ class EnvironmentPageSuite extends SparkFunSuite {
     when(store.environmentInfo()).thenReturn(info)
     when(store.resourceProfileInfo()).thenReturn(Seq.empty)
 
-    val environmentPage = new EnvironmentPage(environmentTab, new SparkConf, store)
+    val page = new EnvironmentPage(environmentTab, new SparkConf, store)
     val request = mock(classOf[HttpServletRequest])
-    environmentPage.render(request)
+    (page, request)
+  }
+
+  test("SPARK-43471: Handle missing hadoopProperties and metricsProperties") {
+    val (page, request) = createMockPage()
+    page.render(request)
+  }
+
+  test("SPARK-55835: Render config defaults JSON for non-default highlighting") {
+    val (page, request) = createMockPage()
+    val html = page.render(request).toString()
+    assert(html.contains("""id="spark-config-defaults""""))
+    assert(html.contains("""class="d-none""""))
+    // The defaults JSON should contain at least some known config entries
+    assert(html.contains("spark."))
   }
 }

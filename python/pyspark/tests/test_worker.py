@@ -272,6 +272,20 @@ class WorkerPoolCrashTest(PySparkTestCase):
         rdd.map(lambda x: os.getpid()).collect()
 
 
+class SimpleWorkerTests(WorkerTests):
+    """Run worker tests through the non-daemon (simple-worker) path.
+
+    Windows always uses this path; Linux/macOS use it when
+    spark.python.use.daemon=false.
+    """
+
+    @classmethod
+    def conf(cls):
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "false")
+        return conf
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 

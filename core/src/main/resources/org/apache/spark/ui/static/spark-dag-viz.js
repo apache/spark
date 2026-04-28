@@ -562,7 +562,7 @@ function addTooltipsForRDDs(svgContainer, g) {
   g.nodes().filter((v) => !g.node(v).isCluster).forEach((v) => {
     const node = g.node(v);
     d3.select("#" + node.id).each(function () {
-      $(this).tooltip({
+      new bootstrap.Tooltip(this, {
         title: node.label, trigger: "hover focus", container: "body", placement: "top", html: true
       })
     });

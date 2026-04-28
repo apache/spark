@@ -24,7 +24,7 @@ import org.apache.spark.util.sketch.CountMinSketch
 /**
  * End-to-end test suite for count_min_sketch.
  */
-class CountMinSketchAggQuerySuite extends QueryTest with SharedSparkSession {
+class CountMinSketchAggQuerySuite extends SharedSparkSession {
 
   test("count-min sketch") {
     import testImplicits._

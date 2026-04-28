@@ -24,7 +24,6 @@ import time
 from types import ModuleType
 from typing import Tuple, Union, List, Callable, Any, Type
 
-
 __all__: List[str] = []
 
 _local = threading.local()

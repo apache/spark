@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
@@ -627,8 +628,16 @@ trait Row extends Serializable {
     }
 
     // Convert a value to json.
-    def toJson(value: Any, dataType: DataType): JValue = (value, dataType) match {
-      case (null, _) => JNull
+    def toJson(value: Any, dataType: DataType): JValue =
+      if (value == null) {
+        JNull
+      } else {
+        TypeApiOps(dataType)
+          .map(ops => JString(ops.format(value)))
+          .getOrElse(toJsonDefault(value, dataType))
+      }
+
+    def toJsonDefault(value: Any, dataType: DataType): JValue = (value, dataType) match {
       case (b: Boolean, _) => JBool(b)
       case (b: Byte, _) => JLong(b)
       case (s: Short, _) => JLong(s)

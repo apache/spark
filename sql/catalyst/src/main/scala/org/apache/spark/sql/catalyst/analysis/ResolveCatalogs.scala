@@ -45,9 +45,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       // We resolve only UnresolvedIdentifiers, and pass on the other nodes
       val resolved = identifiers.map {
         case UnresolvedIdentifier(nameParts, _) =>
-          // From scripts we can only create local variables, which must be unqualified,
-          // and must not be DECLARE OR REPLACE.
-          if (withinSqlScript) {
+          if (withinLocalVariableScope) {
             if (c.replace) {
               throw new AnalysisException(
                 "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
@@ -61,7 +59,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
                 Map("varName" -> toSQLId(nameParts)))
             }
 
-            SqlScriptingContextManager.get().map(_.getVariableManager)
+            SqlScriptingContextManager.get().flatMap(_.getVariableManager)
               .getOrElse(throw SparkException.internalError(
                 "Scripting local variable manager should be present in SQL script."))
               .qualify(nameParts.last)
@@ -77,7 +75,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       c.copy(names = resolved)
 
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
-      if (withinSqlScript) {
+      if (withinLocalVariableScope) {
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
@@ -85,8 +83,29 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
+    case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case CreateUserDefinedFunction(UnresolvedIdentifier(nameParts, _),
+        _, _, _, _, _, _, _, _, _, _, _, _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "CREATE", nameParts.last)
+
+    case DropFunction(UnresolvedIdentifier(nameParts, _), _)
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "DROP", nameParts.last)
+
     case d @ DropFunction(u @ UnresolvedIdentifier(nameParts, _), _) =>
       d.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
+
+    case RefreshFunction(UnresolvedIdentifier(nameParts, _))
+        if isSystemBuiltinName(nameParts) =>
+      throw QueryCompilationErrors.operationNotAllowedOnBuiltinFunctionError(
+        "REFRESH", nameParts.last)
 
     case r @ RefreshFunction(u @ UnresolvedIdentifier(nameParts, _)) =>
       r.copy(child = resolveFunctionIdentifier(nameParts, u.origin))
@@ -101,6 +120,10 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case r @ ReplaceTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
       r.copy(name = resolvedIdentifier)
+
+    case c @ CreateTableLike(UnresolvedIdentifier(nameParts, allowTemp), _, _, _, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      c.copy(name = resolvedIdentifier)
 
     case UnresolvedIdentifier(nameParts, allowTemp) =>
       resolveIdentifier(nameParts, allowTemp, Nil)
@@ -134,20 +157,26 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
+  private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {
+    nameParts.length == 3 &&
+      nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+      nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+  }
+
   /**
    * Resolves a function identifier, checking for builtin and temp functions first.
-   * Builtin and temp functions are only registered with unqualified names.
+   * Only unqualified (1-part) names get special builtin/temp handling; multi-part names
+   * go through standard catalog resolution.
    */
   private def resolveFunctionIdentifier(
       nameParts: Seq[String],
       origin: Origin): ResolvedIdentifier = CurrentOrigin.withOrigin(origin) {
     if (nameParts.length == 1) {
-      val funcName = FunctionIdentifier(nameParts.head)
       val sessionCatalog = catalogManager.v1SessionCatalog
-      if (sessionCatalog.isBuiltinFunction(funcName)) {
+      if (sessionCatalog.isBuiltinFunction(nameParts.head)) {
         val ident = Identifier.of(Array(CatalogManager.BUILTIN_NAMESPACE), nameParts.head)
         ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else if (sessionCatalog.isTemporaryFunction(funcName)) {
+      } else if (sessionCatalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))) {
         val ident = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.head)
         ResolvedIdentifier(FakeSystemCatalog, ident)
       } else {
@@ -175,8 +204,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
-  private def withinSqlScript: Boolean =
-    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined
+  /**
+   * Whether we are within a local variable scope. This is true when we are directly inside a
+   * SQL script and local variable rules apply (unqualified DECLARE only, no OR REPLACE, no DROP).
+   * EXECUTE IMMEDIATE inside a script is not within a local variable scope, since it works
+   * with session variables as if it were outside the script.
+   */
+  private def withinLocalVariableScope: Boolean =
+    SqlScriptingContextManager.get().flatMap(_.getVariableManager).isDefined
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],

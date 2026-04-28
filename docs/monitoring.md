@@ -170,8 +170,28 @@ Security options for the Spark History Server are covered more detail in the
     logs to load. This can be a local <code>file://</code> path,
     an HDFS path <code>hdfs://namenode/shared/spark-logs</code>
     or that of an alternative filesystem supported by the Hadoop APIs.
+    Multiple directories can be specified as a comma-separated list
+    (e.g., <code>hdfs:///logs/prod,s3a://bucket/logs/staging</code>).
+    Directories can be on the same or different filesystems.
+    The directories should be disjoint (not nested within each other).
+    If event log files with the same name exist in different directories,
+    each file is indexed separately based on its source directory.
+    When multiple directories are configured, all existing
+    <code>spark.history.fs.*</code> settings apply globally across all directories
+    (there are no per-directory configurations).
     </td>
     <td>1.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.logDirectory.names</td>
+    <td>(none)</td>
+    <td>
+    Optional comma-separated list of display names for the log directories specified
+    in <code>spark.history.fs.logDirectory</code>. Names correspond to directories by position.
+    If not set, the full path is shown in the UI. Empty entries fall back to the full path.
+    Duplicate display names are rejected at startup.
+    </td>
+    <td>4.2.0</td>
   </tr>
   <tr>
     <td>spark.history.fs.update.interval</td>
@@ -182,8 +202,25 @@ Security options for the Spark History Server are covered more detail in the
       at the expense of more server load re-reading updated applications.
       As soon as an update has completed, listings of the completed and incomplete applications
       will reflect the changes.
+      When multiple log directories are configured, one scan cycle covers all directories
+      sequentially.
     </td>
     <td>1.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.update.scanDisabledPathPatterns</td>
+    <td>(none)</td>
+    <td>
+      Comma-separated list of regular expressions matched against log directory paths.
+      Directories whose full path matches any pattern will not be scanned periodically
+      (e.g., <code>s3a://.*,gs://.*</code> disables scanning for all S3 and GCS directories).
+      Applications in these directories rely on on-demand loading instead of scanning and
+      will not appear in the listing until accessed by appId. When accessed, accurate metadata
+      is populated immediately. Logs that are never accessed are not subject to the cleaner;
+      use external lifecycle management (e.g., S3 Lifecycle Policies, GCS Object Lifecycle
+      Management) for those.
+    </td>
+    <td>4.2.0</td>
   </tr>
   <tr>
     <td>spark.history.retainedApplications</td>
@@ -255,6 +292,7 @@ Security options for the Spark History Server are covered more detail in the
       They are also deleted if the number of files is more than
       <code>spark.history.fs.cleaner.maxNum</code>, Spark tries to clean up the completed attempts
       from the applications based on the order of their oldest attempt time.
+      When multiple log directories are configured, one cleaner cycle covers all directories.
     </td>
     <td>1.4.0</td>
   </tr>
@@ -263,6 +301,8 @@ Security options for the Spark History Server are covered more detail in the
     <td>7d</td>
     <td>
       When <code>spark.history.fs.cleaner.enabled=true</code>, job history files older than this will be deleted when the filesystem history cleaner runs.
+      When multiple log directories are configured, this age threshold applies to files across
+      all directories.
     </td>
     <td>1.4.0</td>
   </tr>
@@ -274,6 +314,9 @@ Security options for the Spark History Server are covered more detail in the
       Spark tries to clean up the completed attempt logs to maintain the log directory under this limit.
       This should be smaller than the underlying file system limit like
       `dfs.namenode.fs-limits.max-directory-items` in HDFS.
+      When multiple log directories are configured, this limit applies to the total number of
+      files across all directories. The oldest completed attempts are deleted first regardless
+      of which directory they belong to.
     </td>
     <td>3.0.0</td>
   </tr>
@@ -326,6 +369,8 @@ Security options for the Spark History Server are covered more detail in the
     <td>25% of available cores</td>
     <td>
       Number of threads that will be used by history server to process event logs.
+      When multiple log directories are configured, the thread pool is shared across
+      all directories.
     </td>
     <td>2.0.0</td>
   </tr>
@@ -334,6 +379,8 @@ Security options for the Spark History Server are covered more detail in the
     <td>25% of available cores</td>
     <td>
       Number of threads that will be used by history server to compact event logs.
+      When multiple log directories are configured, the thread pool is shared across
+      all directories.
     </td>
     <td>4.1.0</td>
   </tr>
@@ -398,6 +445,8 @@ Security options for the Spark History Server are covered more detail in the
       The maximum number of event log files which will be retained as non-compacted. By default,
       all event log files will be retained. The lowest value is 1 for technical reason.<br/>
       Please read the section of "Applying compaction of old event log files" for more details.
+      When multiple log directories are configured, this setting applies independently to each
+      directory.
     </td>
     <td>3.0.0</td>
   </tr>
@@ -444,6 +493,8 @@ Security options for the Spark History Server are covered more detail in the
       This controls each scan process to be completed within a reasonable time, and such
       prevent the initial scan from running too long and blocking new eventlog files to
       be scanned in time in large environments.
+      When multiple log directories are configured, this batch size applies independently
+      to each directory's scan.
     </td>
     <td>3.4.0</td>
   </tr>

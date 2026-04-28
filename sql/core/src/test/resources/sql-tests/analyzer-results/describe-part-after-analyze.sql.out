@@ -40,6 +40,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-08-01, hr=10], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
@@ -52,6 +53,7 @@ AnalyzePartitionCommand `spark_catalog`.`default`.`t`, [ds=Some(2017-08-01), hr=
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-08-01, hr=10], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
@@ -64,12 +66,14 @@ AnalyzePartitionCommand `spark_catalog`.`default`.`t`, [ds=Some(2017-08-01)], fa
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-08-01, hr=10], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=11)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-08-01, hr=11], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
@@ -82,18 +86,21 @@ AnalyzePartitionCommand `spark_catalog`.`default`.`t`, [ds=None, hr=None], false
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=10)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-08-01, hr=10], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
 DESC EXTENDED t PARTITION (ds='2017-08-01', hr=11)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-08-01, hr=11], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
 DESC EXTENDED t PARTITION (ds='2017-09-01', hr=5)
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`t`, [ds=2017-09-01, hr=5], true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.t, V1Table(default.t), [key#x, value#x, ds#x, hr#x]
 
 
 -- !query
