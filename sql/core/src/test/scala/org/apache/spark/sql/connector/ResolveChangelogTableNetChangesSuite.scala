@@ -34,33 +34,32 @@ import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Tests for the `netChanges` deduplication mode handled by
+ * Shared test bodies for the `netChanges` deduplication mode handled by
  * [[org.apache.spark.sql.catalyst.analysis.ResolveChangelogTable]].
  *
- * Setup convention: every test runs against an in-memory connector configured with
- * `containsIntermediateChanges = true` and `representsUpdateAsDeleteAndInsert = false`,
- * which means
+ * Concrete subclasses fix the [[computeUpdates]] flag and therefore run the
+ * entire suite twice (once with `computeUpdates = true`, once with
+ * `computeUpdates = false`). Test bodies use [[computedPreUpdateLabel]] /
+ * [[computedPostUpdateLabel]] in their expected outputs.
+ *
+ * Setup convention: every test runs against an in-memory connector configured
+ * with `containsIntermediateChanges = true` and
+ * `representsUpdateAsDeleteAndInsert = false`, which means
  *   - netChanges is enabled (the only post-processing pass under test);
- *   - update detection is disabled (so the test directly controls the change_type
- *     labels reaching netChanges).
- *
- * Coverage:
- *   - Single-event tests: a lone `insert` or `delete` survives netChanges unchanged
- *     across a few version-range shapes (covers the `cnt=1` partitions of the
- *     `(insert, insert)` and `(delete, delete)` matrix cells).
- *   - Full matrix: all 9 `(first_change_type, last_change_type)` cells from the
- *     design plan, parameterised over `computeUpdates in {true, false}`. Some cells
- *     need 3 or 4 events to construct a partition with that first/last shape.
- *
- * The `(yes, yes)` cells follow the SPIP B.8 / SQL Ref Spec footnote: under
- * `cu=true` the two emitted rows are labelled `update_preimage + update_postimage`,
- * under `cu=false` they are labelled `delete + insert` -- regardless of which input
- * labels the partition started with.
+ *   - update detection is disabled (so the test directly controls the
+ *     change_type labels reaching netChanges).
  */
-class ResolveChangelogTableNetChangesSuite
+trait ResolveChangelogTableNetChangesTestsBase
     extends QueryTest
     with SharedSparkSession
     with BeforeAndAfterEach {
+
+  /**
+   * Value of the user-facing CDC option `computeUpdates` that this test run
+   * exercises. Concrete subclasses pin this to `true` or `false` so the same
+   * test bodies cover both modes via two suite classes.
+   */
+  protected def computeUpdates: Boolean
 
   private val catalogName = "cdc_netchanges_catalog"
   private val testTableName = "events"
@@ -110,7 +109,7 @@ class ResolveChangelogTableNetChangesSuite
    * `row_commit_version` is set to `commitVersion`; these tests do not exercise
    * carry-over removal, so the rcv value does not matter for assertions.
    */
-  private def event(
+  private def cdcEntry(
       id: Long, name: String, changeType: String, commitVersion: Long): InternalRow = {
     InternalRow(
       id,
@@ -122,18 +121,18 @@ class ResolveChangelogTableNetChangesSuite
   }
 
   private def addInsert(commitVersion: Long, id: Long, name: String): Unit =
-    catalog.addChangeRows(ident, Seq(event(id, name, CHANGE_TYPE_INSERT, commitVersion)))
+    catalog.addChangeRows(ident, Seq(cdcEntry(id, name, CHANGE_TYPE_INSERT, commitVersion)))
 
   private def addDelete(commitVersion: Long, id: Long, name: String): Unit =
-    catalog.addChangeRows(ident, Seq(event(id, name, CHANGE_TYPE_DELETE, commitVersion)))
+    catalog.addChangeRows(ident, Seq(cdcEntry(id, name, CHANGE_TYPE_DELETE, commitVersion)))
 
   private def addUpdatePre(commitVersion: Long, id: Long, name: String): Unit =
     catalog.addChangeRows(
-      ident, Seq(event(id, name, CHANGE_TYPE_UPDATE_PREIMAGE, commitVersion)))
+      ident, Seq(cdcEntry(id, name, CHANGE_TYPE_UPDATE_PREIMAGE, commitVersion)))
 
   private def addUpdatePost(commitVersion: Long, id: Long, name: String): Unit =
     catalog.addChangeRows(
-      ident, Seq(event(id, name, CHANGE_TYPE_UPDATE_POSTIMAGE, commitVersion)))
+      ident, Seq(cdcEntry(id, name, CHANGE_TYPE_UPDATE_POSTIMAGE, commitVersion)))
 
   // ---------------------------------------------------------------------------
   // Expected output helpers
@@ -145,37 +144,29 @@ class ResolveChangelogTableNetChangesSuite
   private def expectDelete(version: Long, id: Long, name: String): Row =
     Row(id, name, CHANGE_TYPE_DELETE, version)
 
-  private def expectUpdatePre(version: Long, id: Long, name: String): Row =
-    Row(id, name, CHANGE_TYPE_UPDATE_PREIMAGE, version)
-
-  private def expectUpdatePost(version: Long, id: Long, name: String): Row =
-    Row(id, name, CHANGE_TYPE_UPDATE_POSTIMAGE, version)
+  /**
+   * Mode-dependent target label for the FIRST emitted row of a partition where
+   * `existedBefore=true, existsAfter=true`. Mirrors the production rule's
+   * `computedPreUpdateLabel` selection: `update_preimage` under
+   * `computeUpdates = true`, `delete` under `computeUpdates = false`.
+   */
+  private def computedPreUpdateLabel: String =
+    if (computeUpdates) CHANGE_TYPE_UPDATE_PREIMAGE else CHANGE_TYPE_DELETE
 
   /**
-   * Expected two-row output for an `UPDATE(s)` collapse: the partition's first row
-   * (representing the row's state when it entered the range) plus the last row
-   * (state when it exits). Output labels follow the SQL Ref Spec footnote:
-   * `update_preimage + update_postimage` under `cu=true`, `delete + insert` under
-   * `cu=false`.
+   * Mode-dependent target label for the LAST emitted row of a partition where
+   * `existedBefore=true, existsAfter=true`. Mirrors the production rule's
+   * `computedPostUpdateLabel` selection: `update_postimage` under
+   * `computeUpdates = true`, `insert` under `computeUpdates = false`.
    */
-  private def outputForUpdate(
-      cu: Boolean,
-      id: Long,
-      preV: Long, oldName: String,
-      postV: Long, newName: String): Seq[Row] = {
-    if (cu) {
-      Seq(expectUpdatePre(preV, id, oldName), expectUpdatePost(postV, id, newName))
-    } else {
-      Seq(expectDelete(preV, id, oldName), expectInsert(postV, id, newName))
-    }
-  }
+  private def computedPostUpdateLabel: String =
+    if (computeUpdates) CHANGE_TYPE_UPDATE_POSTIMAGE else CHANGE_TYPE_INSERT
 
   // ---------------------------------------------------------------------------
   // Query helper
   // ---------------------------------------------------------------------------
 
-  private def runNetChanges(
-      fromV: Long, toV: Long, computeUpdates: Boolean = false): DataFrame =
+  private def runNetChanges(fromV: Long, toV: Long): DataFrame =
     sql(
       s"SELECT id, name, _change_type, _commit_version " +
       s"FROM $catalogName.$testTableName " +
@@ -185,176 +176,138 @@ class ResolveChangelogTableNetChangesSuite
   // ===========================================================================
   // Single-event: a lone insert or delete passes through netChanges
   // ===========================================================================
-  //
-  // Parameterised over `change_type` in {insert, delete} and three range shapes:
-  // wide range, single-version range, and `cu=true` to confirm the lone event
-  // is mode-independent.
 
-  private val singleEventCases: Seq[(String, (Long => Unit), (Long => Row))] = Seq(
-    ("insert",
-      (v: Long) => addInsert(v, 1L, "Alice"),
-      (v: Long) => expectInsert(v, 1L, "Alice")),
-    ("delete",
-      (v: Long) => addDelete(v, 1L, "Alice"),
-      (v: Long) => expectDelete(v, 1L, "Alice")))
+  test("single insert survives netChanges (wide range FROM 1 TO 10)") {
+    addInsert(commitVersion = 3L, id = 1L, name = "Alice")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(expectInsert(3L, 1L, "Alice")))
+  }
 
-  singleEventCases.foreach { case (label, addFn, expectFn) =>
-    test(s"single $label survives netChanges (wide range FROM 1 TO 10)") {
-      addFn(3L)
-      checkAnswer(runNetChanges(fromV = 1, toV = 10), Seq(expectFn(3L)))
-    }
+  test("single insert survives netChanges (single-version range FROM 3 TO 3)") {
+    addInsert(commitVersion = 3L, id = 1L, name = "Alice")
+    checkAnswer(
+      runNetChanges(fromV = 3, toV = 3),
+      Seq(expectInsert(3L, 1L, "Alice")))
+  }
 
-    test(s"single $label survives netChanges (single-version range FROM 3 TO 3)") {
-      addFn(3L)
-      checkAnswer(runNetChanges(fromV = 3, toV = 3), Seq(expectFn(3L)))
-    }
+  test("single delete survives netChanges (wide range FROM 1 TO 10)") {
+    addDelete(commitVersion = 3L, id = 1L, name = "Alice")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(expectDelete(3L, 1L, "Alice")))
+  }
 
-    test(s"single $label survives netChanges (cu=true wide range)") {
-      addFn(3L)
-      checkAnswer(
-        runNetChanges(fromV = 1, toV = 10, computeUpdates = true),
-        Seq(expectFn(3L)))
-    }
+  test("single delete survives netChanges (single-version range FROM 3 TO 3)") {
+    addDelete(commitVersion = 3L, id = 1L, name = "Alice")
+    checkAnswer(
+      runNetChanges(fromV = 3, toV = 3),
+      Seq(expectDelete(3L, 1L, "Alice")))
   }
 
   // ===========================================================================
   // Full matrix: all 9 (first_change_type, last_change_type) cells
   // ===========================================================================
-  //
-  // For each cell, `setup` adds the events that produce a partition with the
-  // declared first/last change_type pair, and `expected(cu)` returns the rows
-  // the netChanges output should contain. Some cells need more than two events
-  // to construct (e.g. `(insert, update_postimage)` requires an insert plus an
-  // update pre/post pair, i.e. 3 events).
 
-  private case class MatrixCase(
-      label: String,
-      setup: () => Unit,
-      expected: Boolean => Seq[Row])
+  test("matrix: (insert, delete) cancels out") {
+    addInsert(commitVersion = 2, id = 1L, name = "Alice")
+    addDelete(commitVersion = 5, id = 1L, name = "Alice")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq.empty[Row])
+  }
 
-  private val matrixCases: Seq[MatrixCase] = Seq(
+  test("matrix: (insert, insert) emits the last insert") {
+    // Lifecycle: insert(2), delete(3), re-insert(5).
+    addInsert(commitVersion = 2, id = 1L, name = "Alice")
+    addDelete(commitVersion = 3, id = 1L, name = "Alice")
+    addInsert(commitVersion = 5, id = 1L, name = "Alice_v2")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(expectInsert(5L, 1L, "Alice_v2")))
+  }
 
-    // (insert, delete): row inserted and deleted in the range. Cancels.
-    MatrixCase(
-      label = "(insert, delete) cancels out",
-      setup = () => {
-        addInsert(commitVersion = 2, id = 1L, name = "Alice")
-        addDelete(commitVersion = 5, id = 1L, name = "Alice")
-      },
-      expected = (_: Boolean) => Seq.empty[Row]),
+  test("matrix: (insert, update_post) emits last as insert") {
+    // Lifecycle: insert(2), update_pre/post(5).
+    addInsert(commitVersion = 2, id = 1L, name = "Alice")
+    addUpdatePre(commitVersion = 5, id = 1L, name = "Alice")
+    addUpdatePost(commitVersion = 5, id = 1L, name = "Alice_v2")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(expectInsert(5L, 1L, "Alice_v2")))
+  }
 
-    // (insert, insert) with cnt > 1: insert + delete + re-insert; net is the
-    // re-insert with the latest values. Mode-independent (label always insert).
-    MatrixCase(
-      label = "(insert, insert) emits the last insert",
-      setup = () => {
-        addInsert(commitVersion = 2, id = 1L, name = "Alice")
-        addDelete(commitVersion = 3, id = 1L, name = "Alice")
-        addInsert(commitVersion = 5, id = 1L, name = "Alice_v2")
-      },
-      expected = (_: Boolean) => Seq(expectInsert(5L, 1L, "Alice_v2"))),
+  test("matrix: (update_pre, update_post) emits PRE + POST") {
+    // Lifecycle: update_pre/post(3) -- pure UPDATE(s) case.
+    addUpdatePre(commitVersion = 3, id = 1L, name = "Alice")
+    addUpdatePost(commitVersion = 3, id = 1L, name = "Alice_v2")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(
+        Row(1L, "Alice", computedPreUpdateLabel, 3L),
+        Row(1L, "Alice_v2", computedPostUpdateLabel, 3L)))
+  }
 
-    // (insert, update_postimage): inserted, then updated. Last event is the
-    // update post; output is one row labelled `insert` with the post values.
-    // Mode-independent (label always insert).
-    MatrixCase(
-      label = "(insert, update_post) emits last as insert",
-      setup = () => {
-        addInsert(commitVersion = 2, id = 1L, name = "Alice")
-        addUpdatePre(commitVersion = 5, id = 1L, name = "Alice")
-        addUpdatePost(commitVersion = 5, id = 1L, name = "Alice_v2")
-      },
-      expected = (_: Boolean) => Seq(expectInsert(5L, 1L, "Alice_v2"))),
+  test("matrix: (update_pre, insert) emits PRE + POST") {
+    // Lifecycle: update_pre/post(2), delete(3), re-insert(5).
+    addUpdatePre(commitVersion = 2, id = 1L, name = "Alice")
+    addUpdatePost(commitVersion = 2, id = 1L, name = "Alice_v2")
+    addDelete(commitVersion = 3, id = 1L, name = "Alice_v2")
+    addInsert(commitVersion = 5, id = 1L, name = "Alice_resurrected")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(
+        Row(1L, "Alice", computedPreUpdateLabel, 2L),
+        Row(1L, "Alice_resurrected", computedPostUpdateLabel, 5L)))
+  }
 
-    // (update_pre, update_post): pure UPDATE(s); 2 rows mode-dependent.
-    MatrixCase(
-      label = "(update_pre, update_post) emits PRE + POST",
-      setup = () => {
-        addUpdatePre(commitVersion = 3, id = 1L, name = "Alice")
-        addUpdatePost(commitVersion = 3, id = 1L, name = "Alice_v2")
-      },
-      expected = (cu: Boolean) =>
-        outputForUpdate(cu, 1L, preV = 3, "Alice", postV = 3, "Alice_v2")),
+  test("matrix: (delete, update_post) emits PRE + POST") {
+    // Lifecycle: delete(2), insert(3), update_pre/post(5).
+    addDelete(commitVersion = 2, id = 1L, name = "Alice")
+    addInsert(commitVersion = 3, id = 1L, name = "Alice_v2")
+    addUpdatePre(commitVersion = 5, id = 1L, name = "Alice_v2")
+    addUpdatePost(commitVersion = 5, id = 1L, name = "Alice_v3")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(
+        Row(1L, "Alice", computedPreUpdateLabel, 2L),
+        Row(1L, "Alice_v3", computedPostUpdateLabel, 5L)))
+  }
 
-    // (update_pre, insert): pre-existed (via update), exists at end (via re-insert
-    // after delete). 2 rows mode-dependent. Lifecycle:
-    //   update_pre(2), update_post(2), delete(3), insert(5).
-    MatrixCase(
-      label = "(update_pre, insert) emits PRE + POST",
-      setup = () => {
-        addUpdatePre(commitVersion = 2, id = 1L, name = "Alice")
-        addUpdatePost(commitVersion = 2, id = 1L, name = "Alice_v2")
-        addDelete(commitVersion = 3, id = 1L, name = "Alice_v2")
-        addInsert(commitVersion = 5, id = 1L, name = "Alice_resurrected")
-      },
-      expected = (cu: Boolean) =>
-        outputForUpdate(cu, 1L, preV = 2, "Alice", postV = 5, "Alice_resurrected")),
+  test("matrix: (delete, insert) emits PRE + POST") {
+    // Lifecycle: delete(2), re-insert(5) -- raw delete + insert across versions.
+    addDelete(commitVersion = 2, id = 1L, name = "Alice")
+    addInsert(commitVersion = 5, id = 1L, name = "Alice_resurrected")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(
+        Row(1L, "Alice", computedPreUpdateLabel, 2L),
+        Row(1L, "Alice_resurrected", computedPostUpdateLabel, 5L)))
+  }
 
-    // (delete, update_post): pre-existed (via delete), exists at end (via update
-    // post after re-insert). 2 rows mode-dependent. Lifecycle:
-    //   delete(2), insert(3), update_pre(5), update_post(5).
-    MatrixCase(
-      label = "(delete, update_post) emits PRE + POST",
-      setup = () => {
-        addDelete(commitVersion = 2, id = 1L, name = "Alice")
-        addInsert(commitVersion = 3, id = 1L, name = "Alice_v2")
-        addUpdatePre(commitVersion = 5, id = 1L, name = "Alice_v2")
-        addUpdatePost(commitVersion = 5, id = 1L, name = "Alice_v3")
-      },
-      expected = (cu: Boolean) =>
-        outputForUpdate(cu, 1L, preV = 2, "Alice", postV = 5, "Alice_v3")),
+  test("matrix: (update_pre, delete) emits first as delete") {
+    // Lifecycle: update_pre/post(3), delete(5).
+    addUpdatePre(commitVersion = 3, id = 1L, name = "Alice")
+    addUpdatePost(commitVersion = 3, id = 1L, name = "Alice_v2")
+    addDelete(commitVersion = 5, id = 1L, name = "Alice_v2")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(expectDelete(3L, 1L, "Alice")))
+  }
 
-    // (delete, insert): pre-existed and exists at end via raw delete + insert
-    // (no native update labels). 2 rows mode-dependent.
-    MatrixCase(
-      label = "(delete, insert) emits PRE + POST",
-      setup = () => {
-        addDelete(commitVersion = 2, id = 1L, name = "Alice")
-        addInsert(commitVersion = 5, id = 1L, name = "Alice_resurrected")
-      },
-      expected = (cu: Boolean) =>
-        outputForUpdate(cu, 1L, preV = 2, "Alice", postV = 5, "Alice_resurrected")),
-
-    // (update_pre, delete): pre-existed (via update), gone at end. 1 row labelled
-    // `delete` with the values from the FIRST update_pre. Mode-independent (delete).
-    MatrixCase(
-      label = "(update_pre, delete) emits first as delete",
-      setup = () => {
-        addUpdatePre(commitVersion = 3, id = 1L, name = "Alice")
-        addUpdatePost(commitVersion = 3, id = 1L, name = "Alice_v2")
-        addDelete(commitVersion = 5, id = 1L, name = "Alice_v2")
-      },
-      expected = (_: Boolean) => Seq(expectDelete(3L, 1L, "Alice"))),
-
-    // (delete, delete) with cnt > 1: delete + re-insert + delete; net is the
-    // first delete (the row's state at range entry). Mode-independent (delete).
-    MatrixCase(
-      label = "(delete, delete) emits the first delete",
-      setup = () => {
-        addDelete(commitVersion = 2, id = 1L, name = "Alice")
-        addInsert(commitVersion = 3, id = 1L, name = "Alice_v2")
-        addDelete(commitVersion = 5, id = 1L, name = "Alice_v2")
-      },
-      expected = (_: Boolean) => Seq(expectDelete(2L, 1L, "Alice"))))
-
-  matrixCases.foreach { mc =>
-    Seq(true, false).foreach { cu =>
-      test(s"matrix: ${mc.label} [cu=$cu]") {
-        mc.setup()
-        checkAnswer(
-          runNetChanges(fromV = 1, toV = 10, computeUpdates = cu),
-          mc.expected(cu))
-      }
-    }
+  test("matrix: (delete, delete) emits the first delete") {
+    // Lifecycle: delete(2), insert(3), delete(5).
+    addDelete(commitVersion = 2, id = 1L, name = "Alice")
+    addInsert(commitVersion = 3, id = 1L, name = "Alice_v2")
+    addDelete(commitVersion = 5, id = 1L, name = "Alice_v2")
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(expectDelete(2L, 1L, "Alice")))
   }
 
   // ===========================================================================
   // Range-narrowing: events outside the requested range must not show up
   // ===========================================================================
-  //
-  // Verifies the connector-side range filter and netChanges interact correctly:
-  // narrow ranges drop events that would otherwise appear, even if those events
-  // are part of the rowId's lifecycle outside the range.
 
   test("range narrowing: only events inside [from, to] reach netChanges") {
     // Lifecycle: insert(v2) -- update_pre/post(v5) -- delete(v8). The narrow
@@ -366,8 +319,84 @@ class ResolveChangelogTableNetChangesSuite
     addDelete(commitVersion = 8, id = 1L, name = "Alice_v2")
 
     checkAnswer(
-      runNetChanges(fromV = 3, toV = 6, computeUpdates = true),
-      outputForUpdate(
-        cu = true, id = 1L, preV = 5, oldName = "Alice", postV = 5, newName = "Alice_v2"))
+      runNetChanges(fromV = 3, toV = 6),
+      Seq(
+        Row(1L, "Alice", computedPreUpdateLabel, 5L),
+        Row(1L, "Alice_v2", computedPostUpdateLabel, 5L)))
   }
+
+  // ===========================================================================
+  // Multi-rowId: each rowId's lifecycle collapses independently
+  // ===========================================================================
+
+  test("multi-rowId table lifecycle: each rowId collapses independently") {
+    // v1: 4 inserts.
+    addInsert(commitVersion = 1, id = 1L, name = "Alice")
+    addInsert(commitVersion = 1, id = 2L, name = "Bob")
+    addInsert(commitVersion = 1, id = 3L, name = "Carol")
+    addInsert(commitVersion = 1, id = 4L, name = "Dave")
+
+    // v2: update id=3 (emitted as native pre/post pair by the test connector).
+    addUpdatePre(commitVersion = 2, id = 3L, name = "Carol")
+    addUpdatePost(commitVersion = 2, id = 3L, name = "Carol_v2")
+
+    // v3: 2 inserts.
+    addInsert(commitVersion = 3, id = 5L, name = "Eve")
+    addInsert(commitVersion = 3, id = 6L, name = "Frank")
+
+    // v4: 2 deletes.
+    addDelete(commitVersion = 4, id = 1L, name = "Alice")
+    addDelete(commitVersion = 4, id = 2L, name = "Bob")
+
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 4),
+      Seq(
+        expectInsert(2L, 3L, "Carol_v2"),  // id=3: insert + update -> last as insert
+        expectInsert(1L, 4L, "Dave"),      // id=4: lone insert
+        expectInsert(3L, 5L, "Eve"),       // id=5: lone insert
+        expectInsert(3L, 6L, "Frank")))    // id=6: lone insert
+  }
+
+  test("multi-rowId hitting different mode-dependent cells in one query") {
+    addDelete(commitVersion = 2, id = 1L, name = "Alice")
+    addInsert(commitVersion = 5, id = 1L, name = "Alice_resurrected")
+
+    addUpdatePre(commitVersion = 3, id = 2L, name = "Bob")
+    addUpdatePost(commitVersion = 3, id = 2L, name = "Bob_v2")
+
+    addInsert(commitVersion = 4, id = 3L, name = "Carol")
+    addDelete(commitVersion = 6, id = 3L, name = "Carol")
+
+    checkAnswer(
+      runNetChanges(fromV = 1, toV = 10),
+      Seq(
+        // id=1: (delete, insert) -- first + last with mode-dependent labels.
+        Row(1L, "Alice", computedPreUpdateLabel, 2L),
+        Row(1L, "Alice_resurrected", computedPostUpdateLabel, 5L),
+        // id=2: (update_pre, update_post) -- PRE + POST with mode-dependent labels.
+        Row(2L, "Bob", computedPreUpdateLabel, 3L),
+        Row(2L, "Bob_v2", computedPostUpdateLabel, 3L)
+        // id=3: (insert, delete) -- cancel, no rows.
+      ))
+  }
+}
+
+/**
+ * Runs the netChanges test bodies with `computeUpdates = true`:
+ * `existedBefore=true, existsAfter=true` partitions emit `update_preimage` +
+ * `update_postimage`.
+ */
+class ResolveChangelogTableNetChangesWithComputeUpdatesSuite
+    extends ResolveChangelogTableNetChangesTestsBase {
+  override protected def computeUpdates: Boolean = true
+}
+
+/**
+ * Runs the netChanges test bodies with `computeUpdates = false`:
+ * `existedBefore=true, existsAfter=true` partitions emit `delete` + `insert`
+ * (per SQL Ref Spec footnote).
+ */
+class ResolveChangelogTableNetChangesWithoutComputeUpdatesSuite
+    extends ResolveChangelogTableNetChangesTestsBase {
+  override protected def computeUpdates: Boolean = false
 }
