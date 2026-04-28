@@ -22,16 +22,6 @@ import org.apache.spark.sql.catalyst.util.MapData;
 
 /**
  * Map abstraction in {@link ColumnVector}.
- *
- * <h3>Validation (SPARK-56636 DO NOT MERGE)</h3>
- *
- * Deliberate doclint heading violation -- the heading tag above is at
- * the wrong level under the implicit class title, the same shape that
- * hit RelationCatalog.java on PR 51419. Used to verify the unidoc
- * diagnostic banner now surfaces the line directly instead of leaving
- * it buried among ~100 genjavadoc-stub errors. The prose intentionally
- * contains no literal HTML tag tokens (curly braces, angle brackets) so
- * doclint sees only the one violation in the heading itself.
  */
 public final class ColumnarMap extends MapData {
   private final ColumnarArray keys;

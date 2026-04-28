@@ -337,17 +337,21 @@ object SparkBuild extends PomBuild {
       Seq("--add-modules=jdk.incubator.vector")
     },
 
-    (Compile / doc / javacOptions) ++= {
-      Seq("-Xdoclint:all", "-Xdoclint:-missing")
-    },
-
     javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
 
+    // Doclint runs at compile time, not just during `doc`/`unidoc`. The
+    // unidoc pipeline can lose per-file diagnostics when the genjavadoc-stub
+    // completion cascade interrupts javadoc's tree-build phase; running the
+    // same `-Xdoclint` checks under javac on the real `.java` sources catches
+    // heading-out-of-sequence, broken `{@link}`, etc. before unidoc runs.
+    // Mirrored into `JavaUnidoc / unidoc / javacOptions` below (the `:=`
+    // there blocks scope inheritance).
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
       "-g",
       "-proc:full",
-      "--release", javaVersion.value
+      "--release", javaVersion.value,
+      "-Xdoclint:all", "-Xdoclint:-missing"
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
@@ -1698,6 +1702,9 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
+        // Mirror Compile / javacOptions doclint settings -- `:=` above blocks
+        // scope inheritance, so we list them explicitly here.
+        "-Xdoclint:all", "-Xdoclint:-missing",
         "--ignore-source-errors", "-notree"
       )
     },

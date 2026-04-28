@@ -133,147 +133,33 @@ def build_spark_scala_and_java_docs_if_necessary
 
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
-  # Tee sbt output to a log file so we can diagnose failures. The most common
-  # unidoc failure is a javadoc crash mid-stream while generating HTML for a
-  # specific class, buried under ~100 benign errors on genjavadoc-generated
-  # Java stubs (e.g. target/java/org/apache/spark/ErrorInfo.java). Without the
-  # diagnostic below, the real culprit -- the source whose doc tripped javadoc
-  # -- is effectively invisible in the CI log.
-  log_file = File.join(SPARK_PROJECT_ROOT, "target", "unidoc-build.log")
-  mkdir_p(File.dirname(log_file))
-  success = stream_and_capture(command, log_file)
-  unless success
-    diagnose_unidoc_failure(log_file)
-    raise("Unidoc generation failed")
-  end
-end
 
-# Runs `command`, streaming every line to both stdout and `log_file`. Returns
-# true iff the command exited 0. Ruby-only; no shell pipefail reliance.
-def stream_and_capture(command, log_file)
-  File.open(log_file, 'w') do |f|
-    IO.popen("#{command} 2>&1", 'r') do |pipe|
-      pipe.each_line do |line|
+  # Suppress genjavadoc-stub diagnostic blocks from the visible log. javadoc
+  # emits ~3500 `[error]` lines per unidoc run on stubs under `target/java/`
+  # ("cannot find symbol" / "illegal combination of modifiers" on stub `T1, T2,
+  # ...` type variables) -- all benign because `--ignore-source-errors` is set,
+  # but they bury everything else. Each diagnostic is a header line followed by
+  # 3-5 `[error|warn]`-prefixed continuation lines (snippet, caret,
+  # symbol/location); the state machine drops both.
+  ansi = /\e\[[0-9;]*[A-Za-z]/
+  stub_header = %r{\[(?:error|warn)\]\s+\S*?/target/java/\S+\.java:\d+(?::\d+)?:\s}
+  stub_cont = %r{\A\s*\[(?:error|warn)\]\s+(?!/\S+\.java:\d+(?::\d+)?:\s)}
+  in_stub = false
+  IO.popen("#{command} 2>&1", 'r') do |pipe|
+    pipe.each_line do |line|
+      plain = line.gsub(ansi, '')
+      if plain =~ stub_header
+        in_stub = true
+      elsif in_stub && plain =~ stub_cont
+        # continuation of a stub block; suppress
+      else
+        in_stub = false
         $stdout.write(line)
         $stdout.flush
-        f.write(line)
       end
     end
   end
-  $?.success?
-end
-
-# Scans the captured unidoc log and prints a pointer to the most likely
-# culprit source file. The heuristic: when javadoc dies mid-HTML-generation,
-# the last "Generating .../X.html" line before "javadoc exited with exit code"
-# names the class that tripped it. Prints nothing actionable if the failure
-# mode doesn't match (e.g. a scaladoc error), in which case the full log above
-# already shows what's wrong.
-def diagnose_unidoc_failure(log_file)
-  return unless File.exist?(log_file)
-  begin
-    lines = File.readlines(log_file)
-
-    javadoc_exit_idx = lines.rindex { |l| l.include?("javadoc exited with exit code") }
-    last_generating = nil
-    if javadoc_exit_idx
-      # Strip ANSI color codes so the regex matches sbt-coloured output too.
-      ansi = /\e\[[0-9;]*[A-Za-z]/
-      lines[0...javadoc_exit_idx].reverse_each do |line|
-        if line.gsub(ansi, '') =~ %r{Generating .+/javaunidoc/(\S+?\.html)\.\.\.}
-          last_generating = $1
-          break
-        end
-      end
-    end
-
-    # Filter the log down to fatal doclint diagnostics. The signal we want is
-    # `[error]` or `[warn]` lines whose body has the shape
-    #   <path>/X.java:LINE: <message>     or
-    #   <path>/X.java:LINE:COL: <message>
-    # (with a colon after the line number -- this is the doclint diagnostic
-    # shape). These are the violations that drive `javadoc exited with exit
-    # code 1`; sbt's logger may classify them under either prefix depending
-    # on javadoc's own error vs. warning split, so we accept both.
-    #
-    # We exclude:
-    #   - `/target/java/...` paths -- genjavadoc-generated stubs whose 100+
-    #     "is not public" / "cannot find symbol" errors are intentionally
-    #     non-fatal (`--ignore-source-errors` is set).
-    #   - `(File.java:LINE)` shapes -- sbt stack traces that paren-wrap the
-    #     file ref. Stack-trace lines have `:LINE)` (paren close), not
-    #     `:LINE:` (colon after digits), which is how this regex tells them
-    #     apart from real diagnostics.
-    #   - `Could not find any member to link for ...` -- benign scaladoc
-    #     warnings about unresolvable @link targets; not what causes exit 1.
-    ansi = /\e\[[0-9;]*[A-Za-z]/
-    user_errors = lines.select do |line|
-      plain = line.gsub(ansi, '')
-      plain =~ %r{\[(?:error|warn)\][^\[]*?[\w/][\w./-]*\.java:\d+(?::\d+)?:\s} &&
-        plain !~ %r{/target/java/} &&
-        plain !~ /Could not find any member to link/
-    end.map { |l| l.gsub(ansi, '').strip }.uniq
-
-    banner = "=" * 78
-    $stderr.puts ""
-    $stderr.puts banner
-    $stderr.puts "Unidoc failed -- diagnostic summary"
-    $stderr.puts banner
-    if !user_errors.empty?
-      $stderr.puts ""
-      $stderr.puts "  Likely fatal error(s) (genjavadoc stubs filtered out):"
-      user_errors.first(10).each { |e| $stderr.puts "    #{e}" }
-      if user_errors.size > 10
-        $stderr.puts "    ... and #{user_errors.size - 10} more (see full log)"
-      end
-      $stderr.puts ""
-      $stderr.puts "  These are the '[error]' lines in user source paths --"
-      $stderr.puts "  doclint violations (e.g. heading-out-of-sequence <H3>"
-      $stderr.puts "  after <H1>, malformed @link, missing @param) are the"
-      $stderr.puts "  most common cause of `javadoc exited with exit code 1`"
-      $stderr.puts "  on this project; `--ignore-source-errors` does NOT"
-      $stderr.puts "  suppress them."
-    elsif last_generating
-      class_path = last_generating.sub(/\.html$/, '')
-      class_name = class_path.tr('/', '.')
-      $stderr.puts ""
-      $stderr.puts "  Last class HTML emitted before javadoc exit: #{last_generating}"
-      $stderr.puts "  This may be where javadoc crashed mid-generation, OR may"
-      $stderr.puts "  just be the last class processed before a non-zero exit"
-      $stderr.puts "  driven by error count (no fatal `[error]` lines were"
-      $stderr.puts "  found in user source paths above). If unrelated to the"
-      $stderr.puts "  failure, look for fatal patterns in the full sbt output."
-      $stderr.puts ""
-      $stderr.puts "  Common mid-class crash triggers (from genjavadoc-generated"
-      $stderr.puts "  Java stubs of #{class_name}'s Scala source): wiki-style"
-      $stderr.puts "  `[[Class]]` / `[[method]]` links or inline-backticked code"
-      $stderr.puts "  refs that the standard doclet's tree builder cannot resolve."
-    elsif javadoc_exit_idx
-      $stderr.puts ""
-      $stderr.puts "  Javadoc exited but no class HTML generation was in progress"
-      $stderr.puts "  and no fatal `[error]` lines were found in user source paths."
-      $stderr.puts "  The exit predates HTML output -- likely a CLI / classpath /"
-      $stderr.puts "  setup issue. See the full sbt output above."
-    else
-      $stderr.puts ""
-      $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
-      $stderr.puts "  the log and no fatal `[error]` lines were found in user"
-      $stderr.puts "  source paths. The failure is likely outside the javaunidoc"
-      $stderr.puts "  step (scaladoc / sbt / build env). See the full sbt output."
-    end
-    $stderr.puts ""
-    $stderr.puts "  NOTE: the ~100 `[error]` lines on files under target/java/"
-    $stderr.puts "  are benign genjavadoc stubs (intentionally non-fatal via"
-    $stderr.puts "  `--ignore-source-errors`); they look fatal but never cause"
-    $stderr.puts "  exit 1. They are filtered out of the candidates above."
-    $stderr.puts banner
-    $stderr.puts ""
-  rescue => e
-    # Never let the diagnostic helper itself obscure the underlying unidoc
-    # failure: if anything here goes wrong (e.g. encoding error reading the
-    # log), report it briefly and let the caller raise the real error.
-    $stderr.puts "(diagnostic helper failed: #{e.class}: #{e.message})"
-  end
+  raise("Unidoc generation failed") unless $?.success?
 end
 
 def build_scala_and_java_docs
