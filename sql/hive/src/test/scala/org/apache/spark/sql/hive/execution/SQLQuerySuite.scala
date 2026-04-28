@@ -269,6 +269,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
         s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+      checkKeywordsNotExist(sql("describe function udtf_count"), "Resource:")
 
       checkAnswer(
         sql("SELECT udtf_count(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
@@ -278,6 +279,13 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
         s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+      checkKeywordsNotExist(sql("describe function udtf_count"), "Resource:")
+
+      checkKeywordsExist(sql("describe function extended udtf_count"),
+        s"Function: $SESSION_CATALOG_NAME.default.udtf_count",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        s"Resource: jar ${TestUDTFJar.jar.toURI}",
+        "Extended Usage:")
     }
   }
 
@@ -294,6 +302,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+      checkKeywordsNotExist(sql("describe function udtf_count_temp"), "Resource:")
 
       checkAnswer(
         sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
@@ -303,6 +312,37 @@ abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
         "Function: udtf_count_temp",
         "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
         "Usage: N/A")
+      checkKeywordsNotExist(sql("describe function udtf_count_temp"), "Resource:")
+
+      checkKeywordsExist(sql("describe function extended udtf_count_temp"),
+        "Function: udtf_count_temp",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        s"Resource: jar ${TestUDTFJar.jar.toURI}",
+        "Extended Usage:")
+
+      // CREATE OR REPLACE without USING must drop the previously recorded resources.
+      sql(
+        """
+          |CREATE OR REPLACE TEMPORARY FUNCTION udtf_count_temp
+          |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+        """.stripMargin)
+      checkKeywordsNotExist(sql("describe function extended udtf_count_temp"), "Resource:")
+
+      // DROP must also clear recorded resources so a later same-name function (no USING)
+      // does not inherit stale resources.
+      sql(
+        s"""
+           |CREATE OR REPLACE TEMPORARY FUNCTION udtf_count_temp
+           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           |USING JAR '${TestUDTFJar.jar.toURI}'
+        """.stripMargin)
+      sql("DROP TEMPORARY FUNCTION udtf_count_temp")
+      sql(
+        """
+          |CREATE TEMPORARY FUNCTION udtf_count_temp
+          |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+        """.stripMargin)
+      checkKeywordsNotExist(sql("describe function extended udtf_count_temp"), "Resource:")
     }
   }
 

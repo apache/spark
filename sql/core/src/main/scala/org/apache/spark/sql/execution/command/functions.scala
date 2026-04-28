@@ -130,7 +130,19 @@ case class DescribeFunctionCommand(
       }
 
     if (isExtended) {
-      (result ++ sqlPathRows) :+ Row(s"Extended Usage:${info.getExtended}")
+      val catalog = sparkSession.sessionState.catalog
+      val resources = if (info.getDb == null) {
+        // Temporary or built-in function: built-in functions never carry resources, so this
+        // returns Nil for them without contacting the metastore.
+        catalog.getTempFunctionResources(identifier)
+      } else if (catalog.isPersistentFunction(identifier)) {
+        catalog.getFunctionMetadata(identifier).resources
+      } else {
+        Nil
+      }
+      val resourceRows =
+        resources.map(r => Row(s"Resource: ${r.resourceType.resourceType} ${r.uri}"))
+      (result ++ resourceRows ++ sqlPathRows) :+ Row(s"Extended Usage:${info.getExtended}")
     } else {
       result
     }

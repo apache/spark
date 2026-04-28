@@ -239,6 +239,15 @@ class SessionCatalog(
   @GuardedBy("this")
   protected val tempViews = new mutable.HashMap[String, TemporaryViewRelation]
 
+  /**
+   * Resources (`USING JAR/FILE`) attached to temporary functions. Only entries with
+   * non-empty resources are stored. Keyed by the registry-side identifier produced
+   * by [[tempFunctionIdentifier]] so lookups match what the function registry uses.
+   */
+  @GuardedBy("this")
+  protected val tempFunctionResources =
+    new mutable.HashMap[FunctionIdentifier, Seq[FunctionResource]]
+
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
   // check whether the temporary view or function exists, then, if not, operate on
@@ -2100,6 +2109,16 @@ class SessionCatalog(
     }
     val info = makeExprInfoForHiveFunction(funcDefinition)
     registry.registerFunction(identToRegister, info, functionBuilder)
+    if (func.database.isEmpty) {
+      // Always sync the side map so CREATE OR REPLACE without USING clears stale resources.
+      synchronized {
+        if (funcDefinition.resources.nonEmpty) {
+          tempFunctionResources.put(identToRegister, funcDefinition.resources)
+        } else {
+          tempFunctionResources.remove(identToRegister)
+        }
+      }
+    }
   }
 
   private def makeExprInfoForHiveFunction(func: CatalogFunction): ExpressionInfo = {
@@ -2245,7 +2264,10 @@ class SessionCatalog(
   def unregisterFunction(name: FunctionIdentifier): Boolean = {
     // If it's an unqualified name, it's a temp function stored with session namespace database
     val tempIdent = if (name.database.isEmpty) tempFunctionIdentifier(name.funcName) else name
-    functionRegistry.dropFunction(tempIdent) || tableFunctionRegistry.dropFunction(tempIdent)
+    val dropped =
+      functionRegistry.dropFunction(tempIdent) || tableFunctionRegistry.dropFunction(tempIdent)
+    if (dropped) synchronized { tempFunctionResources.remove(tempIdent) }
+    dropped
   }
 
   /**
@@ -2253,11 +2275,23 @@ class SessionCatalog(
    */
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
     val tempIdent = tempFunctionIdentifier(name)
-    if (!functionRegistry.dropFunction(tempIdent) &&
-        !tableFunctionRegistry.dropFunction(tempIdent) &&
-        !ignoreIfNotExists) {
+    val dropped =
+      functionRegistry.dropFunction(tempIdent) || tableFunctionRegistry.dropFunction(tempIdent)
+    if (dropped) {
+      synchronized { tempFunctionResources.remove(tempIdent) }
+    } else if (!ignoreIfNotExists) {
       throw new NoSuchTempFunctionException(name)
     }
+  }
+
+  /**
+   * Returns the resources attached to a temporary function (or `Nil` if none / not a temp).
+   * The lookup uses the registry-side temp identifier so the caller may pass an unqualified
+   * [[FunctionIdentifier]].
+   */
+  def getTempFunctionResources(name: FunctionIdentifier): Seq[FunctionResource] = synchronized {
+    val tempIdent = if (name.database.isEmpty) tempFunctionIdentifier(name.funcName) else name
+    tempFunctionResources.getOrElse(tempIdent, Nil)
   }
 
   /**
@@ -2764,6 +2798,7 @@ class SessionCatalog(
     globalTempViewManager.clear()
     functionRegistry.clear()
     tableFunctionRegistry.clear()
+    tempFunctionResources.clear()
     tableRelationCache.invalidateAll()
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
@@ -2795,6 +2830,7 @@ class SessionCatalog(
     target.currentDb = currentDb
     // copy over temporary views
     tempViews.foreach(kv => target.tempViews.put(kv._1, kv._2))
+    tempFunctionResources.foreach(kv => target.tempFunctionResources.put(kv._1, kv._2))
   }
 
   /**
