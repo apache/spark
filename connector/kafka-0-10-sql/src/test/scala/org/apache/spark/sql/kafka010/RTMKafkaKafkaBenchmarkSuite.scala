@@ -42,9 +42,7 @@ import org.apache.spark.tags.ExcludedTest
  * stateless transformation, and writes results to an output Kafka topic using
  * [[RealTimeTrigger]]. After the run it reports e2e latency percentiles.
  *
- * This benchmark intentionally runs a real local-cluster and a live Kafka broker, so it
- * is slow and is excluded from the default test run. To run it explicitly:
- *
+ * This benchmark will only run when triggered explicitly
  *   build/sbt -Dtest.default.exclude.tags="" \
  *     "sql-kafka-0-10/testOnly *RTMKafkaKafkaBenchmarkSuite"
  */
