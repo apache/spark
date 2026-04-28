@@ -1701,11 +1701,11 @@ object Unidoc {
         // Run doclint at unidoc time so heading-out-of-sequence, broken
         // `{@link}`, malformed HTML and similar issues fail the doc-gen
         // job with a per-file `path/X.java:LINE: error: ...` instead of a
-        // generic `javadoc exited with exit code 1`. The `/public` scope
-        // matches the `-public` flag above so doclint applies to exactly
-        // the documented API surface (after `ignoreUndocumentedPackages`
-        // has already filtered the source set).
-        "-Xdoclint:all/public", "-Xdoclint:-missing/public",
+        // generic `javadoc exited with exit code 1`. javadoc rejects the
+        // `/access` modifier (javac-only); access filtering already comes
+        // from the `-public` flag above plus `ignoreUndocumentedPackages`
+        // applied to the source set.
+        "-Xdoclint:all", "-Xdoclint:-missing",
         "--ignore-source-errors", "-notree"
       )
     },
