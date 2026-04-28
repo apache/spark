@@ -13135,10 +13135,9 @@ def time_bucket(
     Aligns a timestamp to the start of a fixed-size interval bucket.
 
     Returns the start of the bucket that ``ts`` falls into, where buckets are defined by
-    the given ``bucket_size`` interval aligned to ``origin``. Year-month interval bucket
-    sizes align to calendar boundaries in the session time zone for ``TIMESTAMP``, and in
-    UTC for ``TIMESTAMP_NTZ``. Day-time interval bucket sizes are fixed-length and
-    unaffected by the session time zone.
+    the given ``bucket_size`` interval aligned to ``origin``. For ``TIMESTAMP_NTZ``,
+    bucketing is performed in UTC. For ``TIMESTAMP``, year-month interval buckets and
+    calendar-day components of day-time interval buckets align to the session time zone.
 
     .. versionadded:: 4.2.0
 
@@ -13150,9 +13149,8 @@ def time_bucket(
     ts : :class:`~pyspark.sql.Column` or column name
         A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
     origin : :class:`~pyspark.sql.Column` or column name, optional
-        Alignment anchor. Defaults to 1970-01-01 00:00:00 in the session time zone for
-        ``TIMESTAMP``, and 1970-01-01 00:00:00 wall-clock for ``TIMESTAMP_NTZ``. Must be
-        the same type as ``ts`` and must be foldable.
+        Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
+        ``ts`` and must be foldable.
 
     Returns
     -------

@@ -328,6 +328,36 @@ struct<t:timestamp,bucket:timestamp_ntz>
 
 
 -- !query
+SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-03-09 12:00:00'),
+    (TIMESTAMP '2024-03-10 12:00:00'),
+    (TIMESTAMP '2024-03-11 12:00:00') tab(t)
+  ORDER BY t
+-- !query schema
+struct<t:timestamp,bucket:timestamp>
+-- !query output
+2024-03-09 12:00:00	2024-03-09 00:00:00
+2024-03-10 12:00:00	2024-03-10 00:00:00
+2024-03-11 12:00:00	2024-03-11 00:00:00
+
+
+-- !query
+SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-11-02 12:00:00'),
+    (TIMESTAMP '2024-11-03 12:00:00'),
+    (TIMESTAMP '2024-11-04 12:00:00') tab(t)
+  ORDER BY t
+-- !query schema
+struct<t:timestamp,bucket:timestamp>
+-- !query output
+2024-11-02 12:00:00	2024-11-02 00:00:00
+2024-11-03 12:00:00	2024-11-03 00:00:00
+2024-11-04 12:00:00	2024-11-04 00:00:00
+
+
+-- !query
 SET TIME ZONE 'UTC'
 -- !query schema
 struct<key:string,value:string>

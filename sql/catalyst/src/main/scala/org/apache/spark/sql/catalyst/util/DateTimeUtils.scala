@@ -1061,21 +1061,56 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * DayTimeInterval bucketing: microsecond floor division against `originMicros`.
-   * Returns `originMicros + floorDiv(tsMicros - originMicros, bucketMicros) * bucketMicros`.
+   * DayTimeInterval bucketing: mirrors `timestampAddDayTime` by splitting `bucketMicros`
+   * into a calendar-day count and a remainder in microseconds, advancing `originMicros` by
+   * `k * bucketDays` calendar days in `zoneId` and then by `k * bucketRemMicros` UTC
+   * microseconds. For sub-day buckets the calendar-day component is zero, so the result is
+   * pure UTC-microsecond floor division and `zoneId` has no effect. For `TIMESTAMP` (with
+   * local time zone) inputs callers should pass the session zone; for `TIMESTAMP_NTZ` they
+   * should pass `ZoneOffset.UTC`. With a UTC zone the result matches pure UTC floor
+   * division regardless of the bucket size.
    *
-   * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces
-   * this at analysis time.
+   * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
+   * analysis time.
    *
    * @param bucketMicros bucket size in microseconds.
    * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
    * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar-day arithmetic is performed.
    */
-  def timeBucketDTInterval(bucketMicros: Long, tsMicros: Long, originMicros: Long): Long = {
+  def timeBucketDTInterval(
+      bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
+    val bucketDays = bucketMicros / MICROS_PER_DAY
+    val bucketRemMicros = bucketMicros - bucketDays * MICROS_PER_DAY
+
     val diff = MathUtils.subtractExact(tsMicros, originMicros)
-    val bucketOffset =
-      MathUtils.multiplyExact(MathUtils.floorDiv(diff, bucketMicros), bucketMicros)
-    MathUtils.addExact(originMicros, bucketOffset)
+    var k = MathUtils.floorDiv(diff, bucketMicros)
+
+    if (bucketDays == 0) {
+      val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
+      MathUtils.addExact(originMicros, bucketOffset)
+    } else {
+      // Cumulative DST drift between origin and ts is bounded by one offset shift, which is
+      // at most a few hours for standard zones, while bucketMicros >= MICROS_PER_DAY here.
+      // The UTC-linear estimate is therefore off by at most one bucket; a single ±1 step
+      // recovers the correct k.
+      def candidate(kk: Long): Long = {
+        val zoned = microsToInstant(originMicros).atZone(zoneId)
+          .plusDays(MathUtils.multiplyExact(kk, bucketDays))
+          .plus(MathUtils.multiplyExact(kk, bucketRemMicros), ChronoUnit.MICROS)
+        instantToMicros(zoned.toInstant)
+      }
+
+      var c = candidate(k)
+      if (c > tsMicros) {
+        k -= 1
+        c = candidate(k)
+      } else {
+        val cNext = candidate(MathUtils.addExact(k, 1L))
+        if (cNext <= tsMicros) c = cNext
+      }
+      c
+    }
   }
 
   /**

@@ -254,6 +254,28 @@ Sort [t#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-03-09 12:00:00'),
+    (TIMESTAMP '2024-03-10 12:00:00'),
+    (TIMESTAMP '2024-03-11 12:00:00') tab(t)
+  ORDER BY t
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-11-02 12:00:00'),
+    (TIMESTAMP '2024-11-03 12:00:00'),
+    (TIMESTAMP '2024-11-04 12:00:00') tab(t)
+  ORDER BY t
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SET TIME ZONE 'UTC'
 -- !query analysis
 SetCommand (spark.sql.session.timeZone,Some(UTC))

@@ -1527,48 +1527,96 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
 
   test("timeBucketDTInterval") {
+    val utc = ZoneOffset.UTC
     // 15-minute bucket with default (epoch) origin
     assert(timeBucketDTInterval(15 * MICROS_PER_MINUTE,
-      date(2024, 1, 1, 11, 27, 0), 0L) === date(2024, 1, 1, 11, 15, 0))
+      date(2024, 1, 1, 11, 27, 0), 0L, utc) === date(2024, 1, 1, 11, 15, 0))
     // 1-hour bucket
     assert(timeBucketDTInterval(MICROS_PER_HOUR,
-      date(2024, 1, 1, 11, 27, 0), 0L) === date(2024, 1, 1, 11, 0, 0))
+      date(2024, 1, 1, 11, 27, 0), 0L, utc) === date(2024, 1, 1, 11, 0, 0))
     // Custom origin shifts alignment: grid anchored at :05
     assert(timeBucketDTInterval(MICROS_PER_HOUR,
-      date(2024, 1, 1, 11, 27, 0), date(1970, 1, 1, 0, 5, 0))
+      date(2024, 1, 1, 11, 27, 0), date(1970, 1, 1, 0, 5, 0), utc)
       === date(2024, 1, 1, 11, 5, 0))
     // 7-day weekly bucket (epoch = Thursday, so buckets run Thu-Wed)
     assert(timeBucketDTInterval(7 * MICROS_PER_DAY,
-      date(2024, 1, 10, 11, 27, 0), 0L) === date(2024, 1, 4, 0, 0, 0))
+      date(2024, 1, 10, 11, 27, 0), 0L, utc) === date(2024, 1, 4, 0, 0, 0))
     // ts exactly on boundary returns same instant
     assert(timeBucketDTInterval(15 * MICROS_PER_MINUTE,
-      date(2024, 1, 1, 11, 15, 0), 0L) === date(2024, 1, 1, 11, 15, 0))
+      date(2024, 1, 1, 11, 15, 0), 0L, utc) === date(2024, 1, 1, 11, 15, 0))
     // Origin AFTER ts: floorDiv must handle negative diff correctly
     assert(timeBucketDTInterval(MICROS_PER_HOUR,
-      date(2024, 1, 1, 11, 27, 0), date(2025, 1, 1, 0, 30, 0))
+      date(2024, 1, 1, 11, 27, 0), date(2025, 1, 1, 0, 30, 0), utc)
       === date(2024, 1, 1, 10, 30, 0))
     // Pre-epoch ts
     assert(timeBucketDTInterval(MICROS_PER_DAY,
-      date(1969, 12, 31, 23, 30, 0), 0L) === date(1969, 12, 31, 0, 0, 0))
+      date(1969, 12, 31, 23, 30, 0), 0L, utc) === date(1969, 12, 31, 0, 0, 0))
     // 1-microsecond bucket preserves exact value
     assert(timeBucketDTInterval(1L,
-      date(2024, 6, 20, 10, 0, 0, 123456), 0L)
+      date(2024, 6, 20, 10, 0, 0, 123456), 0L, utc)
       === date(2024, 6, 20, 10, 0, 0, 123456))
+    // Session-zone bucketing for whole-day buckets in LA: daily buckets land on local
+    // midnight, including across the spring-forward (2024-03-10) and fall-back
+    // (2024-11-03) DST transitions. Origin = local 1970-01-01 00:00 PST = 8h UTC.
+    val la = DateTimeUtils.getZoneId("America/Los_Angeles")
+    val laOrigin = DateTimeUtils.daysToMicros(0, la)
+    // Winter ts: 2024-02-15 18:00 UTC = 2024-02-15 10:00 PST; bucket = 2024-02-15 PST.
+    assert(timeBucketDTInterval(MICROS_PER_DAY,
+      date(2024, 2, 15, 18, 0, 0), laOrigin, la)
+      === DateTimeUtils.daysToMicros(LocalDate.of(2024, 2, 15).toEpochDay.toInt, la))
+    // Summer ts: 2024-07-15 17:00 UTC = 2024-07-15 10:00 PDT; bucket = 2024-07-15 PDT.
+    assert(timeBucketDTInterval(MICROS_PER_DAY,
+      date(2024, 7, 15, 17, 0, 0), laOrigin, la)
+      === DateTimeUtils.daysToMicros(LocalDate.of(2024, 7, 15).toEpochDay.toInt, la))
+    // Spring-forward day (23 UTC hours): ts 2024-03-10 19:00 UTC = 2024-03-10 12:00 PDT.
+    assert(timeBucketDTInterval(MICROS_PER_DAY,
+      date(2024, 3, 10, 19, 0, 0), laOrigin, la)
+      === DateTimeUtils.daysToMicros(LocalDate.of(2024, 3, 10).toEpochDay.toInt, la))
+    // Fall-back day (25 UTC hours): ts 2024-11-04 02:00 UTC = 2024-11-03 18:00 PST.
+    // Bucket = 2024-11-03 00:00 LA, which at 00:00 is still PDT (fall-back at 02:00).
+    assert(timeBucketDTInterval(MICROS_PER_DAY,
+      date(2024, 11, 4, 2, 0, 0), laOrigin, la)
+      === DateTimeUtils.daysToMicros(LocalDate.of(2024, 11, 3).toEpochDay.toInt, la))
+    // Custom origin in LA: 1-day bucket with origin at 06:00 PST. After 60 calendar days,
+    // bucket(60) = 2024-03-15 06:00 PDT, preserving local TOD across spring-forward.
+    val laCustomOrigin = date(2024, 1, 15, 14, 0, 0)  // 14:00 UTC = 2024-01-15 06:00 PST
+    assert(timeBucketDTInterval(MICROS_PER_DAY,
+      date(2024, 3, 15, 13, 0, 0), laCustomOrigin, la)  // 13:00 UTC = 2024-03-15 06:00 PDT
+      === date(2024, 3, 15, 13, 0, 0))
+    // Compound DT (36h = 1 day + 12h) across spring-forward exercises step-forward in
+    // estimate-and-adjust. Origin = 2024-03-08 00:00 PST. The 4th bucket boundary lands
+    // at 2024-03-12 12:00 PDT, 1 hour later than a UTC-linear estimate would predict.
+    val dtSpringOrigin = date(2024, 3, 8, 8, 0, 0)  // 08:00 UTC = 2024-03-08 00:00 PST
+    assert(timeBucketDTInterval(36 * MICROS_PER_HOUR,
+      date(2024, 3, 12, 19, 0, 0), dtSpringOrigin, la)  // 19:00 UTC = 2024-03-12 12:00 PDT
+      === date(2024, 3, 12, 19, 0, 0))
+    // Compound DT (36h) across fall-back exercises step-back. Origin = 2024-11-01 00:00
+    // PDT. ts at 2024-11-05 19:30 UTC: linear estimate is k=3, but zone-aware k=2 since
+    // fall-back stretches the calendar span by 1 hour.
+    val dtFallOrigin = date(2024, 11, 1, 7, 0, 0)  // 07:00 UTC = 2024-11-01 00:00 PDT
+    assert(timeBucketDTInterval(36 * MICROS_PER_HOUR,
+      date(2024, 11, 5, 19, 30, 0), dtFallOrigin, la)
+      === date(2024, 11, 4, 7, 0, 0))  // 07:00 UTC = 2024-11-03 23:00 PST
+    // Sub-day bucket is zone-independent: result with LA matches result with UTC.
+    assert(timeBucketDTInterval(15 * MICROS_PER_MINUTE,
+      date(2024, 3, 10, 19, 7, 0), 0L, la)
+      === timeBucketDTInterval(15 * MICROS_PER_MINUTE,
+        date(2024, 3, 10, 19, 7, 0), 0L, utc))
     // Overflow in subtractExact (ts - origin underflows below Long.MinValue)
     intercept[ArithmeticException] {
-      timeBucketDTInterval(1L, Long.MinValue, Long.MaxValue)
+      timeBucketDTInterval(1L, Long.MinValue, Long.MaxValue, utc)
     }
     // Overflow in subtractExact (ts - origin overflows above Long.MaxValue)
     intercept[ArithmeticException] {
-      timeBucketDTInterval(1L, Long.MaxValue, -1L)
+      timeBucketDTInterval(1L, Long.MaxValue, -1L, utc)
     }
     // Overflow in multiplyExact (floorDiv * bucketMicros)
     intercept[ArithmeticException] {
-      timeBucketDTInterval(3L, Long.MinValue, 0L)
+      timeBucketDTInterval(3L, Long.MinValue, 0L, utc)
     }
-    // Overflow in addExact (origin + bucketOffset)
+    // Overflow in instantToMicros after extreme plusDays shift
     intercept[ArithmeticException] {
-      timeBucketDTInterval(Long.MaxValue, -6L, -5L)
+      timeBucketDTInterval(Long.MaxValue, -6L, -5L, utc)
     }
   }
 

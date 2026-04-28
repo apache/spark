@@ -1,8 +1,8 @@
 -- time_bucket function tests
 
--- Pin session timezone to UTC so rendered TIMESTAMP values in the golden file
--- are stable across CI and developer machines. time_bucket itself always
--- computes in UTC regardless of session timezone.
+-- Pin session timezone to UTC. With UTC as the session zone, TIMESTAMP (LTZ)
+-- bucketing produces the same results as TIMESTAMP_NTZ; the non-UTC section
+-- below covers the session-zone-aware behavior.
 SET TIME ZONE 'UTC';
 
 
@@ -133,9 +133,10 @@ SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
   ORDER BY t;
 
 
--- Year-month bucketing in a non-UTC session: TIMESTAMP (LTZ) values bucket in the
--- session time zone, so monthly boundaries land at local month-start across DST
--- (America/Los_Angeles springs forward 2024-03-10). NTZ values bucket in UTC.
+-- Bucketing in a non-UTC session: TIMESTAMP (LTZ) values bucket in the session time
+-- zone, so monthly and daily boundaries land at local calendar boundaries across DST
+-- (America/Los_Angeles springs forward 2024-03-10 and falls back 2024-11-03). NTZ
+-- values bucket in UTC.
 SET TIME ZONE 'America/Los_Angeles';
 SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
   FROM VALUES
@@ -148,6 +149,21 @@ SELECT t, time_bucket(INTERVAL '1' MONTH, CAST(t AS TIMESTAMP_NTZ)) AS bucket
     (TIMESTAMP '2024-02-15 10:00:00'),
     (TIMESTAMP '2024-03-15 10:00:00'),
     (TIMESTAMP '2024-04-15 10:00:00') tab(t)
+  ORDER BY t;
+-- Daily bucket on LTZ across the spring-forward day: each ts buckets to local midnight.
+SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-03-09 12:00:00'),
+    (TIMESTAMP '2024-03-10 12:00:00'),
+    (TIMESTAMP '2024-03-11 12:00:00') tab(t)
+  ORDER BY t;
+-- Daily bucket on LTZ across the fall-back day (2024-11-03): each ts buckets to local
+-- midnight of its own day even though Nov 3 has 25 wall-clock hours.
+SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-11-02 12:00:00'),
+    (TIMESTAMP '2024-11-03 12:00:00'),
+    (TIMESTAMP '2024-11-04 12:00:00') tab(t)
   ORDER BY t;
 SET TIME ZONE 'UTC';
 

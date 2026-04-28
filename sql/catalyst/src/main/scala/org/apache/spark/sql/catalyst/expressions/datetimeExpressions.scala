@@ -3904,7 +3904,8 @@ case class TimestampDiff(
  * Aligns a timestamp to the start of a fixed-size interval bucket.
  *
  * Returns the start of the half-open bucket [start, start + bucketSize) containing ts.
- * All computation is performed on UTC values.
+ * For TIMESTAMP_NTZ, bucketing is performed in UTC. For TIMESTAMP, buckets align to
+ * the session time zone.
  */
 case class TimeBucket(
     bucketSize: Expression,
@@ -3990,7 +3991,7 @@ case class TimeBucket(
       case _: DayTimeIntervalType =>
         DateTimeUtils.timeBucketDTInterval(
           bucketSizeVal.asInstanceOf[Long], tsVal.asInstanceOf[Long],
-          originVal.asInstanceOf[Long])
+          originVal.asInstanceOf[Long], zoneIdForType(ts.dataType))
       case _: YearMonthIntervalType =>
         DateTimeUtils.timeBucketYMInterval(
           bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[Long],
@@ -4002,13 +4003,13 @@ case class TimeBucket(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val zid = ctx.addReferenceObj(
+      "zoneId", zoneIdForType(ts.dataType), classOf[ZoneId].getName)
     first.dataType match {
       case _: DayTimeIntervalType =>
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
-          s"$dtu.timeBucketDTInterval($bucketSizeCode, $tsCode, $originCode)")
+          s"$dtu.timeBucketDTInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
       case _: YearMonthIntervalType =>
-        val zid = ctx.addReferenceObj(
-          "zoneId", zoneIdForType(ts.dataType), classOf[ZoneId].getName)
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
           s"$dtu.timeBucketYMInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
       case other => throw SparkException.internalError(
@@ -4028,15 +4029,15 @@ case class TimeBucket(
   usage = """
     _FUNC_(bucketSize, ts[, origin]) - Returns the start of the bucket that `ts` falls into,
       where buckets are defined by the given `bucketSize` interval aligned to `origin`.
-      Year-month interval bucket sizes align to calendar boundaries in the session time
-      zone for `TIMESTAMP`, and in UTC for `TIMESTAMP_NTZ`. Day-time interval bucket sizes
-      are fixed-length and unaffected by the session time zone.
+      For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`, year-month
+      interval buckets and calendar-day components of day-time interval buckets align
+      to the session time zone.
   """,
   arguments = """
     Arguments:
       * bucketSize - A day-time or year-month interval defining the bucket size. Must be positive and foldable.
       * ts - A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
-      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and 1970-01-01 00:00:00 wall-clock for TIMESTAMP_NTZ. Must be the same type as ts and must be foldable.
+      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as ts and must be foldable.
   """,
   examples = """
     Examples:
@@ -4056,10 +4057,8 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     case _ => e
   }
 
-  // Default origin is 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and the
-  // same wall-clock instant for TIMESTAMP_NTZ. For LTZ this resolves to the UTC instant of
-  // local midnight on 1970-01-01, so monthly/yearly buckets align to local calendar
-  // boundaries year-round (across DST).
+  // Default origin: 1970-01-01 00:00:00 in the session zone for TIMESTAMP, wall-clock
+  // for TIMESTAMP_NTZ.
   private def defaultOrigin(tsType: DataType): Literal = tsType match {
     case TimestampType =>
       val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
