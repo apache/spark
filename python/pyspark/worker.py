@@ -2927,66 +2927,60 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         value_offsets = parsed_offsets[0][1]
         output_schema = StructType([StructField("_0", return_type)])
 
-        def _process_group(group: Iterator[pa.RecordBatch]) -> "pa.RecordBatch":
-            """Process one group's batches into a single output RecordBatch.
-
-            Isolating the per-group work in its own frame keeps peakmem
-            bounded across many groups: once the function returns, every
-            intermediate (all_batches, table, all_series, value_df) is
-            released before the next group is pulled in. Without this,
-            keeping the loop inline in the generator lets those locals
-            sit on the generator frame across iterations and the working
-            set grows unbounded on wide-column, large-group inputs.
-            """
-            all_batches = list(group)
-            if all_batches:
-                table = pa.Table.from_batches(all_batches).combine_chunks()
-            else:
-                table = pa.table({})
-            all_series = ArrowBatchTransformer.to_pandas(
-                table,
-                timezone=runner_conf.timezone,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-            )
-            value_df = pd.concat([all_series[o] for o in value_offsets], axis=1)
-
-            if num_udf_args == 1:
-                result = grouped_udf(value_df)
-            else:
-                key = tuple(all_series[o].iloc[0] for o in key_offsets)
-                result = grouped_udf(key, value_df)
-
-            # UDFs that build a fresh result (e.g. sort_values) leave
-            # value_df unused past this point; drop it and its upstream
-            # so the pandas-to-Arrow conversion doesn't have to work
-            # alongside the original input DataFrame.
-            del all_batches, table, all_series, value_df
-
-            verify_pandas_result(
-                result,
-                return_type,
-                runner_conf.assign_cols_by_name,
-                truncate_return_schema=False,
-            )
-
-            return PandasToArrowConversion.convert(
-                [result],
-                output_schema,
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
-                arrow_cast=True,
-                prefers_large_types=runner_conf.use_large_var_types,
-                assign_cols_by_name=runner_conf.assign_cols_by_name,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-            )
-
         def grouped_func(
             split_index: int,
             data: Iterator[Iterator[pa.RecordBatch]],
         ) -> Iterator[pa.RecordBatch]:
-            """Apply groupBy Pandas UDF (non-iterator variant)."""
+            """Apply groupBy Pandas UDF (non-iterator variant).
+
+            The explicit ``del`` calls below keep peakmem bounded across
+            groups. Without them, generator locals from the previous
+            iteration stay bound on the frame until each statement in
+            the next iteration rebinds its slot, so the input-side
+            DataFrames overlap with the next group's allocations and
+            the working set grows unbounded on wide-column, large-group
+            inputs. ``del result`` runs on resume from yield, before
+            ``data.__next__()`` is asked for the next group.
+            """
             for group in data:
-                yield _process_group(group)
+                all_batches = list(group)
+                if all_batches:
+                    table = pa.Table.from_batches(all_batches).combine_chunks()
+                else:
+                    table = pa.table({})
+                all_series = ArrowBatchTransformer.to_pandas(
+                    table,
+                    timezone=runner_conf.timezone,
+                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                )
+                value_df = pd.concat([all_series[o] for o in value_offsets], axis=1)
+
+                if num_udf_args == 1:
+                    result = grouped_udf(value_df)
+                else:
+                    key = tuple(all_series[o].iloc[0] for o in key_offsets)
+                    result = grouped_udf(key, value_df)
+
+                del all_batches, table, all_series, value_df
+
+                verify_pandas_result(
+                    result,
+                    return_type,
+                    runner_conf.assign_cols_by_name,
+                    truncate_return_schema=False,
+                )
+
+                yield PandasToArrowConversion.convert(
+                    [result],
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=runner_conf.use_large_var_types,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+                del result
 
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
