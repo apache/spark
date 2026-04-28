@@ -1700,11 +1700,14 @@ object Unidoc {
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree",
-        // DEBUG (revert before merge): force JVM-level exception logging so
-        // any NPE / RuntimeException in the doclet's tree builder shows a
-        // stack trace; today the failure is silent ("Building tree -> exit 1"
-        // with no further output), which leaves no actionable signal.
-        "-J-Xlog:exceptions=info"
+        // DEBUG (revert before merge): the prior `exceptions=info` run revealed
+        // that javadoc isn't dying on an uncaught Throwable -- it's javac's
+        // ClassFinder spinning on a CompletionFailure (same Throwable address
+        // re-thrown ~938k times in 46s) before MissingResourceException kills
+        // the process. To identify WHICH class can't be completed, also log
+        // every class load. The last class loaded before the
+        // CompletionFailure storm at ~6.6s is almost certainly the trigger.
+        "-J-Xlog:exceptions=info,class+load=info"
       )
     },
 
