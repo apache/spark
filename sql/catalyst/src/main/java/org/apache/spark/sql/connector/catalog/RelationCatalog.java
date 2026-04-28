@@ -160,15 +160,11 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * Load a table by identifier.
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
    * wrapping a {@link ViewInfo} is rejected as not-a-table; anything else is returned. Override
    * only if a tables-only path is materially cheaper than the unified one.
-   *
-   * @param ident a table identifier
-   * @return the table's metadata
-   * @throws NoSuchTableException if no table exists at {@code ident}
    */
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
@@ -180,16 +176,12 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * Load a view by identifier.
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: a {@link MetadataOnlyTable}
    * wrapping a {@link ViewInfo} is unwrapped and returned; anything else (table or absent) is
    * surfaced as {@link NoSuchViewException}. Override only if a views-only path is materially
    * cheaper than the unified one.
-   *
-   * @param ident a view identifier
-   * @return the view's metadata
-   * @throws NoSuchViewException if no view exists at {@code ident}
    */
   @Override
   default ViewInfo loadView(Identifier ident) throws NoSuchViewException {
@@ -206,13 +198,10 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * Test whether a table exists at the given identifier.
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
    * the entry exists and is not a view. Override only if a cheaper existence-check path exists.
-   *
-   * @param ident a table identifier
-   * @return {@code true} if a table exists at {@code ident}, {@code false} otherwise
    */
   @Override
   default boolean tableExists(Identifier ident) {
@@ -225,13 +214,10 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
   }
 
   /**
-   * Test whether a view exists at the given identifier.
+   * {@inheritDoc}
    * <p>
    * The default implementation derives from {@link #loadRelation}: returns {@code true} only if
    * the entry exists and is a view. Override only if a cheaper existence-check path exists.
-   *
-   * @param ident a view identifier
-   * @return {@code true} if a view exists at {@code ident}, {@code false} otherwise
    */
   @Override
   default boolean viewExists(Identifier ident) {
