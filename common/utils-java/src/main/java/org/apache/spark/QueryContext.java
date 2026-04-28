@@ -20,7 +20,7 @@ package org.apache.spark;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Query context of a {@link SparkThrowable}. It helps users understand where error occur
+ * Query context of a {@code SparkThrowable}. It helps users understand where error occur
  * while executing queries.
  *
  * @since 3.4.0
