@@ -92,19 +92,6 @@ Step 3 — Fetch failure annotations:
 
 Each annotation contains the test class, test name, and failure message.
 
-### Doc-gen (unidoc) failures
-
-The `Run / Documentation generation` job's log contains ~100 `[error]` lines from `target/java/.../X.java` files (genjavadoc-generated stubs). These look fatal but are intentionally non-fatal — `--ignore-source-errors` is set in `JavaUnidoc / unidoc / javacOptions`. They never cause exit 1. To find the actual cause:
-
-1. **Filter `[error]` lines for paths NOT under `target/java/`.** The remaining 0–3 lines are the fatal ones — typically doclint violations like heading-out-of-sequence (`<H3>` after `<H1>`), malformed `@link`, missing `@param`. The PR-time diagnostic banner from `docs/_plugins/build_api_docs.rb` does this filtering automatically and prints the candidates.
-
-2. **`Building tree → exit 1` is misleading.** It is NOT a tree-builder crash. The doclet typically completed all HTML generation before exiting 1 due to a non-zero error count. javadoc's `[done in N ms]` / `N errors / M warnings` summary confirms; a `Generating .../help-doc.html` line in the log means HTML generation finished.
-
-3. **JVM-level instrumentation is rarely needed.** The filter in (1) almost always identifies the trigger. Reach for `-J-Xlog:exceptions=info`, `-J-Xlog:class+load=info`, or javadoc's own `-verbose` only as fallback, and be aware:
-   - `-verbose` enables `[parsing X.java]` / `[loading Y.class]` / `Generating .../X.html` lines but produces ~1M log lines per failed run.
-   - `-J-Xlog:exceptions=info` is dominated by JDK-internal noise (lambda machinery, resource bundles, javac's own `CompletionFailure` recovery). The visible exceptions are rarely the cause of exit 1.
-   - `CompletionFailure` storms (same Throwable address re-thrown 100k+ times) are usually NOT the trigger — they are symptoms of unrelated downstream tooling (e.g. scaladoc's internal javac) running after the main javadoc has completed.
-
 ## Pull Request Workflow
 
 PR title format is `[SPARK-xxxx][COMPONENT] Title`. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
