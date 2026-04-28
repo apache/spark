@@ -1698,9 +1698,13 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        // Mirror Compile / javacOptions doclint settings -- `:=` above blocks
-        // scope inheritance, so we list them explicitly here. The `/public`
-        // scope matches the existing `-public` flag above.
+        // Run doclint at unidoc time so heading-out-of-sequence, broken
+        // `{@link}`, malformed HTML and similar issues fail the doc-gen
+        // job with a per-file `path/X.java:LINE: error: ...` instead of a
+        // generic `javadoc exited with exit code 1`. The `/public` scope
+        // matches the `-public` flag above so doclint applies to exactly
+        // the documented API surface (after `ignoreUndocumentedPackages`
+        // has already filtered the source set).
         "-Xdoclint:all/public", "-Xdoclint:-missing/public",
         "--ignore-source-errors", "-notree"
       )
