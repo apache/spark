@@ -22,6 +22,16 @@ import org.apache.spark.sql.catalyst.util.MapData;
 
 /**
  * Map abstraction in {@link ColumnVector}.
+ *
+ * <h3>Validation (SPARK-56636 DO NOT MERGE)</h3>
+ *
+ * Deliberate heading-out-of-sequence violation: <h3> directly under the
+ * implicit class <h1> with no <h2> in between. javadoc 17 doclint flags
+ * this with `error: heading used out of sequence: <H3>, compared to
+ * implicit preceding heading: <H1>` -- the same shape that hit
+ * RelationCatalog.java on PR #51419. Used to verify the unidoc
+ * diagnostic banner now surfaces this line directly instead of leaving
+ * it buried among ~100 genjavadoc-stub errors.
  */
 public final class ColumnarMap extends MapData {
   private final ColumnarArray keys;
