@@ -8488,7 +8488,8 @@ object functions {
 
   /**
    * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
-   * aligned to the epoch (1970-01-01 00:00:00). All computation is in UTC.
+   * aligned to the epoch (1970-01-01 00:00:00). For `TIMESTAMP_NTZ`, bucketing is performed in
+   * UTC. For `TIMESTAMP`, buckets align to the session time zone.
    *
    * @group datetime_funcs
    * @since 4.2.0
@@ -8498,7 +8499,8 @@ object functions {
 
   /**
    * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
-   * aligned to `origin`. All computation is in UTC.
+   * aligned to `origin`. For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`,
+   * buckets align to the session time zone.
    *
    * @group datetime_funcs
    * @since 4.2.0

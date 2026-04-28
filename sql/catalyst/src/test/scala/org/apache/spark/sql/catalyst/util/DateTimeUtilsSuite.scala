@@ -1569,6 +1569,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       date(2024, 7, 15, 17, 0, 0), laOrigin, la)
       === DateTimeUtils.daysToMicros(LocalDate.of(2024, 7, 15).toEpochDay.toInt, la))
     // Spring-forward day (23 UTC hours): ts 2024-03-10 19:00 UTC = 2024-03-10 12:00 PDT.
+    // Linear estimate from origin lands exactly on the bucket boundary -- no adjustment.
     assert(timeBucketDTInterval(MICROS_PER_DAY,
       date(2024, 3, 10, 19, 0, 0), laOrigin, la)
       === DateTimeUtils.daysToMicros(LocalDate.of(2024, 3, 10).toEpochDay.toInt, la))
@@ -1583,20 +1584,29 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(timeBucketDTInterval(MICROS_PER_DAY,
       date(2024, 3, 15, 13, 0, 0), laCustomOrigin, la)  // 13:00 UTC = 2024-03-15 06:00 PDT
       === date(2024, 3, 15, 13, 0, 0))
-    // Compound DT (36h = 1 day + 12h) across spring-forward exercises step-forward in
-    // estimate-and-adjust. Origin = 2024-03-08 00:00 PST. The 4th bucket boundary lands
-    // at 2024-03-12 12:00 PDT, 1 hour later than a UTC-linear estimate would predict.
+    // Compound DT (36h = 1 day + 12h) across spring-forward exercises the step-forward
+    // arm of estimate-and-adjust. Origin = 2024-03-08 00:00 PST. The span from origin to
+    // candidate(3) crosses spring-forward (losing 1h), so candidate(3) lands 1 hour
+    // earlier in UTC than a UTC-linear k=3 boundary would: zone-aware c(3) = 2024-03-12
+    // 19:00 UTC, UTC-linear would predict 20:00 UTC. Linear estimate from ts=19:00 UTC
+    // gives k=2, c(2) < ts, c(3) <= ts -> step forward to k=3.
     val dtSpringOrigin = date(2024, 3, 8, 8, 0, 0)  // 08:00 UTC = 2024-03-08 00:00 PST
     assert(timeBucketDTInterval(36 * MICROS_PER_HOUR,
       date(2024, 3, 12, 19, 0, 0), dtSpringOrigin, la)  // 19:00 UTC = 2024-03-12 12:00 PDT
       === date(2024, 3, 12, 19, 0, 0))
-    // Compound DT (36h) across fall-back exercises step-back. Origin = 2024-11-01 00:00
-    // PDT. ts at 2024-11-05 19:30 UTC: linear estimate is k=3, but zone-aware k=2 since
-    // fall-back stretches the calendar span by 1 hour.
+    // Compound DT (36h) across fall-back exercises the step-back arm. Origin =
+    // 2024-11-01 00:00 PDT. Fall-back stretches the calendar span by 1h, so c(3) lands
+    // 1h later in UTC than UTC-linear would predict. ts at 2024-11-05 19:30 UTC: linear
+    // estimate is k=3, but c(3)=Nov 5 20:00 UTC > ts -> step back to k=2.
     val dtFallOrigin = date(2024, 11, 1, 7, 0, 0)  // 07:00 UTC = 2024-11-01 00:00 PDT
     assert(timeBucketDTInterval(36 * MICROS_PER_HOUR,
       date(2024, 11, 5, 19, 30, 0), dtFallOrigin, la)
       === date(2024, 11, 4, 7, 0, 0))  // 07:00 UTC = 2024-11-03 23:00 PST
+    // Compound DT (36h) within a single non-DST month exercises the no-step arm: the
+    // linear estimate is exact, c(k) <= ts < c(k+1).
+    assert(timeBucketDTInterval(36 * MICROS_PER_HOUR,
+      date(2024, 6, 5, 18, 0, 0), date(2024, 6, 1, 7, 0, 0), la)
+      === date(2024, 6, 4, 7, 0, 0))  // 4th bucket boundary, no DST in span
     // Sub-day bucket is zone-independent: result with LA matches result with UTC.
     assert(timeBucketDTInterval(15 * MICROS_PER_MINUTE,
       date(2024, 3, 10, 19, 7, 0), 0L, la)
@@ -1660,13 +1670,30 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(timeBucketYMInterval(1,
       date(2024, 7, 15, 17, 0, 0), laOrigin, la)
       === DateTimeUtils.daysToMicros(LocalDate.of(2024, 7, 1).toEpochDay.toInt, la))
-    // Extreme ts: daysToMicros on the resulting day count overflows via multiplyExact.
+    // Fall-back fold origin: 2024-11-03 23:30 PST (in the 25-hour day after fall-back at
+    // 02:00). Origin's offset is PST (-08:00). Bucket should preserve the post-fold offset
+    // on the candidate day, matching `+ INTERVAL '1' MONTH` semantics.
+    // Origin: 2024-11-03 23:30 PST = 2024-11-04 07:30 UTC.
+    // ts:     2024-12-05 12:00 PST = 2024-12-05 20:00 UTC.
+    // Bucket: 2024-12-03 23:30 PST = 2024-12-04 07:30 UTC.
+    assert(timeBucketYMInterval(1,
+      date(2024, 12, 5, 20, 0, 0), date(2024, 11, 4, 7, 30, 0), la)
+      === date(2024, 12, 4, 7, 30, 0))
+    // Origin = ts = the SECOND occurrence of 01:30 on the fall-back day (PST, post-fold).
+    // bucket(origin, origin) must equal origin; an offset-naive impl would return PDT
+    // (1h earlier).
+    val foldOrigin = date(2024, 11, 3, 9, 30, 0)  // = 2024-11-03 01:30 PST
+    assert(timeBucketYMInterval(1, foldOrigin, foldOrigin, la) === foldOrigin)
+    // Origin Feb 3 2024 01:30 PST + 9 months -> Nov 3 2024 01:30 in fold. Origin's offset
+    // PST is valid in the fold so it is retained -> Nov 3 09:30 UTC. An offset-naive impl
+    // would pick the earlier offset PDT -> Nov 3 08:30 UTC (1h earlier).
+    assert(timeBucketYMInterval(9,
+      date(2024, 11, 4, 0, 0, 0),    // ts later than candidate
+      date(2024, 2, 3, 9, 30, 0),    // = 2024-02-03 01:30 PST
+      la) === date(2024, 11, 3, 9, 30, 0))
+    // Extreme ts: instantToMicros overflow on the converted bucket boundary.
     intercept[ArithmeticException] {
       timeBucketYMInterval(1, Long.MinValue, 0L, utc)
-    }
-    // Extreme origin: daysToMicros on originMicros's day count overflows via multiplyExact.
-    intercept[ArithmeticException] {
-      timeBucketYMInterval(1, 0L, Long.MinValue, utc)
     }
   }
 }

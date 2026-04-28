@@ -1090,9 +1090,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
       MathUtils.addExact(originMicros, bucketOffset)
     } else {
-      // Cumulative DST drift between origin and ts is bounded by one offset shift, which is
-      // at most a few hours for standard zones, while bucketMicros >= MICROS_PER_DAY here.
-      // The UTC-linear estimate is therefore off by at most one bucket; a single ±1 step
+      // Cumulative offset shift between origin and ts is bounded by 24h (max in IANA:
+      // Pacific/Apia 2011, Pacific/Kiritimati 1994), and bucketMicros >= MICROS_PER_DAY
+      // here, so the UTC-linear estimate is off by at most one bucket; a single ±1 step
       // recovers the correct k.
       def candidate(kk: Long): Long = {
         val zoned = microsToInstant(originMicros).atZone(zoneId)
@@ -1114,47 +1114,37 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * YearMonthInterval bucketing: month arithmetic with end-of-month capping and step-back.
-   * The origin's day-of-month and time-of-day determine the bucket boundaries. Calendar
-   * resolution is performed in the given `zoneId`, so for `TIMESTAMP` (with local time zone)
-   * inputs callers should pass the session zone, and for `TIMESTAMP_NTZ` they should pass
-   * `ZoneOffset.UTC`.
+   * YearMonthInterval bucketing: delegates to `ZonedDateTime.plusMonths`, matching how
+   * `+ INTERVAL '<n>' MONTH` advances. For `TIMESTAMP` (LTZ) inputs callers should pass
+   * the session zone; for `TIMESTAMP_NTZ` they should pass `ZoneOffset.UTC`.
    *
-   * `bucketMonths` must be positive; `TimeBucket.checkInputDataTypes` enforces
-   * this at analysis time.
+   * `bucketMonths` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
+   * analysis time.
    *
    * @param bucketMonths bucket size in months.
    * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
    * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
-   * @param zoneId       zone in which the (year, month, day) decomposition is performed.
+   * @param zoneId       zone in which calendar arithmetic is performed.
    */
   def timeBucketYMInterval(
       bucketMonths: Int, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
-    val tsDays = microsToDays(tsMicros, zoneId)
-    val originDays = microsToDays(originMicros, zoneId)
-    val originTodMicros =
-      MathUtils.subtractExact(originMicros, daysToMicros(originDays, zoneId))
+    val originZdt = microsToInstant(originMicros).atZone(zoneId)
+    val tsZdt = microsToInstant(tsMicros).atZone(zoneId)
+    val rawMonthDiff = (tsZdt.getYear.toLong * 12 + tsZdt.getMonthValue) -
+      (originZdt.getYear.toLong * 12 + originZdt.getMonthValue)
 
-    val tsDate = daysToLocalDate(tsDays)
-    val originDate = daysToLocalDate(originDays)
-    val rawMonthDiff = (tsDate.getYear.toLong * 12 + tsDate.getMonthValue) -
-      (originDate.getYear.toLong * 12 + originDate.getMonthValue)
+    def candidate(kk: Long): Long = instantToMicros(
+      originZdt.plusMonths(MathUtils.multiplyExact(kk, bucketMonths.toLong)).toInstant)
 
     var k = MathUtils.floorDiv(rawMonthDiff, bucketMonths.toLong)
-    var candidateDays = dateAddMonths(originDays,
-      MathUtils.toIntExact(MathUtils.multiplyExact(k, bucketMonths.toLong)))
-    var candidate =
-      MathUtils.addExact(daysToMicros(candidateDays, zoneId), originTodMicros)
-
-    // End-of-month capping in dateAddMonths can overshoot; step back one bucket if so.
-    if (candidate > tsMicros) {
+    var c = candidate(k)
+    // candidate(k) may overshoot ts within the same calendar month -- either via
+    // end-of-month capping (Jan 31 -> Feb 28) or because origin's day/time exceeds ts's.
+    // plusMonths is monotonic, so a single step-back suffices.
+    if (c > tsMicros) {
       k -= 1
-      candidateDays = dateAddMonths(originDays,
-        MathUtils.toIntExact(MathUtils.multiplyExact(k, bucketMonths.toLong)))
-      candidate =
-        MathUtils.addExact(daysToMicros(candidateDays, zoneId), originTodMicros)
+      c = candidate(k)
     }
-
-    candidate
+    c
   }
 }
