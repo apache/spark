@@ -22,7 +22,7 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
 
   before {
     spark.conf.set(s"spark.sql.catalog.cat", classOf[InMemoryCatalog].getName)

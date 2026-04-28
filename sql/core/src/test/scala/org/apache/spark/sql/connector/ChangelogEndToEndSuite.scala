@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.streaming.UserProvided
@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * End-to-end tests for Change Data Capture (CDC) queries using
  * [[InMemoryChangelogCatalog]].
  */
-class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
+class ChangelogEndToEndSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_e2e"
   private val testTableName = "test_table"
@@ -418,27 +418,22 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
       ChangelogInfo.DeduplicationMode.NONE)
   }
 
-  test("changes() passes deduplicationMode and computeUpdates to catalog") {
+  test("changes() passes computeUpdates to catalog") {
     catalog.addChangeRows(ident, Seq(
       makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
 
     // DataFrame API
     spark.read
       .option("startingVersion", "1")
-      .option("deduplicationMode", "netChanges")
       .option("computeUpdates", "true")
       .changes(fullTableName)
       .collect()
-    val info1 = catalog.lastChangelogInfo.get
-    assert(info1.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-    assert(info1.computeUpdates() === true)
+    assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
 
     // SQL
     sql(s"SELECT * FROM $fullTableName CHANGES FROM VERSION 1 " +
-      "WITH (deduplicationMode = 'netChanges', computeUpdates = 'true')").collect()
-    val info2 = catalog.lastChangelogInfo.get
-    assert(info2.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-    assert(info2.computeUpdates() === true)
+      "WITH (computeUpdates = 'true')").collect()
+    assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
   }
 
   // ---------- Batch: timestamp range ----------
@@ -589,23 +584,20 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   // ---------- Streaming: CDC options ----------
 
-  test("streaming changes() passes deduplicationMode and computeUpdates to catalog") {
+  test("streaming changes() passes computeUpdates to catalog") {
     catalog.addChangeRows(ident, Seq(
       makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
 
     // DataFrame API
     val dfApiStream = spark.readStream
       .option("startingVersion", "1")
-      .option("deduplicationMode", "netChanges")
       .option("computeUpdates", "true")
       .changes(fullTableName)
     val q1 = dfApiStream.writeStream
       .format("memory").queryName("cdc_stream_opts_df").start()
     try {
       q1.processAllAvailable()
-      val info1 = catalog.lastChangelogInfo.get
-      assert(info1.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-      assert(info1.computeUpdates() === true)
+      assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
     } finally {
       q1.stop()
     }
@@ -613,14 +605,12 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
     // SQL
     val sqlStream = sql(
       s"SELECT * FROM STREAM $fullTableName CHANGES FROM VERSION 1 " +
-        "WITH (deduplicationMode = 'netChanges', computeUpdates = 'true')")
+        "WITH (computeUpdates = 'true')")
     val q2 = sqlStream.writeStream
       .format("memory").queryName("cdc_stream_opts_sql").start()
     try {
       q2.processAllAvailable()
-      val info2 = catalog.lastChangelogInfo.get
-      assert(info2.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-      assert(info2.computeUpdates() === true)
+      assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
     } finally {
       q2.stop()
     }

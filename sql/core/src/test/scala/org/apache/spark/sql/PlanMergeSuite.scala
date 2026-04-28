@@ -22,8 +22,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class PlanMergeSuite extends QueryTest
-  with SharedSparkSession
+class PlanMergeSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -337,6 +336,63 @@ class PlanMergeSuite extends QueryTest
           |  (SELECT count(distinct c2) + sum(distinct c1) FROM t1)
           |""".stripMargin),
         Row(8, 6))
+    }
+  }
+
+  test("SPARK-40193: Merge non-grouping scalar subqueries with different filter conditions") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(key) FROM testData WHERE key > 50),
+            |  (SELECT sum(key) FROM testData WHERE key <= 50)
+          """.stripMargin)
+
+        checkAnswer(df, Row(3775, 1275) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 1,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("SPARK-40193: Merge non-grouping scalar subqueries where only one has a filter") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString,
+        // ObjectSerializerPruning produces different scan shapes depending on whether a Filter is
+        // present. Disabling the rule makes both scans identical so PlanMerger can merge them.
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.ObjectSerializerPruning") {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT sum(key) FROM testData),
+            |  (SELECT sum(key) FROM testData WHERE key > 50)
+          """.stripMargin)
+
+        checkAnswer(df, Row(5050, 3775) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 1,
+          "Missing or unexpected ReusedSubqueryExec in the plan")
+      }
     }
   }
 }

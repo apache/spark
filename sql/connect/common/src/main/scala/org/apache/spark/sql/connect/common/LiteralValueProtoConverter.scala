@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -57,7 +58,15 @@ object LiteralValueProtoConverter {
       literal: Any,
       options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
+    ConnectTypeOps.toLiteralProtoForValue(literal, builder).getOrElse {
+      toLiteralProtoBuilderDefault(literal, builder, options)
+    }
+  }
 
+  private def toLiteralProtoBuilderDefault(
+      literal: Any,
+      builder: proto.Expression.Literal.Builder,
+      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     def decimalBuilder(precision: Int, scale: Int, value: String) = {
       builder.getDecimalBuilder.setPrecision(precision).setScale(scale).setValue(value)
     }
@@ -127,6 +136,16 @@ object LiteralValueProtoConverter {
       dataType: DataType,
       options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
+    ConnectTypeOps(dataType)
+      .map(_.toLiteralProtoWithType(literal, dataType, builder))
+      .getOrElse(toLiteralProtoWithTypeDefault(literal, dataType, builder, options))
+  }
+
+  private def toLiteralProtoWithTypeDefault(
+      literal: Any,
+      dataType: DataType,
+      builder: proto.Expression.Literal.Builder,
+      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
 
     def arrayBuilder(scalaValue: Any, elementType: DataType) = {
       val ab = builder.getArrayBuilder
@@ -384,7 +403,8 @@ object LiteralValueProtoConverter {
     getScalaConverter(getProtoDataType(literal))(literal)
   }
 
-  private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
+  private def getScalaConverterDefault(
+      dataType: proto.DataType): proto.Expression.Literal => Any = {
     val converter: proto.Expression.Literal => Any = dataType.getKindCase match {
       case proto.DataType.KindCase.NULL =>
         v =>
@@ -428,6 +448,14 @@ object LiteralValueProtoConverter {
           "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
           Map("typeInfo" -> dataType.getKindCase.toString))
     }
+    converter
+  }
+
+  private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
+    val converter: proto.Expression.Literal => Any =
+      ConnectTypeOps.getScalaConverterForKind(dataType.getKindCase).getOrElse {
+        getScalaConverterDefault(dataType)
+      }
     v => if (v.hasNull) null else converter(v)
   }
 
@@ -500,102 +528,9 @@ object LiteralValueProtoConverter {
       if (literal.getLiteralTypeCase == proto.Expression.Literal.LiteralTypeCase.NULL) {
         literal.getNull
       } else {
-        val builder = proto.DataType.newBuilder()
-        literal.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.BINARY =>
-            builder.setBinary(proto.DataType.Binary.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-            builder.setBoolean(proto.DataType.Boolean.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.BYTE =>
-            builder.setByte(proto.DataType.Byte.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.SHORT =>
-            builder.setShort(proto.DataType.Short.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-            builder.setInteger(proto.DataType.Integer.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.LONG =>
-            builder.setLong(proto.DataType.Long.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-            builder.setFloat(proto.DataType.Float.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-            builder.setDouble(proto.DataType.Double.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
-            val decimal = Decimal.apply(literal.getDecimal.getValue)
-            var precision = decimal.precision
-            if (literal.getDecimal.hasPrecision) {
-              precision = math.max(precision, literal.getDecimal.getPrecision)
-            }
-            var scale = decimal.scale
-            if (literal.getDecimal.hasScale) {
-              scale = math.max(scale, literal.getDecimal.getScale)
-            }
-            builder.setDecimal(
-              proto.DataType.Decimal
-                .newBuilder()
-                .setPrecision(math.max(precision, scale))
-                .setScale(scale)
-                .build())
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            builder.setString(proto.DataType.String.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DATE =>
-            builder.setDate(proto.DataType.Date.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
-            builder.setTimestamp(proto.DataType.Timestamp.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
-            builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
-            builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-            builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-            builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIME =>
-            val timeBuilder = proto.DataType.Time.newBuilder()
-            if (literal.getTime.hasPrecision) {
-              timeBuilder.setPrecision(literal.getTime.getPrecision)
-            }
-            builder.setTime(timeBuilder.build())
-          case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-            if (literal.getArray.hasElementType) {
-              builder.setArray(
-                proto.DataType.Array
-                  .newBuilder()
-                  .setElementType(literal.getArray.getElementType)
-                  .setContainsNull(true)
-                  .build())
-            } else {
-              throw InvalidPlanInput(
-                "CONNECT_INVALID_PLAN.ARRAY_LITERAL_MISSING_DATA_TYPE",
-                Map.empty)
-            }
-          case proto.Expression.Literal.LiteralTypeCase.MAP =>
-            if (literal.getMap.hasKeyType && literal.getMap.hasValueType) {
-              builder.setMap(
-                proto.DataType.Map
-                  .newBuilder()
-                  .setKeyType(literal.getMap.getKeyType)
-                  .setValueType(literal.getMap.getValueType)
-                  .setValueContainsNull(true)
-                  .build())
-            } else {
-              throw InvalidPlanInput(
-                "CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE",
-                Map.empty)
-            }
-          case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-            if (literal.getStruct.hasStructType) {
-              builder.setStruct(literal.getStruct.getStructType.getStruct)
-            } else {
-              throw InvalidPlanInput(
-                "CONNECT_INVALID_PLAN.STRUCT_LITERAL_MISSING_DATA_TYPE",
-                Map.empty)
-            }
-          case _ =>
-            val literalCase = literal.getLiteralTypeCase
-            throw InvalidPlanInput(
-              "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
-              Map("typeInfo" -> s"${literalCase.name}(${literalCase.getNumber})"))
-        }
-        builder.build()
+        ConnectTypeOps
+          .getProtoDataTypeFromLiteral(literal)
+          .getOrElse(getProtoDataTypeDefault(literal))
       }
     }
 
@@ -608,6 +543,103 @@ object LiteralValueProtoConverter {
     }
 
     dataType
+  }
+
+  private def getProtoDataTypeDefault(literal: proto.Expression.Literal): proto.DataType = {
+    val builder = proto.DataType.newBuilder()
+    literal.getLiteralTypeCase match {
+      case proto.Expression.Literal.LiteralTypeCase.BINARY =>
+        builder.setBinary(proto.DataType.Binary.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
+        builder.setBoolean(proto.DataType.Boolean.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.BYTE =>
+        builder.setByte(proto.DataType.Byte.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.SHORT =>
+        builder.setShort(proto.DataType.Short.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
+        builder.setInteger(proto.DataType.Integer.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.LONG =>
+        builder.setLong(proto.DataType.Long.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
+        builder.setFloat(proto.DataType.Float.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
+        builder.setDouble(proto.DataType.Double.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
+        val decimal = Decimal.apply(literal.getDecimal.getValue)
+        var precision = decimal.precision
+        if (literal.getDecimal.hasPrecision) {
+          precision = math.max(precision, literal.getDecimal.getPrecision)
+        }
+        var scale = decimal.scale
+        if (literal.getDecimal.hasScale) {
+          scale = math.max(scale, literal.getDecimal.getScale)
+        }
+        builder.setDecimal(
+          proto.DataType.Decimal
+            .newBuilder()
+            .setPrecision(math.max(precision, scale))
+            .setScale(scale)
+            .build())
+      case proto.Expression.Literal.LiteralTypeCase.STRING =>
+        builder.setString(proto.DataType.String.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.DATE =>
+        builder.setDate(proto.DataType.Date.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
+        builder.setTimestamp(proto.DataType.Timestamp.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
+        builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
+        builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
+        builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
+        builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
+      case proto.Expression.Literal.LiteralTypeCase.TIME =>
+        val timeBuilder = proto.DataType.Time.newBuilder()
+        if (literal.getTime.hasPrecision) {
+          timeBuilder.setPrecision(literal.getTime.getPrecision)
+        }
+        builder.setTime(timeBuilder.build())
+      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+        if (literal.getArray.hasElementType) {
+          builder.setArray(
+            proto.DataType.Array
+              .newBuilder()
+              .setElementType(literal.getArray.getElementType)
+              .setContainsNull(true)
+              .build())
+        } else {
+          throw InvalidPlanInput(
+            "CONNECT_INVALID_PLAN.ARRAY_LITERAL_MISSING_DATA_TYPE",
+            Map.empty)
+        }
+      case proto.Expression.Literal.LiteralTypeCase.MAP =>
+        if (literal.getMap.hasKeyType && literal.getMap.hasValueType) {
+          builder.setMap(
+            proto.DataType.Map
+              .newBuilder()
+              .setKeyType(literal.getMap.getKeyType)
+              .setValueType(literal.getMap.getValueType)
+              .setValueContainsNull(true)
+              .build())
+        } else {
+          throw InvalidPlanInput("CONNECT_INVALID_PLAN.MAP_LITERAL_MISSING_DATA_TYPE", Map.empty)
+        }
+      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
+        if (literal.getStruct.hasStructType) {
+          builder.setStruct(literal.getStruct.getStructType.getStruct)
+        } else {
+          throw InvalidPlanInput(
+            "CONNECT_INVALID_PLAN.STRUCT_LITERAL_MISSING_DATA_TYPE",
+            Map.empty)
+        }
+      case _ =>
+        val literalCase = literal.getLiteralTypeCase
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.UNSUPPORTED_LITERAL_TYPE",
+          Map("typeInfo" -> s"${literalCase.name}(${literalCase.getNumber})"))
+    }
+    builder.build()
   }
 
   private def toScalaArrayInternal(

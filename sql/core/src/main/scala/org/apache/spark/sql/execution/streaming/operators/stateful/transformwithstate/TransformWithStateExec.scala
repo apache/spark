@@ -248,11 +248,17 @@ case class TransformWithStateExec(
       timeMode: TimeMode,
       processorHandle: StatefulProcessorHandleImpl): Iterator[InternalRow] = {
     val numExpiredTimers = longMetric("numExpiredTimers")
+    // SPARK-56566: Timers are always scanned without a lower bound (full scan up to the current
+    // batch timestamp / eviction watermark). We intentionally do not pass
+    // prevBatchTimestampMs / lateEventsWatermark as the exclusive lower bound here:
+    // registerTimer has no guard on the registered expiry, so a user-registered timer with expiry
+    // at or below the previous batch's lower bound would be silently dropped by a bounded scan.
+    // Revisit once registerTimer enforces ts > currentBatchTimestamp / watermark.
     timeMode match {
       case ProcessingTime =>
         assert(batchTimestampMs.isDefined)
         val batchTimestamp = batchTimestampMs.get
-        processorHandle.getExpiredTimers(batchTimestamp, prevBatchTimestampMs)
+        processorHandle.getExpiredTimers(batchTimestamp)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)
@@ -261,26 +267,7 @@ case class TransformWithStateExec(
       case EventTime =>
         assert(eventTimeWatermarkForEviction.isDefined)
         val watermark = eventTimeWatermarkForEviction.get
-        // Use the late-events watermark as the scan lower bound only when we can prove that
-        // it equals the previous batch's eviction watermark for this operator. That holds
-        // when STATEFUL_OPERATOR_ALLOW_MULTIPLE is true.
-        //
-        // When STATEFUL_OPERATOR_ALLOW_MULTIPLE is false (legacy mode), lateEvents == eviction
-        // for the same batch, so using it would collapse the eviction range to (wm, wm] = empty
-        // and silently stop firing timers. Fall back to None (full scan) in that mode, as we
-        // don't expect the legacy mode to be used by many users.
-        //
-        // The prevBatchTimestampMs.isDefined check guards against the first batch, where
-        // watermark propagation yields Some(0) for late events even though no timers have been
-        // processed yet, which would incorrectly skip timers registered at timestamp 0.
-        val prevWatermark =
-          if (prevBatchTimestampMs.isDefined &&
-              conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)) {
-            eventTimeWatermarkForLateEvents
-          } else {
-            None
-          }
-        processorHandle.getExpiredTimers(watermark, prevWatermark)
+        processorHandle.getExpiredTimers(watermark)
           .flatMap { case (keyObj, expiryTimestampMs) =>
             numExpiredTimers += 1
             handleTimerRows(keyObj, expiryTimestampMs, processorHandle)

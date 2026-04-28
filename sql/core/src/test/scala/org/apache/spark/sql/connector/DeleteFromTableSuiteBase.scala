@@ -20,6 +20,8 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -27,6 +29,24 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
   import testImplicits._
 
   protected def enforceCheckConstraintOnDelete: Boolean = true
+
+  protected def deltaDelete: Boolean = false
+
+  protected def getDeleteSummary(): DeleteSummary = {
+    val t = catalog.loadTable(ident).asInstanceOf[InMemoryTable]
+    t.commits.last.writeSummary.get.asInstanceOf[DeleteSummary]
+  }
+
+  protected def checkDeleteMetrics(
+      numDeletedRows: Long,
+      numCopiedRows: Long): Unit = {
+    val summary = getDeleteSummary()
+    assert(summary.numDeletedRows() === numDeletedRows,
+      s"Expected numDeletedRows=$numDeletedRows, got ${summary.numDeletedRows()}")
+    val expectedCopied = if (deltaDelete) 0L else numCopiedRows
+    assert(summary.numCopiedRows() === expectedCopied,
+      s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+  }
 
   test("delete from table containing added column with default value") {
     createAndInitTable("pk INT NOT NULL, dep STRING", """{ "pk": 1, "dep": "hr" }""")
@@ -65,6 +85,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, "software", "initial-text"),
         Row(4, "hr", "initial-text"),
         Row(6, "hr", "new-text")))
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 3)
   }
 
   test("delete from table with table constraints") {
@@ -90,10 +111,13 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Seq(Row(2, 4, "eng"), Row(3, 6, "eng")))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
+
     sql(s"DELETE FROM $tableNameAsString WHERE pk >=3")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Seq(Row(2, 4, "eng")))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
   test("delete from table containing struct column with default value") {
@@ -151,6 +175,68 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with literal false condition") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE false")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with literal true condition") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE true")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+  }
+
+  test("delete with NULL equality on VOID column") {
+    createAndInitTable("pk INT NOT NULL, v VOID, dep STRING",
+      """{ "pk": 1, "v": null, "dep": "hr" }
+        |{ "pk": 2, "v": null, "dep": "software" }
+        |{ "pk": 3, "v": null, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE v = NULL")
+
+    checkAnswer(
+      sql(s"SELECT pk, dep FROM $tableNameAsString"),
+      Row(1, "hr") :: Row(2, "software") :: Row(3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with NULL condition on non-null column") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE pk = NULL")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
   }
 
   test("delete with basic filters") {
@@ -165,6 +251,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
   test("delete with aliases") {
@@ -177,6 +265,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString AS t WHERE t.id <= 1 OR t.dep = 'hr'")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(2, 2, "software") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
   }
 
   test("delete with IN predicates") {
@@ -191,6 +281,8 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, "software") :: Row(3, null, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
   }
 
   test("delete with NOT IN predicates") {
@@ -205,12 +297,14 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, null, "hr") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
 
     sql(s"DELETE FROM $tableNameAsString WHERE id NOT IN (1, 10)")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 1, "hr") :: Row(3, null, "hr") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
   test("delete with conditions on nested columns") {
@@ -224,10 +318,12 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, Row(2, "v2"), "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
 
     sql(s"DELETE FROM $tableNameAsString t WHERE t.complex.c1 = id")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
   test("delete with IN subqueries") {
@@ -255,6 +351,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
 
       append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 4, "id": 1, "dep": "hr" }
@@ -276,6 +373,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(5, -1, "hr") :: Row(4, 1, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 2)
 
       append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 6, "id": null, "dep": "hr" }
@@ -297,6 +395,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(5, -1, "hr") :: Row(4, 1, "hr") :: Row(6, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 3)
     }
   }
 
@@ -320,6 +419,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -346,6 +446,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -354,6 +455,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 1)
 
       append("pk INT NOT NULL, id INT, dep STRING",
         """{ "pk": 4, "id": 1, "dep": "hr" }
@@ -374,6 +476,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(5, 2, "hardware") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 3, numCopiedRows = 0)
 
       sql(
         s"""DELETE FROM $tableNameAsString
@@ -420,6 +523,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -430,6 +534,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -440,6 +545,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -452,6 +558,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
     }
   }
 
@@ -480,6 +587,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -488,6 +596,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, 1, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
 
       sql(
         s"""DELETE FROM $tableNameAsString t
@@ -498,6 +607,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
     }
   }
 
@@ -521,6 +631,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
     }
   }
 
@@ -553,6 +664,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         checkAnswer(
           sql(s"SELECT * FROM $tableNameAsString"),
           Row(3, 2, "hardware") :: Row(4, 3, "hr") :: Nil)
+        checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 2)
 
         // verify the view reflects the changes in the table
         checkAnswer(sql("SELECT * FROM temp"), Nil)
@@ -598,6 +710,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, 200) :: Nil)
+    checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 0)
   }
 
   test("delete with subquery cannot be converted into delete with filters") {
@@ -617,6 +730,7 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, 200) :: Row(3, 3, 100) :: Nil)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
     }
   }
 

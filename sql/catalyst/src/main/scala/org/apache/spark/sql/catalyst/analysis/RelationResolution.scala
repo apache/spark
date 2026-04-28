@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
+  CatalogTable,
   CatalogTableType,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
@@ -36,9 +37,14 @@ import org.apache.spark.sql.connector.catalog.{
   ChangelogInfo,
   Identifier,
   LookupCatalog,
+  MetadataOnlyTable,
+  RelationCatalog,
   Table,
+  TableCatalog,
   V1Table,
-  V2TableWithV1Fallback
+  V2TableWithV1Fallback,
+  ViewCatalog,
+  ViewInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
@@ -227,11 +233,60 @@ class RelationResolution(
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
             val finalOptions = u.clearWritePrivileges.options
-            val table = CatalogV2Util.loadTable(
-              catalog,
-              ident,
-              finalTimeTravelSpec,
-              Option(writePrivileges))
+            // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
+            // `loadRelation` answers both "is there a table?" and "is there a view?" in one
+            // call. Time-travel and write privileges apply to tables only, so for those the
+            // lookup falls through to the table-only `loadTable` path below; views are not
+            // reachable via the v2 fallback in those cases.
+            //
+            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
+            // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
+            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
+            val tableOrView: Option[Table] = catalog match {
+              case mc: RelationCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+                try {
+                  Some(mc.loadRelation(ident))
+                } catch {
+                  case _: NoSuchTableException => None
+                }
+              case _ =>
+                val tableSide: Option[Table] = if (
+                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+                ) {
+                  CatalogV2Util.loadTable(
+                    catalog,
+                    ident,
+                    finalTimeTravelSpec,
+                    Option(writePrivileges))
+                } else {
+                  None
+                }
+                // Fallback to ViewCatalog for catalogs that host views but where loadTable
+                // returned None (or was skipped because there's no TableCatalog mixin).
+                // Time-travel / write privileges only apply to tables, not views, so the
+                // fallback only fires when both are absent.
+                tableSide.orElse {
+                  if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
+                    catalog match {
+                      case vc: ViewCatalog =>
+                        try {
+                          Some(new MetadataOnlyTable(vc.loadView(ident), ident.toString))
+                        } catch {
+                          case _: NoSuchViewException => None
+                        }
+                      case _ => None
+                    }
+                  } else {
+                    None
+                  }
+                }
+            }
+            // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
+            // we don't share-cache views.
+            val table: Option[Table] = tableOrView.filter {
+              case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
+              case _ => true
+            }
 
             val sharedRelationCacheMatch = for {
               t <- table
@@ -249,7 +304,7 @@ class RelationResolution(
               val loaded = createRelation(
                 catalog,
                 ident,
-                table,
+                tableOrView,
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)
@@ -314,6 +369,22 @@ class RelationResolution(
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean,
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
+      if (isStreaming) {
+        if (v1Table.tableType == CatalogTableType.VIEW) {
+          throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+            ident.quoted
+          )
+        }
+        SubqueryAlias(
+          v1Table.fullIdent,
+          UnresolvedCatalogRelation(v1Table, options, isStreaming = true)
+        )
+      } else {
+        v1SessionCatalog.getRelation(v1Table, options)
+      }
+    }
+
     table.map {
       // To utilize this code path to execute V1 commands, e.g. INSERT,
       // either it must be session catalog, or tracksPartitionsInCatalog
@@ -324,19 +395,13 @@ class RelationResolution(
       case v1Table: V1Table
           if CatalogV2Util.isSessionCatalog(catalog)
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
-        if (isStreaming) {
-          if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-            throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-              ident.quoted
-            )
-          }
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
-          )
-        } else {
-          v1SessionCatalog.getRelation(v1Table.v1Table, options)
-        }
+        createDataSourceV1Scan(v1Table.v1Table)
+
+      // MetadataOnlyTable is a sentinel meaning "interpret via v1", so unlike the V1Table
+      // case above we apply no session-catalog / tracksPartitionsInCatalog guard -- any catalog
+      // returning MetadataOnlyTable has opted into v1 read semantics.
+      case t: MetadataOnlyTable =>
+        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
       case table =>
         if (isStreaming) {

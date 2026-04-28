@@ -24,13 +24,12 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType}
 
-class BatchEvalPythonExecSuite extends SparkPlanTest
-  with SharedSparkSession
+class BatchEvalPythonExecSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder

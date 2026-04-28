@@ -147,7 +147,8 @@ class CogroupedMapInArrowTestsMixin:
                 with self.quiet():
                     with self.assertRaisesRegex(
                         PythonException,
-                        f"Columns do not match in their data type: {expected}",
+                        "Column types of the returned data do not match specified schema. "
+                        f"Mismatch: {expected}",
                     ):
                         self.cogrouped.applyInArrow(
                             lambda left, right: left, schema=schema
@@ -171,7 +172,8 @@ class CogroupedMapInArrowTestsMixin:
                     with self.quiet():
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             self.cogrouped.applyInArrow(
                                 lambda left, right: left, schema=schema

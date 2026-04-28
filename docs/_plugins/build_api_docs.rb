@@ -133,7 +133,101 @@ def build_spark_scala_and_java_docs_if_necessary
 
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
-  system(command) || raise("Unidoc generation failed")
+  # Tee sbt output to a log file so we can diagnose failures. The most common
+  # unidoc failure is a javadoc crash mid-stream while generating HTML for a
+  # specific class, buried under ~100 benign errors on genjavadoc-generated
+  # Java stubs (e.g. target/java/org/apache/spark/ErrorInfo.java). Without the
+  # diagnostic below, the real culprit -- the source whose doc tripped javadoc
+  # -- is effectively invisible in the CI log.
+  log_file = File.join(SPARK_PROJECT_ROOT, "target", "unidoc-build.log")
+  mkdir_p(File.dirname(log_file))
+  success = stream_and_capture(command, log_file)
+  unless success
+    diagnose_unidoc_failure(log_file)
+    raise("Unidoc generation failed")
+  end
+end
+
+# Runs `command`, streaming every line to both stdout and `log_file`. Returns
+# true iff the command exited 0. Ruby-only; no shell pipefail reliance.
+def stream_and_capture(command, log_file)
+  File.open(log_file, 'w') do |f|
+    IO.popen("#{command} 2>&1", 'r') do |pipe|
+      pipe.each_line do |line|
+        $stdout.write(line)
+        $stdout.flush
+        f.write(line)
+      end
+    end
+  end
+  $?.success?
+end
+
+# Scans the captured unidoc log and prints a pointer to the most likely
+# culprit source file. The heuristic: when javadoc dies mid-HTML-generation,
+# the last "Generating .../X.html" line before "javadoc exited with exit code"
+# names the class that tripped it. Prints nothing actionable if the failure
+# mode doesn't match (e.g. a scaladoc error), in which case the full log above
+# already shows what's wrong.
+def diagnose_unidoc_failure(log_file)
+  return unless File.exist?(log_file)
+  begin
+    lines = File.readlines(log_file)
+
+    javadoc_exit_idx = lines.rindex { |l| l.include?("javadoc exited with exit code") }
+    last_generating = nil
+    if javadoc_exit_idx
+      # Strip ANSI color codes so the regex matches sbt-coloured output too.
+      ansi = /\e\[[0-9;]*[A-Za-z]/
+      lines[0...javadoc_exit_idx].reverse_each do |line|
+        if line.gsub(ansi, '') =~ %r{Generating .+/javaunidoc/(\S+?\.html)\.\.\.}
+          last_generating = $1
+          break
+        end
+      end
+    end
+
+    banner = "=" * 78
+    $stderr.puts ""
+    $stderr.puts banner
+    $stderr.puts "Unidoc failed -- diagnostic summary"
+    $stderr.puts banner
+    if last_generating
+      class_path = last_generating.sub(/\.html$/, '')
+      class_name = class_path.tr('/', '.')
+      $stderr.puts ""
+      $stderr.puts "  Javadoc crashed while generating: #{last_generating}"
+      $stderr.puts "  Likely culprit: doc comment in #{class_name}"
+      $stderr.puts ""
+      $stderr.puts "  Javadoc can hard-exit (not just warn) on specific scaladoc"
+      $stderr.puts "  patterns once they have been passed through genjavadoc --"
+      $stderr.puts "  wiki-style `[[Class]]` / `[[method]]` links or inline-backticked"
+      $stderr.puts "  code refs in the Scala source for the class above are common"
+      $stderr.puts "  triggers. Start by auditing any recent doc-string changes in"
+      $stderr.puts "  that source file."
+      $stderr.puts ""
+      $stderr.puts "  NOTE: the '[error]' lines above on files under"
+      $stderr.puts "  target/java/... are benign genjavadoc stubs -- every PR"
+      $stderr.puts "  emits them and they do not cause the exit. Ignore them."
+    elsif javadoc_exit_idx
+      $stderr.puts ""
+      $stderr.puts "  Javadoc exited but no class HTML generation was in progress;"
+      $stderr.puts "  the crash predates HTML output -- likely a CLI / classpath /"
+      $stderr.puts "  setup issue. See the full sbt output above."
+    else
+      $stderr.puts ""
+      $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
+      $stderr.puts "  the log; the failure is likely outside the javaunidoc step"
+      $stderr.puts "  (scaladoc / sbt / build env). See the full sbt output above."
+    end
+    $stderr.puts banner
+    $stderr.puts ""
+  rescue => e
+    # Never let the diagnostic helper itself obscure the underlying unidoc
+    # failure: if anything here goes wrong (e.g. encoding error reading the
+    # log), report it briefly and let the caller raise the real error.
+    $stderr.puts "(diagnostic helper failed: #{e.class}: #{e.message})"
+  end
 end
 
 def build_scala_and_java_docs

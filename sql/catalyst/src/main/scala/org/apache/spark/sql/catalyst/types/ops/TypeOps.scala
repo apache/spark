@@ -19,9 +19,13 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import javax.annotation.Nullable
 
+import org.apache.arrow.vector.ValueVector
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableValue}
+import org.apache.spark.sql.catalyst.WalkedTypePath
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
+import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimeType}
 
@@ -29,14 +33,9 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * Server-side (catalyst) type operations for the Types Framework.
  *
  * This trait consolidates all server-side operations that a data type must implement to function in
- * the Spark SQL engine. All methods are mandatory because without any of them the type would fail
- * at runtime - physical type mapping is needed for storage, literals for the optimizer, and
- * external type conversion for user-facing operations like collect() and UDFs.
- *
- * This single-interface design was chosen over separate PhyTypeOps/LiteralTypeOps/ExternalTypeOps
- * traits to make it clear what a new type must implement. There is one mandatory interface with
- * everything required. Optional capabilities (e.g., proto serialization, client integration) are
- * defined as separate traits that can be mixed in incrementally as a type's support expands.
+ * the Spark SQL engine. Mandatory methods (physical type, literals, external conversion) must be
+ * implemented by every type. Optional methods (serialization, Arrow writer) return Option and
+ * default to None - types implement them as they expand their integration coverage.
  *
  * USAGE - integration points use TypeOps(dt) which returns Option[TypeOps]:
  * {{{
@@ -181,6 +180,28 @@ trait TypeOps extends Serializable {
   final def toScala(row: InternalRow, column: Int): Any = {
     if (row.isNullAt(column)) null else toScalaImpl(row, column)
   }
+
+  // ==================== Serialization (optional) ====================
+
+  /** Creates a serializer expression (external -> internal). */
+  def createSerializer(input: Expression): Option[Expression] = None
+
+  /**
+   * Creates a deserializer expression (internal -> external).
+   * Most types override this simple version.
+   */
+  def createDeserializer(path: Expression): Option[Expression] = None
+
+  /** Creates a deserializer with full context. Default delegates to the simple version. */
+  def createDeserializer(
+      path: Expression,
+      walkedTypePath: WalkedTypePath,
+      isTopLevel: Boolean): Option[Expression] = createDeserializer(path)
+
+  // ==================== Arrow Writer (optional) ====================
+
+  /** Creates an ArrowFieldWriter for this type. */
+  def createArrowFieldWriter(vector: ValueVector): Option[ArrowFieldWriter] = None
 }
 
 /**

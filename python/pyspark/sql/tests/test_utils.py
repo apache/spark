@@ -1084,6 +1084,76 @@ class UtilsTestsMixin:
             messageParameters={"error_msg": error_msg},
         )
 
+    def test_different_row_count_middle_missing_no_cascading_diff(self):
+        # SPARK-54090: When checkRowOrder=False and expected is missing a row in
+        # the middle of the sorted order, only the truly missing/extra row should
+        # be reported -- not every row after the first mismatch.
+        actual = [Row(id="1"), Row(id="2"), Row(id="3"), Row(id="4"), Row(id="5")]
+        expected = [Row(id="1"), Row(id="2"), Row(id="4"), Row(id="5")]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected)
+
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # Only Row(id='3') is extra in actual: 1 / max(5, 4) = 20%
+        self.assertIn("20.00000 %", error_msg)
+
+    def test_different_row_count_multiple_missing(self):
+        # SPARK-54090: Multiple rows missing from expected should be counted
+        # individually, not cascade across every subsequent row.
+        actual = [Row(v=i) for i in range(1, 7)]
+        expected = [Row(v=i) for i in (1, 3, 5)]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected)
+
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # 3 extras (2, 4, 6) in actual; max(6, 3) = 6 -> 50%
+        self.assertIn("50.00000 %", error_msg)
+
+    def test_different_row_count_includeDiffRows(self):
+        # SPARK-54090: includeDiffRows should contain only truly differing rows.
+        actual = [Row(id="1"), Row(id="2"), Row(id="3"), Row(id="4"), Row(id="5")]
+        expected = [Row(id="1"), Row(id="2"), Row(id="4"), Row(id="5")]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected, includeDiffRows=True)
+
+        # Only one actual row (id='3') has no match in expected.
+        self.assertEqual(pe.exception.data, [(Row(id="3"), None)])
+
+    def test_different_row_count_mixed_extra_and_missing(self):
+        # SPARK-54090: both extras in actual and missing in actual must be
+        # reported without cascading.
+        actual = [Row(v="A"), Row(v="B"), Row(v="D"), Row(v="X")]
+        expected = [Row(v="A"), Row(v="B"), Row(v="C"), Row(v="D"), Row(v="E")]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected, includeDiffRows=True)
+
+        # X is extra in actual; C and E are missing from actual.  Merge-walk
+        # visits them in sorted order: C missing, E missing, X extra.
+        self.assertEqual(
+            pe.exception.data,
+            [(None, Row(v="C")), (None, Row(v="E")), (Row(v="X"), None)],
+        )
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # 3 total diffs / max(4, 5) = 60%
+        self.assertIn("60.00000 %", error_msg)
+
+    def test_different_row_count_extras_at_end(self):
+        # Extras only at end -- both zip_longest and merge-walk should agree.
+        actual = [Row(v=1), Row(v=2), Row(v=3), Row(v=4), Row(v=5)]
+        expected = [Row(v=1), Row(v=2), Row(v=3)]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected, includeDiffRows=True)
+
+        self.assertEqual(pe.exception.data, [(Row(v=4), None), (Row(v=5), None)])
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # 2 extras / max(5, 3) = 40%
+        self.assertIn("40.00000 %", error_msg)
+
     def test_remove_non_word_characters_long(self):
         def remove_non_word_characters(col):
             return F.regexp_replace(col, "[^\\w\\s]+", "")

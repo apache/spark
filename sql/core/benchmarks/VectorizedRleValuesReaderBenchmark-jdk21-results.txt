@@ -7,15 +7,15 @@ AMD EPYC 7763 64-Core Processor
 RLE readBooleans decode:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
 cold reader, trueRatio=0.0                            0              0           0      25171.1           0.0       1.0X
-reused reader, trueRatio=0.0                          0              0           0      25177.7           0.0       1.0X
-cold reader, trueRatio=0.1                            1              1           0        993.9           1.0       0.0X
-reused reader, trueRatio=0.1                          1              1           0        754.0           1.3       0.0X
-cold reader, trueRatio=0.5                            1              1           0       1103.8           0.9       0.0X
-reused reader, trueRatio=0.5                          1              1           0        833.4           1.2       0.0X
-cold reader, trueRatio=0.9                            1              1           0        992.8           1.0       0.0X
-reused reader, trueRatio=0.9                          1              1           0        752.9           1.3       0.0X
-cold reader, trueRatio=1.0                            0              0           0       4201.3           0.2       0.2X
-reused reader, trueRatio=1.0                          0              0           0      25177.1           0.0       1.0X
+reused reader, trueRatio=0.0                          0              0           0      25171.1           0.0       1.0X
+cold reader, trueRatio=0.1                            1              1           0        755.2           1.3       0.0X
+reused reader, trueRatio=0.1                          1              1           0        754.1           1.3       0.0X
+cold reader, trueRatio=0.5                            1              1           0        835.6           1.2       0.0X
+reused reader, trueRatio=0.5                          1              1           0        833.3           1.2       0.0X
+cold reader, trueRatio=0.9                            1              1           0        753.3           1.3       0.0X
+reused reader, trueRatio=0.9                          1              1           0        753.6           1.3       0.0X
+cold reader, trueRatio=1.0                            0              0           0      25165.0           0.0       1.0X
+reused reader, trueRatio=1.0                          0              0           0      25183.2           0.0       1.0X
 
 
 ================================================================================================
@@ -26,18 +26,18 @@ OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 7763 64-Core Processor
 RLE readIntegers dictionary-id decode:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PACKED cold, bitWidth=4                               2              2           0        474.9           2.1       1.0X
-PACKED reused, bitWidth=4                             2              2           0        477.3           2.1       1.0X
-RLE, bitWidth=4                                       0              0           0       4515.4           0.2       9.5X
-PACKED cold, bitWidth=8                               2              2           0        510.1           2.0       1.1X
-PACKED reused, bitWidth=8                             2              2           0        500.3           2.0       1.1X
-RLE, bitWidth=8                                       0              0           0       4516.0           0.2       9.5X
-PACKED cold, bitWidth=12                              3              3           0        415.7           2.4       0.9X
-PACKED reused, bitWidth=12                            3              3           0        415.9           2.4       0.9X
-RLE, bitWidth=12                                      0              0           0       4515.6           0.2       9.5X
-PACKED cold, bitWidth=20                              3              3           0        352.4           2.8       0.7X
-PACKED reused, bitWidth=20                            3              3           0        351.7           2.8       0.7X
-RLE, bitWidth=20                                      0              0           0       4514.8           0.2       9.5X
+PACKED cold, bitWidth=4                               2              2           0        478.0           2.1       1.0X
+PACKED reused, bitWidth=4                             2              2           0        475.7           2.1       1.0X
+RLE, bitWidth=4                                       0              0           0       4508.2           0.2       9.4X
+PACKED cold, bitWidth=8                               2              2           0        518.0           1.9       1.1X
+PACKED reused, bitWidth=8                             2              2           0        515.7           1.9       1.1X
+RLE, bitWidth=8                                       0              0           0       4508.9           0.2       9.4X
+PACKED cold, bitWidth=12                              8              8           0        136.1           7.3       0.3X
+PACKED reused, bitWidth=12                            8              8           0        136.1           7.3       0.3X
+RLE, bitWidth=12                                      0              0           0       4503.7           0.2       9.4X
+PACKED cold, bitWidth=20                              3              3           0        353.3           2.8       0.7X
+PACKED reused, bitWidth=20                            3              3           0        352.1           2.8       0.7X
+RLE, bitWidth=20                                      0              0           0       4508.9           0.2       9.4X
 
 
 ================================================================================================
@@ -48,16 +48,16 @@ OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 7763 64-Core Processor
 Nullable batch with def-levels:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-nullRatio=0.0, n/a                                    0              0           0       6820.6           0.1       1.0X
-nullRatio=0.1, random                                11             11           0         94.0          10.6       0.0X
-nullRatio=0.1, clustered                             10             10           0        105.0           9.5       0.0X
-nullRatio=0.3, random                                13             13           0         79.0          12.7       0.0X
-nullRatio=0.3, clustered                              9             10           0        110.9           9.0       0.0X
-nullRatio=0.5, random                                14             14           0         74.0          13.5       0.0X
-nullRatio=0.5, clustered                              9              9           0        118.5           8.4       0.0X
-nullRatio=0.9, random                                 9              9           0        119.3           8.4       0.0X
-nullRatio=0.9, clustered                              7              8           0        140.4           7.1       0.0X
-nullRatio=1.0, random                                 0              0           0       5054.2           0.2       0.7X
+nullRatio=0.0, n/a                                    0              0           0       6502.7           0.2       1.0X
+nullRatio=0.1, random                                 8              9           0        123.7           8.1       0.0X
+nullRatio=0.1, clustered                              6              6           0        169.7           5.9       0.0X
+nullRatio=0.3, random                                12             12           0         87.3          11.5       0.0X
+nullRatio=0.3, clustered                              6              6           0        168.0           6.0       0.0X
+nullRatio=0.5, random                                13             13           0         79.8          12.5       0.0X
+nullRatio=0.5, clustered                              6              6           0        171.7           5.8       0.0X
+nullRatio=0.9, random                                 8              8           0        136.0           7.4       0.0X
+nullRatio=0.9, clustered                              6              6           0        181.6           5.5       0.0X
+nullRatio=1.0, random                                 0              0           0       5072.8           0.2       0.8X
 
 
 ================================================================================================
@@ -68,15 +68,15 @@ OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.17.0-1010-azure
 AMD EPYC 7763 64-Core Processor
 Nullable batch without def-levels:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-nullRatio=0.0, n/a                                    0              0           0      12353.8           0.1       1.0X
-nullRatio=0.1, random                                10             10           0        100.7           9.9       0.0X
-nullRatio=0.1, clustered                             10             10           0        107.0           9.3       0.0X
-nullRatio=0.3, random                                12             12           0         88.9          11.3       0.0X
-nullRatio=0.3, clustered                              9              9           0        112.7           8.9       0.0X
-nullRatio=0.5, random                                13             13           0         82.7          12.1       0.0X
-nullRatio=0.5, clustered                              9              9           0        118.8           8.4       0.0X
-nullRatio=0.9, random                                 9              9           0        123.2           8.1       0.0X
-nullRatio=0.9, clustered                              8              8           0        134.0           7.5       0.0X
-nullRatio=1.0, random                                 0              0           0       6191.1           0.2       0.5X
+nullRatio=0.0, n/a                                    0              0           0      11512.6           0.1       1.0X
+nullRatio=0.1, random                                 7              7           0        144.6           6.9       0.0X
+nullRatio=0.1, clustered                              5              5           0        197.2           5.1       0.0X
+nullRatio=0.3, random                                11             11           0         99.6          10.0       0.0X
+nullRatio=0.3, clustered                              6              6           0        189.8           5.3       0.0X
+nullRatio=0.5, random                                12             12           0         89.0          11.2       0.0X
+nullRatio=0.5, clustered                              5              5           0        194.7           5.1       0.0X
+nullRatio=0.9, random                                 7              7           0        151.9           6.6       0.0X
+nullRatio=0.9, clustered                              5              5           0        200.5           5.0       0.0X
+nullRatio=1.0, random                                 0              0           0      11945.0           0.1       1.0X
 
 

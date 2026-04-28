@@ -18,7 +18,6 @@ package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -31,7 +30,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class DistributionAndOrderingSuiteBase
-    extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
+    extends SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override def beforeAll(): Unit = {

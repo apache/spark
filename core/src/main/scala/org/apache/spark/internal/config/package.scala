@@ -1950,6 +1950,21 @@ package object config {
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
+  private[spark] val UNSAFE_SORTER_SPILL_MERGE_FACTOR =
+    ConfigBuilder("spark.unsafe.sorter.spill.merge.factor")
+      .doc("Maximum number of spill files to merge simultaneously in UnsafeExternalSorter. " +
+        "When the number of spill files exceeds this value, a multi-round merge is performed " +
+        "to limit the number of concurrently open file readers and avoid OOM during sort-merge. " +
+        "A smaller value uses less memory but incurs more intermediate disk I/O. " +
+        "Set to -1 to disable bounded merging (legacy behavior).")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .internal()
+      .version("4.2.0")
+      .intConf
+      .checkValue(v => v == -1 || v >= 2,
+        "The merge factor must be -1 (disabled) or at least 2.")
+      .createWithDefault(-1)
+
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
   private[spark] val PLUGINS =
