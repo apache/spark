@@ -312,24 +312,24 @@ private case class AccumulatorPartialVal[PARTIAL](
  * discarding any values coming from earlier attempts that have been recomputed.
  * If the accumulator is used by multiple RDDs, the last attempt value is tracked separately for
  * each, and can be retrieved for each or all of them separately, see lastAttemptValueForX methods.
- * If the accumulator is used directly on the Spark Driver using [[AccumulatorV2.add]],
+ * If the accumulator is used directly on the Spark Driver using [[AccumulatorV2#add]],
  * that value is considered the last attempt value.
  * If the accumulator was both used in Tasks and updated directly on the driver, it can't determine
  * what should be considered the last attempt, and lastAttemptValueForX methods will return None.
  *
  * Contract for driver-only updates:
- * A driver-side value (set via [[AccumulatorV2.add]] on the driver, outside any Task) is only
+ * A driver-side value (set via [[AccumulatorV2#add]] on the driver, outside any Task) is only
  * returned by methods that do not narrow by RDD, namely [[lastAttemptValueForAllRDDs]] and
  * [[lastAttemptValueForHighestRDDId]]. Methods that narrow to specific RDDs or RDD scopes
  * ([[lastAttemptValueForRDDId]], [[lastAttemptValueForRDDIds]], [[lastAttemptValueForRDDScopes]])
  * return the zero value when a driver-only value is present, because a driver-side update cannot
  * be attributed to any particular RDD or scope.
  *
- * [[LastAttemptAccumulator]] is not reset by the [[AccumulatorV2.reset]] method implementation,
- * and its state is not copied by the [[AccumulatorV2.copy]] method implementation, and it should
+ * [[LastAttemptAccumulator]] is not reset by the [[AccumulatorV2#reset]] method implementation,
+ * and its state is not copied by the [[AccumulatorV2#copy]] method implementation, and it should
  * not be serialized to the Executors. The internal state should only be initialized by the
  * [[initializeLastAttemptAccumulator]] method on the "main" instance of the accumulator, that was
- * created and registered with [[AccumulatorContext]] with AccumulatorV2.register. All the
+ * created and registered with [[AccumulatorContext]] with [[AccumulatorV2#register]]. All the
  * interfaces of [[LastAttemptAccumulator]]: [[mergeLastAttempt]] (used only by DAGScheduler) and
  * lastAttemptValueForX, [[logAccumulatorState]] (used by the using code) should only be invoked on
  * that instance, on the Spark Driver.
@@ -345,7 +345,7 @@ private case class AccumulatorPartialVal[PARTIAL](
  *
  * Implementations must implement [[partialMergeVal]] and [[partialMerge]] methods operating on
  * PARTIAL type. In regular [[AccumulatorV2]] implementations, the [[AccumulatorV2]] object
- * itself holds the intermediate value of the accumulator, and [[AccumulatorV2.merge]] method is
+ * itself holds the intermediate value of the accumulator, and [[AccumulatorV2#merge]] method is
  * used to merge these objects together. [[LastAttemptAccumulator]] needs to keep track of partial
  * values of every partition of every RDD that used the accumulator, and holding a full
  * [[AccumulatorV2]] object for each would have a high overhead. Therefore, an implementation should
@@ -354,7 +354,7 @@ private case class AccumulatorPartialVal[PARTIAL](
  * Implementations must also implement an [[isMergeable]] method that checks if the other
  * [[AccumulatorV2]] is of a compatible type to be merged with this using [[partialMergeVal]]. In
  * regular [[AccumulatorV2]] implementations, this check is normally done inside the
- * [[AccumulatorV2.merge]] method, which is not used here.
+ * [[AccumulatorV2#merge]] method, which is not used here.
  *
  * If an implementation is used to keep user data in the accumulator, it should override
  * [[accumulatorStoresUserData]] to return true, to ensure correct structured logging annotation.
@@ -577,7 +577,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    *
    * Called from a single thread in DAGScheduler, no synchronization needed.
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
-   * was created and registered in [[AccumulatorContext]] by AccumulatorV2.register.
+   * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2#register]].
    */
   private[spark] def mergeLastAttempt(
       other: AccumulatorV2[_, _],
@@ -710,7 +710,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    * Returns the last attempt value of this accumulator, aggregated from a set of RDDs.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
-   * was created and registered in [[AccumulatorContext]] by AccumulatorV2.register.
+   * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2#register]].
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
@@ -738,7 +738,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    * Returns the last attempt value of this accumulator, aggregated from a specific RDD.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
-   * was created and registered in [[AccumulatorContext]] by AccumulatorV2.register.
+   * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2#register]].
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
@@ -761,7 +761,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    * the driver value will be used instead.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
-   * was created and registered in [[AccumulatorContext]] by AccumulatorV2.register.
+   * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2#register]].
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
@@ -787,7 +787,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    * the driver value will be used instead.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
-   * was created and registered in [[AccumulatorContext]] by AccumulatorV2.register.
+   * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2#register]].
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
@@ -815,7 +815,7 @@ trait LastAttemptAccumulator[IN, OUT, PARTIAL] extends Logging {
    * Returns the last attempt value of this accumulator, aggregated from RDDs with given scope ids.
    *
    * Should be used only on the Spark Driver, on the instance of [[LastAttemptAccumulator]] that
-   * was created and registered in [[AccumulatorContext]] by AccumulatorV2.register.
+   * was created and registered in [[AccumulatorContext]] by [[AccumulatorV2#register]].
    *
    * @return None if the last attempt value cannot be established, Some(value) otherwise.
    */
