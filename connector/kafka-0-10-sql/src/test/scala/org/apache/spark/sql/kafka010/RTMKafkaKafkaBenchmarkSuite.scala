@@ -35,6 +35,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.test.TestSparkSession
+import org.apache.spark.tags.ExcludedTest
 
 /**
  * Stateless Kafka-to-Kafka RTM benchmark. Reads from an input Kafka topic, applies a
@@ -42,8 +43,12 @@ import org.apache.spark.sql.test.TestSparkSession
  * [[RealTimeTrigger]]. After the run it reports e2e latency percentiles.
  *
  * This benchmark intentionally runs a real local-cluster and a live Kafka broker, so it
- * is slow. Run it explicitly when measuring RTM throughput and latency for the stateless path.
+ * is slow and is excluded from the default test run. To run it explicitly:
+ *
+ *   build/sbt -Dtest.default.exclude.tags="" \
+ *     "sql-kafka-0-10/testOnly *RTMKafkaKafkaBenchmarkSuite"
  */
+@ExcludedTest
 class RTMKafkaKafkaBenchmarkSuite
   extends KafkaSourceTest
     with ThreadAudit
@@ -58,7 +63,7 @@ class RTMKafkaKafkaBenchmarkSuite
     ))
 
   test("RTM stateless kafka-to-kafka benchmark") {
-    benchmark(15.seconds.toMillis, 4)
+    benchmark(60.seconds.toMillis, 4)
   }
 
   def benchmark(longRunningBatchDurationMs: Long, numBatches: Long): Unit = {
@@ -106,7 +111,7 @@ class RTMKafkaKafkaBenchmarkSuite
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", outputTopic)
-      .option("checkpointLocation", Files.createTempDirectory("some-prefix").toFile.getName)
+      .option("checkpointLocation", Files.createTempDirectory("rtm-benchmark").toString)
       .option("kafka.buffer.memory", "67108864") // 64MB
       .option("kafka.compression.type", "snappy")
       .outputMode("update")
@@ -120,8 +125,7 @@ class RTMKafkaKafkaBenchmarkSuite
     dataGenThread.start()
 
     val latch = new CountDownLatch(1)
-
-    spark.streams.addListener(new StreamingQueryListener {
+    val listener = new StreamingQueryListener {
       override def onQueryStarted(
           event: StreamingQueryListener.QueryStartedEvent): Unit = {}
 
@@ -133,12 +137,18 @@ class RTMKafkaKafkaBenchmarkSuite
           latch.countDown()
         }
       }
-    })
+    }
+    spark.streams.addListener(listener)
 
     val timeoutMs = numBatches * longRunningBatchDurationMs * 2 + 60 * 1000
-    val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
-    query.stop()
-    dataGenThread.interrupt()
+    val completed = try {
+      latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    } finally {
+      spark.streams.removeListener(listener)
+      query.stop()
+      dataGenThread.interrupt()
+      dataGenThread.join(30 * 1000)
+    }
     if (!completed) {
       throw new RuntimeException(
         s"Benchmark timed out waiting for $numBatches batches to complete after ${timeoutMs}ms.")
