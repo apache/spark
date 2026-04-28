@@ -301,6 +301,28 @@ trait QueryTestBase
   }
 
   /**
+   * Temporarily sets SparkContext configuration values for testing.
+   * This is for configs that must be set on the SparkContext (not
+   * SQLConf), such as testing flags.
+   */
+  protected def withSparkContextConf[T](
+      pairs: (String, String)*)(f: => T): T = {
+    val sc = spark.sparkContext
+    val oldValues = pairs.map { case (k, _) =>
+      k -> sc.conf.getOption(k)
+    }
+    try {
+      pairs.foreach { case (k, v) => sc.conf.set(k, v) }
+      f
+    } finally {
+      oldValues.foreach {
+        case (k, Some(v)) => sc.conf.set(k, v)
+        case (k, None) => sc.conf.remove(k)
+      }
+    }
+  }
+
+  /**
    * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
    */
   protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {

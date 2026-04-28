@@ -423,7 +423,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
-      AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
+      AppendDataExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -438,10 +438,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case OverwriteByExpression(
         r: DataSourceV2Relation, _, query, _, _, _, Some(write), _) =>
-      OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
+      OverwriteByExpressionExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, _, Some(write)) =>
-      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
+      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
     case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>
       DeleteFromTableExec(r.table.asDeletable, filters.toArray, refreshCache(r)) :: Nil
@@ -487,7 +487,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         refreshCache(r), // use the original relation to refresh the cache
         projections,
         write,
-        rd.operation.command) :: Nil
+        rd.operation.command,
+        r.name) :: Nil
 
     case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
         Some(write)) =>
@@ -496,7 +497,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         refreshCache(r), // use the original relation to refresh the cache
         projections,
         write,
-        wd.operation.command) :: Nil
+        wd.operation.command,
+        r.name) :: Nil
 
     case MergeRows(isSourceRowPresent, isTargetRowPresent, matchedInstructions,
         notMatchedInstructions, notMatchedBySourceInstructions, checkCardinality, output, child) =>

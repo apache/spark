@@ -222,6 +222,38 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
   }
 
+  test("update with literal false condition") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "hardware" }
+        |{ "pk": 3, "salary": null, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE false")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 100, "hr") :: Row(2, 200, "hardware") :: Row(3, null, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+  }
+
+  test("update with literal true condition") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "hardware" }
+        |{ "pk": 3, "salary": null, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE true")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, -1, "hardware") :: Row(3, -1, "hr") :: Nil)
+
+    checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0)
+  }
+
   test("update without condition") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }

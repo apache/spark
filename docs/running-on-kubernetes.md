@@ -709,6 +709,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>4.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.allocation.recoveryMode.enabled</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    When Spark driver detects an executor termination due to OOM, Spark starts to
+    allocate the recovery-mode executors which accept only a single task per executor JVM.
+    In other words, the recovery-mode executors replace the OOM-terminated executors to
+    survive from the resource-hungry tasks for the remaining tasks and stages.
+    If set to <code>false</code>, Spark will not use the recovery-mode executors.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
   <td><code>(none)</code></td>
   <td>
@@ -1746,6 +1758,36 @@ See the [configuration page](configuration.html) for information on Spark config
     If there is no outlier, it works like TOTAL_DURATION policy.
   </td>
   <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeInterval</code></td>
+  <td><code>0s</code></td>
+  <td>
+    Interval between executor resize operations. To disable, set 0 (default).
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeThreshold</code></td>
+  <td><code>0.9</code></td>
+  <td>
+    The threshold to resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    The factor to resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
 </tr>
 </table>
 

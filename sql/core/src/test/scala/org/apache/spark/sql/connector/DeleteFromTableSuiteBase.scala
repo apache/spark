@@ -179,6 +179,66 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
   }
 
+  test("delete with literal false condition") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE false")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with literal true condition") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE true")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+  }
+
+  test("delete with NULL equality on VOID column") {
+    createAndInitTable("pk INT NOT NULL, v VOID, dep STRING",
+      """{ "pk": 1, "v": null, "dep": "hr" }
+        |{ "pk": 2, "v": null, "dep": "software" }
+        |{ "pk": 3, "v": null, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE v = NULL")
+
+    checkAnswer(
+      sql(s"SELECT pk, dep FROM $tableNameAsString"),
+      Row(1, "hr") :: Row(2, "software") :: Row(3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with NULL condition on non-null column") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE pk = NULL")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
   test("delete with basic filters") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }

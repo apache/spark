@@ -273,7 +273,7 @@ case class EnsureRequirements(
             child match {
               case ShuffleExchangeExec(_, c, so, ps) =>
                 ShuffleExchangeExec(newPartitioning, c, so, ps)
-              case GroupPartitionsExec(c, _, _, _, _) => ShuffleExchangeExec(newPartitioning, c)
+              case gpe: GroupPartitionsExec => ShuffleExchangeExec(newPartitioning, gpe.child)
               case _ => ShuffleExchangeExec(newPartitioning, child)
             }
           }
@@ -286,12 +286,48 @@ case class EnsureRequirements(
       if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
       } else {
-        SortExec(requiredOrdering, global = false, child = child)
+        // Before adding a SortExec, check whether a GroupPartitionsExec anywhere in the child
+        // subtree can self-satisfy via sorted merge. tryEnableSortedMerge generates all alternative
+        // plans where one or more GPEs have sorted merge enabled; we take the first one whose
+        // outputOrdering satisfies the requirement.
+        tryEnableSortedMerge(child)
+          .find(newChild => SortOrder.orderingSatisfies(newChild.outputOrdering, requiredOrdering))
+          .getOrElse(SortExec(requiredOrdering, global = false, child = child))
       }
     }
 
     children
   }
+
+  private def hasKeyedPartitioning(p: Partitioning): Boolean = p match {
+    case e: Expression => e.exists(_.isInstanceOf[KeyedPartitioning])
+    case _ => false
+  }
+
+  // Generates all alternative plans in which one or more GroupPartitionsExec nodes in the subtree
+  // have sorted-merge enabled (every possible combination). Returns a LazyList so the caller can
+  // stop evaluating once a satisfying alternative is found.
+  //
+  // Pruning: traversal stops at SortExec (which reorders data, making sorted merge below it
+  // pointless) and at any node whose outputPartitioning no longer carries a KeyedPartitioning.
+  // This is a good heuristic, though not strictly equivalent to "ordering no longer propagates":
+  // partition-key expressions are constant within each coalesced partition and therefore usually
+  // prefix outputOrdering. When a node prunes the KeyedPartitioning (e.g. a Project that drops
+  // partition keys), it also prunes that ordering prefix. Since Spark has no notion of constant
+  // expressions in SortOrder, dropping a prefix invalidates the rest of the ordering too -- so in
+  // practice the two are always pruned together.
+  //
+  // At each GPE the rule emits [original, sorted-merge-enabled] alternatives (or just [original]
+  // when sorted merge cannot be enabled). multiTransformDownWithPruning then builds the Cartesian
+  // product across all GPEs in the subtree, giving every combination.
+  private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] =
+    plan.multiTransformDownWithPruning(
+      p => !p.isInstanceOf[SortExec] &&
+        hasKeyedPartitioning(p.asInstanceOf[SparkPlan].outputPartitioning)) {
+      case gpe: GroupPartitionsExec =>
+        // Include the original so that peer GPEs are still independently considered.
+        gpe +: gpe.tryEnableSortedMerge().toSeq
+    }
 
   private def reorder(
       leftKeys: IndexedSeq[Expression],
