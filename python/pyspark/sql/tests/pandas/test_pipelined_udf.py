@@ -146,9 +146,11 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             return x + 1
 
         # 2 rows across 4 partitions means some partitions are empty
-        result = self.spark.range(2, numPartitions=4).select(
-            col("id"), add_one(col("id")).alias("result")
-        ).collect()
+        result = (
+            self.spark.range(2, numPartitions=4)
+            .select(col("id"), add_one(col("id")).alias("result"))
+            .collect()
+        )
         self.assertEqual(len(result), 2)
         for row in result:
             self.assertEqual(row.result, row.id + 1)
@@ -164,9 +166,9 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def double_it(x: pd.Series) -> pd.Series:
             return x * 2
 
-        result = self.spark.range(50).select(
-            double_it(add_one(col("id"))).alias("result")
-        ).collect()
+        result = (
+            self.spark.range(50).select(double_it(add_one(col("id"))).alias("result")).collect()
+        )
         for row in result:
             self.assertEqual(row.result, (row.result // 2) * 2)  # even number
 
@@ -179,7 +181,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
 
         df = self.spark.createDataFrame(
             [(1,), (None,), (3,), (None,), (5,)],
-            schema=StructType([StructField("v", LongType(), True)])
+            schema=StructType([StructField("v", LongType(), True)]),
         )
         result = df.select(col("v"), add_one(col("v")).alias("result")).collect()
         expected = [(1, 2), (None, None), (3, 4), (None, None), (5, 6)]

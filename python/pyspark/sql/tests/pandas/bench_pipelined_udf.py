@@ -117,13 +117,12 @@ def run_subprocess(pipelined, udf_code, make_df_code, args):
     env["PYTHONPATH"] = f"{pyspark_path}:{py4j_zip}:" + env.get("PYTHONPATH", "")
 
     result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True, text=True, env=env, timeout=600
+        [sys.executable, "-c", script], capture_output=True, text=True, env=env, timeout=600
     )
 
     for line in result.stdout.splitlines():
         if line.startswith("BENCH_RESULT:"):
-            return json.loads(line[len("BENCH_RESULT:"):])
+            return json.loads(line[len("BENCH_RESULT:") :])
 
     print("  ERROR: no BENCH_RESULT in output")
     print("  STDERR (last 500 chars):", result.stderr[-500:] if result.stderr else "<empty>")
