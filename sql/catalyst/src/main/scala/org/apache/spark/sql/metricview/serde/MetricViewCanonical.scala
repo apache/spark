@@ -94,7 +94,7 @@ private[sql] object Source {
     if (sourceText.isEmpty) {
       throw MetricViewValidationException("Source cannot be empty")
     }
-    Try(CatalystSqlParser.parseTableIdentifier(sourceText)) match {
+    Try(CatalystSqlParser.parseMultipartIdentifier(sourceText)) match {
       case Success(_) => AssetSource(sourceText)
       case Failure(_) =>
         Try(CatalystSqlParser.parseQuery(sourceText)) match {
@@ -167,4 +167,33 @@ private[sql] case class MetricView(
     version: String,
     from: Source,
     where: Option[String] = None,
-    select: Seq[Column])
+    select: Seq[Column]) {
+
+  /**
+   * Returns a set of table properties describing this metric view's source and
+   * filter clauses. Mirrors the property keys used by the canonical metric view
+   * representation on other Spark platforms so consumers of the catalog see a
+   * consistent property layout.
+   */
+  def getProperties: Map[String, String] = {
+    val base = Map(MetricView.PROP_FROM_TYPE -> from.sourceType.toString)
+    val fromProps = from match {
+      case asset: AssetSource =>
+        base + (MetricView.PROP_FROM_NAME -> asset.name)
+      case sql: SQLSource =>
+        base + (MetricView.PROP_FROM_SQL -> MetricView.truncate(sql.sql))
+    }
+    where.fold(fromProps)(w =>
+      fromProps + (MetricView.PROP_WHERE -> MetricView.truncate(w)))
+  }
+}
+
+private[sql] object MetricView {
+  final val PROP_FROM_TYPE = "metric_view.from.type"
+  final val PROP_FROM_NAME = "metric_view.from.name"
+  final val PROP_FROM_SQL = "metric_view.from.sql"
+  final val PROP_WHERE = "metric_view.where"
+
+  private def truncate(value: String): String =
+    value.take(Constants.MAXIMUM_PROPERTY_SIZE)
+}

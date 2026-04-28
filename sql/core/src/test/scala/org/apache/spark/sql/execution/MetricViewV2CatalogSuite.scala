@@ -1,0 +1,462 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution
+
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ViewAlreadyExistsException}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, MetadataOnlyTable, RelationCatalog, Table, TableCatalog, TableDependency, TableSummary, ViewInfo}
+import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.Metadata
+
+/**
+ * Tests that exercise [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]] on a
+ * non-session V2 catalog. Metric views are persisted through the same [[ViewCatalog]] interface
+ * as plain views; the only marker that distinguishes them is `PROP_TABLE_TYPE = METRIC_VIEW`
+ * plus the typed `viewDependencies` field on [[ViewInfo]]. The recording catalog used here is a
+ * minimal [[RelationCatalog]] so the same instance can also host the source table referenced by
+ * the metric view's YAML.
+ */
+class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
+
+  import testImplicits._
+
+  private val testCatalogName = "testcat"
+  private val testNamespace = "ns"
+  private val sourceTableName = "events"
+  private val fullSourceTableName =
+    s"$testCatalogName.$testNamespace.$sourceTableName"
+  private val metricViewName = "mv"
+  private val fullMetricViewName =
+    s"$testCatalogName.$testNamespace.$metricViewName"
+
+  private val metricViewColumns = Seq(
+    Column("region", DimensionExpression("region"), 0),
+    Column("count_sum", MeasureExpression("sum(count)"), 1))
+
+  private val testTableData = Seq(
+    ("region_1", 1, 5.0),
+    ("region_2", 2, 10.0))
+
+  override protected def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(
+      s"spark.sql.catalog.$testCatalogName",
+      classOf[MetricViewRecordingCatalog].getName)
+    // A catalog that does not implement ViewCatalog - used for the negative gate test.
+    spark.conf.set(
+      s"spark.sql.catalog.${MetricViewV2CatalogSuite.noViewCatalogName}",
+      classOf[InMemoryTableCatalog].getName)
+  }
+
+  override protected def afterAll(): Unit = {
+    spark.conf.unset(s"spark.sql.catalog.$testCatalogName")
+    spark.conf.unset(
+      s"spark.sql.catalog.${MetricViewV2CatalogSuite.noViewCatalogName}")
+    super.afterAll()
+  }
+
+  private def withTestCatalogTables(body: => Unit): Unit = {
+    MetricViewRecordingCatalog.reset()
+    testTableData.toDF("region", "count", "price")
+      .createOrReplaceTempView("metric_view_v2_source")
+    try {
+      sql(
+        s"""CREATE TABLE $fullSourceTableName
+           |USING foo AS SELECT * FROM metric_view_v2_source""".stripMargin)
+      body
+    } finally {
+      sql(s"DROP VIEW IF EXISTS $fullMetricViewName")
+      sql(s"DROP TABLE IF EXISTS $fullSourceTableName")
+      spark.catalog.dropTempView("metric_view_v2_source")
+      MetricViewRecordingCatalog.reset()
+    }
+  }
+
+  private def createMetricView(
+      name: String,
+      metricView: MetricView,
+      comment: Option[String] = None): String = {
+    val yaml = MetricViewFactory.toYAML(metricView)
+    val commentClause = comment.map(c => s"\nCOMMENT '$c'").getOrElse("")
+    sql(
+      s"""CREATE VIEW $name
+         |WITH METRICS$commentClause
+         |LANGUAGE YAML
+         |AS
+         |$$$$
+         |$yaml
+         |$$$$""".stripMargin)
+    yaml
+  }
+
+  private def capturedViewInfo(): ViewInfo = {
+    val ident = Identifier.of(Array(testNamespace), metricViewName)
+    val info = MetricViewRecordingCatalog.capturedViews.get(ident)
+    assert(info != null,
+      s"Expected ViewInfo for $ident to be captured by the V2 catalog")
+    info
+  }
+
+  test("V2 catalog receives METRIC_VIEW table type and view text via ViewInfo") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      val yaml = createMetricView(fullMetricViewName, metricView)
+
+      val info = capturedViewInfo()
+      // PROP_TABLE_TYPE is overwritten to METRIC_VIEW after `ViewInfo`'s constructor stamps it
+      // to VIEW; this is the marker `V1Table.toCatalogTable` reads to map the round-tripped row
+      // back to `CatalogTableType.METRIC_VIEW`.
+      assert(info.properties().get(TableCatalog.PROP_TABLE_TYPE)
+        === TableSummary.METRIC_VIEW_TABLE_TYPE)
+      assert(info.queryText() === yaml)
+
+      val deps = info.viewDependencies()
+      assert(deps != null)
+      assert(deps.dependencies().length === 1)
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.tableFullName() === fullSourceTableName)
+    }
+  }
+
+  test("V2 catalog path populates metric_view.* + view context + sql configs on ViewInfo") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = Some("count > 0"),
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView)
+
+      val info = capturedViewInfo()
+      val props = info.properties()
+
+      // metric_view.* descriptive properties (mirrors DBR SingleSourceMetricView).
+      assert(props.get(MetricView.PROP_FROM_TYPE) === "ASSET")
+      assert(props.get(MetricView.PROP_FROM_NAME) === fullSourceTableName)
+      assert(props.get(MetricView.PROP_FROM_SQL) === null)
+      assert(props.get(MetricView.PROP_WHERE) === "count > 0")
+
+      // SQL configs and current catalog/namespace are first-class typed fields on ViewInfo, no
+      // longer encoded into properties for V2 catalogs.
+      assert(info.sqlConfigs().size > 0,
+        s"Expected at least one captured SQL config; got ${info.sqlConfigs()}")
+      assert(info.currentCatalog() ===
+        spark.sessionState.catalogManager.currentCatalog.name())
+      assert(info.currentNamespace().toSeq ===
+        spark.sessionState.catalogManager.currentNamespace.toSeq)
+    }
+  }
+
+  test("DROP VIEW succeeds on a V2 metric view") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView)
+      val ident = Identifier.of(Array(testNamespace), metricViewName)
+
+      assert(MetricViewRecordingCatalog.capturedViews.containsKey(ident))
+
+      sql(s"DROP VIEW $fullMetricViewName")
+      assert(!MetricViewRecordingCatalog.capturedViews.containsKey(ident))
+    }
+  }
+
+  test("DROP VIEW IF EXISTS on a non-existent V2 metric view is a no-op") {
+    withTestCatalogTables {
+      sql(s"DROP VIEW IF EXISTS $testCatalogName.$testNamespace.does_not_exist")
+    }
+  }
+
+  test("V2 catalog path captures SQL source and comment") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        SQLSource(s"SELECT * FROM $fullSourceTableName"),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView, comment = Some("my mv"))
+
+      val info = capturedViewInfo()
+      val props = info.properties()
+      assert(props.get(TableCatalog.PROP_TABLE_TYPE)
+        === TableSummary.METRIC_VIEW_TABLE_TYPE)
+      assert(props.get(MetricView.PROP_FROM_TYPE) === "SQL")
+      assert(props.get(MetricView.PROP_FROM_NAME) === null)
+      assert(props.get(MetricView.PROP_FROM_SQL) ===
+        s"SELECT * FROM $fullSourceTableName")
+      assert(props.get(TableCatalog.PROP_COMMENT) === "my mv")
+
+      val deps = info.viewDependencies()
+      assert(deps != null && deps.dependencies().length === 1)
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.tableFullName() === fullSourceTableName)
+    }
+  }
+
+  test("metric view columns carry metric_view.type / metric_view.expr in column metadata") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView)
+
+      val cols = capturedViewInfo().columns()
+      assert(cols.length === metricViewColumns.length)
+
+      val byName = cols.map(c => c.name() -> c).toMap
+      def metadataOf(name: String): Metadata =
+        Metadata.fromJson(Option(byName(name).metadataInJSON()).getOrElse("{}"))
+
+      val regionMeta = metadataOf("region")
+      assert(regionMeta.getString(Constants.COLUMN_TYPE_PROPERTY_KEY) === "dimension")
+      assert(regionMeta.getString(Constants.COLUMN_EXPR_PROPERTY_KEY) === "region")
+
+      val countMeta = metadataOf("count_sum")
+      assert(countMeta.getString(Constants.COLUMN_TYPE_PROPERTY_KEY) === "measure")
+      assert(countMeta.getString(Constants.COLUMN_EXPR_PROPERTY_KEY) === "sum(count)")
+    }
+  }
+
+  test("user-specified column names with comments preserve metric_view.* metadata") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      val yaml = MetricViewFactory.toYAML(metricView)
+      // Give both columns new names, and a comment on each. Without the `retainMetadata`
+      // fix to `ViewHelper.aliasPlan`, the metric_view.* keys disappear here.
+      sql(
+        s"""CREATE VIEW $fullMetricViewName (reg COMMENT 'region alias', n COMMENT 'count')
+           |WITH METRICS
+           |LANGUAGE YAML
+           |AS
+           |$$$$
+           |$yaml
+           |$$$$""".stripMargin)
+
+      val cols = capturedViewInfo().columns()
+      val byName = cols.map(c => c.name() -> c).toMap
+      assert(byName.keySet === Set("reg", "n"))
+
+      def metadataOf(name: String): Metadata =
+        Metadata.fromJson(Option(byName(name).metadataInJSON()).getOrElse("{}"))
+
+      val regMeta = metadataOf("reg")
+      assert(regMeta.getString(Constants.COLUMN_TYPE_PROPERTY_KEY) === "dimension")
+      assert(regMeta.getString(Constants.COLUMN_EXPR_PROPERTY_KEY) === "region")
+      // `CatalogV2Util.structTypeToV2Columns` peels "comment" off into `Column.comment()`
+      // rather than leaving it inside `metadataInJSON`; assert via the V2 column accessor.
+      assert(byName("reg").comment() === "region alias")
+
+      val nMeta = metadataOf("n")
+      assert(nMeta.getString(Constants.COLUMN_TYPE_PROPERTY_KEY) === "measure")
+      assert(nMeta.getString(Constants.COLUMN_EXPR_PROPERTY_KEY) === "sum(count)")
+      assert(byName("n").comment() === "count")
+    }
+  }
+
+  test("dependency extraction: SQL source JOIN captures both tables") {
+    withTestCatalogTables {
+      val secondSource = s"$testCatalogName.$testNamespace.customers"
+      sql(
+        s"""CREATE TABLE $secondSource (id INT, name STRING)
+           |USING foo""".stripMargin)
+      try {
+        val joinSql =
+          s"SELECT c.name, t.count FROM $fullSourceTableName t " +
+            s"JOIN $secondSource c ON t.count = c.id"
+        val metricView = MetricView(
+          "0.1",
+          SQLSource(joinSql),
+          where = None,
+          select = Seq(
+            Column("name", DimensionExpression("name"), 0),
+            Column("count_sum", MeasureExpression("sum(count)"), 1)))
+        createMetricView(fullMetricViewName, metricView)
+
+        val deps = capturedViewInfo().viewDependencies()
+        assert(deps != null)
+        val depNames =
+          deps.dependencies().map(_.asInstanceOf[TableDependency].tableFullName()).toSet
+        assert(depNames === Set(fullSourceTableName, secondSource),
+          s"Expected dependencies on both source tables, got $depNames")
+      } finally {
+        sql(s"DROP TABLE IF EXISTS $secondSource")
+      }
+    }
+  }
+
+  test("dependency extraction: SQL source subquery deduplicates same-table references") {
+    withTestCatalogTables {
+      val subquerySql =
+        s"SELECT * FROM $fullSourceTableName " +
+          s"WHERE count > (SELECT avg(count) FROM $fullSourceTableName)"
+      val metricView = MetricView(
+        "0.1",
+        SQLSource(subquerySql),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView)
+
+      val deps = capturedViewInfo().viewDependencies()
+      assert(deps != null && deps.dependencies().length === 1,
+        s"Expected 1 deduplicated dependency, got " +
+          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.tableFullName() === fullSourceTableName)
+    }
+  }
+
+  test("dependency extraction: SQL source self-join deduplicates same-table references") {
+    withTestCatalogTables {
+      val selfJoinSql =
+        s"SELECT a.region AS a_region, a.count AS a_count " +
+          s"FROM $fullSourceTableName a JOIN $fullSourceTableName b " +
+          s"ON a.region = b.region"
+      val metricView = MetricView(
+        "0.1",
+        SQLSource(selfJoinSql),
+        where = None,
+        select = Seq(
+          Column("region", DimensionExpression("a_region"), 0),
+          Column("count_sum", MeasureExpression("sum(a_count)"), 1)))
+      createMetricView(fullMetricViewName, metricView)
+
+      val deps = capturedViewInfo().viewDependencies()
+      assert(deps != null && deps.dependencies().length === 1,
+        s"Expected 1 deduplicated dependency for self-join, got " +
+          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.tableFullName() === fullSourceTableName)
+    }
+  }
+
+  test("CREATE VIEW ... WITH METRICS on a non-ViewCatalog catalog fails with " +
+      "MISSING_CATALOG_ABILITY.VIEWS") {
+    val ex = intercept[AnalysisException] {
+      sql(
+        s"""CREATE VIEW ${MetricViewV2CatalogSuite.noViewCatalogName}.default.mv
+           |WITH METRICS
+           |LANGUAGE YAML
+           |AS
+           |$$$$
+           |${MetricViewFactory.toYAML(MetricView(
+              "0.1",
+              AssetSource(fullSourceTableName),
+              where = None,
+              select = metricViewColumns))}
+           |$$$$""".stripMargin)
+    }
+    assert(ex.getCondition === "MISSING_CATALOG_ABILITY")
+    assert(ex.getMessage.contains("VIEWS"))
+  }
+}
+
+object MetricViewV2CatalogSuite {
+  val noViewCatalogName: String = "testcat_no_view"
+}
+
+/**
+ * Minimal [[RelationCatalog]] used by [[MetricViewV2CatalogSuite]]. Layers `ViewCatalog`
+ * methods over [[InMemoryTableCatalog]] (which provides table storage + namespace ops) and
+ * captures every [[ViewInfo]] passed to `createView` so tests can inspect the typed payload.
+ *
+ * The metric-view CREATE path goes via `ViewCatalog.createView`, so the captured map keys are
+ * the view identifiers; the source table created by the test fixture is stored separately in
+ * the inherited table catalog.
+ */
+class MetricViewRecordingCatalog extends InMemoryTableCatalog with RelationCatalog {
+  private val views =
+    new ConcurrentHashMap[(Seq[String], String), ViewInfo]()
+
+  // -- ViewCatalog methods --
+
+  override def listViews(namespace: Array[String]): Array[Identifier] = {
+    val target = namespace.toSeq
+    val out = new java.util.ArrayList[Identifier]()
+    views.forEach { (key, _) =>
+      if (key._1 == target) out.add(Identifier.of(key._1.toArray, key._2))
+    }
+    out.asScala.toArray
+  }
+
+  // `loadView`, `tableExists`, and `viewExists` are inherited from `RelationCatalog`'s
+  // defaults, which derive from `loadRelation` -- a stored `ViewInfo` is wrapped in
+  // `MetadataOnlyTable` by `loadRelation` and the defaults unwrap it correctly.
+
+  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    if (views.putIfAbsent(key, info) != null) {
+      throw new ViewAlreadyExistsException(ident)
+    }
+    MetricViewRecordingCatalog.capturedViews.put(ident, info)
+    info
+  }
+
+  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    val key = (ident.namespace().toSeq, ident.name())
+    if (!views.containsKey(key)) throw new NoSuchViewException(ident)
+    views.put(key, info)
+    MetricViewRecordingCatalog.capturedViews.put(ident, info)
+    info
+  }
+
+  override def dropView(ident: Identifier): Boolean = {
+    val key = (ident.namespace().toSeq, ident.name())
+    val removed = views.remove(key) != null
+    if (removed) {
+      MetricViewRecordingCatalog.capturedViews.remove(ident)
+    }
+    removed
+  }
+
+  // -- RelationCatalog single-RPC perf path --
+
+  override def loadRelation(ident: Identifier): Table = {
+    val key = (ident.namespace().toSeq, ident.name())
+    Option(views.get(key)) match {
+      case Some(info) => new MetadataOnlyTable(info, ident.toString)
+      case None => super.loadTable(ident) // delegate to InMemoryTableCatalog for tables
+    }
+  }
+}
+
+object MetricViewRecordingCatalog {
+  // Captures every ViewInfo that flows through createView / replaceView so individual tests
+  // can assert on it. Cleared between tests via `reset()`.
+  val capturedViews: ConcurrentHashMap[Identifier, ViewInfo] =
+    new ConcurrentHashMap[Identifier, ViewInfo]()
+
+  def reset(): Unit = capturedViews.clear()
+}

@@ -563,8 +563,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
+      val tableCatalog = r.catalog.asTableCatalog
       val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
-      DropTableExec(r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
+      DropTableExec(tableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil, None) :: Nil

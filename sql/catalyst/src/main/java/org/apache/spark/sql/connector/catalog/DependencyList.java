@@ -21,25 +21,26 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 
+/**
+ * A list of dependencies for a SQL object such as a view or metric view.
+ * <p>
+ * <ul>
+ *   <li>When {@code null}, the dependency information is not provided.</li>
+ *   <li>When the array is empty, dependencies are provided but the object has none.</li>
+ *   <li>When the array is non-empty, each entry describes one dependency.</li>
+ * </ul>
+ *
+ * @param dependencies array of dependencies
+ * @since 4.2.0
+ */
 @Evolving
-public interface TableSummary {
-    String MANAGED_TABLE_TYPE = "MANAGED";
-    String EXTERNAL_TABLE_TYPE = "EXTERNAL";
-    String VIEW_TABLE_TYPE = "VIEW";
-    String FOREIGN_TABLE_TYPE = "FOREIGN";
-    String METRIC_VIEW_TABLE_TYPE = "METRIC_VIEW";
+public record DependencyList(Dependency[] dependencies) {
 
-    Identifier identifier();
-    String tableType();
+  public DependencyList {
+    Objects.requireNonNull(dependencies, "dependencies must not be null");
+  }
 
-    static TableSummary of(Identifier identifier, String tableType) {
-        return new TableSummaryImpl(identifier, tableType);
-    }
-}
-
-record TableSummaryImpl(Identifier identifier, String tableType) implements TableSummary {
-    TableSummaryImpl {
-      Objects.requireNonNull(identifier, "Identifier of a table summary object cannot be null");
-      Objects.requireNonNull(tableType, "Table type of a table summary object cannot be null");
-    }
+  public static DependencyList of(Dependency... dependencies) {
+    return new DependencyList(dependencies);
+  }
 }

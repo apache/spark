@@ -17,29 +17,23 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Objects;
-
 import org.apache.spark.annotation.Evolving;
 
+/**
+ * Represents a dependency of a SQL object such as a view or metric view.
+ * <p>
+ * A dependency is one of: {@link TableDependency} or {@link FunctionDependency}.
+ *
+ * @since 4.2.0
+ */
 @Evolving
-public interface TableSummary {
-    String MANAGED_TABLE_TYPE = "MANAGED";
-    String EXTERNAL_TABLE_TYPE = "EXTERNAL";
-    String VIEW_TABLE_TYPE = "VIEW";
-    String FOREIGN_TABLE_TYPE = "FOREIGN";
-    String METRIC_VIEW_TABLE_TYPE = "METRIC_VIEW";
+public interface Dependency {
 
-    Identifier identifier();
-    String tableType();
+  static TableDependency table(String tableFullName) {
+    return new TableDependency(tableFullName);
+  }
 
-    static TableSummary of(Identifier identifier, String tableType) {
-        return new TableSummaryImpl(identifier, tableType);
-    }
-}
-
-record TableSummaryImpl(Identifier identifier, String tableType) implements TableSummary {
-    TableSummaryImpl {
-      Objects.requireNonNull(identifier, "Identifier of a table summary object cannot be null");
-      Objects.requireNonNull(tableType, "Table type of a table summary object cannot be null");
-    }
+  static FunctionDependency function(String functionFullName) {
+    return new FunctionDependency(functionFullName);
+  }
 }

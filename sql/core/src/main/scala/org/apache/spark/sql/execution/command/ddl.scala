@@ -232,7 +232,8 @@ case class DropTableCommand(
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
-        case CatalogTableType.VIEW if !isView =>
+        // Both VIEW and METRIC_VIEW are conceptually views and must be dropped via DROP VIEW.
+        case CatalogTableType.VIEW | CatalogTableType.METRIC_VIEW if !isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
@@ -240,10 +241,11 @@ case class DropTableCommand(
             foundType = catalog.getTableMetadata(tableName).tableType.name,
             alternative = "DROP VIEW"
           )
-        case o if o != CatalogTableType.VIEW && isView =>
+        case o if o != CatalogTableType.VIEW && o != CatalogTableType.METRIC_VIEW && isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP VIEW",
-            requiredType = CatalogTableType.VIEW.name,
+            requiredType =
+              s"${CatalogTableType.VIEW.name} or ${CatalogTableType.METRIC_VIEW.name}",
             objectName = catalog.getTableMetadata(tableName).qualifiedName,
             foundType = o.name,
             alternative = "DROP TABLE"
