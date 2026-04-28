@@ -40,6 +40,8 @@ public interface TruncatableTable extends Table {
   /**
    * Returns an array of supported custom metrics with name and description.
    * By default it returns empty array.
+   *
+   * @since 4.2.0
    */
   default CustomMetric[] supportedCustomMetrics() {
     return new CustomMetric[]{};
@@ -49,6 +51,8 @@ public interface TruncatableTable extends Table {
    * Returns an array of custom metrics which are collected with values at the driver side only.
    * Note that these metrics must be included in the supported custom metrics reported by
    * `supportedCustomMetrics`.
+   *
+   * @since 4.2.0
    */
   default CustomTaskMetric[] reportDriverMetrics() {
     return new CustomTaskMetric[]{};

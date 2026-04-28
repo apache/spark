@@ -52,7 +52,7 @@ trait SupportsCustomDriverMetrics { self: SparkPlan =>
    */
   protected def createCustomMetrics(metrics: Array[CustomMetric]): Map[String, SQLMetric] = {
     metrics.map { m =>
-      m.name() -> SQLMetrics.createV2CustomMetric(sparkContext, m)
+      m.name -> SQLMetrics.createV2CustomMetric(sparkContext, m)
     }.toMap
   }
 
@@ -75,7 +75,6 @@ trait SupportsCustomDriverMetrics { self: SparkPlan =>
       }
     }
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(
-      sparkContext, executionId, updated.toImmutableArraySeq)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, updated.toImmutableArraySeq)
   }
 }

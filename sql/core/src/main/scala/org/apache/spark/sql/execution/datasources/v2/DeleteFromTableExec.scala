@@ -34,8 +34,11 @@ case class DeleteFromTableExec(
     createCustomMetrics(table.supportedCustomMetrics())
 
   override protected def run(): Seq[InternalRow] = {
-    table.deleteWhere(condition)
-    postDriverMetrics(table.reportDriverMetrics())
+    try {
+      table.deleteWhere(condition)
+    } finally {
+      postDriverMetrics(table.reportDriverMetrics())
+    }
     refreshCache()
     Seq.empty
   }
