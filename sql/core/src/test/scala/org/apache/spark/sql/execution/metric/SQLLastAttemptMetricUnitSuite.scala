@@ -186,32 +186,24 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     assert(slam.lastAttemptValueForAllRDDs() === Some(60))
   }
 
-  test("compact storage: common attempt shared, overrides only for retries") {
+  test("compact storage: per-component override arrays allocated only when component diverges") {
     val slam = SQLLastAttemptMetrics.createMetric(sc, "test SLAM")
     val acc = slam.copy()
 
     val rddsMap = lastAttemptRddsMapField.get(slam)
     val mapGetMethod = rddsMap.getClass.getMethod("get", classOf[Object])
 
-    def rddValsForRddId(rddId: Int): Object = {
-      val opt = mapGetMethod.invoke(rddsMap, Int.box(rddId)).asInstanceOf[Option[Object]]
-      opt.get
-    }
-
-    // First update establishes the common attempt; subsequent updates on the same attempt
-    // record only their value and the bitmap bit, no overrides.
+    // Establish a common attempt across all 5 mock partitions.
     for (partId <- 0 until 5) {
       setMockAttempt(rddId = 1, partitionId = partId)
       acc.set(10)
       slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
     }
-    val rddVals = rddValsForRddId(1)
+    val rddVals = mapGetMethod.invoke(rddsMap, Int.box(1)).asInstanceOf[Option[Object]].get
     val rddValsClass = rddVals.getClass
     // @specialized var fields are emitted with `org$apache$spark$util$LastAttemptRDDVals$$`
     // prefix so specialized subclasses can override them.
     val fieldPrefix = "org$apache$spark$util$LastAttemptRDDVals$$"
-    val overrideSizeFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideSize")
-    overrideSizeFld.setAccessible(true)
     val commonStageIdFld = rddValsClass.getDeclaredField(fieldPrefix + "commonStageId")
     commonStageIdFld.setAccessible(true)
     val commonStageAttemptIdFld =
@@ -220,113 +212,77 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     val commonTaskAttemptNumberFld =
       rddValsClass.getDeclaredField(fieldPrefix + "commonTaskAttemptNumber")
     commonTaskAttemptNumberFld.setAccessible(true)
+    val overrideStageIdsFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideStageIds")
+    overrideStageIdsFld.setAccessible(true)
+    val overrideStageAttemptIdsFld =
+      rddValsClass.getDeclaredField(fieldPrefix + "overrideStageAttemptIds")
+    overrideStageAttemptIdsFld.setAccessible(true)
+    val overrideTaskAttemptNumbersFld =
+      rddValsClass.getDeclaredField(fieldPrefix + "overrideTaskAttemptNumbers")
+    overrideTaskAttemptNumbersFld.setAccessible(true)
 
-    assert(overrideSizeFld.getInt(rddVals) === 0,
-      "Common case (no retries) should not allocate any overrides")
+    // No retries: common is set, none of the override arrays are allocated.
     assert(commonStageIdFld.getInt(rddVals) === 10)
     assert(commonStageAttemptIdFld.getInt(rddVals) === 10)
     assert(commonTaskAttemptNumberFld.getInt(rddVals) === 0)
+    assert(overrideStageIdsFld.get(rddVals) === null)
+    assert(overrideStageAttemptIdsFld.get(rddVals) === null)
+    assert(overrideTaskAttemptNumbersFld.get(rddVals) === null)
     assert(slam.lastAttemptValueForRDDId(1) === Some(50))
 
-    // A retry of one partition with a newer stageAttemptId records exactly one override
-    // entry; common values are untouched.
+    // Pure stage-attempt retry of partition 0: only stageAttemptId diverges from the common.
     setMockAttempt(rddId = 1, partitionId = 0)
     acc.set(20)
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 1)
-    assert(commonStageIdFld.getInt(rddVals) === 10)
-    assert(commonStageAttemptIdFld.getInt(rddVals) === 10)
+    assert(overrideStageIdsFld.get(rddVals) === null,
+      "stageId still matches common; its override array should not be allocated")
+    assert(overrideStageAttemptIdsFld.get(rddVals) != null,
+      "stageAttemptId diverged; its override array should be allocated")
+    assert(overrideTaskAttemptNumbersFld.get(rddVals) === null,
+      "taskAttemptNumber still matches common; its override array should not be allocated")
+    val saIds1 = overrideStageAttemptIdsFld.get(rddVals).asInstanceOf[Array[Int]]
+    assert(saIds1.length === 5)
+    assert(saIds1(0) === 11)
+    assert(saIds1(1) === -1, "Untouched partitions should hold EMPTY_ID (= -1) sentinel")
     assert(slam.lastAttemptValueForRDDId(1) === Some(60)) // 20 + 10*4
 
-    // Re-retrying the same partition with a newer attempt updates the override entry
-    // in place; the override size does not grow.
-    setMockAttempt(rddId = 1, partitionId = 0)
-    acc.set(30)
-    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 11, 0, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 1)
-    assert(slam.lastAttemptValueForRDDId(1) === Some(70)) // 30 + 10*4
-
-    // A different partition retried adds a second override entry.
-    setMockAttempt(rddId = 1, partitionId = 2)
-    acc.set(15)
-    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 2)
-    assert(slam.lastAttemptValueForRDDId(1) === Some(75)) // 30 + 10 + 15 + 10 + 10
-
-    // An update with a per-task retry (different taskAttemptNumber, same stage) is also
-    // recorded as an override.
+    // Mid-stage retry of partition 1: only taskAttemptNumber diverges.
     when(mockTaskInfo.attemptNumber).thenReturn(1)
     when(mockRdd.id).thenReturn(1)
-    when(mockTaskInfo.partitionId).thenReturn(4)
-    acc.set(8)
+    when(mockTaskInfo.partitionId).thenReturn(1)
+    acc.set(15)
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 3)
-    assert(slam.lastAttemptValueForRDDId(1) === Some(73)) // 30 + 10 + 15 + 10 + 8
-  }
+    assert(overrideStageIdsFld.get(rddVals) === null)
+    assert(overrideTaskAttemptNumbersFld.get(rddVals) != null,
+      "taskAttemptNumber diverged; its override array should be allocated")
+    val tans2 = overrideTaskAttemptNumbersFld.get(rddVals).asInstanceOf[Array[Int]]
+    assert(tans2(1) === 1)
+    assert(tans2(0) === -1)
+    assert(slam.lastAttemptValueForRDDId(1) === Some(65)) // 20 + 15 + 10*3
 
-  test("compact storage: override index map allocated lazily on first override") {
-    val slam = SQLLastAttemptMetrics.createMetric(sc, "test SLAM")
-    val acc = slam.copy()
-
-    val numParts = 10
+    // Cross-stage retry of partition 2 (new stageId). Now stageId also diverges.
     when(mockTaskInfo.attemptNumber).thenReturn(0)
-    when(mockRdd.scope).thenReturn(None)
-    when(mockRdd.getNumPartitions).thenReturn(numParts)
-    when(mockRdd.id).thenReturn(7)
-
-    // Populate every partition under the same common attempt; no overrides yet.
-    for (partId <- 0 until numParts) {
-      when(mockTaskInfo.partitionId).thenReturn(partId)
-      acc.set(1)
-      slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
-    }
-
-    val rddsMap = lastAttemptRddsMapField.get(slam)
-    val mapGetMethod = rddsMap.getClass.getMethod("get", classOf[Object])
-    val rddVals = mapGetMethod.invoke(rddsMap, Int.box(7)).asInstanceOf[Option[Object]].get
-    val rddValsClass = rddVals.getClass
-    val fieldPrefix = "org$apache$spark$util$LastAttemptRDDVals$$"
-    val overrideSizeFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideSize")
-    overrideSizeFld.setAccessible(true)
-    val overrideIdxMapFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideIdxMap")
-    overrideIdxMapFld.setAccessible(true)
-
-    assert(overrideSizeFld.getInt(rddVals) === 0)
-    assert(overrideIdxMapFld.get(rddVals) === null,
-      "Map must not be allocated when there are no overrides")
-
-    // First override allocates the map and adds the entry.
-    when(mockTaskInfo.partitionId).thenReturn(0)
-    acc.set(2)
-    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 1)
-    val map = overrideIdxMapFld.get(rddVals)
-      .asInstanceOf[scala.collection.mutable.HashMap[Int, Int]]
-    assert(map != null, "Map must be allocated on first override")
-    assert(map.size === 1)
-    assert(map(0) === 0)
-
-    // A second override on a different partition appends and extends the map.
-    when(mockTaskInfo.partitionId).thenReturn(3)
-    acc.set(5)
-    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 2)
-    assert(map.size === 2)
-    assert(map(3) === 1)
-
-    // An in-place override update (newer attempt for an existing partition) leaves the index
-    // and the map unchanged.
-    when(mockTaskInfo.partitionId).thenReturn(0)
-    val partition0IdxBefore = map(0)
-    acc.set(7)
+    when(mockTaskInfo.partitionId).thenReturn(2)
+    acc.set(30)
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 11, 0, mockProperties)
-    assert(overrideSizeFld.getInt(rddVals) === 2)
-    assert(map.size === 2)
-    assert(map(0) === partition0IdxBefore,
-      "In-place override update must not move the index")
+    assert(overrideStageIdsFld.get(rddVals) != null,
+      "stageId now diverges; its override array should be allocated")
+    val sIds3 = overrideStageIdsFld.get(rddVals).asInstanceOf[Array[Int]]
+    assert(sIds3(2) === 11)
+    assert(sIds3(0) === -1)
+    assert(slam.lastAttemptValueForRDDId(1) === Some(85)) // 20 + 15 + 30 + 10*2
 
-    // Aggregate: 8 partitions still on common attempt with value 1, partition 0 last value 7,
-    // partition 3 value 5.
-    assert(slam.lastAttemptValueForRDDId(7) === Some(8 * 1 + 7 + 5))
+    // Re-update partition 0 with a value that brings stageAttemptId back to common (10) while
+    // diverging stageId (12). The previous override entry for partition 0 in
+    // overrideStageAttemptIds must be cleared back to EMPTY_ID.
+    when(mockTaskInfo.partitionId).thenReturn(0)
+    acc.set(40)
+    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 12, 10, mockProperties)
+    val saIds4 = overrideStageAttemptIdsFld.get(rddVals).asInstanceOf[Array[Int]]
+    assert(saIds4(0) === -1,
+      "Partition 0's stageAttemptId now matches common; its override entry must be cleared")
+    val sIds4 = overrideStageIdsFld.get(rddVals).asInstanceOf[Array[Int]]
+    assert(sIds4(0) === 12)
+    assert(slam.lastAttemptValueForRDDId(1) === Some(105)) // 40 + 15 + 30 + 10*2
   }
 }

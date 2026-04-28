@@ -189,32 +189,27 @@ private class LastAttemptRDDVals[@specialized T](
   private val computedBitmap: Array[Long] =
     new Array[Long]((partitionPartialVals.length + 63) >>> 6)
 
-  // Sparse storage for partitions whose (stageId, stageAttemptId, taskAttemptNumber) differs from
-  // the common attempt above. Stored as parallel int arrays to avoid the per-entry overhead of a
-  // HashMap of boxed tuples; the [[overrideIdxMap]] holds the partitionId -> array-index mapping
-  // for O(1) lookups.
-  //
-  // All four arrays and the index map are null until the first override is recorded - in the
-  // common (no-retry) case nothing extra is allocated for this RDD. They are then allocated as a
-  // group and grown together as more overrides accumulate.
-  //
-  // Once an override is recorded for a partition, subsequent updates only modify (or replace) its
-  // entry, since attempts are monotonic and we only call update for newer attempts.
+  // Per-partition override arrays for each component of the attempt tuple. Each is allocated
+  // lazily and independently the first time some partition's value for that component diverges
+  // from the common; until then the field is null and no per-partition state is kept for that
+  // component. Once allocated, an array is sized [[numPartitions]]: entries equal to EMPTY_ID
+  // mean "match the common value" and any other value is the per-partition override. This way:
+  //  - RDDs without retries pay zero per-partition allocations (all three fields stay null).
+  //  - A pure stage retry (new stageAttemptId, same stageId, taskAttemptNumber resets to 0)
+  //    allocates only [[overrideStageAttemptIds]].
+  //  - A mid-stage retry (executor lost, some tasks restart with a higher taskAttemptNumber)
+  //    allocates only [[overrideTaskAttemptNumbers]].
+  //  - Whole-stage cross-Stage retry (new stageId) allocates [[overrideStageIds]] too.
   //
   // Concurrency: update() is called only from the DAGScheduler scheduler loop. Some readers of
-  // the override state can run concurrently (e.g. logAccumulatorState invoked from elsewhere). We
-  // rely on JMM happens-before via the volatile `overrideSize`: when we allocate or extend the
-  // arrays we always set `overrideSize` last, so a reader observing a non-zero size also observes
-  // the underlying array contents up to that index. The HashMap itself isn't thread-safe;
-  // findOverrideIdx tolerates a transient race by validating the index against the arrays and
-  // catching exceptions from a partially-updated map, returning -1 in that case (the caller
-  // treats this as "no override yet" and uses the common attempt - eventually consistent).
-  @volatile private var overrideSize: Int = 0
-  private var overridePartIds: Array[Int] = null
-  private var overrideStageIds: Array[Int] = null
-  private var overrideStageAttemptIds: Array[Int] = null
-  private var overrideTaskAttemptNumbers: Array[Int] = null
-  private var overrideIdxMap: scala.collection.mutable.HashMap[Int, Int] = null
+  // the state can run concurrently (e.g. logAccumulatorState formatting). The fields are
+  // declared @volatile, and the new array is fully populated before the field is assigned, so a
+  // reader either sees null (use common) or sees an array whose Array.fill initialization is
+  // visible. In-place element writes for subsequent overrides are plain ints; readers may see
+  // them eventually, matching the loose semantics of the original per-partition int arrays.
+  @volatile private var overrideStageIds: Array[Int] = null
+  @volatile private var overrideStageAttemptIds: Array[Int] = null
+  @volatile private var overrideTaskAttemptNumbers: Array[Int] = null
 
   def numPartitions: Int = partitionPartialVals.length
 
@@ -228,64 +223,41 @@ private class LastAttemptRDDVals[@specialized T](
     computedBitmap(idx) = computedBitmap(idx) | (1L << (partitionId & 63))
   }
 
-  private def matchesCommon(stageId: Int, stageAttemptId: Int, taskAttemptNumber: Int): Boolean = {
-    stageId == commonStageId &&
-      stageAttemptId == commonStageAttemptId &&
-      taskAttemptNumber == commonTaskAttemptNumber
-  }
-
   /**
-   * Returns the index of `partitionId`'s override entry in the override arrays, or -1 if there is
-   * none. O(1) HashMap probe; the map is null when this RDD has never seen an override.
-   *
-   * Tolerates a concurrent reader race against an in-flight `setOverride` by validating the
-   * result and catching any exceptions from a partially-updated HashMap; in that case it returns
-   * -1, and the caller falls back to the common attempt (eventually consistent).
+   * Records a new value for one component (stageId / stageAttemptId / taskAttemptNumber) of the
+   * attempt tuple at `partitionId`, allocating the override array on first divergence. Returns
+   * the array reference the caller should write back to the @volatile field - either a freshly
+   * allocated and populated array (first override for this component) or the existing array
+   * after an in-place update. When the new value matches the common, an existing override entry
+   * is cleared back to EMPTY_ID; when no array has ever been allocated, no work is done.
    */
-  private def findOverrideIdx(partitionId: Int): Int = {
-    val map = overrideIdxMap
-    if (map == null) return -1
-    val n = overrideSize
-    try {
-      val idx = map.getOrElse(partitionId, -1)
-      if (idx >= 0 && idx < n && overridePartIds(idx) == partitionId) idx else -1
-    } catch {
-      case NonFatal(_) => -1
+  private def setOverrideComponent(
+      array: Array[Int],
+      partitionId: Int,
+      value: Int,
+      common: Int): Array[Int] = {
+    if (value != common) {
+      if (array == null) {
+        val newArr = Array.fill(partitionPartialVals.length)(EMPTY_ID)
+        newArr(partitionId) = value
+        newArr
+      } else {
+        array(partitionId) = value
+        array
+      }
+    } else {
+      if (array != null) array(partitionId) = EMPTY_ID
+      array
     }
   }
 
-  /** Add or update an override entry for a partition whose attempt differs from the common. */
-  private def setOverride(
-      partitionId: Int, sId: Int, saId: Int, tan: Int): Unit = {
-    if (overrideIdxMap == null) {
-      // First override on this RDD: allocate the override arrays and the index map together.
-      overrideIdxMap = new scala.collection.mutable.HashMap[Int, Int]
-      overridePartIds = new Array[Int](4)
-      overrideStageIds = new Array[Int](4)
-      overrideStageAttemptIds = new Array[Int](4)
-      overrideTaskAttemptNumbers = new Array[Int](4)
-    }
-    val existingIdx = overrideIdxMap.getOrElse(partitionId, -1)
-    if (existingIdx >= 0) {
-      // Existing override: update in place; size and map are unchanged.
-      overrideStageIds(existingIdx) = sId
-      overrideStageAttemptIds(existingIdx) = saId
-      overrideTaskAttemptNumbers(existingIdx) = tan
-    } else {
-      val n = overrideSize
-      if (n == overridePartIds.length) {
-        val newCap = n * 2
-        overridePartIds = java.util.Arrays.copyOf(overridePartIds, newCap)
-        overrideStageIds = java.util.Arrays.copyOf(overrideStageIds, newCap)
-        overrideStageAttemptIds = java.util.Arrays.copyOf(overrideStageAttemptIds, newCap)
-        overrideTaskAttemptNumbers = java.util.Arrays.copyOf(overrideTaskAttemptNumbers, newCap)
-      }
-      overridePartIds(n) = partitionId
-      overrideStageIds(n) = sId
-      overrideStageAttemptIds(n) = saId
-      overrideTaskAttemptNumbers(n) = tan
-      overrideIdxMap.update(partitionId, n)
-      overrideSize = n + 1
+  /** Reads one component's value at `partitionId`, falling back to `common` when the override
+   *  array is null or the entry equals EMPTY_ID. */
+  private def lookupComponent(array: Array[Int], partitionId: Int, common: Int): Int = {
+    if (array == null) common
+    else {
+      val v = array(partitionId)
+      if (v == EMPTY_ID) common else v
     }
   }
 
@@ -298,11 +270,12 @@ private class LastAttemptRDDVals[@specialized T](
     }
     partitionPartialVals(partId) = partialValue.partialMergeVal
     setComputedBit(partId)
-    if (!matchesCommon(
-        partialValue.stageId, partialValue.stageAttemptId, partialValue.taskAttemptNumber)) {
-      setOverride(
-        partId, partialValue.stageId, partialValue.stageAttemptId, partialValue.taskAttemptNumber)
-    }
+    overrideStageIds = setOverrideComponent(
+      overrideStageIds, partId, partialValue.stageId, commonStageId)
+    overrideStageAttemptIds = setOverrideComponent(
+      overrideStageAttemptIds, partId, partialValue.stageAttemptId, commonStageAttemptId)
+    overrideTaskAttemptNumbers = setOverrideComponent(
+      overrideTaskAttemptNumbers, partId, partialValue.taskAttemptNumber, commonTaskAttemptNumber)
     lastSqlExecutionId = partialValue.sqlExecutionId
   }
 
@@ -310,15 +283,10 @@ private class LastAttemptRDDVals[@specialized T](
     var sId = EMPTY_ID
     var saId = EMPTY_ID
     var tan = EMPTY_ID
-    val overrideIdx = findOverrideIdx(partId)
-    if (overrideIdx >= 0) {
-      sId = overrideStageIds(overrideIdx)
-      saId = overrideStageAttemptIds(overrideIdx)
-      tan = overrideTaskAttemptNumbers(overrideIdx)
-    } else if (!isEmptyAt(partId)) {
-      sId = commonStageId
-      saId = commonStageAttemptId
-      tan = commonTaskAttemptNumber
+    if (!isEmptyAt(partId)) {
+      sId = lookupComponent(overrideStageIds, partId, commonStageId)
+      saId = lookupComponent(overrideStageAttemptIds, partId, commonStageAttemptId)
+      tan = lookupComponent(overrideTaskAttemptNumbers, partId, commonTaskAttemptNumber)
     }
     AccumulatorPartialVal(
       partialMergeVal = partitionPartialVals(partId),
@@ -333,10 +301,6 @@ private class LastAttemptRDDVals[@specialized T](
   }
 
   override def toString: String = {
-    // Reconstruct the per-partition stage/attempt view from common + overrides so debug output
-    // shows the same layout (one entry per partition) as a naive design with three N-sized int
-    // arrays. Also include the compact representation - common attempt, the computed bitmap and
-    // the override entries - so the internal storage state is visible too.
     val n = numPartitions
     val sIds = new Array[Int](n)
     val saIds = new Array[Int](n)
@@ -349,16 +313,6 @@ private class LastAttemptRDDVals[@specialized T](
       tans(i) = pv.taskAttemptNumber
       i += 1
     }
-    val overridesStr = if (overrideIdxMap == null) {
-      "{}"
-    } else {
-      val sz = overrideSize
-      (0 until sz).map { j =>
-        s"${overridePartIds(j)}->" +
-          s"(${overrideStageIds(j)},${overrideStageAttemptIds(j)},${overrideTaskAttemptNumbers(j)})"
-      }.mkString("{", ",", "}")
-    }
-    val computedStr = computedBitmap.map(b => f"$b%016x").mkString("[", ",", "]")
     s"""LastAttemptVal(
        |  rddId=$rddId,
        |  rddScopeId=$rddScopeId,
@@ -366,10 +320,7 @@ private class LastAttemptRDDVals[@specialized T](
        |  partitionPartialVals=${partitionPartialVals.mkString("[", ",", "]")},
        |  stageIds=${sIds.mkString("[", ",", "]")},
        |  stageAttemptIds=${saIds.mkString("[", ",", "]")},
-       |  taskAttemptNumbers=${tans.mkString("[", ",", "]")},
-       |  commonAttempt=($commonStageId,$commonStageAttemptId,$commonTaskAttemptNumber),
-       |  computedBitmap=$computedStr,
-       |  overrides=$overridesStr
+       |  taskAttemptNumbers=${tans.mkString("[", ",", "]")}
        |)""".stripMargin
   }
 }
