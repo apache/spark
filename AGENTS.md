@@ -20,6 +20,8 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
+Scaladoc member-link convention: when linking to a method or field of another class from a `/** */` doc comment, use `[[Class#method]]`, not `[[Class.method]]`. genjavadoc passes wiki-style links through as javadoc `{@link ...}`, and javadoc reads `.` as the inner-class separator; if `Class` is a regular `class` / `trait` (not a Scala `object`) and has no companion-object member with that name, javadoc fails to resolve and the unidoc step fails with `error: reference not found`. The `#` form is the Javadoc-canonical member separator and resolves cleanly. Same-class members can still be referenced bare as `[[methodName]]`.
+
 ## Build and Test
 
 Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
