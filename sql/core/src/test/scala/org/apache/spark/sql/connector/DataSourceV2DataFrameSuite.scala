@@ -1917,7 +1917,8 @@ class DataSourceV2DataFrameSuite
   // Nested rename changes the parent struct type (different field name),
   // so schema validation catches it. The top-level ID is preserved
   // because the standard catalog matches by column name.
-  test("nested rename triggers schema validation error with preserved ID") {
+  test("non-composed catalog: nested rename caught by " +
+      "data columns validation") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
