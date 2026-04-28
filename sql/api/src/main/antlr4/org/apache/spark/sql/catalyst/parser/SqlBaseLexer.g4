@@ -103,7 +103,7 @@ import java.util.Deque;
 
   /**
    * If the counter is zero, it's a shift right operator. It can be closing tags of an complex
-   * type definition, such as MAP<INT, ARRAY<INT>>.
+   * type definition, such as {@code MAP<INT, ARRAY<INT>>}.
    */
   public boolean isShiftRightOperator() {
     return complex_type_level_counter == 0 ? true : false;
