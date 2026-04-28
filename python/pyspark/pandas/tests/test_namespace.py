@@ -384,7 +384,26 @@ class NamespaceTestsMixin:
                     )
 
         self.assertRaisesRegex(TypeError, "first argument must be", lambda: ps.concat(psdf))
-        self.assertRaisesRegex(TypeError, "cannot concatenate object", lambda: ps.concat([psdf, 1]))
+        self.assertRaisesRegex(
+            TypeError,
+            "cannot concatenate object of type 'DataFrame'",
+            lambda: ps.concat([pdf]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "cannot concatenate object of type 'Series'",
+            lambda: ps.concat([pdf["C"]]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "cannot concatenate object of type 'DataFrame'",
+            lambda: ps.concat([psdf, pdf]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "cannot concatenate object of type 'int'",
+            lambda: ps.concat([psdf, 1]),
+        )
 
         psdf2 = psdf.set_index("B", append=True)
         self.assertRaisesRegex(

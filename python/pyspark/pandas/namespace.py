@@ -2539,19 +2539,20 @@ def concat(
     if len(objs) == 0:
         raise ValueError("All objects passed were None")
 
+    psobjs: List[Union[DataFrame, Series]] = []
     for obj in objs:
         if not isinstance(obj, (Series, DataFrame)):
             raise TypeError(
                 "cannot concatenate object of type "
                 "'{name}"
-                "; only ps.Series "
-                "and ps.DataFrame are valid".format(name=type(objs).__name__)
+                "'; only ps.Series and ps.DataFrame are valid".format(name=type(obj).__name__)
             )
+        psobjs.append(obj)
 
     if join not in ["inner", "outer"]:
         raise ValueError("Only can inner (intersect) or outer (union) join the other axis.")
 
-    if all([obj.empty for obj in objs]):
+    if all([obj.empty for obj in psobjs]):
         warnings.warn(
             "The behavior of array concatenation with empty entries is "
             "deprecated. In a future version, this will no longer exclude "
@@ -2565,7 +2566,7 @@ def concat(
     psdf: DataFrame
     if axis == 1:
         psdfs: List[DataFrame] = [
-            obj.to_frame() if isinstance(obj, Series) else obj for obj in objs
+            obj.to_frame() if isinstance(obj, Series) else obj for obj in psobjs
         ]
 
         level: int = min(psdf._internal.column_labels_level for psdf in psdfs)
@@ -2644,14 +2645,14 @@ def concat(
 
     # Series, Series ...
     # We should return Series if objects are all Series.
-    should_return_series = all(map(lambda obj: isinstance(obj, Series), objs))
+    should_return_series = all(map(lambda obj: isinstance(obj, Series), psobjs))
 
     # DataFrame, Series ... & Series, Series ...
     # In this case, we should return DataFrame.
     new_objs: List[DataFrame] = []
     num_series = 0
     series_names = set()
-    for obj in objs:
+    for obj in psobjs:
         if isinstance(obj, Series):
             num_series += 1
             series_names.add(obj.name)
