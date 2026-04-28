@@ -298,6 +298,21 @@ spark.sql.session.timeZone	America/Los_Angeles
 
 
 -- !query
+SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-02-15 10:00:00'),
+    (TIMESTAMP '2024-03-15 10:00:00'),
+    (TIMESTAMP '2024-04-15 10:00:00') tab(t)
+  ORDER BY t
+-- !query schema
+struct<t:timestamp,bucket:timestamp>
+-- !query output
+2024-02-15 10:00:00	2024-02-01 00:00:00
+2024-03-15 10:00:00	2024-03-01 00:00:00
+2024-04-15 10:00:00	2024-04-01 00:00:00
+
+
+-- !query
 SELECT t, time_bucket(INTERVAL '1' MONTH, CAST(t AS TIMESTAMP_NTZ)) AS bucket
   FROM VALUES
     (TIMESTAMP '2024-02-15 10:00:00'),

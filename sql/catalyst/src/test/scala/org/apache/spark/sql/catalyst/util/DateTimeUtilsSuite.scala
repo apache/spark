@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -1573,39 +1573,52 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("timeBucketYMInterval") {
+    val utc = ZoneOffset.UTC
     // 1-month bucket default origin
     assert(timeBucketYMInterval(1,
-      date(2024, 3, 15, 11, 27, 0), 0L) === date(2024, 3, 1, 0, 0, 0))
+      date(2024, 3, 15, 11, 27, 0), 0L, utc) === date(2024, 3, 1, 0, 0, 0))
     // 3-month (quarterly) bucket
     assert(timeBucketYMInterval(3,
-      date(2024, 5, 15, 10, 0, 0), 0L) === date(2024, 4, 1, 0, 0, 0))
+      date(2024, 5, 15, 10, 0, 0), 0L, utc) === date(2024, 4, 1, 0, 0, 0))
     // 12-month (yearly) bucket
     assert(timeBucketYMInterval(12,
-      date(2024, 5, 15, 10, 0, 0), 0L) === date(2024, 1, 1, 0, 0, 0))
+      date(2024, 5, 15, 10, 0, 0), 0L, utc) === date(2024, 1, 1, 0, 0, 0))
     // Monthly with origin on 15th: grid anchored at day-of-month = 15
     assert(timeBucketYMInterval(1,
-      date(2024, 3, 20, 9, 0, 0), date(1970, 1, 15, 0, 0, 0))
+      date(2024, 3, 20, 9, 0, 0), date(1970, 1, 15, 0, 0, 0), utc)
       === date(2024, 3, 15, 0, 0, 0))
     // End-of-month capping with step-back: origin on 1970-01-31, 1-month bucket.
     // AddMonths(1970-01-31, k) caps to 2024-03-31 for large k (> ts); step back to
     // 2024-02-29 (leap year).
     assert(timeBucketYMInterval(1,
-      date(2024, 3, 1, 12, 0, 0), date(1970, 1, 31, 0, 0, 0))
+      date(2024, 3, 1, 12, 0, 0), date(1970, 1, 31, 0, 0, 0), utc)
       === date(2024, 2, 29, 0, 0, 0))
     // Leap-year capping: origin on Feb 29, 1-year bucket, non-leap target.
     assert(timeBucketYMInterval(12,
-      date(2025, 3, 1, 0, 0, 0), date(2024, 2, 29, 0, 0, 0))
+      date(2025, 3, 1, 0, 0, 0), date(2024, 2, 29, 0, 0, 0), utc)
       === date(2025, 2, 28, 0, 0, 0))
     // Pre-epoch ts
     assert(timeBucketYMInterval(1,
-      date(1968, 7, 15, 10, 0, 0), 0L) === date(1968, 7, 1, 0, 0, 0))
+      date(1968, 7, 15, 10, 0, 0), 0L, utc) === date(1968, 7, 1, 0, 0, 0))
+    // Session-zone bucketing: in LA (UTC-8 winter / UTC-7 summer), monthly buckets land on
+    // local month-start regardless of DST. Origin = local 1970-01-01 00:00 PST = 8h UTC.
+    val la = DateTimeUtils.getZoneId("America/Los_Angeles")
+    val laOrigin = DateTimeUtils.daysToMicros(0, la)
+    // Winter ts: 2024-02-15 10:00 PST = 2024-02-15 18:00 UTC; bucket = 2024-02-01 PST.
+    assert(timeBucketYMInterval(1,
+      date(2024, 2, 15, 18, 0, 0), laOrigin, la)
+      === DateTimeUtils.daysToMicros(LocalDate.of(2024, 2, 1).toEpochDay.toInt, la))
+    // Summer ts: 2024-07-15 17:00 UTC = 2024-07-15 10:00 PDT; bucket = 2024-07-01 PDT.
+    assert(timeBucketYMInterval(1,
+      date(2024, 7, 15, 17, 0, 0), laOrigin, la)
+      === DateTimeUtils.daysToMicros(LocalDate.of(2024, 7, 1).toEpochDay.toInt, la))
     // Extreme ts: daysToMicros on the resulting day count overflows via multiplyExact.
     intercept[ArithmeticException] {
-      timeBucketYMInterval(1, Long.MinValue, 0L)
+      timeBucketYMInterval(1, Long.MinValue, 0L, utc)
     }
     // Extreme origin: daysToMicros on originMicros's day count overflows via multiplyExact.
     intercept[ArithmeticException] {
-      timeBucketYMInterval(1, 0L, Long.MinValue)
+      timeBucketYMInterval(1, 0L, Long.MinValue, utc)
     }
   }
 }

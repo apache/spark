@@ -133,9 +133,16 @@ SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
   ORDER BY t;
 
 
--- NTZ-cast pattern: monthly buckets stay on local month starts across a DST
--- boundary (America/Los_Angeles springs forward 2024-03-10).
+-- Year-month bucketing in a non-UTC session: TIMESTAMP (LTZ) values bucket in the
+-- session time zone, so monthly boundaries land at local month-start across DST
+-- (America/Los_Angeles springs forward 2024-03-10). NTZ values bucket in UTC.
 SET TIME ZONE 'America/Los_Angeles';
+SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-02-15 10:00:00'),
+    (TIMESTAMP '2024-03-15 10:00:00'),
+    (TIMESTAMP '2024-04-15 10:00:00') tab(t)
+  ORDER BY t;
 SELECT t, time_bucket(INTERVAL '1' MONTH, CAST(t AS TIMESTAMP_NTZ)) AS bucket
   FROM VALUES
     (TIMESTAMP '2024-02-15 10:00:00'),

@@ -1080,7 +1080,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
 
   /**
    * YearMonthInterval bucketing: month arithmetic with end-of-month capping and step-back.
-   * The origin's day-of-month and time-of-day determine the bucket boundaries.
+   * The origin's day-of-month and time-of-day determine the bucket boundaries. Calendar
+   * resolution is performed in the given `zoneId`, so for `TIMESTAMP` (with local time zone)
+   * inputs callers should pass the session zone, and for `TIMESTAMP_NTZ` they should pass
+   * `ZoneOffset.UTC`.
    *
    * `bucketMonths` must be positive; `TimeBucket.checkInputDataTypes` enforces
    * this at analysis time.
@@ -1088,12 +1091,14 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param bucketMonths bucket size in months.
    * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
    * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which the (year, month, day) decomposition is performed.
    */
-  def timeBucketYMInterval(bucketMonths: Int, tsMicros: Long, originMicros: Long): Long = {
-    val tsDays = microsToDays(tsMicros, ZoneOffset.UTC)
-    val originDays = microsToDays(originMicros, ZoneOffset.UTC)
+  def timeBucketYMInterval(
+      bucketMonths: Int, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
+    val tsDays = microsToDays(tsMicros, zoneId)
+    val originDays = microsToDays(originMicros, zoneId)
     val originTodMicros =
-      MathUtils.subtractExact(originMicros, daysToMicros(originDays, ZoneOffset.UTC))
+      MathUtils.subtractExact(originMicros, daysToMicros(originDays, zoneId))
 
     val tsDate = daysToLocalDate(tsDays)
     val originDate = daysToLocalDate(originDays)
@@ -1104,7 +1109,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     var candidateDays = dateAddMonths(originDays,
       MathUtils.toIntExact(MathUtils.multiplyExact(k, bucketMonths.toLong)))
     var candidate =
-      MathUtils.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
+      MathUtils.addExact(daysToMicros(candidateDays, zoneId), originTodMicros)
 
     // End-of-month capping in dateAddMonths can overshoot; step back one bucket if so.
     if (candidate > tsMicros) {
@@ -1112,7 +1117,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       candidateDays = dateAddMonths(originDays,
         MathUtils.toIntExact(MathUtils.multiplyExact(k, bucketMonths.toLong)))
       candidate =
-        MathUtils.addExact(daysToMicros(candidateDays, ZoneOffset.UTC), originTodMicros)
+        MathUtils.addExact(daysToMicros(candidateDays, zoneId), originTodMicros)
     }
 
     candidate

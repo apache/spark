@@ -3909,14 +3909,21 @@ case class TimestampDiff(
 case class TimeBucket(
     bucketSize: Expression,
     ts: Expression,
-    originTs: Expression)
-  extends TernaryExpression with ExpectsInputTypes {
+    originTs: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression with ExpectsInputTypes with TimeZoneAwareExpression {
 
   override def nullIntolerant: Boolean = true
 
   override def first: Expression = bucketSize
   override def second: Expression = ts
   override def third: Expression = originTs
+
+  override def withTimeZone(timeZoneId: String): TimeBucket =
+    copy(timeZoneId = Option(timeZoneId))
+
+  def this(bucketSize: Expression, ts: Expression, originTs: Expression) =
+    this(bucketSize, ts, originTs, None)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(DayTimeIntervalType, YearMonthIntervalType),
@@ -3987,7 +3994,7 @@ case class TimeBucket(
       case _: YearMonthIntervalType =>
         DateTimeUtils.timeBucketYMInterval(
           bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[Long],
-          originVal.asInstanceOf[Long])
+          originVal.asInstanceOf[Long], zoneIdForType(ts.dataType))
       case other => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
@@ -4000,8 +4007,10 @@ case class TimeBucket(
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
           s"$dtu.timeBucketDTInterval($bucketSizeCode, $tsCode, $originCode)")
       case _: YearMonthIntervalType =>
+        val zid = ctx.addReferenceObj(
+          "zoneId", zoneIdForType(ts.dataType), classOf[ZoneId].getName)
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
-          s"$dtu.timeBucketYMInterval($bucketSizeCode, $tsCode, $originCode)")
+          s"$dtu.timeBucketYMInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
       case other => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
@@ -4018,16 +4027,16 @@ case class TimeBucket(
 @ExpressionDescription(
   usage = """
     _FUNC_(bucketSize, ts[, origin]) - Returns the start of the bucket that `ts` falls into,
-      where buckets are defined by the given `bucketSize` interval aligned to `origin`. All
-      bucketing is performed on UTC micros; the session time zone does not affect bucket
-      alignment. For local wall-clock alignment in a DST zone, cast the TIMESTAMP to
-      TIMESTAMP_NTZ.
+      where buckets are defined by the given `bucketSize` interval aligned to `origin`.
+      Year-month interval bucket sizes align to calendar boundaries in the session time
+      zone for `TIMESTAMP`, and in UTC for `TIMESTAMP_NTZ`. Day-time interval bucket sizes
+      are fixed-length and unaffected by the session time zone.
   """,
   arguments = """
     Arguments:
       * bucketSize - A day-time or year-month interval defining the bucket size. Must be positive and foldable.
       * ts - A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
-      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00 (UTC for TIMESTAMP). Must be the same type as ts and must be foldable.
+      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and 1970-01-01 00:00:00 wall-clock for TIMESTAMP_NTZ. Must be the same type as ts and must be foldable.
   """,
   examples = """
     Examples:
@@ -4047,6 +4056,17 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     case _ => e
   }
 
+  // Default origin is 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and the
+  // same wall-clock instant for TIMESTAMP_NTZ. For LTZ this resolves to the UTC instant of
+  // local midnight on 1970-01-01, so monthly/yearly buckets align to local calendar
+  // boundaries year-round (across DST).
+  private def defaultOrigin(tsType: DataType): Literal = tsType match {
+    case TimestampType =>
+      val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+      Literal(DateTimeUtils.daysToMicros(0, zoneId), TimestampType)
+    case _ => Literal(0L, tsType)
+  }
+
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     expressions match {
       case Seq(rawBucketSize, rawTs) =>
@@ -4057,7 +4077,7 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
           case _ => TimestampType
         }
         val ts = retypeNull(rawTs, tsType)
-        TimeBucket(bucketSize, ts, Literal(0L, tsType))
+        TimeBucket(bucketSize, ts, defaultOrigin(tsType))
       case Seq(rawBucketSize, rawTs, rawOrigin) =>
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
         val tsType = (rawTs.dataType, rawOrigin.dataType) match {
