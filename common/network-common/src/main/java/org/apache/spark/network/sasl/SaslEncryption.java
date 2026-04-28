@@ -167,7 +167,7 @@ class SaslEncryption {
      * This makes assumptions about how netty treats FileRegion instances, because there's no way
      * to know beforehand what will be the size of the encrypted message. Namely, it assumes
      * that netty will try to transfer data from this message while
-     * <code>transferred() < count()</code>. So these two methods return, technically, wrong data,
+     * {@code transferred() < count()}. So these two methods return, technically, wrong data,
      * but netty doesn't know better.
      */
     @Override

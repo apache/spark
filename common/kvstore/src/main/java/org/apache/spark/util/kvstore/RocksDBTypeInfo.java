@@ -68,8 +68,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  *
  * <p>
  * Entity data (either the entity's natural key or a copy of the data) is stored in all keys
- * that end with "+<something>". A count of all objects that match a particular top-level index
- * value is kept at the end marker ("-<something>"). A count is also kept at the natural index's end
+ * that end with {@code +<something>}. A count of all objects that match a particular top-level index
+ * value is kept at the end marker ({@code -<something>}). A count is also kept at the natural index's end
  * marker, to make it easy to retrieve the number of all elements of a particular type.
  * </p>
  *

@@ -38,7 +38,7 @@ import java.util.UUID;
 import static org.apache.spark.types.variant.VariantUtil.*;
 
 /**
- * This class is structurally equivalent to {@link org.apache.spark.unsafe.types.VariantVal}. We
+ * This class is structurally equivalent to {@code org.apache.spark.unsafe.types.VariantVal}. We
  * define a new class to avoid depending on or modifying Spark.
  */
 public final class Variant {
