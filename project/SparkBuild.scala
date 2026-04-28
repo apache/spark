@@ -1700,14 +1700,16 @@ object Unidoc {
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree",
-        // DEBUG (revert before merge): the prior `exceptions=info` run revealed
-        // that javadoc isn't dying on an uncaught Throwable -- it's javac's
-        // ClassFinder spinning on a CompletionFailure (same Throwable address
-        // re-thrown ~938k times in 46s) before MissingResourceException kills
-        // the process. To identify WHICH class can't be completed, also log
-        // every class load. The last class loaded before the
-        // CompletionFailure storm at ~6.6s is almost certainly the trigger.
-        "-J-Xlog:exceptions=info,class+load=info"
+        // DEBUG (revert before merge): javadoc's own `-verbose` mode emits
+        // "[parsing X.java]" and "[loading Y.class]" messages, which the
+        // prior `-J-Xlog:class+load=info` did NOT (the JVM logger only sees
+        // bytecode loads via the class loader, not javadoc's own .java/.class
+        // reads via JavacFileManager). Combined with `-Xlog:exceptions=info`,
+        // the last `[loading ...]` or `[parsing ...]` line before the
+        // CompletionFailure storm at ~6.5s should pinpoint the user class
+        // that javac cannot resolve.
+        "-verbose",
+        "-J-Xlog:exceptions=info"
       )
     },
 
