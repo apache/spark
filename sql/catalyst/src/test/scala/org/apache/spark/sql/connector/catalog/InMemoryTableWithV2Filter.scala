@@ -164,7 +164,7 @@ object InMemoryTableWithV2Filter {
 
   /**
    * Evaluates a single V2 predicate by resolving column values through the
-   * given function. Supports `=`, `&lt;=&gt;`, `IS_NULL`, `IS_NOT_NULL`, and `ALWAYS_TRUE`.
+   * given function. Supports =, <=>, IS_NULL, IS_NOT_NULL, and ALWAYS_TRUE.
    */
   def evalPredicate(
       pred: Predicate,
