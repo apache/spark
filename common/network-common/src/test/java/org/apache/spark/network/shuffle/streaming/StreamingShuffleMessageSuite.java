@@ -1,0 +1,199 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.network.shuffle.streaming;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Unit tests for {@link StreamingShuffleMessage} encode/decode round-trips and
+ * {@link ShuffleChecksum}.
+ */
+public class StreamingShuffleMessageSuite {
+
+  private static final int SEQ_NUM = 42;
+
+  // ---- helpers ---------------------------------------------------------------
+
+  private ByteBuf encodeAndSlice(StreamingShuffleMessage msg) {
+    msg.setSeqNum(SEQ_NUM);
+    CompositeByteBuf buf = Unpooled.compositeBuffer();
+    buf.capacity(msg.headerLength());
+    msg.encode(buf);
+    msg.release();
+    // Return a copy so we can freely advance the reader index
+    ByteBuf copy = Unpooled.buffer(buf.readableBytes());
+    copy.writeBytes(buf);
+    buf.release();
+    return copy;
+  }
+
+  // ---- CreditControlMessage --------------------------------------------------
+
+  @Test
+  public void testCreditControlRoundTrip() {
+    CreditControlMessage original = new CreditControlMessage(3, 7, 5);
+    ByteBuf encoded = encodeAndSlice(original);
+    try {
+      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(encoded);
+      assertInstanceOf(CreditControlMessage.class, decoded);
+      CreditControlMessage credit = (CreditControlMessage) decoded;
+      assertEquals(SEQ_NUM, credit.getSeqNum());
+      assertEquals(3, credit.shuffleWriterId);
+      assertEquals(7, credit.shuffleReaderId);
+      assertEquals(5, credit.numMessages);
+    } finally {
+      encoded.release();
+    }
+  }
+
+  // ---- TerminationControlMessage ---------------------------------------------
+
+  @Test
+  public void testTerminationControlRoundTrip() {
+    TerminationControlMessage original = new TerminationControlMessage(1, 2);
+    ByteBuf encoded = encodeAndSlice(original);
+    try {
+      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(encoded);
+      assertInstanceOf(TerminationControlMessage.class, decoded);
+      TerminationControlMessage term = (TerminationControlMessage) decoded;
+      assertEquals(SEQ_NUM, term.getSeqNum());
+      assertEquals(1, term.shuffleWriterId);
+      assertEquals(2, term.shuffleReaderId);
+    } finally {
+      encoded.release();
+    }
+  }
+
+  // ---- TerminationAckMessage -------------------------------------------------
+
+  @Test
+  public void testTerminationAckRoundTrip() {
+    TerminationAckMessage original = new TerminationAckMessage(4, 8);
+    original.setSeqNum(99);  // echo back last seen seqNum
+    CompositeByteBuf buf = Unpooled.compositeBuffer();
+    buf.capacity(original.headerLength());
+    original.encode(buf);
+    ByteBuf copy = Unpooled.buffer(buf.readableBytes());
+    copy.writeBytes(buf);
+    buf.release();
+
+    try {
+      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(copy);
+      assertInstanceOf(TerminationAckMessage.class, decoded);
+      TerminationAckMessage ack = (TerminationAckMessage) decoded;
+      assertEquals(99, ack.getSeqNum());
+      assertEquals(4, ack.shuffleWriterId);
+      assertEquals(8, ack.shuffleReaderId);
+    } finally {
+      copy.release();
+    }
+  }
+
+  // ---- DataMessage -----------------------------------------------------------
+
+  @Test
+  public void testDataMessageRoundTrip() {
+    byte[] payload = "hello streaming shuffle".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    long checksum = 0xDEADBEEFL;
+
+    DataMessage original = new DataMessage(2, 5, payload.length, payloadBuf, checksum);
+    original.setSeqNum(10);
+    CompositeByteBuf buf = Unpooled.compositeBuffer();
+    buf.capacity(original.headerLength());
+    original.encode(buf);
+    original.release();
+    payloadBuf.release();
+
+    ByteBuf copy = Unpooled.buffer(buf.readableBytes());
+    copy.writeBytes(buf);
+    buf.release();
+
+    try {
+      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(copy);
+      assertInstanceOf(DataMessage.class, decoded);
+      DataMessage dm = (DataMessage) decoded;
+      assertEquals(10, dm.getSeqNum());
+      assertEquals(2, dm.shuffleWriterId);
+      assertEquals(5, dm.shuffleReaderId);
+      assertEquals(payload.length, dm.dataSize);
+      assertEquals(checksum, dm.checksum);
+
+      ByteBuf recordData = dm.getRecordData();
+      byte[] out = new byte[payload.length];
+      recordData.readBytes(out);
+      assertArrayEquals(payload, out);
+      dm.release();
+    } finally {
+      copy.release();
+    }
+  }
+
+  // ---- ShuffleChecksum -------------------------------------------------------
+
+  @Test
+  public void testShuffleChecksumHeapBuffer() {
+    byte[] data = {1, 2, 3, 4, 5};
+    ByteBuf buf = Unpooled.wrappedBuffer(data); // heap-backed
+
+    ShuffleChecksum cs = new ShuffleChecksum();
+    cs.updateChecksum(buf, 0, data.length);
+    long value1 = cs.getValue();
+    assertTrue(value1 != 0);
+
+    cs.reset();
+    cs.updateChecksum(buf, 0, data.length);
+    assertEquals(value1, cs.getValue(), "Checksum should be deterministic");
+    buf.release();
+  }
+
+  @Test
+  public void testShuffleChecksumDirectBuffer() {
+    byte[] data = {10, 20, 30};
+    ByteBuf heap = Unpooled.wrappedBuffer(data);
+    ByteBuf direct = Unpooled.directBuffer(data.length);
+    direct.writeBytes(data);
+
+    ShuffleChecksum csHeap = new ShuffleChecksum();
+    csHeap.updateChecksum(heap, 0, data.length);
+
+    ShuffleChecksum csDirect = new ShuffleChecksum();
+    csDirect.updateChecksum(direct, 0, data.length);
+
+    assertEquals(csHeap.getValue(), csDirect.getValue(),
+        "Heap and direct buffer checksums should match");
+
+    heap.release();
+    direct.release();
+  }
+
+  @Test
+  public void testInvalidMessageTypeThrows() {
+    ByteBuf buf = Unpooled.buffer(12);
+    buf.writeInt(999); // unknown type
+    buf.writeLong(0L);
+    assertThrows(IllegalArgumentException.class, () -> StreamingShuffleMessage.decode(buf));
+    buf.release();
+  }
+}
