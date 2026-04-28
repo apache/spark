@@ -187,18 +187,31 @@ def diagnose_unidoc_failure(log_file)
       end
     end
 
-    # Filter `[error]` lines down to the actually-fatal ones. javadoc emits
-    # ~100 errors against `target/java/.../X.java` (genjavadoc-generated
-    # stubs) which are intentionally non-fatal -- `--ignore-source-errors`
-    # is set in `JavaUnidoc / unidoc / javacOptions` for exactly this reason.
-    # The fatal errors are the ones in user source paths (doclint
-    # violations like heading-out-of-sequence, malformed @link, missing
-    # @param). javadoc reports the count in its `[done in N ms] / N errors`
-    # summary; this filter surfaces the lines themselves.
+    # Filter the log down to fatal doclint diagnostics. The signal we want is
+    # `[error]` or `[warn]` lines whose body has the shape
+    #   <path>/X.java:LINE: <message>     or
+    #   <path>/X.java:LINE:COL: <message>
+    # (with a colon after the line number -- this is the doclint diagnostic
+    # shape). These are the violations that drive `javadoc exited with exit
+    # code 1`; sbt's logger may classify them under either prefix depending
+    # on javadoc's own error vs. warning split, so we accept both.
+    #
+    # We exclude:
+    #   - `/target/java/...` paths -- genjavadoc-generated stubs whose 100+
+    #     "is not public" / "cannot find symbol" errors are intentionally
+    #     non-fatal (`--ignore-source-errors` is set).
+    #   - `(File.java:LINE)` shapes -- sbt stack traces that paren-wrap the
+    #     file ref. Stack-trace lines have `:LINE)` (paren close), not
+    #     `:LINE:` (colon after digits), which is how this regex tells them
+    #     apart from real diagnostics.
+    #   - `Could not find any member to link for ...` -- benign scaladoc
+    #     warnings about unresolvable @link targets; not what causes exit 1.
     ansi = /\e\[[0-9;]*[A-Za-z]/
     user_errors = lines.select do |line|
       plain = line.gsub(ansi, '')
-      plain =~ /\[error\].*\.java:\d+/ && plain !~ %r{/target/java/}
+      plain =~ %r{\[(?:error|warn)\][^\[]*?[\w/][\w./-]*\.java:\d+(?::\d+)?:\s} &&
+        plain !~ %r{/target/java/} &&
+        plain !~ /Could not find any member to link/
     end.map { |l| l.gsub(ansi, '').strip }.uniq
 
     banner = "=" * 78
