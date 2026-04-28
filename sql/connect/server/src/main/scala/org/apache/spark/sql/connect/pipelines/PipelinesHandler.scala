@@ -367,24 +367,31 @@ private[connect] object PipelinesHandler extends Logging {
         }
       }
 
-    val relationFlowDetails = flow.getRelationFlowDetails
-    graphElementRegistry.registerFlow(
-      UnresolvedFlow(
-        identifier = flowIdentifier,
-        destinationIdentifier = destinationIdentifier,
-        func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
-          transformRelationFunc(relationFlowDetails.getRelation)),
-        sqlConf = flow.getSqlConfMap.asScala.toMap,
-        once = false,
-        queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
-        origin = QueryOrigin(
-          filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
-            flow.getSourceCodeLocation.getFileName),
-          line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
-            flow.getSourceCodeLocation.getLineNumber),
-          objectType = Some(QueryOriginType.Flow.toString),
-          objectName = Option(flowIdentifier.unquotedString),
-          language = Some(Python()))))
+    flow.getDetailsCase match {
+      case proto.PipelineCommand.DefineFlow.DetailsCase.RELATION_FLOW_DETAILS =>
+        val relationFlowDetails = flow.getRelationFlowDetails
+        graphElementRegistry.registerFlow(
+          UnresolvedFlow(
+            identifier = flowIdentifier,
+            destinationIdentifier = destinationIdentifier,
+            func = FlowAnalysis.createFlowFunctionFromLogicalPlan(
+              transformRelationFunc(relationFlowDetails.getRelation)),
+            sqlConf = flow.getSqlConfMap.asScala.toMap,
+            once = false,
+            queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
+            origin = QueryOrigin(
+              filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
+                flow.getSourceCodeLocation.getFileName),
+              line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+                flow.getSourceCodeLocation.getLineNumber),
+              objectType = Some(QueryOriginType.Flow.toString),
+              objectName = Option(flowIdentifier.unquotedString),
+              language = Some(Python()))))
+      case proto.PipelineCommand.DefineFlow.DetailsCase.AUTO_CDC_FLOW_DETAILS =>
+        throw new UnsupportedOperationException("AutoCdcFlowDetails is not yet implemented.")
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported DefineFlow details case: $other")
+    }
     flowIdentifier
   }
 
