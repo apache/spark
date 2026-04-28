@@ -803,52 +803,52 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         result = ArrowArrayToPandasConversion.convert_pyarrow(arr, LongType())
         self.assertEqual(result.name, "my_col")
 
-    def test_convert_arrow_dtype_types(self):
-        """Test that arrow_dtype_types routes matching types to convert_pyarrow."""
+    def test_convert_arrow_dtype(self):
+        """Test that arrow_dtype routes supported types to convert_pyarrow."""
         import pyarrow as pa
         import pandas as pd
 
         arr = pa.array([1, 2, 3], type=pa.int64())
 
-        # With arrow_dtype_types including LongType: should get ArrowDtype
-        result = ArrowArrayToPandasConversion.convert(
-            arr, LongType(), arrow_dtype_types=(LongType,)
-        )
+        # arrow_dtype=True with a supported type: ArrowDtype-backed
+        result = ArrowArrayToPandasConversion.convert(arr, LongType(), arrow_dtype=True)
         self.assertIsInstance(result.dtype, pd.ArrowDtype)
 
-        # With arrow_dtype_types not including LongType: should get numpy dtype
-        result = ArrowArrayToPandasConversion.convert(
-            arr, LongType(), arrow_dtype_types=(StringType,)
-        )
-        self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
-
-        # With arrow_dtype_types=None (default): should get numpy dtype
+        # arrow_dtype=False (default): numpy-backed
         result = ArrowArrayToPandasConversion.convert(arr, LongType())
         self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
 
-    def test_convert_arrow_table_to_pandas_arrow_dtype(self):
-        """Test _convert_arrow_table_to_pandas with arrow_dtype flag."""
+    def test_convert_arrow_dtype_unsupported_type_falls_through(self):
+        """arrow_dtype=True with a type not in ARROW_DTYPE_TYPES falls through
+        to convert_numpy/convert_legacy."""
         import pyarrow as pa
         import pandas as pd
 
-        from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+        # ArrayType is not in ARROW_DTYPE_TYPES, so arrow_dtype=True should fall through
+        arr = pa.array([[1, 2], [3]], type=pa.list_(pa.int64()))
+        result = ArrowArrayToPandasConversion.convert(
+            arr, ArrayType(IntegerType()), arrow_dtype=True
+        )
+        self.assertNotIsInstance(result.dtype, pd.ArrowDtype)
 
-        table = pa.table({"a": [1, 2, 3], "b": ["x", "y", "z"]})
-        schema = StructType([StructField("a", LongType()), StructField("b", StringType())])
+    def test_convert_arrow_dtype_with_df_for_struct(self):
+        """arrow_dtype=True with df_for_struct=True falls through to legacy
+        (caller wants a DataFrame, not an ArrowDtype Series)."""
+        import pyarrow as pa
+        import pandas as pd
 
-        # arrow_dtype=False: numpy-backed
-        pdf_numpy = _convert_arrow_table_to_pandas(table, schema, timezone="UTC", arrow_dtype=False)
-        self.assertNotIsInstance(pdf_numpy["a"].dtype, pd.ArrowDtype)
-        self.assertNotIsInstance(pdf_numpy["b"].dtype, pd.ArrowDtype)
+        struct_type = pa.struct([("a", pa.int64()), ("b", pa.string())])
+        arr = pa.array([{"a": 1, "b": "x"}], type=struct_type)
+        spark_type = StructType([StructField("a", LongType()), StructField("b", StringType())])
 
-        # arrow_dtype=True: ArrowDtype-backed for supported types
-        pdf_arrow = _convert_arrow_table_to_pandas(table, schema, timezone="UTC", arrow_dtype=True)
-        self.assertIsInstance(pdf_arrow["a"].dtype, pd.ArrowDtype)
-        self.assertIsInstance(pdf_arrow["b"].dtype, pd.ArrowDtype)
-
-        # Values should be equal
-        self.assertEqual(pdf_numpy["a"].tolist(), pdf_arrow["a"].tolist())
-        self.assertEqual(pdf_numpy["b"].tolist(), pdf_arrow["b"].tolist())
+        # df_for_struct=True with arrow_dtype=True: returns a DataFrame, not a Series
+        result = ArrowArrayToPandasConversion.convert(
+            arr,
+            spark_type,
+            arrow_dtype=True,
+            df_for_struct=True,
+        )
+        self.assertIsInstance(result, pd.DataFrame)
 
     def test_geography_convert_numpy(self):
         import pyarrow as pa

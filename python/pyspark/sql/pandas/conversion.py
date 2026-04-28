@@ -184,7 +184,6 @@ def _convert_arrow_table_to_pandas(
     struct_handling_mode: Optional[str] = None,
     date_as_object: bool = False,
     self_destruct: bool = False,
-    arrow_dtype: bool = False,
 ) -> "PandasDataFrameLike":
     """
     Helper function to convert Arrow table columns to a pandas DataFrame.
@@ -208,9 +207,6 @@ def _convert_arrow_table_to_pandas(
         Whether to convert date values to Python datetime.date objects (default: False)
     self_destruct : bool
         Whether to enable memory-efficient self-destruct mode for large tables (default: False)
-    arrow_dtype : bool
-        Whether to produce ArrowDtype-backed pandas Series for supported types
-        (default: False)
 
     Returns
     -------
@@ -258,30 +254,23 @@ def _convert_arrow_table_to_pandas(
         error_on_duplicated_field_names = True
         struct_handling_mode = "dict"
 
-    if arrow_dtype:
-        from pyspark.sql.conversion import ArrowArrayToPandasConversion
+    # Convert arrow columns to pandas Series
+    column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
 
-        arrow_dtype_types = ArrowArrayToPandasConversion.ARROW_DTYPE_TYPES
-    else:
-        arrow_dtype_types = ()
-
-    def _convert_column(arrow_col: "pa.ChunkedArray", field: DataType) -> "pd.Series":
-        if isinstance(field.dataType, arrow_dtype_types):
-            return ArrowArrayToPandasConversion.convert_pyarrow(
-                arrow_col, field.dataType, ser_name=field.name
-            )
-        return _create_converter_to_pandas(
-            field.dataType,
-            field.nullable,
-            timezone=timezone,
-            struct_in_pandas=struct_handling_mode,
-            error_on_duplicated_field_names=error_on_duplicated_field_names,
-        )(arrow_col.to_pandas(**pandas_options))
-
+    # Apply Spark-specific type converters to each column
     pdf = pd.concat(
         objs=cast(
             Sequence[pd.Series],
-            [_convert_column(arrow_table.column(i), field) for i, field in enumerate(schema)],
+            (
+                _create_converter_to_pandas(
+                    field.dataType,
+                    field.nullable,
+                    timezone=timezone,
+                    struct_in_pandas=struct_handling_mode,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(series)
+                for series, field in zip(column_data, schema.fields)
+            ),
         ),
         axis="columns",
     )
@@ -317,7 +306,6 @@ class PandasConversionMixin:
             arrowPySparkFallbackEnabled,
             arrowPySparkSelfDestructEnabled,
             pandasStructHandlingMode,
-            arrowPySparkArrowDtypeEnabled,
         ) = self.sparkSession._jconf.getConfs(
             [
                 "spark.sql.session.timeZone",
@@ -326,7 +314,6 @@ class PandasConversionMixin:
                 "spark.sql.execution.arrow.pyspark.fallback.enabled",
                 "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
                 "spark.sql.execution.pandas.structHandlingMode",
-                "spark.sql.execution.arrow.pyspark.arrowDtype.enabled",
             ]
         )
 
@@ -399,7 +386,6 @@ class PandasConversionMixin:
                         struct_handling_mode=pandasStructHandlingMode,
                         date_as_object=True,
                         self_destruct=arrowPySparkSelfDestructEnabled == "true",
-                        arrow_dtype=arrowPySparkArrowDtypeEnabled == "true",
                     )
 
                     return pdf

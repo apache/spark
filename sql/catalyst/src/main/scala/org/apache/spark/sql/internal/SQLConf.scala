@@ -4267,14 +4267,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val ARROW_PYSPARK_ARROW_DTYPE_ENABLED =
-    buildConf("spark.sql.execution.arrow.pyspark.arrowDtype.enabled")
-      .doc("(Experimental) When true, use ArrowDtype-backed pandas Series in " +
-        "pyspark.sql.DataFrame.toPandas for supported data types. This keeps data in Arrow " +
-        "format without converting to numpy, which handles nulls natively via pd.NA and " +
-        "avoids type coercion issues. " +
-        "This optimization applies to: pyspark.sql.DataFrame.toPandas " +
-        "when 'spark.sql.execution.arrow.pyspark.enabled' is set.")
+  val PYTHON_UDF_PANDAS_ARROW_DTYPE_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.pandas.arrowDtype.enabled")
+      .doc("(Experimental) When true, use ArrowDtype-backed pandas Series for supported data " +
+        "types when converting Arrow input to pandas in Pandas UDF execution. This keeps data " +
+        "in Arrow format without converting to numpy, which handles nulls natively via pd.NA " +
+        "and avoids type coercion issues.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -8114,7 +8112,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
-  def arrowPySparkArrowDtypeEnabled: Boolean = getConf(ARROW_PYSPARK_ARROW_DTYPE_ENABLED)
+  def pythonUDFPandasArrowDtypeEnabled: Boolean = getConf(PYTHON_UDF_PANDAS_ARROW_DTYPE_ENABLED)
 
   def pysparkBinaryAsBytes: Boolean = getConf(PYSPARK_BINARY_AS_BYTES)
 

@@ -159,6 +159,12 @@ class RunnerConf(Conf):
         )
 
     @property
+    def arrow_dtype(self) -> bool:
+        return (
+            self.get("spark.sql.execution.pythonUDF.pandas.arrowDtype.enabled", "false") == "true"
+        )
+
+    @property
     def timezone(self) -> Optional[str]:
         return self.get("spark.sql.session.timeZone", None, lower_str=False)
 
@@ -3088,6 +3094,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     ndarray_as_list=True,
                     prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                     df_for_struct=False,
+                    arrow_dtype=runner_conf.arrow_dtype,
                 )
                 num_rows = len(pandas_columns[0]) if pandas_columns else input_batch.num_rows
                 if not pandas_columns:
@@ -3214,6 +3221,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 table,
                 timezone=ser._timezone,
                 prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                arrow_dtype=runner_conf.arrow_dtype,
             )
             key_series = [all_series[o] for o in key_offsets]
             value_series = [all_series[o] for o in value_offsets]
@@ -3237,6 +3245,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 next(batch_iter),
                 timezone=ser._timezone,
                 prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                arrow_dtype=runner_conf.arrow_dtype,
             )
             key_series = [first_series[o] for o in parsed_offsets[0][0]]
 
@@ -3248,6 +3257,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                         batch,
                         timezone=ser._timezone,
                         prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                        arrow_dtype=runner_conf.arrow_dtype,
                     )
                     yield [series[o] for o in parsed_offsets[0][1]]
 
