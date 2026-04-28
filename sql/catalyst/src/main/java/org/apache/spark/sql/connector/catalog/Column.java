@@ -171,14 +171,14 @@ public interface Column {
   String metadataInJSON();
 
   /**
-   * Returns the ID of this top-level column, or null. The ID is an opt-in signal that the
-   * connector tracks column identity beyond column name and type.
+   * Returns the ID of this top-level column, or null. The ID is an opt-in identifier that the
+   * connector uses to track column identity beyond column name and type.
    * <p>
    * When a non-null ID is returned, the connector commits to the following contract:
    * <ul>
    *   <li>The ID is stable across renames (logical name changes preserve the ID).</li>
-   *   <li>The ID changes when a column is dropped and re-added, even with the same name
-   *       and type.</li>
+   *   <li>The ID changes when a top-level column is dropped and re-added, even with the same
+   *       name and type.</li>
    *   <li>IDs are not reused within a table's history.</li>
    * </ul>
    * <p>
@@ -186,8 +186,8 @@ public interface Column {
    * return null when:
    * <ul>
    *   <li>The catalog has no notion of column identity beyond name and type, OR</li>
-   *   <li>The connector chooses to treat same-name drop+re-add as the same column (lenient
-   *       semantics: the cached DataFrame will be permitted to read the new column's data).</li>
+   *   <li>The connector chooses to treat same-name drop+re-add as the same column
+   *       (lenient semantics).</li>
    * </ul>
    * Returning null is per-column: a connector may return IDs for some columns and null for
    * others.
