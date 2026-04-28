@@ -1466,6 +1466,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // KP from the right child, so traversal enters the binary and sorted merge IS enabled on the
       // GPE. However, the binary's outputOrdering remains empty: it comes from the left (non-GPE)
       // child. The call site's find correctly rejects all such alternatives.
+      assert(EnsureRequirements.tryEnableSortedMerge(DummyBothKPBinaryExec(otherChild, gpe))
+        .exists(anyGpeEnabled))
       assert(!EnsureRequirements.tryEnableSortedMerge(DummyBothKPBinaryExec(otherChild, gpe))
         .exists(_.outputOrdering.nonEmpty))
     }

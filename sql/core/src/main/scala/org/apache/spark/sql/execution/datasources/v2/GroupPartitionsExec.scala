@@ -231,7 +231,9 @@ case class GroupPartitionsExec(
       childIsSafeForKWayMerge
 
   /**
-   * Returns a copy of this node with k-way merge enabled if the config permits it.
+   * Returns a copy of this node with k-way merge enabled if it is feasible: the config is on,
+   * the child has an ordering, the child subtree is `SafeForKWayMerge`, and this node actually
+   * coalesces partitions.
    */
   def tryEnableSortedMerge(): Option[GroupPartitionsExec] = {
     Option.when(hasCoalescing && canUseSortedMerge) {
