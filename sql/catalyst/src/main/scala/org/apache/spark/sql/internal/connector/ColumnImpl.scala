@@ -38,6 +38,11 @@ case class ColumnImpl(
   // identifier, not part of the column's structural identity. Including it would break existing
   // equality comparisons that rely on schema properties (name, type, nullability, etc.) and
   // would cause spurious mismatches when the same logical column is constructed with different IDs.
+  //
+  // A same logical column can be constructed with different IDs: when a column is dropped and
+  // re-added with the same name, the original column data is already gone, so some connectors may
+  // treat this as a different column by assigning a new ID. The column still has the same name,
+  // type, and nullability, so structurally it looks the same, but the ID differs.
   // Column ID validation is performed separately by [[V2TableUtil.validateColumnIds]].
   override def equals(other: Any): Boolean = other match {
     case that: ColumnImpl =>
