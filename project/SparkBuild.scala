@@ -1699,17 +1699,7 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        "--ignore-source-errors", "-notree",
-        // DEBUG (revert before merge): javadoc's own `-verbose` mode emits
-        // "[parsing X.java]" and "[loading Y.class]" messages, which the
-        // prior `-J-Xlog:class+load=info` did NOT (the JVM logger only sees
-        // bytecode loads via the class loader, not javadoc's own .java/.class
-        // reads via JavacFileManager). Combined with `-Xlog:exceptions=info`,
-        // the last `[loading ...]` or `[parsing ...]` line before the
-        // CompletionFailure storm at ~6.5s should pinpoint the user class
-        // that javac cannot resolve.
-        "-verbose",
-        "-J-Xlog:exceptions=info"
+        "--ignore-source-errors", "-notree"
       )
     },
 

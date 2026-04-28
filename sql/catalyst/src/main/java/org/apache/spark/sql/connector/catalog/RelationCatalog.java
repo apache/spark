@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * tables implement just {@link TableCatalog}; connectors that expose only views implement just
  * {@link ViewCatalog}; this interface is not relevant to them.
  *
- * <h3>Two principles</h3>
+ * <h2>Two principles</h2>
  *
  * A {@code RelationCatalog} follows two rules that, taken together, define every cross-cutting
  * subtlety:
@@ -50,7 +50,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  *       discriminator.</li>
  * </ol>
  *
- * <h3>Per-method cross-type behavior</h3>
+ * <h2>Per-method cross-type behavior</h2>
  *
  * <b>Active rejection</b> (write-side methods that throw on cross-type collision):
  * <table>
@@ -94,7 +94,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  *   <tr><td>{@link ViewCatalog#listViews}</td><td>views only</td></tr>
  * </table>
  *
- * <h3>Single-RPC perf entry points</h3>
+ * <h2>Single-RPC perf entry points</h2>
  *
  * The orthogonal {@link TableCatalog} and {@link ViewCatalog} answer two cross-cutting
  * questions in two round trips each. {@code RelationCatalog} adds dedicated methods so a
