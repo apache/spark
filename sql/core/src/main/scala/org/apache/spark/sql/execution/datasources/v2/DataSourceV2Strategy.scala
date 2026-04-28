@@ -454,19 +454,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
       // Strip catalog prefix if the identifier is catalog-qualified.
-      val newNameParts =
-        if (rawNewNameParts.length > 1 && rawNewNameParts.head == catalog.name()) {
-          rawNewNameParts.tail
-        } else {
-          rawNewNameParts
-        }
+      val newNameParts = if (rawNewNameParts.length > 1 &&
+          SQLConf.get.resolver(rawNewNameParts.head, catalog.name())) {
+        rawNewNameParts.tail
+      } else {
+        rawNewNameParts
+      }
 
-      val namespace =
-        if (newNameParts.length == 1) {
-          oldIdent.namespace()
-        } else {
-          newNameParts.dropRight(1).toArray
-        }
+      val namespace = if (newNameParts.length == 1) {
+        oldIdent.namespace()
+      } else {
+        newNameParts.init.toArray
+      }
 
       val newIdent = Identifier.of(namespace, newNameParts.last)
 

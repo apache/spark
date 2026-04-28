@@ -2502,10 +2502,14 @@ class DataSourceV2SQLSuiteV1Filter
       // rename with catalog-qualified target identifier
       sql("ALTER TABLE testcat.ns.t1 RENAME TO testcat.ns.t1_renamed")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns"), Seq(Row("ns", "t1_renamed", false)))
+
+      // rename with case-insensitive catalog-qualified target identifier
+      sql("ALTER TABLE testcat.ns.t1_renamed RENAME TO TesTcaT.ns.t1")
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns"), Seq(Row("ns", "t1", false)))
     }
   }
 
-  test("SPARK-56611: rename table across namespace should work for V2 catalogs") {
+  test("SPARK-56611: rename table across namespaces") {
     withTable("testcat.ns1.t1", "testcat.ns2.t1") {
       sql("CREATE TABLE testcat.ns1.t1 USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "t1", false)))
