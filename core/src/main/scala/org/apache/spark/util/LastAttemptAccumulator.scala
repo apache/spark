@@ -218,6 +218,18 @@ private class LastAttemptRDDVals[@specialized T](
   private var overrideTaskAttemptNumbers: Array[Int] = null
   private var overrideBitmap: Array[Long] = null
 
+  // Acceleration for [[findOverrideIdx]]: a HashMap from partitionId to its index in the override
+  // arrays. Null while the override count stays at or below
+  // [[LastAttemptRDDVals.OverrideIdxMapThreshold]] - linear scans over a handful of ints are
+  // faster than a hashmap probe and avoid the hashmap allocation. Once the count crosses the
+  // threshold the map is built once over the existing entries and then kept in sync as new
+  // overrides are appended (in-place updates of an existing override don't change its index, so
+  // no map update is needed for those).
+  // Concurrent readers tolerate stale or transiently-inconsistent map state via a fallback to
+  // linear scan in findOverrideIdx; the override arrays themselves remain consistent up to
+  // overrideSize, so the fallback always finds the entry.
+  private var overrideIdxMap: scala.collection.mutable.HashMap[Int, Int] = null
+
   def numPartitions: Int = partitionPartialVals.length
 
   def isEmptyAt(partitionId: Int): Boolean = {
@@ -246,12 +258,26 @@ private class LastAttemptRDDVals[@specialized T](
 
   /**
    * Returns the index of `partitionId`'s override entry in the override arrays, or -1 if it has
-   * none. Short-circuits via the bitmap so partitions without an override avoid the linear scan
-   * entirely; lookups for the rare overridden partitions cost O(numOverrides).
+   * none. Short-circuits via the bitmap so partitions without an override avoid the lookup
+   * entirely; for overridden partitions, falls back to a linear scan when the override count is
+   * small or to an O(1) HashMap probe once the count crosses
+   * [[LastAttemptRDDVals.OverrideIdxMapThreshold]].
    */
   private def findOverrideIdx(partitionId: Int): Int = {
     if (!isOverridden(partitionId)) return -1
     val n = overrideSize
+    val map = overrideIdxMap
+    if (map != null) {
+      try {
+        val idx = map.getOrElse(partitionId, -1)
+        // Validate the result against the override arrays - guards against a transient race
+        // where a concurrent reader observes a stale or partially-updated map.
+        if (idx >= 0 && idx < n && overridePartIds(idx) == partitionId) return idx
+      } catch {
+        case NonFatal(_) =>
+        // Concurrent map mutation; fall through to linear scan below.
+      }
+    }
     val partIds = overridePartIds
     var i = 0
     while (i < n) {
@@ -294,6 +320,19 @@ private class LastAttemptRDDVals[@specialized T](
       overrideTaskAttemptNumbers(n) = tan
       val word = partitionId >>> 6
       overrideBitmap(word) = overrideBitmap(word) | (1L << (partitionId & 63))
+      // Maintain the override index map: keep it in sync once it exists, build it on demand the
+      // first time the override count crosses the threshold.
+      if (overrideIdxMap != null) {
+        overrideIdxMap.update(partitionId, n)
+      } else if (n + 1 > LastAttemptRDDVals.OverrideIdxMapThreshold) {
+        val newMap = new scala.collection.mutable.HashMap[Int, Int]
+        var j = 0
+        while (j <= n) {
+          newMap.update(overridePartIds(j), j)
+          j += 1
+        }
+        overrideIdxMap = newMap
+      }
       overrideSize = n + 1
     }
   }
@@ -388,6 +427,11 @@ private object LastAttemptRDDVals {
   // (stageId, stageAttemptId, taskAttemptNumber) before any update, and as the value returned
   // by partialValueAt for partitions that have not been computed.
   val EMPTY_ID: Int = -1
+
+  // Override-count threshold above which [[LastAttemptRDDVals]] builds a HashMap from
+  // partitionId to override-array index for O(1) lookups. Below this, a linear scan over the
+  // override arrays is fast (cache-friendly) and avoids the map allocation entirely.
+  val OverrideIdxMapThreshold: Int = 32
 
   def apply[@specialized T](
       rddId: Int,

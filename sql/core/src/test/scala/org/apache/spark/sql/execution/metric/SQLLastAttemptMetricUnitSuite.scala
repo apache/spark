@@ -263,4 +263,97 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     assert(overrideSizeFld.getInt(rddVals) === 3)
     assert(slam.lastAttemptValueForRDDId(1) === Some(73)) // 30 + 10 + 15 + 10 + 8
   }
+
+  test("compact storage: override index map built lazily once threshold is crossed") {
+    val slam = SQLLastAttemptMetrics.createMetric(sc, "test SLAM")
+    val acc = slam.copy()
+
+    // Read the threshold from the companion object so this test stays in sync if the constant
+    // is tuned.
+    // scalastyle:off classforname
+    val companion = Class.forName("org.apache.spark.util.LastAttemptRDDVals$")
+      .getField("MODULE$").get(null)
+    // scalastyle:on classforname
+    val threshold = companion.getClass.getMethod("OverrideIdxMapThreshold")
+      .invoke(companion).asInstanceOf[Int]
+
+    val numParts = threshold + 20 // headroom above and below the threshold
+    when(mockTaskInfo.attemptNumber).thenReturn(0)
+    when(mockRdd.scope).thenReturn(None)
+    when(mockRdd.getNumPartitions).thenReturn(numParts)
+    when(mockRdd.id).thenReturn(7)
+
+    // Establish a common attempt across all partitions; no overrides yet.
+    for (partId <- 0 until numParts) {
+      when(mockTaskInfo.partitionId).thenReturn(partId)
+      acc.set(1)
+      slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 10, mockProperties)
+    }
+
+    val rddsMap = lastAttemptRddsMapField.get(slam)
+    val mapGetMethod = rddsMap.getClass.getMethod("get", classOf[Object])
+    val rddVals = mapGetMethod.invoke(rddsMap, Int.box(7)).asInstanceOf[Option[Object]].get
+    val rddValsClass = rddVals.getClass
+    val fieldPrefix = "org$apache$spark$util$LastAttemptRDDVals$$"
+    val overrideSizeFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideSize")
+    overrideSizeFld.setAccessible(true)
+    val overrideIdxMapFld = rddValsClass.getDeclaredField(fieldPrefix + "overrideIdxMap")
+    overrideIdxMapFld.setAccessible(true)
+
+    assert(overrideSizeFld.getInt(rddVals) === 0)
+    assert(overrideIdxMapFld.get(rddVals) === null,
+      "Map must not be allocated when there are no overrides")
+
+    // Retry the first `threshold` partitions with a different stageAttemptId; we sit exactly at
+    // the threshold, so the map should still be null.
+    for (partId <- 0 until threshold) {
+      when(mockTaskInfo.partitionId).thenReturn(partId)
+      acc.set(2)
+      slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
+    }
+    assert(overrideSizeFld.getInt(rddVals) === threshold)
+    assert(overrideIdxMapFld.get(rddVals) === null,
+      s"At threshold ($threshold overrides) the map should still be null")
+
+    // The next override crosses the threshold; the map is built and populated with all entries.
+    when(mockTaskInfo.partitionId).thenReturn(threshold)
+    acc.set(3)
+    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
+    assert(overrideSizeFld.getInt(rddVals) === threshold + 1)
+    val mapAfterThreshold = overrideIdxMapFld.get(rddVals)
+      .asInstanceOf[scala.collection.mutable.HashMap[Int, Int]]
+    assert(mapAfterThreshold != null, "Map must be allocated after crossing the threshold")
+    assert(mapAfterThreshold.size === threshold + 1)
+    for (partId <- 0 to threshold) {
+      assert(mapAfterThreshold.contains(partId),
+        s"Map must contain partition $partId after the threshold crossing")
+    }
+
+    // A new override appended after the threshold extends the existing map.
+    when(mockTaskInfo.partitionId).thenReturn(threshold + 1)
+    acc.set(4)
+    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 10, 11, mockProperties)
+    assert(overrideSizeFld.getInt(rddVals) === threshold + 2)
+    assert(mapAfterThreshold.size === threshold + 2)
+    assert(mapAfterThreshold.contains(threshold + 1))
+
+    // An in-place override update (newer attempt for an existing partition) leaves the map
+    // unchanged - the index doesn't move.
+    when(mockTaskInfo.partitionId).thenReturn(0)
+    val mapEntryBefore = mapAfterThreshold(0)
+    acc.set(5)
+    slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 11, 0, mockProperties)
+    assert(overrideSizeFld.getInt(rddVals) === threshold + 2)
+    assert(mapAfterThreshold.size === threshold + 2)
+    assert(mapAfterThreshold(0) === mapEntryBefore,
+      "In-place override update must not move the index")
+
+    // The aggregate is: (numParts - threshold - 2) partitions still on the common attempt
+    // contribute 1; partitions [1, threshold-1] are overridden with value 2; partition
+    // `threshold` contributes 3; partition `threshold + 1` contributes 4; partition 0
+    // contributes 5 (its latest override).
+    val expected =
+      (numParts - threshold - 2) * 1 + (threshold - 1) * 2 + 1 * 3 + 1 * 4 + 1 * 5
+    assert(slam.lastAttemptValueForRDDId(7) === Some(expected))
+  }
 }
