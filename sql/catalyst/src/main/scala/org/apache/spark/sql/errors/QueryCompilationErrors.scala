@@ -3862,25 +3862,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("catalogName" -> catalogName))
   }
 
-  def cdcUpdateDetectionRequiresCarryOverRemoval(
-      changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
-  def cdcNetChangesNotYetSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
-  def cdcStreamingPostProcessingNotSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
   def invalidCdcOptionConflictingRangeTypes(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.CONFLICTING_RANGE_TYPES",

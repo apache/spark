@@ -43,15 +43,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 @Evolving
 public interface Changelog {
 
-  /** Constant for the {@code _change_type} value of a row inserted into the table. */
-  String CHANGE_TYPE_INSERT = "insert";
-  /** Constant for the {@code _change_type} value of a row deleted from the table. */
-  String CHANGE_TYPE_DELETE = "delete";
-  /** Constant for the {@code _change_type} value of an update's pre-image row. */
-  String CHANGE_TYPE_UPDATE_PREIMAGE = "update_preimage";
-  /** Constant for the {@code _change_type} value of an update's post-image row. */
-  String CHANGE_TYPE_UPDATE_POSTIMAGE = "update_postimage";
-
   /** A name to identify this changelog. */
   String name();
 

@@ -188,6 +188,13 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(v2Catalog.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 

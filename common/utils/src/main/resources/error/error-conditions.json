@@ -661,19 +661,6 @@
     ],
     "sqlState" : "42P08"
   },
-  "CHANGELOG_CONTRACT_VIOLATION" : {
-    "message" : [
-      "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
-    ],
-    "subClass" : {
-      "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
-        "message" : [
-          "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
-        ]
-      }
-    },
-    "sqlState" : "XX000"
-  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -3290,21 +3277,6 @@
       "MISSING_STARTING_VERSION" : {
         "message" : [
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
-        ]
-      },
-      "NET_CHANGES_NOT_YET_SUPPORTED" : {
-        "message" : [
-          "The `deduplicationMode = netChanges` option on connector `<changelogName>` is not yet supported. Use `deduplicationMode = dropCarryovers` (default) or `deduplicationMode = none` instead."
-        ]
-      },
-      "STREAMING_POST_PROCESSING_NOT_SUPPORTED" : {
-        "message" : [
-          "Change Data Capture (CDC) streaming reads on connector `<changelogName>` do not yet support post-processing (carry-over removal, update detection, or net change computation). The requested combination of options would require post-processing, which is currently only available for batch reads. Use a batch read, or set `deduplicationMode = none` and `computeUpdates = false` to receive raw change rows in streaming."
-        ]
-      },
-      "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
-        "message" : [
-          "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."
         ]
       }
     },

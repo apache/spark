@@ -33,8 +33,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 case class ChangelogTable(
     changelog: Changelog,
-    changelogInfo: ChangelogInfo,
-    resolved: Boolean = false) extends Table with SupportsRead {
+    changelogInfo: ChangelogInfo) extends Table with SupportsRead {
 
   override def name: String = changelog.name
 

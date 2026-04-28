@@ -33,7 +33,21 @@ import org.apache.spark.sql.connector.catalog.{
   Identifier
 }
 
-class VariableResolution(tempVariableManager: TempVariableManager) extends SQLConfHelper {
+class VariableResolution(
+    tempVariableManager: TempVariableManager,
+    catalogManager: CatalogManager)
+    extends SQLConfHelper {
+
+  /**
+   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path
+   * (PATH enabled and explicitly set).
+   */
+  private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
+    if (nameParts.length != 1) return true
+    catalogManager.sessionScopeUnqualifiedAllowed(
+      catalogManager.currentCatalog.name(),
+      catalogManager.currentNamespace.toSeq)
+  }
 
   /**
    * Resolves a `multipartName` to an [[Expression]] tree, supporting nested field access.
@@ -125,7 +139,8 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
         )
       }
       .orElse(
-        if (maybeTempVariableName(nameParts)) {
+        if (maybeTempVariableName(nameParts) &&
+            allowUnqualifiedSessionTempVariableLookup(nameParts)) {
           tempVariableManager
             .get(namePartsCaseAdjusted)
             .map { varDef =>
