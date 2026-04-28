@@ -1159,7 +1159,7 @@ class Analyzer(
                   Some(mc.loadTableOrView(ident) match {
                     case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
                       ResolvedPersistentView(
-                        catalog, ident, V1Table.toCatalogTable(catalog, ident, t))
+                        catalog, ident, t.getTableInfo.asInstanceOf[ViewInfo])
                     case table =>
                       ResolvedTable.create(catalog.asTableCatalog, ident, table)
                   })
@@ -1180,7 +1180,7 @@ class Analyzer(
                       val v1Ident = v1Table.catalogTable.identifier
                       val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                       ResolvedPersistentView(
-                        catalog, v2Ident, v1Table.catalogTable)
+                        catalog, v2Ident, new V1ViewInfo(v1Table.catalogTable))
                     case table =>
                       ResolvedTable.create(catalog.asTableCatalog, ident, table)
                   }
@@ -1191,9 +1191,7 @@ class Analyzer(
                   catalog match {
                     case vc: ViewCatalog =>
                       try {
-                        val viewInfo = vc.loadView(ident)
-                        val catalogTable = V1Table.toCatalogTable(catalog, ident, viewInfo)
-                        Some(ResolvedPersistentView(catalog, ident, catalogTable))
+                        Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
                       } catch {
                         case _: NoSuchViewException => None
                       }

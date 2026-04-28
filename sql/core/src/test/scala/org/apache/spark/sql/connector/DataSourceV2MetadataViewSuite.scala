@@ -34,11 +34,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Data-source-table read paths live in
  * [[org.apache.spark.sql.connector.DataSourceV2MetadataTableSuite]].
  *
- * TODO: once the remaining v2 view DDL is implemented (SET/UNSET TBLPROPERTIES, SHOW CREATE
- * VIEW, RENAME TO, SCHEMA BINDING, DESCRIBE / SHOW TBLPROPERTIES on v2 views), register a
- * `MetadataTable`-backed `DelegatingCatalogExtension` as `spark.sql.catalog.spark_catalog`
- * and run the shared [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against
- * the v2 path for full parity with the v1 persisted-view coverage.
+ * TODO: register a `MetadataTable`-backed `DelegatingCatalogExtension` as
+ * `spark.sql.catalog.spark_catalog` and run the shared
+ * [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against the v2 path for full
+ * parity with the v1 persisted-view coverage.
  */
 class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -648,72 +647,85 @@ class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  // --- Follow-up-blocked view DDL / inspection on a non-session v2 catalog ------------
-  // These plans don't have a dedicated v2 strategy yet (tracked for a follow-up PR). We pin
-  // the current failure mode -- UNSUPPORTED_FEATURE.TABLE_OPERATION with a statement-specific
-  // operation string -- so a future generic "no plan found" regression would surface here
-  // rather than silently degrading the UX.
+  // --- v2 view DDL / inspection on a non-session v2 catalog ----------------------------
+  // ResolveSessionCatalog's `ResolvedViewIdentifier` matcher is gated on isSessionCatalog, so
+  // these plans flow through to DataSourceV2Strategy with a `ResolvedPersistentView` child.
+  // Each is handled by a dedicated v2 exec defined alongside the v1 commands.
 
   private def seedV2View(name: String): Unit = {
     sql(s"CREATE VIEW view_catalog.default.$name AS SELECT 1 AS x")
   }
 
+  // Used by the REFRESH / ANALYZE pins below: those plans still don't have a v2 implementation
+  // and surface UNSUPPORTED_FEATURE.TABLE_OPERATION via DataSourceV2Strategy.
   private def assertUnsupportedViewOp(statement: String): Unit = {
     val ex = intercept[AnalysisException](sql(statement))
     assert(ex.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION", s"got ${ex.getCondition}")
   }
 
-  test("ALTER VIEW ... SET TBLPROPERTIES on a v2 view is rejected") {
+  test("ALTER VIEW ... SET TBLPROPERTIES on a v2 view writes the properties") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingTableViewCatalog]
     seedV2View("v_set_props")
-    assertUnsupportedViewOp(
-      "ALTER VIEW view_catalog.default.v_set_props SET TBLPROPERTIES ('k' = 'v')")
+    sql("ALTER VIEW view_catalog.default.v_set_props SET TBLPROPERTIES ('k' = 'v')")
+    val stored = catalog.getStoredView(Array("default"), "v_set_props")
+    assert(stored.properties.get("k") == "v")
   }
 
-  test("ALTER VIEW ... UNSET TBLPROPERTIES on a v2 view is rejected") {
+  test("ALTER VIEW ... UNSET TBLPROPERTIES on a v2 view drops the properties") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingTableViewCatalog]
     seedV2View("v_unset_props")
-    assertUnsupportedViewOp(
-      "ALTER VIEW view_catalog.default.v_unset_props UNSET TBLPROPERTIES ('k')")
+    sql("ALTER VIEW view_catalog.default.v_unset_props SET TBLPROPERTIES ('k' = 'v')")
+    sql("ALTER VIEW view_catalog.default.v_unset_props UNSET TBLPROPERTIES ('k')")
+    val stored = catalog.getStoredView(Array("default"), "v_unset_props")
+    assert(!stored.properties.containsKey("k"))
   }
 
-  test("ALTER VIEW ... WITH SCHEMA on a v2 view is rejected") {
+  test("ALTER VIEW ... WITH SCHEMA on a v2 view updates schemaMode") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingTableViewCatalog]
     seedV2View("v_schema_binding")
-    assertUnsupportedViewOp(
-      "ALTER VIEW view_catalog.default.v_schema_binding WITH SCHEMA EVOLUTION")
+    sql("ALTER VIEW view_catalog.default.v_schema_binding WITH SCHEMA EVOLUTION")
+    val stored = catalog.getStoredView(Array("default"), "v_schema_binding")
+    assert(stored.schemaMode == "EVOLUTION")
   }
 
-  test("ALTER VIEW ... RENAME TO on a v2 view is rejected") {
+  test("ALTER VIEW ... RENAME TO on a v2 view moves the entry") {
+    val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
+      .asInstanceOf[TestingTableViewCatalog]
     seedV2View("v_rename")
-    assertUnsupportedViewOp(
-      "ALTER VIEW view_catalog.default.v_rename RENAME TO view_catalog.default.v_renamed")
+    sql("ALTER VIEW view_catalog.default.v_rename RENAME TO view_catalog.default.v_renamed")
+    assert(!catalog.viewExists(Identifier.of(Array("default"), "v_rename")))
+    assert(catalog.viewExists(Identifier.of(Array("default"), "v_renamed")))
   }
 
-  test("SHOW CREATE TABLE on a v2 view is rejected") {
+  test("SHOW CREATE TABLE on a v2 view emits CREATE VIEW") {
     seedV2View("v_show_create")
-    assertUnsupportedViewOp("SHOW CREATE TABLE view_catalog.default.v_show_create")
+    val ddl = sql("SHOW CREATE TABLE view_catalog.default.v_show_create")
+      .collect().head.getString(0)
+    assert(ddl.startsWith("CREATE VIEW "))
+    assert(ddl.contains("AS SELECT 1 AS x"))
   }
 
-  test("SHOW TBLPROPERTIES on a v2 view is rejected") {
+  test("SHOW TBLPROPERTIES on a v2 view returns user properties") {
     seedV2View("v_show_props")
-    assertUnsupportedViewOp("SHOW TBLPROPERTIES view_catalog.default.v_show_props")
+    sql("ALTER VIEW view_catalog.default.v_show_props SET TBLPROPERTIES ('k' = 'v')")
+    val rows = sql("SHOW TBLPROPERTIES view_catalog.default.v_show_props").collect()
+    assert(rows.exists(r => r.getString(0) == "k" && r.getString(1) == "v"))
   }
 
-  test("SHOW COLUMNS on a v2 view is rejected") {
+  test("SHOW COLUMNS on a v2 view returns the column list") {
     seedV2View("v_show_cols")
-    assertUnsupportedViewOp("SHOW COLUMNS IN view_catalog.default.v_show_cols")
+    val cols = sql("SHOW COLUMNS IN view_catalog.default.v_show_cols")
+      .collect().map(_.getString(0)).toSeq
+    assert(cols == Seq("x"))
   }
 
-  test("DESCRIBE TABLE on a v2 view is rejected") {
+  test("DESCRIBE TABLE on a v2 view returns the schema") {
     seedV2View("v_describe")
-    assertUnsupportedViewOp("DESCRIBE TABLE view_catalog.default.v_describe")
-  }
-
-  test("DESCRIBE TABLE ... COLUMN on a v2 view is rejected") {
-    seedV2View("v_describe_col")
-    // Column resolution against a v2 view's output isn't wired up yet, so the analyzer fails
-    // with UNRESOLVED_COLUMN before reaching the planner. That's still a clean
-    // AnalysisException (not a generic "no plan found"), which is the pin we care about.
-    intercept[AnalysisException](
-      sql("DESCRIBE TABLE view_catalog.default.v_describe_col x"))
+    val rows = sql("DESCRIBE TABLE view_catalog.default.v_describe").collect()
+    assert(rows.exists(r => r.getString(0) == "x" && r.getString(1) == "int"))
   }
 
   // These plans reach `DataSourceV2Strategy` with a `ResolvedPersistentView` child on a
@@ -808,18 +820,17 @@ class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
         .build())
   }
 
-  test("SHOW TABLES on a v2 catalog returns only tables") {
-    // Per the new `TableCatalog.listTables` contract, SHOW TABLES returns table identifiers
-    // only -- views (in mixed catalogs) are listed via SHOW VIEWS / `ViewCatalog.listViews`.
-    // This is an intentional divergence from v1 SHOW TABLES (which includes both tables and
-    // views in a single listing); v2 catalogs separate the two so callers can target either
-    // kind without filtering.
+  test("SHOW TABLES on a TableViewCatalog returns both tables and views (v1-parity)") {
+    // For a `TableViewCatalog` (a catalog exposing both tables and views in a shared
+    // identifier namespace), SHOW TABLES routes through `listRelationSummaries` so views
+    // appear alongside tables -- matching the v1 SHOW TABLES output. Pure `TableCatalog`
+    // catalogs (no view mixin) continue to use `listTables` and return tables only.
     seedV2View("v_in_show_tables")
     seedV2Table("t_in_show_tables")
     val rows = sql("SHOW TABLES IN view_catalog.default").collect()
     val names = rows.map(_.getString(1)).toSet
     assert(names.contains("t_in_show_tables"), s"table missing from SHOW TABLES: $names")
-    assert(!names.contains("v_in_show_tables"), s"view leaked into SHOW TABLES: $names")
+    assert(names.contains("v_in_show_tables"), s"view missing from SHOW TABLES: $names")
     rows.foreach(r => assert(!r.getBoolean(2), s"isTemporary must be false: $r"))
   }
 
@@ -1025,6 +1036,19 @@ class TestingTableViewCatalog extends TableViewCatalog {
     createdViews.remove(key) != null
   }
 
+  override def renameView(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    val oldKey = (oldIdent.namespace().toSeq, oldIdent.name())
+    val newKey = (newIdent.namespace().toSeq, newIdent.name())
+    val existing = createdViews.get(oldKey)
+    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+      throw new NoSuchViewException(oldIdent)
+    }
+    if (createdViews.putIfAbsent(newKey, existing) != null) {
+      throw new ViewAlreadyExistsException(newIdent)
+    }
+    createdViews.remove(oldKey)
+  }
+
   private var catalogName = ""
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
     catalogName = name
@@ -1109,6 +1133,17 @@ class TestingViewOnlyCatalog extends ViewCatalog {
   override def dropView(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
     store.remove(key) != null
+  }
+
+  override def renameView(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    val oldKey = (oldIdent.namespace().toSeq, oldIdent.name())
+    val newKey = (newIdent.namespace().toSeq, newIdent.name())
+    val existing = store.get(oldKey)
+    if (existing == null) throw new NoSuchViewException(oldIdent)
+    if (store.putIfAbsent(newKey, existing) != null) {
+      throw new ViewAlreadyExistsException(newIdent)
+    }
+    store.remove(oldKey)
   }
 
   private var catalogName = ""

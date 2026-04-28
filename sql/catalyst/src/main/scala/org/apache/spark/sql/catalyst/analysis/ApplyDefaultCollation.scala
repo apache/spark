@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog, V1ViewInfo}
 import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
 
 /**
@@ -134,7 +134,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case alterViewAs: AlterViewAs =>
         alterViewAs.child match {
           case resolvedPersistentView: ResolvedPersistentView =>
-            resolvedPersistentView.metadata.collation
+            Option(resolvedPersistentView.info.properties.get(TableCatalog.PROP_COLLATION))
           case resolvedTempView: ResolvedTempView =>
             resolvedTempView.metadata.collation
           case _ => None
@@ -207,13 +207,17 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView
 
         // We match against ResolvedPersistentView because temporary views don't have a
-        // schema/catalog.
+        // schema/catalog. Only the v1 (session-catalog) form is rewritten here -- it carries
+        // the underlying `CatalogTable` via `V1ViewInfo`, so we can update `collation` and
+        // re-wrap. v2 view paths consume `info.properties` directly and are not affected by
+        // this rewrite.
         case alterViewAs@AlterViewAs(resolvedPersistentView@ResolvedPersistentView(
-        catalog: SupportsNamespaces, identifier, _), _, _, _, _)
-          if resolvedPersistentView.metadata.collation.isEmpty =>
+        catalog: SupportsNamespaces, identifier, v1Info: V1ViewInfo), _, _, _, _)
+          if v1Info.v1Table.collation.isEmpty =>
+          val newCollation = getCollationFromSchemaMetadata(catalog, identifier.namespace())
+          val newV1Table = v1Info.v1Table.copy(collation = newCollation)
           val newResolvedPersistentView = resolvedPersistentView.copy(
-            metadata = resolvedPersistentView.metadata.copy(
-              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
+            info = new V1ViewInfo(newV1Table))
           val newAlterViewAs = CurrentOrigin.withOrigin(alterViewAs.origin) {
             alterViewAs.copy(child = newResolvedPersistentView)
           }

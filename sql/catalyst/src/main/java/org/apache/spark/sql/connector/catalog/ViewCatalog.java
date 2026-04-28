@@ -145,4 +145,21 @@ public interface ViewCatalog extends CatalogPlugin {
    * @return true if a view was dropped, false otherwise
    */
   boolean dropView(Identifier ident);
+
+  /**
+   * Rename a view.
+   * <p>
+   * If the catalog supports tables and contains a table at the new identifier, this must throw
+   * {@link ViewAlreadyExistsException}. If the source identifier resolves to a table rather than
+   * a view, this must throw {@link NoSuchViewException}. The cross-type contract for catalogs
+   * that expose both tables and views lives on {@link TableViewCatalog}.
+   *
+   * @param oldIdent the view identifier of the existing view to rename
+   * @param newIdent the new view identifier
+   * @throws NoSuchViewException        if no view exists at {@code oldIdent}
+   * @throws ViewAlreadyExistsException if a view (or, in a {@link TableViewCatalog}, a table)
+   *                                    already exists at {@code newIdent}
+   */
+  void renameView(Identifier oldIdent, Identifier newIdent)
+      throws NoSuchViewException, ViewAlreadyExistsException;
 }

@@ -67,6 +67,9 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  *       <td>{@link org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException}</td></tr>
  *   <tr><td>{@link ViewCatalog#replaceView}</td><td>a table sits at {@code ident}</td>
  *       <td>{@link org.apache.spark.sql.catalyst.analysis.NoSuchViewException}</td></tr>
+ *   <tr><td>{@link ViewCatalog#renameView}</td>
+ *       <td>a table sits at {@code newIdent}</td>
+ *       <td>{@link org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException}</td></tr>
  * </table>
  *
  * <b>Passive filtering</b> (read / non-collision mutation methods that behave as if the wrong
@@ -91,6 +94,8 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  *   <tr><td>{@link ViewCatalog#viewExists}</td><td>returns {@code false} for a table</td></tr>
  *   <tr><td>{@link ViewCatalog#dropView}</td>
  *       <td>returns {@code false} for a table; does not drop it</td></tr>
+ *   <tr><td>{@link ViewCatalog#renameView}</td>
+ *       <td>throws {@code NoSuchViewException} when the source is a table</td></tr>
  *   <tr><td>{@link ViewCatalog#listViews}</td><td>views only</td></tr>
  * </table>
  *

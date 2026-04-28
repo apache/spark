@@ -49,7 +49,7 @@ public class ViewInfo extends TableInfo {
   private final String schemaMode;
   private final String[] queryColumnNames;
 
-  private ViewInfo(Builder builder) {
+  protected ViewInfo(Builder builder) {
     super(builder);
     this.queryText = Objects.requireNonNull(builder.queryText, "queryText should not be null");
     this.currentCatalog = builder.currentCatalog;

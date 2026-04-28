@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.{V1Table, V1ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
@@ -71,10 +71,13 @@ case class DescribeRelationJsonCommand(
         if (partitionSpec.nonEmpty) {
           throw QueryCompilationErrors.descPartitionNotAllowedOnView(v.identifier.name())
         }
+        // v1 paths reach here only for session-catalog views (`V1ViewInfo`); v2 views go
+        // through `DescribeV2ViewExec` in the v2 strategy.
+        val metadata = v.info.asInstanceOf[V1ViewInfo].v1Table
         describeIdentifier(v.identifier.toQualifiedNameParts(v.catalog), jsonMap)
-        describeColsJson(v.metadata.schema, jsonMap)
-        describeFormattedTableInfoJson(v.metadata, jsonMap)
-        describeViewSqlConfsJson(v.metadata, jsonMap)
+        describeColsJson(metadata.schema, jsonMap)
+        describeFormattedTableInfoJson(metadata, jsonMap)
+        describeViewSqlConfsJson(metadata, jsonMap)
 
       case ResolvedTable(catalog, identifier, V1Table(metadata), _) =>
         describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)
