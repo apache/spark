@@ -340,6 +340,8 @@ case class AdaptiveSparkPlanExec(
         if (errors.nonEmpty) {
           cleanUpAndThrowException(errors.toSeq, None)
         }
+        val testTriggerForceCancellation = AQETestHelper.shouldForceCancellation(this)
+
         if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
           // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
           // than that of the current plan; otherwise keep the current physical plan together with
@@ -352,14 +354,21 @@ case class AdaptiveSparkPlanExec(
           // the current physical plan. Once a new plan is adopted and both logical and physical
           // plans are updated, we can clear the query stage list because at this point the two
           // plans are semantically and physically in sync again.
-          val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
+          var logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
+          if (testTriggerForceCancellation) {
+            // Force unwrap all LogicalQueryStage so they get replanned.
+            logicalPlan = logicalPlan.transformDown {
+              case LogicalQueryStage(logical, _) => logical
+            }
+          }
           val afterReOptimize = reOptimize(logicalPlan)
           if (afterReOptimize.isDefined) {
             val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
             val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
             val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
             if (newCost < origCost ||
-              (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
+              (newCost == origCost && currentPhysicalPlan != newPhysicalPlan) ||
+              testTriggerForceCancellation) {
               lazy val plans = sideBySide(
                 currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
               logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
@@ -368,6 +377,9 @@ case class AdaptiveSparkPlanExec(
               currentLogicalPlan = newLogicalPlan
               stagesToReplace = Seq.empty[QueryStageExec]
             }
+          }
+          if (testTriggerForceCancellation) {
+            AQETestHelper.markForcedCancellationTriggeredForPlan(this)
           }
         }
         // Now that some stages have finished, we can try creating new stages.

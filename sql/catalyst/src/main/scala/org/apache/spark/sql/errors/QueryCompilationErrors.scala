@@ -567,11 +567,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def viewDepthExceedsMaxResolutionDepthError(
-      identifier: TableIdentifier, maxNestedDepth: Int, t: TreeNode[_]): Throwable = {
+      viewNameParts: Seq[String], maxNestedDepth: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_EXCEED_MAX_NESTED_DEPTH",
       messageParameters = Map(
-        "viewName" -> toSQLId(identifier.nameParts),
+        "viewName" -> toSQLId(viewNameParts),
         "maxNestedDepth" -> maxNestedDepth.toString),
       origin = t.origin)
   }
@@ -3353,25 +3353,25 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def cannotCreateViewTooManyColumnsError(
-      viewIdent: TableIdentifier,
+      viewNameParts: Seq[String],
       expected: Seq[String],
       query: LogicalPlan): Throwable = {
     new AnalysisException(
       errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
-        "viewName" -> toSQLId(viewIdent.nameParts),
+        "viewName" -> toSQLId(viewNameParts),
         "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
 
   def cannotCreateViewNotEnoughColumnsError(
-      viewIdent: TableIdentifier,
+      viewNameParts: Seq[String],
       expected: Seq[String],
       query: LogicalPlan): Throwable = {
     new AnalysisException(
       errorClass = "CREATE_VIEW_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
-        "viewName" -> toSQLId(viewIdent.nameParts),
+        "viewName" -> toSQLId(viewNameParts),
         "viewColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> query.output.map(c => toSQLId(c.name)).mkString(", ")))
   }
@@ -3383,12 +3383,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def unsupportedCreateOrReplaceViewOnTableError(
-      name: TableIdentifier, replace: Boolean): Throwable = {
+      nameParts: Seq[String], replace: Boolean): Throwable = {
     if (replace) {
       new AnalysisException(
         errorClass = "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
         messageParameters = Map(
-          "tableName" -> toSQLId(name.nameParts),
+          "tableName" -> toSQLId(nameParts),
           "operation" -> "CREATE OR REPLACE VIEW"
         )
       )
@@ -3396,16 +3396,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       new AnalysisException(
         errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
         messageParameters = Map(
-          "relationName" -> toSQLId(name.nameParts)
+          "relationName" -> toSQLId(nameParts)
         )
       )
     }
   }
 
-  def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
+  def viewAlreadyExistsError(nameParts: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" -> name.toString))
+      messageParameters = Map("relationName" -> toSQLId(nameParts)))
   }
 
   def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
@@ -3415,57 +3415,57 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def recursiveViewDetectedError(
-      viewIdent: TableIdentifier,
-      newPath: Seq[TableIdentifier]): Throwable = {
+      viewIdent: Seq[String],
+      newPath: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "RECURSIVE_VIEW",
       messageParameters = Map(
-        "viewIdent" -> toSQLId(viewIdent.nameParts),
-        "newPath" -> newPath.map(p => toSQLId(p.nameParts)).mkString(" -> ")))
+        "viewIdent" -> toSQLId(viewIdent),
+        "newPath" -> newPath.map(toSQLId).mkString(" -> ")))
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
-      name: TableIdentifier,
+      viewNameParts: Seq[String],
       attr: Attribute): Throwable = {
     new AnalysisException(
       errorClass = "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS",
       messageParameters = Map(
-        "name" -> toSQLId(name.nameParts),
+        "name" -> toSQLId(viewNameParts),
         "attr" -> toSQLExpr(attr)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempViewError(
-      name: TableIdentifier,
-      nameParts: String): Throwable = {
+      viewNameParts: Seq[String],
+      tempViewNameParts: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "VIEW",
-        "objName" -> toSQLId(name.nameParts),
+        "objName" -> toSQLId(viewNameParts),
         "tempObj" -> "VIEW",
-        "tempObjName" -> toSQLId(nameParts)))
+        "tempObjName" -> toSQLId(tempViewNameParts)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
-      name: TableIdentifier,
+      viewNameParts: Seq[String],
       funcName: String): Throwable = {
      new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "VIEW",
-        "objName" -> toSQLId(name.nameParts),
+        "objName" -> toSQLId(viewNameParts),
         "tempObj" -> "FUNCTION",
         "tempObjName" -> toSQLId(funcName)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempVarError(
-      nameParts: Seq[String],
+      viewNameParts: Seq[String],
       varName: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
         "obj" -> "VIEW",
-        "objName" -> toSQLId(nameParts),
+        "objName" -> toSQLId(viewNameParts),
         "tempObj" -> "VARIABLE",
         "tempObjName" -> toSQLId(varName)))
   }

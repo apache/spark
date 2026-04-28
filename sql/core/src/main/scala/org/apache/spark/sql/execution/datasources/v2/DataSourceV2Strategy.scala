@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -301,6 +301,91 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
+    // CheckViewReferences guarantees the catalog is a ViewCatalog by the time these strategy
+    // cases fire (it throws MISSING_CATALOG_ABILITY.VIEWS otherwise).
+    case CreateView(ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment,
+        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode,
+        _, _) =>
+      val sqlText = originalText.getOrElse {
+        throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
+      }
+      CreateV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, userSpecifiedColumns, comment,
+        collation, properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
+
+    case AlterViewAs(ResolvedPersistentView(catalog, ident, _), originalText, query, _, _) =>
+      AlterV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, originalText, query) :: Nil
+
+    // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
+    // `ResolveSessionCatalog` can't handle. These are tracked as follow-up work in SPARK-52729;
+    // pin the current failure mode with a clean `UNSUPPORTED_FEATURE.TABLE_OPERATION` error
+    // so users get a meaningful message (and test coverage catches a future regression to a
+    // generic planner error).
+    case SetViewProperties(ResolvedPersistentView(catalog, ident, _), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... SET TBLPROPERTIES")
+
+    case UnsetViewProperties(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... UNSET TBLPROPERTIES")
+
+    case AlterViewSchemaBinding(ResolvedPersistentView(catalog, ident, _), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... WITH SCHEMA")
+
+    case RenameTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ALTER VIEW ... RENAME TO")
+
+    case ShowCreateTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW CREATE TABLE")
+
+    case ShowTableProperties(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW TBLPROPERTIES")
+
+    case ShowColumns(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW COLUMNS")
+
+    case DescribeRelation(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "DESCRIBE TABLE")
+
+    case DescribeColumn(ResolvedPersistentView(catalog, ident, _), _, _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "DESCRIBE TABLE ... COLUMN")
+
+    // Plans that resolve through `UnresolvedTableOrView` reach here with a
+    // `ResolvedPersistentView` child for non-session v2 views (the v1 rewrite in
+    // `ResolveSessionCatalog` no longer matches them because `ResolvedViewIdentifier` is gated
+    // on `isSessionCatalog`). Pin each with `UNSUPPORTED_FEATURE.TABLE_OPERATION` so users get
+    // a clean `AnalysisException` instead of a generic "No plan for ..." assertion from the
+    // planner. Tracked for follow-up real handlers in SPARK-52729.
+    case RefreshTable(ResolvedPersistentView(catalog, ident, _)) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "REFRESH TABLE")
+
+    case AnalyzeTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ANALYZE TABLE")
+
+    case AnalyzeColumn(ResolvedPersistentView(catalog, ident, _), _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "ANALYZE TABLE ... FOR COLUMNS")
+
+    // SHOW PARTITIONS on a view is already rejected during analysis: the parser uses
+    // `UnresolvedTable` (not `UnresolvedTableOrView`), so `CheckAnalysis` surfaces
+    // `EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE` before planning. No strategy case needed.
+
+    // DROP VIEW on a non-session ViewCatalog. The v1 rewrite in `ResolveSessionCatalog` skips
+    // ViewCatalog catalogs, so they fall through here. `DropViewExec` calls
+    // `ViewCatalog.dropView` and surfaces `EXPECT_VIEW_NOT_TABLE` if the identifier resolves to
+    // a table in a mixed catalog.
+    case DropView(r @ ResolvedIdentifier(catalog: ViewCatalog, ident), ifExists) =>
+      val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
+      DropViewExec(catalog, ident, ifExists, invalidateFunc) :: Nil
+
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
         parts, query, tableSpec: TableSpec, options, orCreate, true) =>
       catalog match {
@@ -492,6 +577,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
       ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
+
+    // SHOW VIEWS on a v2 ViewCatalog. `ResolveSessionCatalog` rewrites the SHOW VIEWS plan to
+    // v1 `ShowViewsCommand` only when the catalog is NOT a `ViewCatalog`; non-`ViewCatalog`
+    // catalogs (session or not) are rejected with `MISSING_CATALOG_ABILITY.VIEWS` there. So
+    // this case sees `ViewCatalog` catalogs (typically non-session, since the default
+    // `V2SessionCatalog` is not a `ViewCatalog`; a session-catalog override that mixes in
+    // `ViewCatalog` would also reach here).
+    case ShowViews(ResolvedNamespace(catalog: ViewCatalog, ns, _), pattern, output) =>
+      ShowViewsExec(output, catalog, ns, pattern) :: Nil
 
     case ShowTablesExtended(
         ResolvedNamespace(catalog, ns, _),

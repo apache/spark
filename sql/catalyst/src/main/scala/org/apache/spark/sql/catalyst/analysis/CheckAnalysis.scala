@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
-
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkThrowable}
@@ -44,6 +42,8 @@ import org.apache.spark.util.ArrayImplicits._
 trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString {
 
   protected def isView(nameParts: Seq[String]): Boolean
+
+  protected def conf: org.apache.spark.sql.internal.SQLConf
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -73,20 +73,31 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * Contains system.session and the current catalog namespace only. Not from SQLConf.
    */
   private def ddlSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
-    Seq(toSQLId(Seq("system", "session")), toSQLId(catalogPath))
+    val sessionPath = Seq(
+      CatalogManager.SYSTEM_CATALOG_NAME,
+      CatalogManager.SESSION_NAMESPACE)
+    Seq(toSQLId(sessionPath), toSQLId(catalogPath))
   }
 
   /**
-   * `SQLConf.resolutionSearchPath` entries formatted with [[toSQLId]] for TABLE_OR_VIEW_NOT_FOUND.
-   * Same ordering as relation resolution and routine resolution search paths.
+   * Formats [[CatalogManager.sqlResolutionPathEntries]] with [[toSQLId]]
+   * for TABLE_OR_VIEW_NOT_FOUND error messages.
    */
   private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
-    SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+    val catalog = catalogPath.head
+    val ns = catalogPath.tail.toSeq
+    catalogManager.sqlResolutionPathEntries(catalog, ns).map(toSQLId)
   }
 
-  /** Current catalog name and namespace as a path, used when computing search path for errors. */
-  private def catalogPathForError: Seq[String] = {
-    (currentCatalog.name +: catalogManager.currentNamespace).toSeq
+  /**
+   * Catalog + namespace path for error messages. When resolving inside a view body,
+   * uses the view's defining catalog/namespace from AnalysisContext so the error
+   * reflects where the view was trying to resolve.
+   */
+  protected final def catalogPathForError: Seq[String] = {
+    val ctx = AnalysisContext.get.catalogAndNamespace
+    if (ctx.nonEmpty) ctx
+    else (currentCatalog.name +: catalogManager.currentNamespace).toSeq
   }
 
   /**
@@ -94,13 +105,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * (e.g. DROP TEMPORARY VIEW). Contains system.session only.
    */
   private def tempViewOnlySearchPathForError(): Seq[String] = {
-    Seq(toSQLId(Seq("system", "session")))
+    Seq(toSQLId(Seq(
+      CatalogManager.SYSTEM_CATALOG_NAME,
+      CatalogManager.SESSION_NAMESPACE)))
   }
 
   /**
    * Search path for TABLE_OR_VIEW_NOT_FOUND on unresolved relations in SELECT/DML/INSERT/time
    * travel. Three-part `system.session.name` resolves only to session temp views, so only that
-   * scope is listed. Other names use [[fullSearchPathForError]] (resolutionSearchPath order).
+   * scope is listed. Other names use [[fullSearchPathForError]] (sqlResolutionPathEntries order).
    */
   private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] = {
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(multipartIdentifier)) {
@@ -381,17 +394,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
       case u: UnresolvedTableOrView =>
         val catalogPath = catalogPathForError
-        val searchPath = if (u.commandName.toUpperCase(Locale.ROOT).contains("TEMPORARY VIEW")) {
-          tempViewOnlySearchPathForError()
-        } else if (u.commandName.toUpperCase(Locale.ROOT).startsWith("DESCRIBE") ||
-            u.commandName.toUpperCase(Locale.ROOT).startsWith("DESC ")) {
-          if (CatalogManager.isFullyQualifiedSystemSessionViewName(u.multipartIdentifier)) {
-            tempViewOnlySearchPathForError()
-          } else {
-            fullSearchPathForError(catalogPath)
-          }
-        } else {
-          ddlSearchPathForError(catalogPath)
+        val searchPath = u.tableNotFoundSearchPathMode match {
+          case UnresolvedTableOrViewSearchPathMode.QueryLike =>
+            if (CatalogManager.isFullyQualifiedSystemSessionViewName(u.multipartIdentifier)) {
+              tempViewOnlySearchPathForError()
+            } else {
+              fullSearchPathForError(catalogPath)
+            }
+          case UnresolvedTableOrViewSearchPathMode.Ddl =>
+            ddlSearchPathForError(catalogPath)
         }
         u.tableNotFound(u.multipartIdentifier, searchPath)
 
@@ -401,8 +412,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       case u: UnresolvedFunctionName =>
-        val searchPath =
-          SQLConf.get.resolutionSearchPath(catalogPathForError).map(_.quoted)
+        val searchPath = fullSearchPathForError(catalogPathForError)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
           searchPath,
@@ -595,7 +605,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               searchPathForUnresolvedRelation(u.multipartIdentifier))
 
           case RelationChanges(u: UnresolvedRelation, _) =>
-            u.tableNotFound(u.multipartIdentifier)
+            u.tableNotFound(
+              u.multipartIdentifier,
+              searchPathForUnresolvedRelation(u.multipartIdentifier))
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {

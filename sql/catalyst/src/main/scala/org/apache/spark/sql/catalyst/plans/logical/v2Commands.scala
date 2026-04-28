@@ -1363,8 +1363,12 @@ case class ShowTablePartition(
 /**
  * The logical plan of the SHOW VIEWS command.
  *
- * Notes: v2 catalogs do not support views API yet, the command will fallback to
- * v1 ShowViewsCommand during ResolveSessionCatalog.
+ * Session-catalog targets fall back to v1 `ShowViewsCommand` via `ResolveSessionCatalog`.
+ * v2 [[org.apache.spark.sql.connector.catalog.ViewCatalog]] catalogs are handled in
+ * `DataSourceV2Strategy` (enumerates via
+ * [[org.apache.spark.sql.connector.catalog.ViewCatalog#listViews]]). Non-ViewCatalog v2
+ * catalogs are rejected up front in `ResolveSessionCatalog` with
+ * `MISSING_CATALOG_ABILITY.VIEWS`.
  */
 case class ShowViews(
     namespace: LogicalPlan,
@@ -1714,19 +1718,42 @@ case class RepairTable(
 
 /**
  * The logical plan of the ALTER VIEW ... AS command.
+ *
+ * Extends [[AnalysisOnlyCommand]] so [[Analyzer.HandleSpecialCommand]] captures
+ * `referredTempFunctions` from [[AnalysisContext]]; this list is needed by
+ * [[CheckViewReferences]] and by the v2 execs when the target is a non-session catalog.
+ * Session-catalog targets are still rewritten to [[AlterViewAsCommand]] by
+ * `ResolveSessionCatalog` and the captured value is dropped there (the v1 command re-captures).
  */
 case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
-    query: LogicalPlan) extends BinaryCommand with CTEInChildren {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
+    query: LogicalPlan,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
+    isAnalyzed = true,
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(child = newLeft, query = newRight)
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newChild, newQuery) =>
+        copy(child = newChild, query = newQuery)
+      case others =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 
@@ -1743,6 +1770,11 @@ case class AlterViewSchemaBinding(
 
 /**
  * The logical plan of the CREATE VIEW ... command.
+ *
+ * Extends [[AnalysisOnlyCommand]] so that [[Analyzer.HandleSpecialCommand]] captures
+ * `referredTempFunctions` from the [[AnalysisContext]] after the child query is analyzed;
+ * this list is needed for `verifyTemporaryObjectsNotExists`-style checks on downstream
+ * execution paths.
  */
 case class CreateView(
     child: LogicalPlan,
@@ -1754,15 +1786,32 @@ case class CreateView(
     query: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewSchemaMode: ViewSchemaMode) extends BinaryCommand with CTEInChildren {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
+    viewSchemaMode: ViewSchemaMode,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
+    isAnalyzed = true,
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(child = newLeft, query = newRight)
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newChild, newQuery) =>
+        copy(child = newChild, query = newQuery)
+      case others =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 

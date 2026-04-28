@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.LocalTime
+
+import org.apache.arrow.vector.types.TimeUnit
+import org.apache.arrow.vector.types.pojo.ArrowType
+
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.catalyst.util.{FractionTimeFormatter, TimeFormatter}
+import org.apache.spark.sql.catalyst.util.{FractionTimeFormatter, SparkDateTimeUtils, TimeFormatter}
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
@@ -28,6 +33,10 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * This class implements all TypeApiOps methods for the TIME data type:
  *   - String formatting: uses FractionTimeFormatter for consistent output
  *   - Row encoding: uses LocalTimeEncoder for java.time.LocalTime
+ *   - Arrow conversion (ArrowUtils)
+ *   - Python interop (EvaluatePython)
+ *   - Hive formatting (HiveResult)
+ *   - Thrift type mapping (SparkExecuteStatementOperation)
  *
  * RELATIONSHIP TO TimeTypeOps: TimeTypeOps (in catalyst package) extends this class to inherit
  * client-side operations while adding server-side operations (physical type, literals, etc.).
@@ -56,4 +65,26 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps {
   // ==================== Row Encoding ====================
 
   override def getEncoder: AgnosticEncoder[_] = LocalTimeEncoder
+
+  // ==================== Optional Operations ====================
+
+  override def toArrowType(timeZoneId: String): Option[ArrowType] = {
+    Some(new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8))
+  }
+
+  override def needConversionInPython: Option[Boolean] = Some(true)
+
+  override def makeFromJava: Option[Any => Any] = Some((obj: Any) =>
+    nullSafeConvert(obj) {
+      case c: Long => c
+      // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
+      case c: Int => c.toLong
+    })
+
+  override def formatExternal(value: Any): Option[String] = {
+    val nanos = SparkDateTimeUtils.localTimeToNanos(value.asInstanceOf[LocalTime])
+    Some(timeFormatter.format(nanos))
+  }
+
+  override def thriftTypeName: Option[String] = Some("STRING_TYPE")
 }

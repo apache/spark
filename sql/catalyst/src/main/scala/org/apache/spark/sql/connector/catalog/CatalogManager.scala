@@ -164,6 +164,43 @@ class CatalogManager(
     }
   }
 
+  /**
+   * Ordered catalog/schema path entries for resolving unqualified SQL object names.
+   * When PATH is off or unset, applies [[SQLConf.defaultPathOrder]] (legacy).
+   * When PATH is explicitly set, uses the resolved stored path entries.
+   */
+  def sqlResolutionPathEntries(
+      pathDefaultCatalog: String,
+      pathDefaultNamespace: Seq[String],
+      expandCatalog: String,
+      expandNamespace: Seq[String]): Seq[Seq[String]] = synchronized {
+    val defaultEntry =
+      if (pathDefaultNamespace.isEmpty) Seq(pathDefaultCatalog)
+      else pathDefaultCatalog +: pathDefaultNamespace
+    val stored = if (conf.pathEnabled) _sessionPath else None
+    stored match {
+      case Some(entries) =>
+        CatalogManager.resolvePathEntries(entries, expandCatalog, expandNamespace)
+      case None =>
+        conf.defaultPathOrder(Seq(defaultEntry))
+    }
+  }
+
+  /** Session-catalog overload. */
+  def sqlResolutionPathEntries(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    sqlResolutionPathEntries(
+      currentCatalog, currentNamespace,
+      currentCatalog, currentNamespace)
+
+  /** True if [[sqlResolutionPathEntries]] includes `system.session`. */
+  def sessionScopeUnqualifiedAllowed(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Boolean =
+    sqlResolutionPathEntries(currentCatalog, currentNamespace)
+      .exists(CatalogManager.isSystemSessionPathEntry)
+
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {

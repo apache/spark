@@ -19,12 +19,22 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for dropping a table.
+ *
+ * Probes `tableExists` upfront so `IF EXISTS` over a missing table is a clean no-op even
+ * on catalogs whose `dropTable` / `purgeTable` does not honor the "return false on missing"
+ * contract (e.g. JDBC catalogs that throw a SQL syntax error, or the default `purgeTable`
+ * that throws `UNSUPPORTED_FEATURE.PURGE_TABLE` unconditionally).
+ *
+ * When the table is absent, falls back to `viewExists` for catalogs that also implement
+ * [[ViewCatalog]] -- distinguishes "wrong type" from "missing" so a `DROP TABLE someView`
+ * on a mixed catalog surfaces the dedicated `EXPECT_TABLE_NOT_VIEW` error rather than a
+ * generic "table not found", matching the v1 `DropTableCommand(isView = false)` behavior.
  */
 case class DropTableExec(
     catalog: TableCatalog,
@@ -37,9 +47,18 @@ case class DropTableExec(
     if (catalog.tableExists(ident)) {
       invalidateCache()
       if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
-    } else if (!ifExists) {
-      val nameParts = (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
-      throw QueryCompilationErrors.noSuchTableError(nameParts)
+    } else {
+      val nameParts =
+        (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
+      catalog match {
+        case vc: ViewCatalog if vc.viewExists(ident) =>
+          throw QueryCompilationErrors.expectTableNotViewError(
+            nameParts, cmd = "DROP TABLE", suggestAlternative = false, t = this)
+        case _ if !ifExists =>
+          throw QueryCompilationErrors.noSuchTableError(nameParts)
+        case _ =>
+        // IF EXISTS: no-op.
+      }
     }
 
     Seq.empty

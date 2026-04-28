@@ -69,14 +69,36 @@ case class UnresolvedView(
     suggestAlternative: Boolean = false) extends UnresolvedLeafNode
 
 /**
+ * Controls which search path is shown in `TABLE_OR_VIEW_NOT_FOUND` for
+ * [[UnresolvedTableOrView]] (see [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]).
+ */
+sealed trait UnresolvedTableOrViewSearchPathMode
+
+object UnresolvedTableOrViewSearchPathMode {
+  /** DDL on catalog objects: `system.session` and current catalog namespace only. */
+  case object Ddl extends UnresolvedTableOrViewSearchPathMode
+  /**
+   * Like `SELECT` / DML: full `sqlResolutionPathEntries` order; fully qualified
+   * `system.session.*` names still use the session-only path in errors.
+   */
+  case object QueryLike extends UnresolvedTableOrViewSearchPathMode
+}
+
+/**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]], [[ResolvedPersistentView]] or [[ResolvedTempView]] during
  * analysis.
+ *
+ * @param tableNotFoundSearchPathMode how to format `searchPath` in `TABLE_OR_VIEW_NOT_FOUND`;
+ *                                    set explicitly at parse / construction time (not inferred
+ *                                    from [[commandName]]).
  */
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTempView: Boolean) extends UnresolvedLeafNode
+    allowTempView: Boolean,
+    tableNotFoundSearchPathMode: UnresolvedTableOrViewSearchPathMode =
+      UnresolvedTableOrViewSearchPathMode.Ddl) extends UnresolvedLeafNode
 
 sealed trait PartitionSpec extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw SparkException.internalError(

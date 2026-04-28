@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -327,11 +327,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists) =>
+    // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
+    // `ViewCatalog.dropView`. Other non-session catalogs get `MISSING_CATALOG_ABILITY.VIEWS`,
+    // matching the error raised from `CheckViewReferences` for CREATE/ALTER VIEW and from the
+    // analyzer gate on UnresolvedView.
+    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
+        if !catalog.isInstanceOf[ViewCatalog] =>
       if (catalog == FakeSystemCatalog) {
         DropTempViewCommand(ident, ifExists)
       } else {
-        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+        throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
       }
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
@@ -517,14 +522,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         location) =>
       AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
 
-    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
+    // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
+    // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
+    // from HandleSpecialCommand after this rewrite.
+    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _) =>
       AlterViewAsCommand(ident, originalText, query)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
+    // The final `_, _` are CreateView.isAnalyzed and referredTempFunctions. We drop both:
+    // CreateViewCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
+    // from HandleSpecialCommand after this rewrite.
     case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
+        collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
+        _, _) =>
       CreateViewCommand(
         name = ident,
         userSpecifiedColumns = userSpecifiedColumns,
@@ -532,16 +544,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         collation = collation,
         properties = properties,
         originalText = originalText,
-        plan = child,
+        plan = query,
         allowExisting = allowExisting,
         replace = replace,
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-
-    case ShowViews(ns: ResolvedNamespace, pattern, output) =>
+    // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
+    // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog
+    // catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
+    case ShowViews(ns: ResolvedNamespace, pattern, output)
+        if !ns.catalog.isInstanceOf[ViewCatalog] =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
@@ -772,9 +785,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   object ResolvedViewIdentifier {
+    // Only matches session-catalog persistent views. Non-session-catalog persistent views
+    // (produced for `MetadataOnlyTable`) fall through; `AlterViewAs` is picked up by the v2
+    // strategy, and the remaining view DDL / inspection plans (SET/UNSET TBLPROPERTIES,
+    // ALTER VIEW ... WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW
+    // COLUMNS, DESCRIBE [COLUMN]) are rejected with `UNSUPPORTED_FEATURE.TABLE_OPERATION` by
+    // dedicated v2 strategy cases -- tracked for a follow-up PR (SPARK-52729).
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedPersistentView(catalog, ident, _) =>
-        assert(isSessionCatalog(catalog))
+      case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
       case ResolvedTempView(ident, _) =>
@@ -938,4 +956,5 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
   }
+
 }
