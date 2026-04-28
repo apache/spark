@@ -164,11 +164,19 @@ def stream_and_capture(command, log_file)
 end
 
 # Scans the captured unidoc log and prints a pointer to the most likely
-# culprit source file. The heuristic: when javadoc dies mid-HTML-generation,
-# the last "Generating .../X.html" line before "javadoc exited with exit code"
-# names the class that tripped it. Prints nothing actionable if the failure
-# mode doesn't match (e.g. a scaladoc error), in which case the full log above
-# already shows what's wrong.
+# culprit source file. Two failure modes are surfaced:
+#
+# 1. javadoc dies mid-HTML-generation. The last "Generating .../X.html" line
+#    before "javadoc exited with exit code" names the class that tripped it.
+#
+# 2. javadoc completes HTML generation but reports a non-zero "<N> errors"
+#    count from doclint reference checks. With "-verbose" enabled in the
+#    javacOptions, each such error appears in the log as
+#       <path>.java:<line>: error: reference not found
+#    and we list them so the developer knows exactly which {@link} to fix.
+#
+# Prints nothing actionable if neither pattern matches (e.g. a scaladoc
+# error), in which case the full log above already shows what's wrong.
 def diagnose_unidoc_failure(log_file)
   return unless File.exist?(log_file)
   begin
@@ -186,6 +194,22 @@ def diagnose_unidoc_failure(log_file)
         end
       end
     end
+
+    # "error: reference not found" lines come from javadoc's reference doclint
+    # check on broken {@link Class.member} or {@link Class#member} refs in the
+    # generated stubs (under target/java/...). The line number in the message
+    # is into the *generated* .java, not the original .scala source -- finding
+    # the offending scaladoc usually means opening that target/java file at
+    # that line and reading the {@link ...} on it back to the .scala doc.
+    ansi = /\e\[[0-9;]*[A-Za-z]/
+    ref_errors = []
+    lines.each do |line|
+      stripped = line.gsub(ansi, '')
+      if stripped =~ %r{^(?:\[(?:error|warn|info)\]\s+)?(\S+\.java):(\d+):\s+error: reference not found}
+        ref_errors << "#{$1}:#{$2}"
+      end
+    end
+    ref_errors.uniq!
 
     banner = "=" * 78
     $stderr.puts ""
@@ -209,6 +233,23 @@ def diagnose_unidoc_failure(log_file)
       $stderr.puts "  NOTE: the '[error]' lines above on files under"
       $stderr.puts "  target/java/... are benign genjavadoc stubs -- every PR"
       $stderr.puts "  emits them and they do not cause the exit. Ignore them."
+    elsif !ref_errors.empty?
+      $stderr.puts ""
+      $stderr.puts "  Javadoc reference-resolution errors (each one is a broken"
+      $stderr.puts "  {@link} in a doc comment that genjavadoc copied verbatim"
+      $stderr.puts "  from the corresponding scaladoc; fix the [[link]] in the"
+      $stderr.puts "  Scala source):"
+      $stderr.puts ""
+      ref_errors.first(50).each { |e| $stderr.puts "    #{e}" }
+      if ref_errors.size > 50
+        $stderr.puts "    ... and #{ref_errors.size - 50} more"
+      end
+      $stderr.puts ""
+      $stderr.puts "  Common cause: [[Class.member]] in scaladoc when Class is a"
+      $stderr.puts "  regular `class`/`trait` (not a Scala `object`) and there is"
+      $stderr.puts "  no companion-object member with that name. genjavadoc emits"
+      $stderr.puts "  {@link Class.member}, javadoc reads `.` as the inner-class"
+      $stderr.puts "  separator and fails to resolve. Use [[Class#member]] instead."
     elsif javadoc_exit_idx
       $stderr.puts ""
       $stderr.puts "  Javadoc exited but no class HTML generation was in progress;"
