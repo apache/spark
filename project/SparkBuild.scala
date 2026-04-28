@@ -337,25 +337,17 @@ object SparkBuild extends PomBuild {
       Seq("--add-modules=jdk.incubator.vector")
     },
 
+    (Compile / doc / javacOptions) ++= {
+      Seq("-Xdoclint:all", "-Xdoclint:-missing")
+    },
+
     javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
 
-    // Compile-time doclint runs only the `html` group on public APIs. This
-    // catches heading-out-of-sequence (the original v1-v2 motivation) and
-    // malformed-HTML issues reliably at compile, before unidoc and before
-    // the genjavadoc-stub completion cascade can swallow per-file
-    // diagnostics. Scope is intentionally narrow: `reference` and `syntax`
-    // groups would surface noise on classes that are Java-`public` but not
-    // in unidoc's documented package set (filtered by
-    // `ignoreUndocumentedPackages` below) -- those false positives have
-    // no cheap fix at the per-module compile classpath. Unidoc itself
-    // (Move B) runs the full doclint groups against the aggregated
-    // classpath, where reference checks resolve correctly.
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
       "-g",
       "-proc:full",
-      "--release", javaVersion.value,
-      "-Xdoclint:html/public"
+      "--release", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629

@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * xxHash64. A high quality and fast 64 bit hash code by Yann Colet and Mathias Westerdahl. The
  * class below is modelled like its Murmur3_x86_32 cousin.
- * <p>
+ * <p/>
  * This was largely based on the following (original) C and Java implementations:
  * https://github.com/Cyan4973/xxHash/blob/master/xxhash.c
  * https://github.com/OpenHFT/Zero-Allocation-Hashing/blob/master/src/main/java/net/openhft/hashing/XxHash_r39.java
