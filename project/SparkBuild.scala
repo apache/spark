@@ -1699,7 +1699,10 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        "--ignore-source-errors", "-notree"
+        "--ignore-source-errors", "-notree",
+        "-Xmaxerrs", "999999",
+        "-Xmaxwarns", "999999",
+        "-verbose"
       )
     },
 
