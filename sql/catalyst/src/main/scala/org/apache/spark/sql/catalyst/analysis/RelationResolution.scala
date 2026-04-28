@@ -37,10 +37,10 @@ import org.apache.spark.sql.connector.catalog.{
   ChangelogInfo,
   Identifier,
   LookupCatalog,
-  MetadataOnlyTable,
-  RelationCatalog,
+  MetadataTable,
   Table,
   TableCatalog,
+  TableViewCatalog,
   V1Table,
   V2TableWithV1Fallback,
   ViewCatalog,
@@ -262,8 +262,8 @@ class RelationResolution(
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
             val finalOptions = u.clearWritePrivileges.options
-            // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
-            // `loadRelation` answers both "is there a table?" and "is there a view?" in one
+            // For a `TableViewCatalog` with no time-travel / write privileges, the single-RPC
+            // `loadTableOrView` answers both "is there a table?" and "is there a view?" in one
             // call. Time-travel and write privileges apply to tables only, so for those the
             // lookup falls through to the table-only `loadTable` path below; views are not
             // reachable via the v2 fallback in those cases.
@@ -272,9 +272,9 @@ class RelationResolution(
             // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
             // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
             val tableOrView: Option[Table] = catalog match {
-              case mc: RelationCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+              case mc: TableViewCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                 try {
-                  Some(mc.loadRelation(ident))
+                  Some(mc.loadTableOrView(ident))
                 } catch {
                   case _: NoSuchTableException => None
                 }
@@ -299,7 +299,7 @@ class RelationResolution(
                     catalog match {
                       case vc: ViewCatalog =>
                         try {
-                          Some(new MetadataOnlyTable(vc.loadView(ident), ident.toString))
+                          Some(new MetadataTable(vc.loadView(ident), ident.toString))
                         } catch {
                           case _: NoSuchViewException => None
                         }
@@ -313,7 +313,7 @@ class RelationResolution(
             // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
             // we don't share-cache views.
             val table: Option[Table] = tableOrView.filter {
-              case t: MetadataOnlyTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
+              case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
               case _ => true
             }
 
@@ -426,10 +426,10 @@ class RelationResolution(
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         createDataSourceV1Scan(v1Table.v1Table)
 
-      // MetadataOnlyTable is a sentinel meaning "interpret via v1", so unlike the V1Table
+      // MetadataTable is a sentinel meaning "interpret via v1", so unlike the V1Table
       // case above we apply no session-catalog / tracksPartitionsInCatalog guard -- any catalog
-      // returning MetadataOnlyTable has opted into v1 read semantics.
-      case t: MetadataOnlyTable =>
+      // returning MetadataTable has opted into v1 read semantics.
+      case t: MetadataTable =>
         createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
       case table =>
