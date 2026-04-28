@@ -491,7 +491,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         r.name) :: Nil
 
     case wd @ WriteDelta(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, projections,
-        Some(write)) =>
+        _, Some(write)) =>
       WriteDeltaExec(
         planLater(query),
         refreshCache(r), // use the original relation to refresh the cache
