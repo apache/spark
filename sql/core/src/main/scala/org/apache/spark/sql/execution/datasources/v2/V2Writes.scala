@@ -44,7 +44,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case a @ AppendData(r: DataSourceV2Relation, query, options, _, _, None, _) =>
+    case a @ AppendData(r: DataSourceV2Relation, query, options, _, _, None, _, _) =>
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
       val write = writeBuilder.build()
