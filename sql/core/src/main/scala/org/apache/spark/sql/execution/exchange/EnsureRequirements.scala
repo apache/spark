@@ -309,8 +309,13 @@ case class EnsureRequirements(
   // stop evaluating once a satisfying alternative is found.
   //
   // Pruning: traversal stops at SortExec (which reorders data, making sorted merge below it
-  // pointless) and at any node whose outputPartitioning no longer carries a KeyedPartitioning
-  // (indicating the GPE's partitioning did not flow here, e.g. after an Exchange).
+  // pointless) and at any node whose outputPartitioning no longer carries a KeyedPartitioning.
+  // This is a good heuristic, though not strictly equivalent to "ordering no longer propagates":
+  // partition-key expressions are constant within each coalesced partition and therefore usually
+  // prefix outputOrdering. When a node prunes the KeyedPartitioning (e.g. a Project that drops
+  // partition keys), it also prunes that ordering prefix. Since Spark has no notion of constant
+  // expressions in SortOrder, dropping a prefix invalidates the rest of the ordering too -- so in
+  // practice the two are always pruned together.
   //
   // At each GPE the rule emits [original, sorted-merge-enabled] alternatives (or just [original]
   // when sorted merge cannot be enabled). multiTransformDownWithPruning then builds the Cartesian
