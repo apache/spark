@@ -50,7 +50,6 @@ import static org.apache.spark.launcher.LauncherProtocol.*;
  * The launcher server is used when Spark apps are launched as separate processes than the calling
  * app. It looks more or less like the following:
  *
- * <pre>{@code
  *         -----------------------                       -----------------------
  *         |      User App       |     spark-submit      |      Spark App      |
  *         |                     |  -------------------> |                     |
@@ -66,7 +65,6 @@ import static org.apache.spark.launcher.LauncherProtocol.*;
  *         |        | App Handle |<------------------------------
  *         |        |            |
  *         -----------------------
- * }</pre>
  *
  * The server is started on demand and remains active while there are active or outstanding clients,
  * to avoid opening too many ports when multiple clients are launched. Each client is given a unique

@@ -344,14 +344,16 @@ object SparkBuild extends PomBuild {
     // completion cascade interrupts javadoc's tree-build phase; running the
     // same `-Xdoclint` checks under javac on the real `.java` sources catches
     // heading-out-of-sequence, broken `{@link}`, etc. before unidoc runs.
-    // Mirrored into `JavaUnidoc / unidoc / javacOptions` below (the `:=`
-    // there blocks scope inheritance).
+    // Scoped to `/public` to match unidoc's `-public` filter -- only the
+    // documented (published) API surface is checked, internal/package-private
+    // classes are skipped. Mirrored into `JavaUnidoc / unidoc / javacOptions`
+    // below (the `:=` there blocks scope inheritance).
     (Compile / javacOptions) ++= Seq(
       "-encoding", UTF_8.name(),
       "-g",
       "-proc:full",
       "--release", javaVersion.value,
-      "-Xdoclint:all", "-Xdoclint:-missing"
+      "-Xdoclint:all/public", "-Xdoclint:-missing/public"
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since
     // `javadoc` doesn't play nicely with them; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629
@@ -1703,8 +1705,9 @@ object Unidoc {
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
         // Mirror Compile / javacOptions doclint settings -- `:=` above blocks
-        // scope inheritance, so we list them explicitly here.
-        "-Xdoclint:all", "-Xdoclint:-missing",
+        // scope inheritance, so we list them explicitly here. The `/public`
+        // scope matches the existing `-public` flag above.
+        "-Xdoclint:all/public", "-Xdoclint:-missing/public",
         "--ignore-source-errors", "-notree"
       )
     },

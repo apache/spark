@@ -26,19 +26,19 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 
 /**
- * The physical data representation of {@link org.apache.spark.sql.types.VariantType} that
+ * The physical data representation of {@code org.apache.spark.sql.types.VariantType} that
  * represents a semi-structured value. It consists of two binary values: {@link VariantVal#value}
  * and {@link VariantVal#metadata}. The value encodes types and values, but not field names. The
  * metadata currently contains a version flag and a list of field names. We can extend/modify the
  * detailed binary format given the version flag.
  * <p>
  * A {@link VariantVal} can be produced by casting another value into the Variant type or parsing a
- * JSON string in the {@link org.apache.spark.sql.catalyst.expressions.variant.ParseJson}
+ * JSON string in the {@code org.apache.spark.sql.catalyst.expressions.variant.ParseJson}
  * expression. We can extract a path consisting of field names and array indices from it, cast it
  * into a concrete data type, or rebuild a JSON string from it.
  * <p>
- * The storage layout of this class in {@link org.apache.spark.sql.catalyst.expressions.UnsafeRow}
- * and {@link org.apache.spark.sql.catalyst.expressions.UnsafeArrayData} is: the fixed-size part is
+ * The storage layout of this class in {@code org.apache.spark.sql.catalyst.expressions.UnsafeRow}
+ * and {@code org.apache.spark.sql.catalyst.expressions.UnsafeArrayData} is: the fixed-size part is
  * a long value "offsetAndSize". The upper 32 bits is the offset that points to the start position
  * of the actual binary content. The lower 32 bits is the total length of the binary content. The
  * binary content contains: 4 bytes representing the length of {@link VariantVal#value}, content of
