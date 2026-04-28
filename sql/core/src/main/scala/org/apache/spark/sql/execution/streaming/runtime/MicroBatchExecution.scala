@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatch
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
@@ -174,7 +175,7 @@ class MicroBatchExecution(
     val nextSourceId = new AtomicLong(0L)
     val toExecutionRelationMap = MutableMap[StreamingRelation, StreamingExecutionRelation]()
     val v2ToExecutionRelationMap = MutableMap[StreamingRelationV2, StreamingExecutionRelation]()
-    val v2ToRelationMap = MutableMap[StreamingRelationV2, StreamingDataSourceV2ScanRelation]()
+    val v2ToRelationMap = MutableMap[StreamingRelationV2, LogicalPlan]()
     // We transform each distinct streaming relation into a StreamingExecutionRelation, keeping a
     // map as we go to ensure each identical relation gets the same StreamingExecutionRelation
     // object. For each microbatch, the StreamingExecutionRelation will be replaced with a logical
@@ -239,7 +240,19 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+            // The scan's reported schema may differ from the table's (per-query schema
+            // customization driven by read options). Expose the scan's schema at the leaf and
+            // alias positionally back to the analyzer-resolved (name, exprId) so upstream
+            // references continue to bind. Mirrors the V1 path in `runBatch`.
+            val scanOutput = toAttributes(scan.readSchema())
+            assert(scanOutput.size == output.size,
+              s"Scan from $table returned ${scanOutput.size} columns, expected ${output.size}")
+            val scanRelation =
+              StreamingDataSourceV2ScanRelation(relation, scan, scanOutput, stream)
+            val aliases = output.zip(scanOutput).map { case (to, from) =>
+              Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
+            }
+            Project(aliases, scanRelation)
           })
         } else if (v1.isEmpty) {
           throw QueryExecutionErrors.microBatchUnsupportedByDataSourceError(
