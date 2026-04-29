@@ -191,9 +191,10 @@ private class LastAttemptRDDVals[@specialized T](
 
   // Per-partition override arrays for each component of the attempt tuple. Each is allocated
   // lazily and independently the first time some partition's value for that component diverges
-  // from the common; until then the field is null and no per-partition state is kept for that
-  // component. Once allocated, an array is sized [[numPartitions]]: entries equal to EMPTY_ID
-  // mean "match the common value" and any other value is the per-partition override. This way:
+  // from the common value; until then the field is null and no per-partition state is kept for
+  // that component. Once allocated, an array is sized [[numPartitions]]: entries equal to
+  // EMPTY_ID mean "match the common value" and any other value is the per-partition override.
+  // This way:
   //  - RDDs without retries pay zero per-partition allocations (all three fields stay null).
   //  - A pure stage retry (new stageAttemptId, same stageId, taskAttemptNumber resets to 0)
   //    allocates only [[overrideStageAttemptIds]].
@@ -229,7 +230,7 @@ private class LastAttemptRDDVals[@specialized T](
    * the array reference the caller should write back to the @volatile field - either a freshly
    * allocated and populated array (first override for this component) or the existing array
    * after an in-place update. Once the array exists, the value is always written, even when it
-   * matches the common - lookupComponent returns it correctly either way.
+   * matches the common value - lookupComponent returns it correctly either way.
    */
   private def setOverrideComponent(
       array: Array[Int],
@@ -250,8 +251,9 @@ private class LastAttemptRDDVals[@specialized T](
   }
 
   /** Reads one component's value at `partitionId`, falling back to `common` when the override
-   *  array is null or the entry is still EMPTY_ID (slot never written - typically a partition
-   *  that was computed before this component's override array was allocated). */
+   *  array is null or the entry is still EMPTY_ID (the slot was either not yet written, or was
+   *  initialized to EMPTY_ID and never overwritten because the partition's value matched the
+   *  common when the array was first allocated for a different partition). */
   private def lookupComponent(array: Array[Int], partitionId: Int, common: Int): Int = {
     if (array == null) common
     else {
