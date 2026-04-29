@@ -325,6 +325,34 @@ class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
       "ANALYZE TABLE view_catalog.default.v_analyze_cols COMPUTE STATISTICS FOR COLUMNS x")
   }
 
+  test("DESCRIBE TABLE ... PARTITION on a v2 view is rejected") {
+    // The parser builds an `UnresolvedTableOrView` for DESCRIBE, so this reaches the v2
+    // strategy with a `ResolvedPersistentView` child. Without an explicit pin the planner
+    // falls through to a "No plan for DescribeTablePartition" assertion; pin it with
+    // FORBIDDEN_OPERATION/DESC PARTITION on VIEW to mirror the v1 runtime check in
+    // `DescribeTableCommand.describeDetailedPartitionInfo`.
+    seedV2View("v_desc_part")
+    val ex = intercept[AnalysisException] {
+      sql("DESCRIBE TABLE view_catalog.default.v_desc_part PARTITION (x = 1)")
+    }
+    assert(ex.getCondition == "FORBIDDEN_OPERATION", s"got ${ex.getCondition}")
+  }
+
+  test("DESCRIBE TABLE EXTENDED ... AS JSON on a v2 view succeeds") {
+    // Pre-PR, `ResolvedPersistentView.metadata: CatalogTable` was always populated (a
+    // synthesized `CatalogTable` for v2 views), so DESC ... AS JSON worked uniformly. Post
+    // ResolvedPersistentView -> `info: ViewInfo`, the JSON command now synthesizes a
+    // `CatalogTable` via `V1Table.toCatalogTable` for non-session v2 views to preserve that
+    // pre-PR behavior.
+    seedV2View("v_desc_json")
+    val rows = sql(
+      "DESCRIBE TABLE EXTENDED view_catalog.default.v_desc_json AS JSON").collect()
+    assert(rows.length == 1, s"DESC AS JSON should produce one row, got: ${rows.length}")
+    val json = rows.head.getString(0)
+    assert(json.contains("\"v_desc_json\""), s"JSON output missing view name: $json")
+    assert(json.contains("\"VIEW\""), s"JSON output missing VIEW table_type: $json")
+  }
+
   // DROP VIEW behavior tests live in the per-catalog triplet
   // `sql.execution.command.{,v1/,v2/}.DropViewSuite{,Base}`.
 

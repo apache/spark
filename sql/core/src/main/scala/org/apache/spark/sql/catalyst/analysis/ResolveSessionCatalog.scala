@@ -208,6 +208,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output) =>
       DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
 
+    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
+    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
+    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
+    // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
+    // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
+    // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
+    case DescribeTablePartition(rpv: ResolvedPersistentView, _, _, _) =>
+      val quoted = (rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier)
+        .map(quoteIfNeeded).mkString(".")
+      throw QueryCompilationErrors.descPartitionNotAllowedOnView(quoted)
+
     case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
       // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
       // typically resolves the column to an `Attribute` here. We also accept the legacy
