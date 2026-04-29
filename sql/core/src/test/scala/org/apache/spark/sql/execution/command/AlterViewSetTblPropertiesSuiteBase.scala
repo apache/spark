@@ -96,4 +96,19 @@ trait AlterViewSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUt
     val all = sql(s"SHOW TBLPROPERTIES $view").collect()
     assert(all.length >= 1, s"expected at least one property row, got: ${all.mkString(", ")}")
   }
+
+  test("setting `comment` flows through to SHOW CREATE TABLE") {
+    // v1 `AlterTableSetPropertiesCommand` updates the typed `CatalogTable.comment` field when
+    // the user passes `'comment'` via SET TBLPROPERTIES, so SHOW CREATE TABLE renders the
+    // comment in the COMMENT clause. The v2 path uses `ViewInfo.properties` as the source of
+    // truth for `PROP_COMMENT` (see `AlterV2ViewSetPropertiesExec` and `ShowCreateV2ViewExec`),
+    // so the same SET TBLPROPERTIES('comment' = ...) round-trips through SHOW CREATE TABLE.
+    // Pin the cross-catalog parity here.
+    val view = s"$catalog.$namespace.v_set_comment"
+    createView(view)
+    sql(s"ALTER VIEW $view SET TBLPROPERTIES ('comment' = 'a view comment')")
+    val ddl = sql(s"SHOW CREATE TABLE $view").collect().head.getString(0)
+    assert(ddl.contains("a view comment"),
+      s"comment did not flow through to SHOW CREATE TABLE: $ddl")
+  }
 }
