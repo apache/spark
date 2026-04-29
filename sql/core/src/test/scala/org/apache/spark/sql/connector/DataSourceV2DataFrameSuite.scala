@@ -2384,7 +2384,7 @@ class DataSourceV2DataFrameSuite
 
       checkAnswer(
         spark.sql("SELECT * FROM tmp_view"),
-        Seq(Row(1, 100), Row(2, 200)))
+        Seq(Row(1, null), Row(2, 200)))
     }
   }
 
@@ -2408,6 +2408,29 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "viewName" -> ".*", "tableName" -> ".*",
           "colType" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("temp view with stored plan after session drop and re-add column same type") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      // create two temp views with salary filters
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_null")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+      checkAnswer(spark.table("v_null"), Seq.empty)
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // salary values are now null, so the salary < 999 filter returns nothing
+      checkAnswer(spark.table("v"), Seq.empty)
+      // IS NULL filter now matches all rows
+      checkAnswer(spark.table("v_null"), Seq(Row(1, null), Row(10, null)))
     }
   }
 
