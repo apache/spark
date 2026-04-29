@@ -952,3 +952,40 @@ case class SchemaOfVariantAgg(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(v) - Returns true if the variant is valid, false if it is malformed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('null'));
+       true
+      > SELECT _FUNC_(parse_json('[{"b":true,"a":0}]'));
+       true
+  """,
+  since = "4.2.0",
+  group = "variant_funcs"
+)
+case class IsValidVariant(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = BooleanType
+
+  override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "is_valid_variant"
+
+  protected override def nullSafeEval(value: Any): Any = {
+    val variantVal = value.asInstanceOf[VariantVal]
+    VariantUtil.isValidVariant(variantVal.getValue, variantVal.getMetadata)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val utilClass = classOf[VariantUtil].getName
+    defineCodeGen(ctx, ev, c => {
+      s"$utilClass.isValidVariant(($c).getValue(), ($c).getMetadata())"
+    })
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
