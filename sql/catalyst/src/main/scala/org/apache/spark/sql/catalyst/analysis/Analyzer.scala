@@ -1887,12 +1887,25 @@ class Analyzer(
       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => expand(s, child)
+        case s: Star => expand(s, child).map(aliasIfOuterReference)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => expand(s, child)
+        case UnresolvedAlias(s: Star, _) => expand(s, child).map(aliasIfOuterReference)
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * Wrap an outer-scope star expansion result in [[Alias]] so that the [[OuterReference]]
+     * attribute gets a fresh ExprId in the subquery's scope. This prevents the outer ExprId from
+     * leaking through [[Project.output]] when the expansion goes through a derived table.
+     * Struct star expansion already produces [[Alias]] nodes, so those are left unchanged.
+     */
+    private def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
+      case _: Alias => e
+      case outerReference: OuterReference =>
+        Alias(outerReference, toPrettySQL(outerReference.e))()
+      case _ => e
     }
 
     /**
