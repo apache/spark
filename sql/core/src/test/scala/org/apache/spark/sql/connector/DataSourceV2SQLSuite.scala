@@ -2520,6 +2520,19 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-56611: rename target is resolved within source catalog") {
+    withTable("testcat.ns1.t1", "testcat.testcat2.ns2.t1") {
+      sql("CREATE TABLE testcat.ns1.t1 USING foo AS SELECT id, data FROM source")
+
+      // testcat2 is a valid catalog name, but in the rename target it is
+      // treated as a namespace within testcat (the source table's catalog).
+      sql("ALTER TABLE testcat.ns1.t1 RENAME TO testcat2.ns2.t1")
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Nil)
+      checkAnswer(
+        sql("SHOW TABLES FROM testcat.testcat2.ns2"), Seq(Row("testcat2.ns2", "t1", false)))
+    }
+  }
+
   test("ANALYZE TABLE") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {

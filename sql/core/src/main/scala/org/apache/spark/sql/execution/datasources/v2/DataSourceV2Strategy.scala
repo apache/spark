@@ -461,13 +461,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         rawNewNameParts
       }
 
-      val namespace = if (newNameParts.length == 1) {
-        oldIdent.namespace()
+      val newIdent = if (newNameParts.length == 1) {
+        Identifier.of(oldIdent.namespace(), newNameParts.last)
       } else {
-        newNameParts.init.toArray
+        newNameParts.asIdentifier
       }
-
-      val newIdent = Identifier.of(namespace, newNameParts.last)
 
       RenameTableExec(
         catalog,
