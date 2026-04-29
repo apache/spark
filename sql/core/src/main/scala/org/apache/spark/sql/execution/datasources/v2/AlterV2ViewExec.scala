@@ -23,32 +23,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.execution.command.CommandUtils
-
-private[v2] object V2ViewMetadataMutation {
-  /**
-   * Construct a [[ViewInfo.Builder]] seeded from an existing view's metadata. Mutating execs
-   * (SET / UNSET TBLPROPERTIES, ALTER VIEW ... WITH SCHEMA BINDING) start here, override the
-   * one field they're changing, and call [[ViewInfo.Builder#build]] to produce the replacement
-   * payload for [[ViewCatalog#replaceView]]. Everything else -- columns, queryText, captured
-   * resolution context, captured SQL configs, queryColumnNames -- flows through unchanged so
-   * a metadata-only mutation does not perturb the view body.
-   */
-  def builderFrom(existing: ViewInfo): ViewInfo.Builder = {
-    val builder = new ViewInfo.Builder()
-    builder
-      .withSchema(existing.schema)
-      .withProperties(existing.properties)
-      .withQueryText(existing.queryText)
-      .withSqlConfigs(existing.sqlConfigs)
-      .withCurrentNamespace(existing.currentNamespace)
-      .withQueryColumnNames(existing.queryColumnNames)
-    Option(existing.currentCatalog).foreach(builder.withCurrentCatalog)
-    Option(existing.schemaMode).foreach(builder.withSchemaMode)
-    builder
-  }
-}
 
 /**
  * Shared bits for the v2 ALTER VIEW ... AS exec. The replacement [[ViewInfo]] is constructed by
@@ -126,7 +102,7 @@ case class AlterV2ViewSetPropertiesExec(
 
   override protected def run(): Seq[InternalRow] = {
     val merged = existingView.properties.asScala.toMap ++ properties
-    val info = V2ViewMetadataMutation.builderFrom(existingView)
+    val info = CatalogV2Util.viewInfoBuilderFrom(existingView)
       .withProperties(merged.asJava)
       .build()
     // Match v1 `AlterTableSetPropertiesCommand`'s `invalidateCachedTable` so cached query
@@ -154,7 +130,7 @@ case class AlterV2ViewUnsetPropertiesExec(
 
   override protected def run(): Seq[InternalRow] = {
     val remaining = existingView.properties.asScala.toMap -- propertyKeys
-    val info = V2ViewMetadataMutation.builderFrom(existingView)
+    val info = CatalogV2Util.viewInfoBuilderFrom(existingView)
       .withProperties(remaining.asJava)
       .build()
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
@@ -178,7 +154,7 @@ case class AlterV2ViewSchemaBindingExec(
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val info = V2ViewMetadataMutation.builderFrom(existingView)
+    val info = CatalogV2Util.viewInfoBuilderFrom(existingView)
       .withSchemaMode(viewSchemaMode.toString)
       .build()
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))

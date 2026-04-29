@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog, V1ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, V1ViewInfo, ViewInfo}
 import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
 
 /**
@@ -207,19 +207,37 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView
 
         // We match against ResolvedPersistentView because temporary views don't have a
-        // schema/catalog. Only the v1 (session-catalog) form is rewritten here -- it carries
-        // the underlying `CatalogTable` via `V1ViewInfo`, so we can update `collation` and
-        // re-wrap. v2 view paths consume `info.properties` directly and are not affected by
-        // this rewrite.
-        case alterViewAs@AlterViewAs(resolvedPersistentView@ResolvedPersistentView(
-        catalog: SupportsNamespaces, identifier, v1Info: V1ViewInfo), _, _, _, _)
-          if v1Info.v1Table.collation.isEmpty =>
-          val newCollation = getCollationFromSchemaMetadata(catalog, identifier.namespace())
-          val newV1Table = v1Info.v1Table.copy(collation = newCollation)
-          val newResolvedPersistentView = resolvedPersistentView.copy(
-            info = new V1ViewInfo(newV1Table))
+        // schema/catalog. The rewrite covers both v1 (session-catalog, [[V1ViewInfo]]) and
+        // non-session v2 views: when the existing view has no `PROP_COLLATION`, fold the
+        // namespace's default collation into the resolved `ViewInfo`. For v1, `V1ViewInfo`
+        // is rebuilt around a `CatalogTable` whose typed `collation` field holds the new
+        // value; `V1ViewInfo.builderFrom` bridges that into the v2 `properties()` bag, so
+        // downstream consumers (`fetchDefaultCollation`, `AlterV2ViewExec`'s
+        // `existingProp(PROP_COLLATION)`) see it under either surface. For v2, we rebuild the
+        // existing `ViewInfo` with `PROP_COLLATION` set so the same downstream consumers see
+        // it on the regular `info.properties` path.
+        case alterViewAs @ AlterViewAs(rpv @ ResolvedPersistentView(
+        catalog: SupportsNamespaces, identifier, info), _, _, _, _)
+          if Option(info.properties.get(TableCatalog.PROP_COLLATION)).isEmpty &&
+            getCollationFromSchemaMetadata(catalog, identifier.namespace()).nonEmpty =>
+          // Only rewrite when the namespace actually supplies a default. [[ViewInfo]] /
+          // [[V1ViewInfo]] are non-case classes, so a copy with structurally-identical fields
+          // still reads as a different reference -- if we rewrote unconditionally, the
+          // resolution batch would see the plan change every iteration and never reach
+          // fixed point.
+          val newCollation =
+            getCollationFromSchemaMetadata(catalog, identifier.namespace()).get
+          val newInfo: ViewInfo = info match {
+            case v1Info: V1ViewInfo =>
+              new V1ViewInfo(v1Info.v1Table.copy(collation = Some(newCollation)))
+            case _ =>
+              CatalogV2Util.viewInfoBuilderFrom(info)
+                .withCollation(newCollation)
+                .build()
+          }
+          val newRpv = rpv.copy(info = newInfo)
           val newAlterViewAs = CurrentOrigin.withOrigin(alterViewAs.origin) {
-            alterViewAs.copy(child = newResolvedPersistentView)
+            alterViewAs.copy(child = newRpv)
           }
           newAlterViewAs.copyTagsFrom(alterViewAs)
           newAlterViewAs

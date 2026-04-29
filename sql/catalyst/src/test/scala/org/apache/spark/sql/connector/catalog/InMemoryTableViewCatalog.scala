@@ -17,21 +17,29 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * An in-memory [[TableViewCatalog]] for tests. Tables and views share a single keyspace per
  * the [[TableViewCatalog]] contract; the stored value's runtime type ([[TableInfo]] vs
- * [[ViewInfo]]) is the kind discriminator. Suitable for any test suite that wants to exercise
+ * [[ViewInfo]]) is the kind discriminator. Also implements [[SupportsNamespaces]] with a
+ * minimal namespace store, so analyzer rules that read namespace metadata (e.g.
+ * `ApplyDefaultCollation` consulting `loadNamespaceMetadata` for `PROP_COLLATION`) work
+ * uniformly with the v1 session catalog. Suitable for any test suite that wants to exercise
  * v2 view DDL or inspection commands against a non-session catalog.
  */
-class InMemoryTableViewCatalog extends TableViewCatalog {
+class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces {
 
   private val store =
     new ConcurrentHashMap[(Seq[String], String), TableInfo]()
+  private val namespaces =
+    new ConcurrentHashMap[Seq[String], util.Map[String, String]]()
 
   override def loadTableOrView(ident: Identifier): Table = {
     val key = (ident.namespace().toSeq, ident.name())
@@ -134,6 +142,78 @@ class InMemoryTableViewCatalog extends TableViewCatalog {
       throw new ViewAlreadyExistsException(newIdent)
     }
     store.remove(oldKey)
+  }
+
+  // ----- SupportsNamespaces -----------------------------------------------------------
+
+  // A namespace exists if it was explicitly created or if any stored entry sits under it.
+  private def implicitNamespaces: Set[Seq[String]] =
+    store.keySet.asScala.iterator.map(_._1).toSet
+
+  override def listNamespaces(): Array[Array[String]] = {
+    val all = (namespaces.keySet.asScala ++ implicitNamespaces).toSet
+    all.iterator.filter(_.nonEmpty).map(ns => Array(ns.head)).toArray.distinct
+  }
+
+  override def listNamespaces(parent: Array[String]): Array[Array[String]] = {
+    val parentSeq = parent.toSeq
+    val all = (namespaces.keySet.asScala ++ implicitNamespaces).toSet
+    all.iterator
+      .filter(_.size > parentSeq.size)
+      .filter(_.startsWith(parentSeq))
+      .map(_.take(parentSeq.size + 1).toArray)
+      .toArray
+      .distinct
+  }
+
+  override def namespaceExists(namespace: Array[String]): Boolean = {
+    val ns = namespace.toSeq
+    namespaces.containsKey(ns) || implicitNamespaces.exists(_.startsWith(ns))
+  }
+
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    val ns = namespace.toSeq
+    Option(namespaces.get(ns)) match {
+      case Some(metadata) => metadata
+      case _ if namespaceExists(namespace) => util.Collections.emptyMap[String, String]
+      case _ => throw new NoSuchNamespaceException(name() +: namespace)
+    }
+  }
+
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = {
+    val ns = namespace.toSeq
+    if (namespaces.putIfAbsent(ns, new util.HashMap[String, String](metadata)) != null) {
+      throw new NamespaceAlreadyExistsException(namespace)
+    }
+  }
+
+  override def alterNamespace(
+      namespace: Array[String],
+      changes: NamespaceChange*): Unit = {
+    val ns = namespace.toSeq
+    val current = Option(namespaces.get(ns)).getOrElse {
+      if (!namespaceExists(namespace)) {
+        throw new NoSuchNamespaceException(name() +: namespace)
+      }
+      new util.HashMap[String, String]()
+    }
+    val updated = CatalogV2Util.applyNamespaceChanges(current, changes.toSeq)
+    namespaces.put(ns, updated)
+  }
+
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
+    val ns = namespace.toSeq
+    if (!cascade && implicitNamespaces.exists(_.startsWith(ns))) {
+      throw new org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException(
+        name() +: namespace)
+    }
+    if (cascade) {
+      val keysToRemove = store.keySet.asScala.filter(_._1.startsWith(ns)).toSeq
+      keysToRemove.foreach(store.remove)
+    }
+    namespaces.remove(ns) != null || implicitNamespaces.exists(_.startsWith(ns))
   }
 
   // Test-only accessors --------------------------------------------------------------

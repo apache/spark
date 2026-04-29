@@ -235,7 +235,15 @@ case class AlterViewAsCommand(
     originalText: String,
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    // Analysis-time collation for the resolved view (after `ApplyDefaultCollation` has had a
+    // chance to fill the namespace default into a previously-empty `CatalogTable.collation`).
+    // `ResolveSessionCatalog` populates this from `ResolvedPersistentView.info.properties`'s
+    // `PROP_COLLATION`; only `alterPermanentView` consumes it. `None` means "no collation
+    // specified at analysis time" -- `alterPermanentView` then preserves the existing
+    // `CatalogTable.collation` so external constructors that omit this argument retain the
+    // pre-PR behavior.
+    collation: Option[String] = None)
   extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
 
   import ViewHelper._
@@ -310,7 +318,13 @@ case class AlterViewAsCommand(
       schema = newSchema,
       properties = newProperties,
       viewOriginalText = Some(originalText),
-      viewText = Some(originalText))
+      viewText = Some(originalText),
+      // Prefer the analysis-time collation -- `ApplyDefaultCollation` may have filled the
+      // namespace's default `PROP_COLLATION` into a previously-empty value, and we want that
+      // to be persisted alongside the matching collated literal types in `newSchema`. Fall
+      // back to the existing typed field for backward compat with callers that don't pass
+      // `collation`.
+      collation = collation.orElse(viewMeta.collation))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
   }
