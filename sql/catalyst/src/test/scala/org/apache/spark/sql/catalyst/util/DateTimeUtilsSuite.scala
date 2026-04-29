@@ -1573,8 +1573,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(timeBucketDTInterval(MICROS_PER_DAY,
       date(2024, 3, 10, 19, 0, 0), laOrigin, la)
       === DateTimeUtils.daysToMicros(LocalDate.of(2024, 3, 10).toEpochDay.toInt, la))
-    // Fall-back day (25 UTC hours): ts 2024-11-04 02:00 UTC = 2024-11-03 18:00 PST.
-    // Bucket = 2024-11-03 00:00 LA, which at 00:00 is still PDT (fall-back at 02:00).
+    // Fall-back day (Nov 3 in LA spans 25 UTC hours): ts at 2024-11-04 02:00 UTC.
+    // Bucket = local midnight Nov 3 in LA = 2024-11-03 07:00 UTC (PDT, since fall-back
+    // happens at 02:00 and 00:00 is still on the pre-transition offset).
     assert(timeBucketDTInterval(MICROS_PER_DAY,
       date(2024, 11, 4, 2, 0, 0), laOrigin, la)
       === DateTimeUtils.daysToMicros(LocalDate.of(2024, 11, 3).toEpochDay.toInt, la))

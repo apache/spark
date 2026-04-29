@@ -2403,7 +2403,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           laOrigin),
         timestampAnswer("2024-07-15 00:00:00.000", sdf, TimestampType))
 
-      // Fall-back day in LA (2024-11-03): the day has 25 wall-clock hours but the bucket
+      // Fall-back day in LA (2024-11-03): the day spans 25 UTC hours but the bucket
       // still covers the local calendar day. ts at 18:00 PST buckets to 00:00 PDT.
       checkEvaluation(
         TimeBucket(
@@ -2520,7 +2520,56 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("time_bucket: ExpressionBuilder default origin in non-UTC session") {
+  test("time_bucket: ExpressionBuilder") {
+    // Pin session zone to UTC so the LTZ default origin resolves to 0L. The non-UTC case
+    // is covered by the dedicated test below.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+      val hour = Literal(Duration.ofHours(1))
+      val ts = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampType)
+      val tsNtz = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampNTZType)
+      val ntzOrigin = timestampLiteral("1970-01-01 00:00:00.000", sdf, TimestampNTZType)
+
+      // 2-arg: default origin is epoch with ts's type (TIMESTAMP)
+      val built1 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts))
+        .asInstanceOf[TimeBucket]
+      assert(built1.originTs == Literal(0L, TimestampType))
+
+      // 2-arg with TIMESTAMP_NTZ ts: default origin is epoch with TIMESTAMP_NTZ
+      val built2 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, tsNtz))
+        .asInstanceOf[TimeBucket]
+      assert(built2.originTs == Literal(0L, TimestampNTZType))
+
+      // NULL ts + TIMESTAMP_NTZ origin: ts retyped to TIMESTAMP_NTZ to match origin
+      val built3 = TimeBucketExpressionBuilder.build(
+        "time_bucket", Seq(hour, Literal(null, NullType), ntzOrigin))
+        .asInstanceOf[TimeBucket]
+      assert(built3.ts.dataType == TimestampNTZType)
+
+      // NULL origin + TIMESTAMP_NTZ ts: origin retyped to TIMESTAMP_NTZ to match ts
+      val built4 = TimeBucketExpressionBuilder.build(
+        "time_bucket", Seq(hour, tsNtz, Literal(null, NullType)))
+        .asInstanceOf[TimeBucket]
+      assert(built4.originTs.dataType == TimestampNTZType)
+
+      // Bare NULL as bucketSize: retyped to DayTimeIntervalType
+      val built5 = TimeBucketExpressionBuilder.build(
+        "time_bucket", Seq(Literal(null, NullType), ts))
+        .asInstanceOf[TimeBucket]
+      assert(built5.bucketSize.dataType == DayTimeIntervalType())
+
+      // Wrong arg count
+      intercept[AnalysisException] {
+        TimeBucketExpressionBuilder.build("time_bucket", Seq(hour))
+      }
+      intercept[AnalysisException] {
+        TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts, ts, ts))
+      }
+    }
+  }
+
+  test("time_bucket: ExpressionBuilder in non-UTC session") {
     // In a non-UTC session, the 2-arg form's default origin shifts to the UTC instant of
     // local 1970-01-01 00:00 so monthly/yearly buckets land at local calendar boundaries.
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
@@ -2580,54 +2629,5 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expr5 = TimeBucket(hour, tsLit, ntzOrigin)
     val r5 = expr5.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
     assert(r5.errorSubClass == "UNEXPECTED_INPUT_TYPE")
-  }
-
-  test("time_bucket: ExpressionBuilder") {
-    // Pin session zone to UTC so the LTZ default origin resolves to 0L. The non-UTC case
-    // is covered by the dedicated test below.
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-      sdf.setTimeZone(TimeZone.getTimeZone(UTC))
-      val hour = Literal(Duration.ofHours(1))
-      val ts = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampType)
-      val tsNtz = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampNTZType)
-      val ntzOrigin = timestampLiteral("1970-01-01 00:00:00.000", sdf, TimestampNTZType)
-
-      // 2-arg: default origin is epoch with ts's type (TIMESTAMP)
-      val built1 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts))
-        .asInstanceOf[TimeBucket]
-      assert(built1.originTs == Literal(0L, TimestampType))
-
-      // 2-arg with TIMESTAMP_NTZ ts: default origin is epoch with TIMESTAMP_NTZ
-      val built2 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, tsNtz))
-        .asInstanceOf[TimeBucket]
-      assert(built2.originTs == Literal(0L, TimestampNTZType))
-
-      // NULL ts + TIMESTAMP_NTZ origin: ts retyped to TIMESTAMP_NTZ to match origin
-      val built3 = TimeBucketExpressionBuilder.build(
-        "time_bucket", Seq(hour, Literal(null, NullType), ntzOrigin))
-        .asInstanceOf[TimeBucket]
-      assert(built3.ts.dataType == TimestampNTZType)
-
-      // NULL origin + TIMESTAMP_NTZ ts: origin retyped to TIMESTAMP_NTZ to match ts
-      val built4 = TimeBucketExpressionBuilder.build(
-        "time_bucket", Seq(hour, tsNtz, Literal(null, NullType)))
-        .asInstanceOf[TimeBucket]
-      assert(built4.originTs.dataType == TimestampNTZType)
-
-      // Bare NULL as bucketSize: retyped to DayTimeIntervalType
-      val built5 = TimeBucketExpressionBuilder.build(
-        "time_bucket", Seq(Literal(null, NullType), ts))
-        .asInstanceOf[TimeBucket]
-      assert(built5.bucketSize.dataType == DayTimeIntervalType())
-
-      // Wrong arg count
-      intercept[AnalysisException] {
-        TimeBucketExpressionBuilder.build("time_bucket", Seq(hour))
-      }
-      intercept[AnalysisException] {
-        TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts, ts, ts))
-      }
-    }
   }
 }
