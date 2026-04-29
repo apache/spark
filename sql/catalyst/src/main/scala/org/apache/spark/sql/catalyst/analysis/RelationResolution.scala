@@ -485,11 +485,6 @@ class RelationResolution(
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
-    // Skip cache when a transaction is active.
-    if (catalogManager.transaction.isDefined) {
-      return loadRelation(ref)
-    }
-
     val key = toCacheKey(ref.catalog, ref.identifier)
     relationCache.get(key) match {
       case Some(cached) =>

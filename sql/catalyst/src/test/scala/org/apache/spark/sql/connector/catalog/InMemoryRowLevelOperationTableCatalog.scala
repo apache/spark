@@ -75,7 +75,8 @@ class InMemoryRowLevelOperationTableCatalog
       schema = schema,
       partitioning = partitioning,
       properties = properties,
-      constraints = constraints)
+      constraints = constraints,
+      tableId = table.id)
     newTable.alterTableWithData(table.data, schema)
 
     tables.put(ident, newTable)

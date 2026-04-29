@@ -78,6 +78,10 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
     delegate.properties,
     delegate.constraints) {
 
+  // Expose the same id as the delegate so that identity checks during transaction re-resolution
+  // don't false-positive on the TxnTable wrapper having a different UUID.
+  override val id: String = delegate.id
+
   alterTableWithData(delegate.data, schema)
 
   // Keep initial version to detect any changes during the transaction.

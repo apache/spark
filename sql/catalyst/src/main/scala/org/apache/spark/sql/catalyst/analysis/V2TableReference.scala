@@ -80,10 +80,12 @@ private[sql] case class V2TableReference private(
 private[sql] object V2TableReference {
 
   case class TableInfo(
+      tableId: Option[String],
       columns: Seq[Column],
       metadataColumns: Seq[MetadataColumn])
 
   sealed trait Context
+  /** Context for relations that are re-resolved on access of a dataframe temp view. */
   case class TemporaryViewContext(viewName: Seq[String]) extends Context
   /** Context for relations that are re-resolved through a transaction catalog. */
   case object TransactionContext extends Context
@@ -104,6 +106,7 @@ private[sql] object V2TableReference {
       relation.identifier.get,
       relation.options,
       TableInfo(
+        tableId = Option(relation.table.id()),
         columns = relation.table.columns.toImmutableArraySeq,
         metadataColumns = V2TableUtil.extractMetadataColumns(relation)),
       relation.output,
@@ -127,6 +130,9 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
   }
 
   private def validateLoadedTableInTransaction(table: Table, ref: V2TableReference): Unit = {
+    // Make sure the table was not dropped and recreated.
+    ref.info.tableId.foreach(V2TableUtil.validateTableId(ref.name, _, table))
+
     // Do not allow schema evolution to pre-analysed dataframes that are later used in
     // transactional writes. This is because the entire plans was built based on the original schema
     // and any schema change would make the plan structurally invalid. This is inline with the

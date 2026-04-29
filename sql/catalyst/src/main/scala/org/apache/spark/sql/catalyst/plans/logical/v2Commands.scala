@@ -1020,8 +1020,7 @@ case class MergeIntoTable(
     with SupportsSubquery
     with TransactionalWrite {
 
-  // Implements SupportsSchemaEvolution.table.
-  // Implements TransactionalWrite.table.
+  // Implements WriteWithSchemaEvolution.table and TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {

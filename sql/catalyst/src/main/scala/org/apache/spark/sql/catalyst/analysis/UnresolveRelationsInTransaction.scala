@@ -38,6 +38,10 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan =
     catalogManager.transaction match {
       case Some(transaction) =>
+        // We use plain transform rather than resolveOperators* because the latter skips subtrees
+        // that have already been analyzed. Furthermore, allowInvokingTransformsInAnalyzer
+        // allows to suppress the assertNotAnalysisRule safety check, which forbids calling
+        // transform directly inside the analyzer when not within a resolveOperators call.
         allowInvokingTransformsInAnalyzer {
           plan.transform {
             case tw: TransactionalWrite =>
@@ -50,7 +54,7 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   private def unresolveRelations(
       plan: LogicalPlan,
       catalog: CatalogPlugin): LogicalPlan = {
-    plan transform {
+    plan.transform {
       case r: DataSourceV2Relation if isLoadedFromCatalog(r, catalog) =>
         V2TableReference.createForTransaction(r)
     }

@@ -19,37 +19,37 @@ package org.apache.spark.sql.catalyst.transactions
 
 import java.util.UUID
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfoImpl}
 import org.apache.spark.util.Utils
 
 object TransactionUtils {
-  def commit(transaction: Transaction): Unit = {
+  def commit(txn: Transaction): Unit = {
     Utils.tryWithSafeFinally {
-      transaction.commit()
+      txn.commit()
     } {
-      transaction.close()
+      txn.close()
     }
   }
 
-  def abort(transaction: Transaction): Unit = {
+  def abort(txn: Transaction): Unit = {
     Utils.tryWithSafeFinally {
-      transaction.abort()
+      txn.abort()
     } {
-      transaction.close()
+      txn.close()
     }
   }
 
   def beginTransaction(catalog: TransactionalCatalogPlugin): Transaction = {
     val info = TransactionInfoImpl(id = UUID.randomUUID.toString)
-    val transaction = catalog.beginTransaction(info)
-    if (transaction.catalog.name != catalog.name) {
-      abort(transaction)
-      throw new IllegalStateException(
-        s"""Transaction catalog name (${transaction.catalog.name})
-           |must match original catalog name (${catalog.name}).
-           |""".stripMargin)
+    val txn = catalog.beginTransaction(info)
+    if (txn.catalog.name != catalog.name) {
+      abort(txn)
+      throw SparkException.internalError(
+        s"""Transaction catalog name (${txn.catalog.name})
+           |must match original catalog name (${catalog.name}).""".stripMargin)
     }
-    transaction
+    txn
   }
 }

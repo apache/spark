@@ -356,6 +356,9 @@ class Analyzer(
    * lookups. All other configuration (extended rules, checks, etc.) is preserved. Used by
    * [[QueryExecution]] to create a per-query analyzer for transactional operations for
    * transaction-aware catalog resolution.
+   *
+   * IMPORTANT: any new extension point added to Analyzer must also be copied here, otherwise
+   * transaction-aware analyzer clones (created by QueryExecution) will silently miss those rules.
    */
   def withCatalogManager(newCatalogManager: CatalogManager): Analyzer = {
     val self = this

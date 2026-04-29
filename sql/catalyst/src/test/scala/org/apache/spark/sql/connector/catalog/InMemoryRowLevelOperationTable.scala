@@ -38,13 +38,15 @@ class InMemoryRowLevelOperationTable(
     schema: StructType,
     partitioning: Array[Transform],
     properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty)
+    constraints: Array[Constraint] = Array.empty,
+    tableId: String = java.util.UUID.randomUUID().toString)
   extends InMemoryTable(
     name,
     CatalogV2Util.structTypeToV2Columns(schema),
     partitioning,
     properties,
-    constraints)
+    constraints,
+    id = tableId)
   with SupportsRowLevelOperations {
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)

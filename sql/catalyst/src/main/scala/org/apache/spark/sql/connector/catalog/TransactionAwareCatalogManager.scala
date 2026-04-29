@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.TempVariableManager
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 
@@ -36,6 +37,9 @@ private[sql] class TransactionAwareCatalogManager(
   override val tempVariableManager: TempVariableManager = delegate.tempVariableManager
 
   override def transaction: Option[Transaction] = Some(txn)
+
+  override def withTransaction(newTxn: Transaction): CatalogManager =
+    throw SparkException.internalError("Cannot nest transactions: a transaction is already active.")
 
   override def catalog(name: String): CatalogPlugin = {
     val resolved = delegate.catalog(name)

@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -76,6 +75,10 @@ class QueryExecution(
     val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
     val refreshPhaseEnabled: Boolean = true,
     val queryId: UUID = UUIDv7Generator.generate(),
+    // When a transaction is active, callers creating nested QueryExecution instances MUST pass
+    // the enclosing QueryExecution's analyzer here to propagate the transaction context.
+    // Omitting it causes the nested QE to use sessionState.analyzer, which has no knowledge
+    // of the transaction and will load tables outside the transaction's catalog scope.
     val analyzerOpt: Option[Analyzer] = None) extends LookupCatalog {
 
   val id: Long = QueryExecution.nextExecutionId
@@ -142,25 +145,30 @@ class QueryExecution(
   private def pathBased(write: TransactionalWritePlan): Option[TableCatalog] =
     EliminateSubqueryAliases(write.table) match {
       case UnresolvedRelation(parts, _, _) if parts.length > 1 =>
-        Try(DataSource.lookupDataSourceV2(parts.head, sparkSession.sessionState.conf))
-          .toOption
-          .flatten
-          .collect { case sco: SupportsCatalogOptions => sco }
-          .map { sco =>
-            val sessionConfigs = DataSourceV2Utils.extractSessionConfigs(
-              sco, sparkSession.sessionState.conf)
-            // Pass the entire identifier as option. The connector can decide how to parse it
-            // if needed.
-            val options = sessionConfigs + ("identifier" -> parts.mkString("."))
-            CatalogV2Util.getTableProviderCatalog(
-              sco, catalogManager, new CaseInsensitiveStringMap(options.asJava))
-          }
+        try {
+          DataSource.lookupDataSourceV2(parts.head, sparkSession.sessionState.conf)
+            .collect { case sco: SupportsCatalogOptions => sco }
+            .map { sco =>
+              val sessionConfigs = DataSourceV2Utils.extractSessionConfigs(
+                sco, sparkSession.sessionState.conf)
+              // Pass the entire identifier as option. The connector can decide how to parse it
+              // if needed.
+              val options = sessionConfigs + ("identifier" -> parts.mkString("."))
+              CatalogV2Util.getTableProviderCatalog(
+                sco, catalogManager, new CaseInsensitiveStringMap(options.asJava))
+            }
+        } catch {
+          // The head of the multipart identifier is not a registered data source.
+          // Fallback to catalog-based detection.
+          case _: ClassNotFoundException => None
+        }
       case _ => None
     }
 
   // Per-query analyzer: uses a transaction-aware CatalogManager when a transaction is active,
   // so that all catalog lookups and rule applications during analysis see the correct state
-  // without relying on thread-local context.
+  // without relying on thread-local context. Any nested QueryExecution that is created during
+  // analysis or execution of a transactional plan must receive this analyzer via analyzerOpt.
   private lazy val analyzer: Analyzer = analyzerOpt.getOrElse {
     transactionOpt match {
       case Some(txn) =>
