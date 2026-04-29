@@ -273,14 +273,16 @@ class SQLLastAttemptMetricUnitSuite extends SparkFunSuite with SharedSparkContex
     assert(slam.lastAttemptValueForRDDId(1) === Some(85)) // 20 + 15 + 30 + 10*2
 
     // Re-update partition 0 with a value that brings stageAttemptId back to common (10) while
-    // diverging stageId (12). The previous override entry for partition 0 in
-    // overrideStageAttemptIds must be cleared back to EMPTY_ID.
+    // diverging stageId (12). Once an override array exists, every update writes its value into
+    // the slot - even when the value equals the common - so partition 0's stageAttemptId entry
+    // becomes 10 (rather than being cleared to EMPTY_ID).
     when(mockTaskInfo.partitionId).thenReturn(0)
     acc.set(40)
     slam.mergeLastAttempt(acc, mockRdd, mockTaskInfo, 12, 10, mockProperties)
     val saIds4 = overrideStageAttemptIdsFld.get(rddVals).asInstanceOf[Array[Int]]
-    assert(saIds4(0) === -1,
-      "Partition 0's stageAttemptId now matches common; its override entry must be cleared")
+    assert(saIds4(0) === 10,
+      "Partition 0's stageAttemptId entry should hold the new value (which happens to equal " +
+        "the common), not EMPTY_ID")
     val sIds4 = overrideStageIdsFld.get(rddVals).asInstanceOf[Array[Int]]
     assert(sIds4(0) === 12)
     assert(slam.lastAttemptValueForRDDId(1) === Some(105)) // 40 + 15 + 30 + 10*2

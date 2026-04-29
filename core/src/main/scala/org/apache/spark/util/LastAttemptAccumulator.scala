@@ -228,31 +228,30 @@ private class LastAttemptRDDVals[@specialized T](
    * attempt tuple at `partitionId`, allocating the override array on first divergence. Returns
    * the array reference the caller should write back to the @volatile field - either a freshly
    * allocated and populated array (first override for this component) or the existing array
-   * after an in-place update. When the new value matches the common, an existing override entry
-   * is cleared back to EMPTY_ID; when no array has ever been allocated, no work is done.
+   * after an in-place update. Once the array exists, the value is always written, even when it
+   * matches the common - lookupComponent returns it correctly either way.
    */
   private def setOverrideComponent(
       array: Array[Int],
       partitionId: Int,
       value: Int,
       common: Int): Array[Int] = {
-    if (value != common) {
-      if (array == null) {
+    if (array == null) {
+      if (value == common) null
+      else {
         val newArr = Array.fill(partitionPartialVals.length)(EMPTY_ID)
         newArr(partitionId) = value
         newArr
-      } else {
-        array(partitionId) = value
-        array
       }
     } else {
-      if (array != null) array(partitionId) = EMPTY_ID
+      array(partitionId) = value
       array
     }
   }
 
   /** Reads one component's value at `partitionId`, falling back to `common` when the override
-   *  array is null or the entry equals EMPTY_ID. */
+   *  array is null or the entry is still EMPTY_ID (slot never written - typically a partition
+   *  that was computed before this component's override array was allocated). */
   private def lookupComponent(array: Array[Int], partitionId: Int, common: Int): Int = {
     if (array == null) common
     else {
