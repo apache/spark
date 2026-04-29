@@ -571,7 +571,7 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
   // ============================================================
 
 
-  test("SELECT from a v2 metric view returns aggregated rows") {
+  test("SELECT measure(...) from a v2 metric view returns aggregated rows") {
     withTestCatalogTables {
       val mv = MetricView(
         "0.1",
@@ -582,13 +582,87 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       // The fixture's `events` source has rows ("region_1", 1, 5.0), ("region_2", 2, 10.0).
       // The metric view aggregates by `region` summing `count`. Resolution flows through
       // loadRelation -> MetadataOnlyTable(ViewInfo) -> V1Table.toCatalogTable(ViewInfo) ->
-      // CatalogTableType.METRIC_VIEW -> ResolveMetricView, then the analyzer rewrites the
-      // view body into Aggregate(Seq(region), Seq(sum(count) AS count_sum)) over `events`.
-      val rows = sql(s"SELECT region, count_sum FROM $fullMetricViewName ORDER BY region")
-        .collect()
-      assert(rows.length === 2)
-      assert(rows(0).getString(0) === "region_1" && rows(0).getLong(1) === 1L)
-      assert(rows(1).getString(0) === "region_2" && rows(1).getLong(1) === 2L)
+      // CatalogTableType.METRIC_VIEW -> ResolveMetricView, which rewrites the view body
+      // into Aggregate(Seq(region), Seq(sum(count) AS count_sum)) over `events`. The
+      // `measure(...)` wrapper is required for measure columns -- selecting `count_sum`
+      // bare would fail (mirrors the v1 `MetricViewSuite` query syntax).
+      checkAnswer(
+        sql(s"SELECT region, measure(count_sum) FROM $fullMetricViewName " +
+          "GROUP BY region ORDER BY region"),
+        sql(s"SELECT region, sum(count) FROM $fullSourceTableName " +
+          "GROUP BY region ORDER BY region"))
+    }
+  }
+
+  test("SELECT measure(...) with a WHERE clause on a dimension") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      // Filter at the query layer (not on the metric view's own `where:`).
+      checkAnswer(
+        sql(s"SELECT measure(count_sum) FROM $fullMetricViewName " +
+          "WHERE region = 'region_2'"),
+        sql(s"SELECT sum(count) FROM $fullSourceTableName " +
+          "WHERE region = 'region_2'"))
+    }
+  }
+
+  test("SELECT against a v2 metric view honors the view's pre-defined where clause") {
+    withTestCatalogTables {
+      // Pre-define a filter on the metric view itself: only rows with count > 1 should be
+      // visible to consumers (i.e. region_2 only).
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = Some("count > 1"),
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      checkAnswer(
+        sql(s"SELECT region, measure(count_sum) FROM $fullMetricViewName " +
+          "GROUP BY region ORDER BY region"),
+        sql(s"SELECT region, sum(count) FROM $fullSourceTableName " +
+          "WHERE count > 1 GROUP BY region ORDER BY region"))
+    }
+  }
+
+  test("SELECT from a v2 metric view supports multiple measures with different aggregations") {
+    withTestCatalogTables {
+      // Add a second measure (sum of price) so we exercise the multi-measure rewrite path.
+      val cols = Seq(
+        Column("region", DimensionExpression("region"), 0),
+        Column("count_sum", MeasureExpression("sum(count)"), 1),
+        Column("price_sum", MeasureExpression("sum(price)"), 2),
+        Column("price_max", MeasureExpression("max(price)"), 3))
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = cols)
+      createMetricView(fullMetricViewName, mv)
+      checkAnswer(
+        sql(s"SELECT measure(count_sum), measure(price_sum), measure(price_max) " +
+          s"FROM $fullMetricViewName"),
+        sql(s"SELECT sum(count), sum(price), max(price) FROM $fullSourceTableName"))
+    }
+  }
+
+  test("SELECT from a v2 metric view supports ORDER BY and LIMIT on measures") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      checkAnswer(
+        sql(s"SELECT region, measure(count_sum) FROM $fullMetricViewName " +
+          "GROUP BY region ORDER BY 2 DESC LIMIT 1"),
+        sql(s"SELECT region, sum(count) FROM $fullSourceTableName " +
+          "GROUP BY region ORDER BY 2 DESC LIMIT 1"))
     }
   }
 
@@ -658,6 +732,76 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
 
       sql(s"DROP VIEW $fullMetricViewName")
       assert(!MetricViewRecordingCatalog.capturedViews.containsKey(ident))
+    }
+  }
+
+  test("DROP TABLE on a v2 metric view throws EXPECT_TABLE_NOT_VIEW") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+
+      // `DropTableExec` first probes `tableExists` (false for a view per the RelationCatalog
+      // passive-filtering contract), then falls back to `viewExists` and -- when the entity
+      // exists as a view but a table was requested -- throws `EXPECT_TABLE_NOT_VIEW` to
+      // distinguish "wrong type" from "missing".
+      val ex = intercept[AnalysisException] {
+        sql(s"DROP TABLE $fullMetricViewName")
+      }
+      assert(ex.getCondition === "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        s"Expected EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE, got ${ex.getCondition}: ${ex.getMessage}")
+
+      // The metric view is still present after the failed DROP TABLE.
+      val ident = Identifier.of(Array(testNamespace), metricViewName)
+      assert(MetricViewRecordingCatalog.capturedViews.containsKey(ident),
+        "DROP TABLE on a metric view must not delete it.")
+    }
+  }
+
+  test("DROP TABLE IF EXISTS on a v2 metric view also throws EXPECT_TABLE_NOT_VIEW") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+
+      // IF EXISTS does not silence the wrong-type error: the entity exists, just not as a
+      // table. (This mirrors the v1 `DropTableCommand` behavior, where `IF EXISTS` only
+      // short-circuits the not-found branch.)
+      val ex = intercept[AnalysisException] {
+        sql(s"DROP TABLE IF EXISTS $fullMetricViewName")
+      }
+      assert(ex.getCondition === "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+        s"Expected EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE, got ${ex.getCondition}: ${ex.getMessage}")
+    }
+  }
+
+  test("SHOW CREATE TABLE on a v2 metric view is unsupported") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+
+      // SHOW CREATE TABLE on a v2 view (including metric views) is rejected by
+      // DataSourceV2Strategy via `unsupportedTableOperationError(...)`. There's no
+      // round-trippable `CREATE VIEW ... WITH METRICS` form yet, so explicit "unsupported"
+      // is the right answer rather than emitting a misleading plain `CREATE VIEW ...`.
+      val ex = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $fullMetricViewName")
+      }
+      assert(ex.getCondition === "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        s"Expected UNSUPPORTED_FEATURE.TABLE_OPERATION, got " +
+          s"${ex.getCondition}: ${ex.getMessage}")
+      assert(ex.getMessage.contains("SHOW CREATE TABLE"),
+        s"Error message should mention 'SHOW CREATE TABLE', got: ${ex.getMessage}")
     }
   }
 
