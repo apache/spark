@@ -22,6 +22,16 @@ import org.apache.spark.sql.catalyst.util.MapData;
 
 /**
  * Map abstraction in {@link ColumnVector}.
+ *
+ * <h3>Validation (SPARK-56636 DO NOT MERGE)</h3>
+ *
+ * Deliberate doclint heading-out-of-sequence violation in a real `.java`
+ * source. This is the case Move B is designed to catch -- the same shape
+ * that hit `RelationCatalog.java` on PR 51419 and motivated this whole
+ * PR. With `-Xdoclint:html` on the unidoc invocation, this should fail
+ * the doc-gen job with a clean
+ * `ColumnarMap.java:LINE: error: heading used out of sequence: <H3>`
+ * line. Reverted before merge.
  */
 public final class ColumnarMap extends MapData {
   private final ColumnarArray keys;

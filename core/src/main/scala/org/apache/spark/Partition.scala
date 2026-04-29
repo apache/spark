@@ -19,13 +19,6 @@ package org.apache.spark
 
 /**
  * An identifier for a partition in an RDD.
- *
- * <h3>Validation (SPARK-56636 DO NOT MERGE)</h3>
- *
- * Deliberate doclint heading-out-of-sequence violation in a Scala source.
- * genjavadoc preserves the heading into the stub, and Move B runs doclint
- * against the stub during JavaUnidoc, so this should surface as a heading
- * diagnostic on the stub path. Reverted before merge.
  */
 trait Partition extends Serializable {
   /**
