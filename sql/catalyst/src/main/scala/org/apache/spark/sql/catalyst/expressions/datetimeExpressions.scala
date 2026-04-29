@@ -4028,7 +4028,7 @@ case class TimeBucket(
 @ExpressionDescription(
   usage = """
     _FUNC_(bucketSize, ts[, origin]) - Returns the start of the bucket that `ts` falls into,
-      where buckets are defined by the given `bucketSize` interval aligned to `origin`.
+      where buckets are defined by the given `bucketSize` interval aligned to optional `origin`.
       For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`, year-month
       interval buckets and calendar-day components of day-time interval buckets align
       to the session time zone.
@@ -4057,8 +4057,8 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     case _ => e
   }
 
-  // Default origin: 1970-01-01 00:00:00 in the session zone for TIMESTAMP, wall-clock
-  // for TIMESTAMP_NTZ.
+  // Default origin: 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and
+  // EPOCH (1970-01-01 00:00:00 UTC) for TIMESTAMP_NTZ.
   private def defaultOrigin(tsType: DataType): Literal = tsType match {
     case TimestampType =>
       val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)

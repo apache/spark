@@ -1061,14 +1061,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * DayTimeInterval bucketing: mirrors `timestampAddDayTime` by splitting `bucketMicros`
-   * into a calendar-day count and a remainder in microseconds, advancing `originMicros` by
-   * `k * bucketDays` calendar days in `zoneId` and then by `k * bucketRemMicros` UTC
-   * microseconds. For sub-day buckets the calendar-day component is zero, so the result is
-   * pure UTC-microsecond floor division and `zoneId` has no effect. For `TIMESTAMP` (with
-   * local time zone) inputs callers should pass the session zone; for `TIMESTAMP_NTZ` they
-   * should pass `ZoneOffset.UTC`. With a UTC zone the result matches pure UTC floor
-   * division regardless of the bucket size.
+   * DayTimeInterval bucketing: bucket k starts at
+   * `timestampAddDayTime(originMicros, k * bucketMicros, zoneId)`, matching the instant that
+   * `originMicros + INTERVAL '<k * bucketSize>'` would produce. For sub-day buckets the
+   * calendar-day component is zero, so the result is pure UTC-microsecond floor division
+   * and `zoneId` has no effect.
    *
    * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
    * analysis time.
@@ -1081,7 +1078,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def timeBucketDTInterval(
       bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
     val bucketDays = bucketMicros / MICROS_PER_DAY
-    val bucketRemMicros = bucketMicros - bucketDays * MICROS_PER_DAY
 
     val diff = MathUtils.subtractExact(tsMicros, originMicros)
     var k = MathUtils.floorDiv(diff, bucketMicros)
@@ -1090,16 +1086,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
       val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
       MathUtils.addExact(originMicros, bucketOffset)
     } else {
-      // Cumulative offset shift between origin and ts is bounded by 24h (max in IANA:
-      // Pacific/Apia 2011, Pacific/Kiritimati 1994), and bucketMicros >= MICROS_PER_DAY
-      // here, so the UTC-linear estimate is off by at most one bucket; a single ±1 step
-      // recovers the correct k.
-      def candidate(kk: Long): Long = {
-        val zoned = microsToInstant(originMicros).atZone(zoneId)
-          .plusDays(MathUtils.multiplyExact(kk, bucketDays))
-          .plus(MathUtils.multiplyExact(kk, bucketRemMicros), ChronoUnit.MICROS)
-        instantToMicros(zoned.toInstant)
-      }
+      // bucketMicros >= MICROS_PER_DAY, so DST offset shifts (a few hours at most) can
+      // move candidate(k) within one bucket of `origin + k*bucketMicros` but no further.
+      // One +/-1 step recovers the correct k.
+      def candidate(kk: Long): Long =
+        timestampAddDayTime(originMicros, MathUtils.multiplyExact(kk, bucketMicros), zoneId)
 
       var c = candidate(k)
       if (c > tsMicros) {
@@ -1114,9 +1105,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * YearMonthInterval bucketing: delegates to `ZonedDateTime.plusMonths`, matching how
-   * `+ INTERVAL '<n>' MONTH` advances. For `TIMESTAMP` (LTZ) inputs callers should pass
-   * the session zone; for `TIMESTAMP_NTZ` they should pass `ZoneOffset.UTC`.
+   * YearMonthInterval bucketing: bucket k starts at
+   * `originZdt.plusMonths(k * bucketMonths)`, matching the instant that
+   * `originMicros + INTERVAL '<k * bucketMonths>' MONTH` would produce. The offset of
+   * bucket boundaries depends on which side of a DST fold the origin instant resolves to,
+   * mirroring `+ INTERVAL '<n>' MONTH` semantics.
    *
    * `bucketMonths` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
    * analysis time.

@@ -13127,15 +13127,15 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 @_try_remote_functions
 def time_bucket(
-    bucket_size: "ColumnOrName",
+    bucket_size: "Column",
     ts: "ColumnOrName",
-    origin: Optional["ColumnOrName"] = None,
+    origin: Optional["Column"] = None,
 ) -> Column:
     """
     Aligns a timestamp to the start of a fixed-size interval bucket.
 
     Returns the start of the bucket that ``ts`` falls into, where buckets are defined by
-    the given ``bucket_size`` interval aligned to ``origin``. For ``TIMESTAMP_NTZ``,
+    the given ``bucket_size`` interval aligned to optional ``origin``. For ``TIMESTAMP_NTZ``,
     bucketing is performed in UTC. For ``TIMESTAMP``, year-month interval buckets and
     calendar-day components of day-time interval buckets align to the session time zone.
 
@@ -13143,12 +13143,12 @@ def time_bucket(
 
     Parameters
     ----------
-    bucket_size : :class:`~pyspark.sql.Column` or column name
+    bucket_size : :class:`~pyspark.sql.Column`
         A day-time or year-month interval defining the bucket size. Must be positive
         and foldable.
     ts : :class:`~pyspark.sql.Column` or column name
         A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
-    origin : :class:`~pyspark.sql.Column` or column name, optional
+    origin : :class:`~pyspark.sql.Column`, optional
         Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
         ``ts`` and must be foldable.
 

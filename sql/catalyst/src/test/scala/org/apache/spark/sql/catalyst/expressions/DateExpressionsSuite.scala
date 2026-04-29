@@ -2427,8 +2427,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         timestampAnswer("2024-03-12 12:00:00.000", sdf, TimestampType))
 
       // Compound DT (36h) across fall-back: exercises step-back. Origin = 2024-11-01
-      // 00:00 PDT; ts at 2024-11-05 11:30 PST buckets back to 2024-11-03 23:00 PST
-      // (linear estimate would land on 2024-11-05 11:00 PST).
+      // 00:00 PDT; ts at 2024-11-05 11:30 PST buckets back to 2024-11-04 00:00 PST
+      // (= origin + INTERVAL '72' HOUR; linear estimate would land on 2024-11-05 11:00).
       val fallOrigin = Literal(
         DateTimeUtils.daysToMicros(
           java.time.LocalDate.of(2024, 11, 1).toEpochDay.toInt, getZoneId("America/Los_Angeles")),
@@ -2438,7 +2438,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal(Duration.ofHours(36)),
           timestampLiteral("2024-11-05 11:30:00.000", sdf, TimestampType),
           fallOrigin),
-        timestampAnswer("2024-11-03 23:00:00.000", sdf, TimestampType))
+        timestampAnswer("2024-11-04 00:00:00.000", sdf, TimestampType))
     }
   }
 

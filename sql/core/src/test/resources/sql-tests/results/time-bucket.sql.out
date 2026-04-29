@@ -1068,3 +1068,13 @@ struct<t:timestamp,bucket:timestamp>
 2024-11-02 12:00:00	2024-11-02 00:00:00
 2024-11-03 12:00:00	2024-11-03 00:00:00
 2024-11-04 12:00:00	2024-11-04 00:00:00
+
+
+-- !query
+SELECT t, time_bucket(INTERVAL '36' HOUR, t, TIMESTAMP '2024-11-01 00:00:00') AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-11-05 11:30:00') tab(t)
+-- !query schema
+struct<t:timestamp,bucket:timestamp>
+-- !query output
+2024-11-05 11:30:00	2024-11-04 00:00:00

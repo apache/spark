@@ -921,3 +921,11 @@ SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
   ORDER BY t
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT t, time_bucket(INTERVAL '36' HOUR, t, TIMESTAMP '2024-11-01 00:00:00') AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-11-05 11:30:00') tab(t)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

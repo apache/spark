@@ -249,3 +249,7 @@ SELECT t, time_bucket(INTERVAL '1' DAY, t) AS bucket
     (TIMESTAMP '2024-11-03 12:00:00'),
     (TIMESTAMP '2024-11-04 12:00:00') tab(t)
   ORDER BY t;
+-- Compound day-time bucket (36h) on LTZ across the fall-back day.
+SELECT t, time_bucket(INTERVAL '36' HOUR, t, TIMESTAMP '2024-11-01 00:00:00') AS bucket
+  FROM VALUES
+    (TIMESTAMP '2024-11-05 11:30:00') tab(t);
