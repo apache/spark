@@ -1167,6 +1167,89 @@ class MapArrowIterUDFPeakmemBench(_MapArrowIterBenchMixin, _PeakmemBenchBase):
     pass
 
 
+# -- SQL_MAP_PANDAS_ITER_UDF -------------------------------------------------
+# UDF receives ``Iterator[pandas.DataFrame]``, returns ``Iterator[pandas.DataFrame]``.
+
+
+class _MapPandasIterBenchMixin:
+    """Provides ``_write_scenario`` for SQL_MAP_PANDAS_ITER_UDF.
+
+    Wraps input batches in a struct column to match the JVM-side wire format
+    (``MapInBatchEvaluatorFactory`` wraps each row in another row, and the
+    Pandas serializer turns that struct back into a ``pandas.DataFrame``
+    when ``df_for_struct=True``).
+    """
+
+    def _identity_pdf_iter(it):
+        yield from it
+
+    def _sort_pdf_iter(it):
+        for pdf in it:
+            yield pdf.sort_values(pdf.columns[0]).reset_index(drop=True)
+
+    def _filter_pdf_iter(it):
+        for pdf in it:
+            yield pdf[pdf[pdf.columns[0]].notna()]
+
+    # Scaled down vs SQL_MAP_ARROW_ITER_UDF: pandas conversion adds
+    # per-batch Arrow<->Pandas overhead across all columns.
+    _scenario_configs = {
+        "sm_batch_few_col": ("mixed", 100_000, 5, 1_000),
+        "sm_batch_many_col": ("mixed", 10_000, 50, 1_000),
+        "lg_batch_few_col": ("mixed", 1_000_000, 5, 10_000),
+        "lg_batch_many_col": ("mixed", 100_000, 50, 10_000),
+        "pure_ints": ("pure_ints", 200_000, 10, 5_000),
+        "pure_floats": ("pure_floats", 200_000, 10, 5_000),
+        "pure_strings": ("pure_strings", 200_000, 10, 5_000),
+        "pure_ts": ("pure_ts", 200_000, 10, 5_000),
+        "mixed_types": ("mixed", 200_000, 10, 5_000),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        type_key, num_rows, num_cols, batch_size = _MapPandasIterBenchMixin._scenario_configs[name]
+        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
+        struct_type = MockDataFactory.make_struct_type(
+            num_fields=num_cols,
+            base_types=pool,
+        )
+        return MockDataFactory.make_batches(
+            num_rows=num_rows,
+            num_cols=1,
+            spark_type_pool=[struct_type],
+            batch_size=batch_size,
+        )
+
+    _udfs = {
+        "identity_udf": (_identity_pdf_iter, [0]),
+        "sort_udf": (_sort_pdf_iter, [0]),
+        "filter_udf": (_filter_pdf_iter, [0]),
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._build_scenario(scenario)
+        udf_func, arg_offsets = self._udfs[udf_name]
+        ret_type = schema.fields[0].dataType
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+        )
+
+
+class MapPandasIterUDFTimeBench(_MapPandasIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class MapPandasIterUDFPeakmemBench(_MapPandasIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
 # -- SQL_SCALAR_ARROW_UDF ---------------------------------------------------
 # UDF receives ``pa.Array`` columns, returns ``pa.Array``.
 
