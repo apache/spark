@@ -24,6 +24,7 @@ import jdk.javadoc.doclet.StandardDoclet;
 import javax.lang.model.element.Element;
 import javax.tools.Diagnostic;
 
+import java.io.PrintWriter;
 import java.util.Locale;
 
 /**
@@ -79,6 +80,21 @@ public final class SparkUnidocDoclet extends StandardDoclet {
     public void print(Diagnostic.Kind kind, Element element, String message) {
       mirror(kind, element == null ? null : element.toString(), message);
       delegate.print(kind, element, message);
+    }
+
+    // JDK 17 Reporter has `getStandardWriter()` and `getDiagnosticWriter()` as
+    // default methods returning null. The standard doclet calls these on
+    // whatever Reporter we install; if we don't delegate to the wrapped
+    // reporter (which has the real PrintWriter), the doclet NPEs trying to
+    // use the null writer.
+    @Override
+    public PrintWriter getStandardWriter() {
+      return delegate.getStandardWriter();
+    }
+
+    @Override
+    public PrintWriter getDiagnosticWriter() {
+      return delegate.getDiagnosticWriter();
     }
 
     private static String locationOf(DocTreePath path) {
