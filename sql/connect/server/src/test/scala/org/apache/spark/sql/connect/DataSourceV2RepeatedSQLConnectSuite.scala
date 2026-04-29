@@ -33,6 +33,11 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  *
  * In Connect, every sql() call creates a fresh plan that is re-analyzed on the server, so it
  * always sees the latest data, schema, and table identity.
+ *
+ * The "DataFrame reuse" tests (at the bottom) test Connect-specific behavior: reusing the same
+ * DataFrame across external mutations. In classic Spark, the resolved plan is captured at
+ * DataFrame creation time, so reusing a DF after schema changes would fail. In Connect, each
+ * action re-sends the plan to the server for fresh analysis.
  */
 class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
 
@@ -44,12 +49,16 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
 
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
-    val actualStrs = actual.map(_.toString()).toSet
-    val expectedStrs = expected.map(_.toString()).toSet
     assert(
-      actualStrs == expectedStrs,
+      actual.map(_.toString()).toSet == expected.map(_.toString()).toSet,
       s"Expected ${expected.mkString(", ")} but got ${actual.mkString(", ")}")
   }
+
+  private def serverCatalog(
+      serverSession: org.apache.spark.sql.classic.SparkSession): InMemoryTableCatalog =
+    serverSession.sessionState.catalogManager
+      .catalog("testcat")
+      .asInstanceOf[InMemoryTableCatalog]
 
   // Scenario 1: external writes
 
@@ -167,6 +176,87 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         Collections.emptyMap[String, String])
 
       assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq.empty)
+
+      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+    }
+  }
+
+  // DataFrame reuse tests: these test Connect-specific behavior where reusing the same
+  // DataFrame object across mutations still sees fresh data, because Connect re-sends
+  // the plan for fresh analysis on every action.
+
+  test("[connect] reused DataFrame reflects external write") {
+    withSession { s =>
+      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+      val df = s.sql(s"SELECT * FROM $T")
+      assertRows(df.collect(), Seq(Row(1, 100)))
+
+      // external write via catalog API
+      val serverSession = getServerSession(s)
+      val cat = serverCatalog(serverSession)
+      val schema2 = StructType.fromDDL("id INT, salary INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema2).withRow(InternalRow(2, 200))))
+
+      // same df object, Connect re-analyzes and sees the new row
+      assertRows(df.collect(), Seq(Row(1, 100), Row(2, 200)))
+
+      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+    }
+  }
+
+  test("[connect] reused DataFrame reflects external schema change") {
+    withSession { s =>
+      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+      val df = s.sql(s"SELECT * FROM $T")
+      assertRows(df.collect(), Seq(Row(1, 100)))
+
+      // external schema change + write via catalog API
+      val serverSession = getServerSession(s)
+      val cat = serverCatalog(serverSession)
+      val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
+      cat.alterTable(ident, addCol)
+
+      val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+
+      // same df object, Connect re-analyzes and sees the new schema
+      assertRows(df.collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
+
+      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+    }
+  }
+
+  test("[connect] reused DataFrame reflects external drop/recreate") {
+    withSession { s =>
+      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+      val df = s.sql(s"SELECT * FROM $T")
+      assertRows(df.collect(), Seq(Row(1, 100)))
+
+      // external drop and recreate via catalog API
+      val serverSession = getServerSession(s)
+      val cat = serverCatalog(serverSession)
+      cat.dropTable(ident)
+      cat.createTable(
+        ident,
+        Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
+        Array.empty,
+        Collections.emptyMap[String, String])
+
+      // same df object, Connect re-analyzes against the new empty table
+      assertRows(df.collect(), Seq.empty)
 
       s.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
