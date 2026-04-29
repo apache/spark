@@ -561,26 +561,26 @@ class ColumnTestsMixin:
     def test_select_regular_column_with_reused_dataframe_hidden_in_natural_join(self):
         # A DataFrame appears both as a direct join side and inside a natural/USING
         # join that hides one of its columns into `metadataOutput`. When resolving
-        # `dim["k"]`, two candidates match the plan id: one from `p.output` (the
+        # `dim["id"]`, two candidates match the plan id: one from `p.output` (the
         # direct join side) and one only visible via `p.metadataOutput` (the reused
         # `dim` nested under the USING-join wrapper). We should prefer the regular
         # candidate and not throw AMBIGUOUS_COLUMN_REFERENCE.
-        fact = self.spark.createDataFrame([(10, "T1"), (20, "T2")], ["fk", "t"])
-        dim = self.spark.createDataFrame([(10,), (20,), (30,)], ["k"])
-        # The second row's k (99) does not match any dim row, so the USING
-        # left-join in `enriched` produces NULL on the dim side for t "T2".
-        # If `dim["k"]` were resolved to the hidden (USING-wrapper) candidate,
+        fact = self.spark.createDataFrame([(10, "T1"), (20, "T2")], ["fk", "val"])
+        dim = self.spark.createDataFrame([(10,), (20,), (30,)], ["id"])
+        # The second row's id (99) does not match any dim row, so the USING
+        # left-join in `enriched` produces NULL on the dim side for val "T2".
+        # If `dim["id"]` were resolved to the hidden (USING-wrapper) candidate,
         # the second row would yield NULL instead of 20, and the assertion below
-        # would fail. This pins resolution to the direct-side `k`.
-        events = self.spark.createDataFrame([(10, "T1"), (99, "T2")], ["k", "t"])
-        enriched = events.join(dim, "k", "left")
+        # would fail. This pins resolution to the direct-side `id`.
+        events = self.spark.createDataFrame([(10, "T1"), (99, "T2")], ["id", "val"])
+        enriched = events.join(dim, "id", "left")
         result = (
-            fact.join(dim, fact["fk"] == dim["k"], "left")
-            .join(enriched, "t", "full_outer")
-            .select(dim["k"])
+            fact.join(dim, fact["fk"] == dim["id"], "left")
+            .join(enriched, "val", "full_outer")
+            .select(dim["id"])
         )
         self.assertEqual(
-            [r["k"] for r in result.sort("t").collect()],
+            [r["id"] for r in result.sort("val").collect()],
             [10, 20],
         )
 
