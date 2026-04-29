@@ -766,6 +766,97 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("truncTimestamp with sub-hour zone offsets") {
+    // Asia/Kolkata (+05:30) and Asia/Kathmandu (+05:45) are not aligned to HOUR in UTC.
+    // The fast path applies the offset as part of its arithmetic, so HOUR/DAY truncation
+    // produces the correct local-aligned result without needing the slow path.
+    val kolkata = getZoneId("Asia/Kolkata")
+    val ts = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:42:17.123456+05:30"), kolkata).get
+    val expectedHour = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:00:00+05:30"), kolkata).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_HOUR, kolkata) === expectedHour)
+    val expectedDay = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T00:00:00+05:30"), kolkata).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, kolkata) === expectedDay)
+
+    val kathmandu = getZoneId("Asia/Kathmandu")
+    val ts2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:42:17.123456+05:45"), kathmandu).get
+    val expectedHour2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:00:00+05:45"), kathmandu).get
+    assert(DateTimeUtils.truncTimestamp(
+      ts2, DateTimeUtils.TRUNC_TO_HOUR, kathmandu) === expectedHour2)
+  }
+
+  test("truncTimestamp across DST transitions") {
+    val la = getZoneId("America/Los_Angeles")
+    // Spring-forward in LA: 2024-03-10 02:00 PDT does not exist; 02:30 local maps to
+    // 2024-03-10 03:30 PDT in wall-clock terms. Use an instant just after the transition
+    // so HOUR/DAY truncation candidate falls into the pre-transition offset window.
+    val postSpring = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-10T03:30:00-07:00"), la).get
+    val expectedHour = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-10T03:00:00-07:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postSpring, DateTimeUtils.TRUNC_TO_HOUR, la)
+      === expectedHour)
+    val expectedDay = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-10T00:00:00-08:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postSpring, DateTimeUtils.TRUNC_TO_DAY, la)
+      === expectedDay)
+
+    // Fall-back in LA: 2024-11-03 01:30 occurs twice. Truncation to HOUR/DAY should
+    // produce the same wall-clock boundary as the slow path regardless.
+    val postFall = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-11-03T01:30:00-08:00"), la).get
+    val expectedHour2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-11-03T01:00:00-08:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postFall, DateTimeUtils.TRUNC_TO_HOUR, la)
+      === expectedHour2)
+    val expectedDay2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-11-03T00:00:00-07:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postFall, DateTimeUtils.TRUNC_TO_DAY, la)
+      === expectedDay2)
+  }
+
+  test("SPARK-30766/30857: truncTimestamp before the epoch in HOUR/DAY") {
+    val la = getZoneId("America/Los_Angeles")
+    val ts1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1960-02-11T00:01:02.123"), la).get
+    val expectedHour1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1960-02-11T00:00:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(ts1, DateTimeUtils.TRUNC_TO_HOUR, la) === expectedHour1)
+    val expectedDay1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1960-02-11T00:00:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(ts1, DateTimeUtils.TRUNC_TO_DAY, la) === expectedDay1)
+  }
+
+  test("truncTimestamp at America/Sao_Paulo midnight DST gap") {
+    // 2018-11-04 was the last Brazilian DST start; the offset jumped from -3
+    // to -2 at exactly midnight local. The local times 00:00-00:59 on this
+    // date did not exist, so DAY truncation must resolve the gap forward to
+    // 01:00 BRST. Exercises the fast path's DST-fallback for midnight gaps.
+    val zone = getZoneId("America/Sao_Paulo")
+    val ts = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2018-11-04T12:00:00-02:00"), zone).get
+    val expected = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2018-11-04T01:00:00-02:00"), zone).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, zone) === expected)
+  }
+
+  test("truncTimestamp at Pacific/Apia after the 2011 calendar shift") {
+    // Pacific/Apia jumped from UTC-11 to UTC+13 on 2011-12-30, skipping the
+    // local date Dec 30 entirely. Verify that DAY truncation at a clean,
+    // post-transition, no-DST instant (June 2012, austral winter, +13)
+    // resolves to local midnight via the fast path.
+    val zone = getZoneId("Pacific/Apia")
+    val ts = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2012-06-15T13:00:00+13:00"), zone).get
+    val expected = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2012-06-15T00:00:00+13:00"), zone).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, zone) === expected)
+  }
+
   test("SPARK-51554: time truncation using timeTrunc") {
     // 01:02:03.400500600
     val input = localTimeToNanos(LocalTime.of(1, 2, 3, 400500600))
