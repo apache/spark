@@ -27,7 +27,7 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -340,7 +340,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       AlterV2ViewSchemaBindingExec(
         catalog.asInstanceOf[ViewCatalog], ident, rpv.info, schemaMode) :: Nil
 
-    case RenameTable(ResolvedPersistentView(catalog, ident, _), newName, _) =>
+    case RenameTable(ResolvedPersistentView(catalog, ident, _), newName, isView) =>
+      // Reject `ALTER TABLE <view> RENAME TO ...` -- the syntax says TABLE, but the resolved
+      // child is a view. Matches the v1 runtime check in `DDLUtils.verifyAlterTableType`.
+      if (!isView) {
+        throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(ident.name())
+      }
       RenameV2ViewExec(
         catalog.asInstanceOf[ViewCatalog], ident, newName.asIdentifier) :: Nil
 
@@ -359,9 +364,21 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeRelation(rpv @ ResolvedPersistentView(catalog, ident, _), isExtended, output) =>
       DescribeV2ViewExec(output, catalog.name(), ident, rpv.info, isExtended) :: Nil
 
-    case DescribeColumn(rpv @ ResolvedPersistentView(_, _, _), column: UnresolvedAttribute,
-        isExtended, output) =>
-      DescribeV2ViewColumnExec(output, rpv.info, column, isExtended) :: Nil
+    case DescribeColumn(rpv @ ResolvedPersistentView(_, _, _), column, isExtended, output) =>
+      // `ResolvedPersistentView.output` exposes the view's schema, so `ResolveReferences`
+      // resolves the column against it -- meaning we typically receive an `Attribute` here.
+      // Accept the legacy `UnresolvedAttribute` form too, mirroring the v1 rewrite for
+      // session-catalog views in `ResolveSessionCatalog`.
+      val nameParts = column match {
+        case u: UnresolvedAttribute => u.nameParts
+        case a: Attribute => a.qualifier :+ a.name
+        case Alias(child, _) =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "DESC TABLE COLUMN", toPrettySQL(child))
+        case _ =>
+          throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
+      }
+      DescribeV2ViewColumnExec(output, rpv.info, nameParts, isExtended) :: Nil
 
     // Plans that resolve through `UnresolvedTableOrView` reach here with a
     // `ResolvedPersistentView` child for non-session v2 views (the v1 rewrite in

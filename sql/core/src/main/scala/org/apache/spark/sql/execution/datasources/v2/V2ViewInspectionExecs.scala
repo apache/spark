@@ -21,7 +21,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
@@ -204,21 +203,21 @@ case class DescribeV2ViewExec(
 }
 
 /**
- * Physical plan node for DESCRIBE TABLE ... COLUMN on a v2 view. Mirrors the column-only
- * branch of v1 `DescribeColumnCommand`: emit `col_name`, `data_type`, `comment` for the
- * resolved field. v2 views do not carry column statistics, so the EXTENDED branch in v1 emits
- * `NULL` for every stat row -- we follow the same shape.
+ * Physical plan node for DESCRIBE TABLE ... COLUMN on a v2 view. The column nameParts are
+ * extracted at strategy time from the (already-resolved) column expression on
+ * `DescribeColumn`, so this exec doesn't have to deal with resolution. v2 views don't carry
+ * column statistics, so the EXTENDED branch in v1 emits `NULL` for every stat row -- we
+ * follow the same shape.
  */
 case class DescribeV2ViewColumnExec(
     output: Seq[Attribute],
     viewInfo: ViewInfo,
-    column: UnresolvedAttribute,
+    colNameParts: Seq[String],
     isExtended: Boolean) extends LeafV2CommandExec with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val resolver = conf.resolver
-    val colNameParts = column.nameParts
-    val colName = column.name
+    val colName = colNameParts.mkString(".")
     if (colNameParts.length > 1) {
       throw QueryCompilationErrors.commandNotSupportNestedColumnError(
         "DESC TABLE COLUMN", colName)

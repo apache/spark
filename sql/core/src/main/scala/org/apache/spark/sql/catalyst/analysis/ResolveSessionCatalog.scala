@@ -208,11 +208,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output) =>
       DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
 
-    case DescribeColumn(
-        ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
-      // For views, the column will not be resolved by `ResolveReferences` because
-      // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident, column.nameParts, isExtended, output)
+    case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
+      // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
+      // typically resolves the column to an `Attribute` here. We also accept the legacy
+      // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
+      // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
+      val nameParts = column match {
+        case u: UnresolvedAttribute => u.nameParts
+        case a: Attribute => a.qualifier :+ a.name
+        case Alias(child, _) =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "DESC TABLE COLUMN", toPrettySQL(child))
+        case _ =>
+          throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
+      }
+      DescribeColumnCommand(ident, nameParts, isExtended, output)
 
     case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
