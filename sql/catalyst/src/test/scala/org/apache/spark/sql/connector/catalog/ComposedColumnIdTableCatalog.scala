@@ -134,12 +134,15 @@ class ComposedColumnIdTableCatalog extends InMemoryTableCatalog {
 
       allColumnNestedIds(columnName) = newNestedFieldIds
 
-      // Use the bare root ID from rootIds to avoid double-encoding.
-      // Fall back to newColumn.id() only for genuinely new columns
-      // (those added by an AddColumn change at the top level).
-      val bareRoot = oldRootIds.getOrElse(columnName, newColumn.id())
-      allRootIds(columnName) = bareRoot
-      val composedId = encodeComposedId(bareRoot, newNestedFieldIds)
+      // super.alterTable preserves IDs by name, so newColumn.id() is
+      // the previously composed string (e.g. "5[0:10,1:11]"). Passing
+      // that to encodeComposedId would produce "5[0:10,1:11][0:10,1:12]"
+      // instead of "5[0:10,1:12]". Use the original root ID (e.g. "5")
+      // from rootIds instead; fall back to newColumn.id() only for
+      // genuinely new columns whose ID is a fresh numeric string.
+      val rootId = oldRootIds.getOrElse(columnName, newColumn.id())
+      allRootIds(columnName) = rootId
+      val composedId = encodeComposedId(rootId, newNestedFieldIds)
       newColumn.asInstanceOf[ColumnImpl].copy(id = composedId): Column
     }
 

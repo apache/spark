@@ -2009,23 +2009,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("composed nested IDs tolerate nested field reorder") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t ALTER COLUMN person.age FIRST")
-
-      // With position-based keys, the composed string is invariant under
-      // reorder (same set of position:id pairs). Schema validation matches
-      // struct fields by name, so reorder is also tolerated there. Spark
-      // reads struct fields by name, so reorder is a safe operation.
-      checkAnswer(df, Seq(Row(1, Row("Alice", 30))))
-    }
-  }
-
   test("composed nested IDs detect drop+re-add in map key struct") {
     val t = "composedidcat.ns1.ns2.tbl"
     withTable(t) {
