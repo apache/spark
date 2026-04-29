@@ -44,4 +44,24 @@ trait ShowViewsSuiteBase extends QueryTest with DDLCommandTestUtils {
     assert(names.contains("show_views_match"))
     assert(!names.contains("show_views_skip"))
   }
+
+  test("does not include non-view table entries") {
+    // SHOW VIEWS lists views and only views. Both v1 (session catalog routing through
+    // ShowTablesCommand-with-views-only) and v2 (`ShowViewsExec` routing through
+    // `ViewCatalog.listViews`) should exclude tables, and both must mark `isTemporary` as
+    // false for persistent view rows.
+    val viewName = "v_show_views_only"
+    val tableName = "t_not_in_show_views"
+    val table = s"$catalog.$namespace.$tableName"
+    sql(s"CREATE VIEW $catalog.$namespace.$viewName AS SELECT 1 AS x")
+    withTable(table) {
+      sql(s"CREATE TABLE $table (x INT) USING parquet")
+      val rows = sql(s"SHOW VIEWS IN $catalog.$namespace").collect()
+      val names = rows.map(_.getString(1)).toSet
+      assert(names.contains(viewName), s"$viewName missing from SHOW VIEWS: $names")
+      assert(!names.contains(tableName), s"non-view leaked into SHOW VIEWS: $names")
+      rows.foreach(r => assert(!r.getBoolean(2),
+        s"isTemporary must be false for persistent view rows: $r"))
+    }
+  }
 }

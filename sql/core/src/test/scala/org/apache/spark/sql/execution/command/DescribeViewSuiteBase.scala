@@ -48,6 +48,21 @@ trait DescribeViewSuiteBase extends QueryTest with DDLCommandTestUtils {
       s"expected a detailed-info block in:\n${rows.mkString("\n")}")
   }
 
+  test("describe extended includes Catalog and View Text rows") {
+    // Both v1 (`DescribeTableCommand` over a `CatalogTable` of type VIEW) and v2
+    // (`DescribeV2ViewExec`) emit a `Catalog` row carrying the resolved catalog name and a
+    // `View Text` row containing the view body, so users can read the actual definition out
+    // of EXTENDED rather than going to SHOW CREATE TABLE for it.
+    val view = s"$catalog.$namespace.v_describe_ext_body"
+    sql(s"CREATE VIEW $view AS SELECT 7 AS x")
+    val rows = sql(s"DESCRIBE TABLE EXTENDED $view").collect()
+    val pairs = rows.map(r => r.getString(0) -> Option(r.getString(1)).getOrElse("")).toMap
+    assert(pairs.get("Catalog").contains(catalog),
+      s"expected Catalog=$catalog in:\n$pairs")
+    assert(pairs.get("View Text").exists(_.contains("SELECT 7 AS x")),
+      s"expected View Text containing 'SELECT 7 AS x' in:\n$pairs")
+  }
+
   test("describe extended promotes Comment and Collation to top-level rows") {
     // v1 `CatalogTable.toJsonLinkedHashMap` and v2 `DescribeV2ViewExec` both render Comment /
     // Collation as their own rows in the EXTENDED block, separately from the generic

@@ -23,19 +23,14 @@ class DescribeViewSuite
   extends command.DescribeViewSuiteBase with ViewCommandSuiteBase {
 
   test("V2: extended emits the v2-native `# Detailed View Information` header") {
+    // v1 emits `# Detailed Table Information` for views (CatalogTableType.VIEW shares the
+    // same describe path as CatalogTableType.{MANAGED,EXTERNAL}); v2's `DescribeV2ViewExec`
+    // routes views to a dedicated header. Pin the v2-side text here so the divergence stays
+    // intentional.
     val view = s"$catalog.$namespace.v2_desc_ext_header"
     sql(s"CREATE VIEW $view AS SELECT 1 AS x")
     val rows = sql(s"DESCRIBE TABLE EXTENDED $view").collect().map(_.getString(0))
     assert(rows.contains("# Detailed View Information"),
       s"v2 extended describe should emit the View header; got:\n${rows.mkString("\n")}")
-  }
-
-  test("V2: extended block includes view text and catalog name") {
-    val view = s"$catalog.$namespace.v2_desc_ext_body"
-    sql(s"CREATE VIEW $view AS SELECT 7 AS x")
-    val rows = sql(s"DESCRIBE TABLE EXTENDED $view").collect()
-    val pairs = rows.map(r => r.getString(0) -> r.getString(1)).toMap
-    assert(pairs.get("Catalog").contains(catalog))
-    assert(pairs.get("View Text").exists(_.contains("SELECT 7 AS x")))
   }
 }
