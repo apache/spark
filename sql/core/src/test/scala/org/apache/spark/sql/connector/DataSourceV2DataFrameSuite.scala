@@ -1998,9 +1998,48 @@ class DataSourceV2DataFrameSuite
 
       sql(s"ALTER TABLE $t RENAME COLUMN person.name TO first_name")
 
-      // The old path Seq("name") disappears and the new path
-      // Seq("first_name") gets a fresh ID, so the composed top-level
-      // string for person changes. COLUMN_ID_MISMATCH fires.
+      // With position-based keys, the renamed field stays at position 0
+      // and keeps its nested ID. The composed string is unchanged, so
+      // schema validation catches the struct type difference instead.
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("composed nested IDs tolerate nested field reorder") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ALTER COLUMN person.age FIRST")
+
+      // With position-based keys, the composed string is invariant under
+      // reorder (same set of position:id pairs). Schema validation matches
+      // struct fields by name, so reorder is also tolerated there. Spark
+      // reads struct fields by name, so reorder is a safe operation.
+      checkAnswer(df, Seq(Row(1, Row("Alice", 30))))
+    }
+  }
+
+  test("composed nested IDs detect drop+re-add in map key struct") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t " +
+        s"(id INT, coords MAP<STRUCT<x: INT, y: INT>, STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES " +
+        s"(1, map(named_struct('x', 1, 'y', 2), 'origin'))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN coords.key.y")
+      sql(s"ALTER TABLE $t ADD COLUMN coords.key.y INT")
+
+      // The nested y field in the map key struct got a new ID on re-add.
+      // The composed top-level ID for coords changes.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
