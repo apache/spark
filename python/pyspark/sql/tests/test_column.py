@@ -567,8 +567,13 @@ class ColumnTestsMixin:
         # regular candidate and not throw AMBIGUOUS_COLUMN_REFERENCE.
         fact = self.spark.createDataFrame([(1, 10, "T1"), (2, 20, "T2")], ["id", "fk", "txn_id"])
         dim = self.spark.createDataFrame([(10, "X"), (20, "Y"), (30, "Z")], ["dim_id", "dim_name"])
+        # The second row's dim_id (99) does not match any dim row, so the USING
+        # left-join in `enriched` produces NULL on the dim side for txn_id "T2".
+        # If `dim["dim_id"]` were resolved to the hidden (USING-wrapper) candidate,
+        # the second row would yield NULL instead of 20, and the assertion below
+        # would fail. This pins resolution to the direct-side `dim_id`.
         events = self.spark.createDataFrame(
-            [(10, "T1", 100), (20, "T2", 200)], ["dim_id", "txn_id", "amount"]
+            [(10, "T1", 100), (99, "T2", 200)], ["dim_id", "txn_id", "amount"]
         )
         enriched = events.join(dim, "dim_id", "left")
         result = (
