@@ -19,12 +19,4 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
 
-class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteBase {
-
-  override protected def withSeededTable(qualified: String)(body: => Unit): Unit = {
-    withTable(qualified) {
-      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
-      body
-    }
-  }
-}
+class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteBase

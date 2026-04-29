@@ -23,13 +23,6 @@ import org.apache.spark.sql.execution.command
 
 class DropViewSuite extends command.DropViewSuiteBase with ViewCommandSuiteBase {
 
-  override protected def withSeededTable(qualified: String)(body: => Unit): Unit = {
-    withTable(qualified) {
-      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
-      body
-    }
-  }
-
   test("V2: drop removes the entry from the catalog store") {
     val view = s"$catalog.$namespace.v2_drop_remove"
     sql(s"CREATE VIEW $view AS SELECT 1 AS x")

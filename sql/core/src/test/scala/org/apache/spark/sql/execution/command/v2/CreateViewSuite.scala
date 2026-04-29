@@ -24,13 +24,6 @@ import org.apache.spark.sql.execution.command
 class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteBase {
   import testImplicits._
 
-  override protected def withSeededTable(qualified: String)(body: => Unit): Unit = {
-    withTable(qualified) {
-      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
-      body
-    }
-  }
-
   test("V2: CREATE VIEW propagates DEFAULT COLLATION onto the stored ViewInfo") {
     val view = s"$catalog.$namespace.v2_create_collation"
     withTable("spark_catalog.default.src_coll") {

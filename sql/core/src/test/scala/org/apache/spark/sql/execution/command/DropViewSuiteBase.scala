@@ -36,11 +36,16 @@ trait DropViewSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   /**
-   * Seed a non-view table at `qualified` (full `catalog.ns.name`) and run `body`. The leaf
-   * suite implements the path-specific seeding (v1 SQL `CREATE TABLE`, v2 catalog API call)
-   * and the matching cleanup so the test does not have to know which catalog is under test.
+   * Seed a non-view table at `qualified` (full `catalog.ns.name`) and run `body`. Same SQL
+   * for v1 and v2 -- `InMemoryTableViewCatalog.createTable` accepts the parquet TableInfo
+   * the same way the session catalog does, so both legs share this implementation.
    */
-  protected def withSeededTable(qualified: String)(body: => Unit): Unit
+  protected final def withSeededTable(qualified: String)(body: => Unit): Unit = {
+    withTable(qualified) {
+      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
+      body
+    }
+  }
 
   test("drop existing view") {
     val view = s"$catalog.$namespace.v_drop_basic"
@@ -61,21 +66,20 @@ trait DropViewSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"DROP VIEW IF EXISTS $catalog.$namespace.v_drop_never_existed")
   }
 
-  test("DROP VIEW on a non-view table entry is rejected") {
-    // Both paths refuse to drop a non-view table when the user said DROP VIEW, but the
-    // error class differs as a pre-existing divergence: v1 `DropTableCommand` raises
-    // `WRONG_COMMAND_FOR_OBJECT_TYPE` while v2 `DropViewExec` raises
-    // `EXPECT_VIEW_NOT_TABLE`. Accept either so this test can run on both paths -- aligning
-    // the two error classes is out of scope here.
+  test("DROP VIEW on a non-view table entry surfaces WRONG_COMMAND_FOR_OBJECT_TYPE") {
+    // Both v1 `DropTableCommand` and v2 `DropViewExec` route this case to
+    // `WRONG_COMMAND_FOR_OBJECT_TYPE`, which renders "Use DROP TABLE instead" -- giving the
+    // user the right command to retry. The `alternative` parameter on the rendered message
+    // surfaces the suggestion that subclassed `EXPECT_*` errors otherwise carry only via
+    // their subclass name.
     val view = s"$catalog.$namespace.v_drop_table_collide"
     withSeededTable(view) {
       val ex = intercept[AnalysisException] {
         sql(s"DROP VIEW $view")
       }
-      val cond = ex.getCondition
-      assert(
-        cond.startsWith("EXPECT_VIEW_NOT_TABLE") || cond == "WRONG_COMMAND_FOR_OBJECT_TYPE",
-        s"unexpected error condition: $cond")
+      assert(ex.getCondition == "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        s"unexpected error condition: ${ex.getCondition}")
+      assert(ex.getMessage.contains("Use DROP TABLE instead"))
     }
   }
 }

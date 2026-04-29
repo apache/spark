@@ -39,12 +39,16 @@ trait CreateViewSuiteBase extends QueryTest with DDLCommandTestUtils {
   }
 
   /**
-   * Seed a non-view table at `qualified` (full `catalog.ns.name`) and run `body`. The leaf
-   * suite implements the path-specific seeding (v1 SQL `CREATE TABLE`, v2 catalog API call)
-   * and the matching cleanup so the test does not have to know which catalog is under test.
-   * The seeded table has a single `col STRING` column.
+   * Seed a non-view table at `qualified` (full `catalog.ns.name`) and run `body`. Same SQL
+   * for v1 and v2 -- `InMemoryTableViewCatalog.createTable` accepts the parquet TableInfo
+   * the same way the session catalog does, so both legs share this implementation.
    */
-  protected def withSeededTable(qualified: String)(body: => Unit): Unit
+  protected final def withSeededTable(qualified: String)(body: => Unit): Unit = {
+    withTable(qualified) {
+      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
+      body
+    }
+  }
 
   test("CREATE VIEW persists the body and the SELECT round-trips") {
     val view = s"$catalog.$namespace.v_create_basic"
