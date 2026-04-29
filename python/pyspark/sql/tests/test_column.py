@@ -577,10 +577,11 @@ class ColumnTestsMixin:
         result = (
             df1.join(df2, df1["key"] == df2["id"], "left")
             .join(enriched, "val", "full_outer")
+            .sort("val")
             .select(df2["id"])
         )
         self.assertEqual(
-            [r["id"] for r in result.sort("val").collect()],
+            [r["id"] for r in result.collect()],
             [10, 20],
         )
 
