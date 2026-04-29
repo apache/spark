@@ -35,6 +35,11 @@ if should_test_connect:
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkSessionTestCase(unittest.TestCase):
+    def setUp(self):
+        # Reset class-level session state so tests are order-independent.
+        RemoteSparkSession._default_session = None
+        RemoteSparkSession._active_session.session = None
+
     def test_fails_to_create_session_without_remote_and_channel_builder(self):
         with self.assertRaises(ValueError):
             RemoteSparkSession.builder.getOrCreate()
@@ -98,14 +103,14 @@ class SparkSessionTestCase(unittest.TestCase):
 
     def test_default_session_expires_when_client_closes(self):
         s1 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
-        s2 = RemoteSparkSession.getDefaultSession()
+        s2 = RemoteSparkSession._get_default_session()
 
         self.assertIs(s1, s2)
 
         # We don't call close() to avoid executing ExecutePlanResponseReattachableIterator
         s1._client._closed = True
 
-        self.assertIsNone(RemoteSparkSession.getDefaultSession())
+        self.assertIsNone(RemoteSparkSession._get_default_session())
         s3 = RemoteSparkSession.builder.remote("sc://other").getOrCreate()
 
         self.assertIsNot(s1, s3)
