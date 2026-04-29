@@ -16,10 +16,26 @@
  */
 package org.apache.spark.udf.worker.core
 
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import java.io.File
 
-class WorkerAbstractionSuite
-    extends AnyFunSuite { // scalastyle:ignore funsuite
+import org.apache.spark.annotation.Experimental
 
-  test("dummy") {}
+/**
+ * :: Experimental ::
+ * A [[WorkerConnection]] over a Unix domain socket. Owns the socket
+ * path and removes the socket file on [[close]]. Subclasses provide the
+ * protocol-specific channel (e.g. gRPC over UDS) and may override
+ * [[close]] to add transport-level shutdown -- they should call
+ * `super.close()` to ensure the socket file is removed.
+ *
+ * [[close]] is idempotent: deleting an already-removed file is a no-op.
+ */
+@Experimental
+abstract class UnixSocketWorkerConnection(val socketPath: String)
+  extends WorkerConnection {
+
+  override def close(): Unit = {
+    val f = new File(socketPath)
+    if (f.exists()) f.delete()
+  }
 }
