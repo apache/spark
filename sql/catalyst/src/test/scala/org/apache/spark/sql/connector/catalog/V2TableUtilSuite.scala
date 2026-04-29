@@ -700,7 +700,16 @@ class V2TableUtilSuite extends SparkFunSuite {
       dataType: DataType,
       nullable: Boolean,
       id: String): Column = {
-    ColumnImpl(name, dataType, nullable, null, null, null, null, null, id)
+    ColumnImpl(
+      name = name,
+      dataType = dataType,
+      nullable = nullable,
+      comment = null,
+      defaultValue = null,
+      generationExpression = null,
+      identityColumnSpec = null,
+      metadataInJSON = null,
+      id = id)
   }
 
   private def metaCol(
