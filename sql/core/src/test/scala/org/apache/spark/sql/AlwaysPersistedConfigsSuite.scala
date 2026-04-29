@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
  * This suite tests if configs which values should always be stored are stored when creating a view
  * or a UDF.
  */
-class AlwaysPersistedConfigsSuite extends QueryTest with SharedSparkSession {
+class AlwaysPersistedConfigsSuite extends SharedSparkSession {
 
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(
     implicit pos: Position): Unit = {

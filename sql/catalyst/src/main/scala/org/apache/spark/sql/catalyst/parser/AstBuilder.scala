@@ -4286,8 +4286,12 @@ class AstBuilder extends DataTypeAstBuilder
   protected def createUnresolvedTableOrView(
       ctx: IdentifierReferenceContext,
       commandName: String,
-      allowTempView: Boolean = true): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTableOrView(_, commandName, allowTempView))
+      allowTempView: Boolean = true,
+      tableNotFoundSearchPathMode: UnresolvedTableOrViewSearchPathMode =
+        UnresolvedTableOrViewSearchPathMode.Ddl): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(
+      ctx,
+      UnresolvedTableOrView(_, commandName, allowTempView, tableNotFoundSearchPathMode))
   }
 
   private def createUnresolvedTableOrView(
@@ -7387,7 +7391,7 @@ class AstBuilder extends DataTypeAstBuilder
             // and replace it with the corresponding attribute from the child operator.
             case UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
-              newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
+              newAggregateExpressions += UnresolvedPipeAggregateOrdinal(v)
             case e: Expression =>
               newGroupingExpressions += e
               newAggregateExpressions += UnresolvedAlias(e, None)

@@ -19,7 +19,6 @@ package org.apache.spark.sql.analysis.resolver
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
@@ -33,9 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class MetadataResolverSuite
-    extends QueryTest
-    with SharedSparkSession {
+class MetadataResolverSuite extends SharedSparkSession {
   private val catalogName = "spark_catalog"
 
   private val keyValueTableSchema = StructType(

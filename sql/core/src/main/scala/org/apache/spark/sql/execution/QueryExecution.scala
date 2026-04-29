@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
@@ -327,7 +327,30 @@ class QueryExecution(
 
   protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
     QueryExecution.withInternalError(s"The Spark SQL phase $phase failed with an internal error.") {
-      tracker.measurePhase(phase)(block)
+      withQueryExecutionId(sparkSession) {
+        tracker.measurePhase(phase)(block)
+      }
+    }
+  }
+
+  /**
+   * Set the query execution id in thread-local properties while
+   * executing the block. This is used by
+   * [[org.apache.spark.sql.execution.metric.SQLLastAttemptAccumulator]] to associate
+   * driver-side metric updates with a specific QueryExecution.
+   */
+  private[sql] def withQueryExecutionId[T](
+      session: SparkSession)(block: => T): T = {
+    val sc = session.sparkContext
+    val oldId = sc.getLocalProperty(
+      SparkContext.DATASET_QUERY_EXECUTION_ID_KEY)
+    sc.setLocalProperty(
+      SparkContext.DATASET_QUERY_EXECUTION_ID_KEY, id.toString)
+    try {
+      block
+    } finally {
+      sc.setLocalProperty(
+        SparkContext.DATASET_QUERY_EXECUTION_ID_KEY, oldId)
     }
   }
 

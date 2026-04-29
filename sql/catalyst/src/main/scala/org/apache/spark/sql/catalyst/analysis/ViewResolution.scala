@@ -38,7 +38,7 @@ object ViewResolution {
       val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
       if (nestedViewDepth > maxNestedViewDepth) {
         throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-          view.desc.identifier,
+          view.desc.fullIdent,
           maxNestedViewDepth,
           view
         )

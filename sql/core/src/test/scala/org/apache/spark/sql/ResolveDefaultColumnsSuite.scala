@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
+class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
     withTable("t") {
       sql("create table t(c1 timestamp, c2 timestamp) using parquet")

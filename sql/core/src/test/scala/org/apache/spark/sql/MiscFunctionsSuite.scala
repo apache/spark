@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, StringType}
 
-class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
+class MiscFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("reflect and java_method") {

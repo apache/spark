@@ -164,6 +164,43 @@ class CatalogManager(
     }
   }
 
+  /**
+   * Ordered catalog/schema path entries for resolving unqualified SQL object names.
+   * When PATH is off or unset, applies [[SQLConf.defaultPathOrder]] (legacy).
+   * When PATH is explicitly set, uses the resolved stored path entries.
+   */
+  def sqlResolutionPathEntries(
+      pathDefaultCatalog: String,
+      pathDefaultNamespace: Seq[String],
+      expandCatalog: String,
+      expandNamespace: Seq[String]): Seq[Seq[String]] = synchronized {
+    val defaultEntry =
+      if (pathDefaultNamespace.isEmpty) Seq(pathDefaultCatalog)
+      else pathDefaultCatalog +: pathDefaultNamespace
+    val stored = if (conf.pathEnabled) _sessionPath else None
+    stored match {
+      case Some(entries) =>
+        CatalogManager.resolvePathEntries(entries, expandCatalog, expandNamespace)
+      case None =>
+        conf.defaultPathOrder(Seq(defaultEntry))
+    }
+  }
+
+  /** Session-catalog overload. */
+  def sqlResolutionPathEntries(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    sqlResolutionPathEntries(
+      currentCatalog, currentNamespace,
+      currentCatalog, currentNamespace)
+
+  /** True if [[sqlResolutionPathEntries]] includes `system.session`. */
+  def sessionScopeUnqualifiedAllowed(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Boolean =
+    sqlResolutionPathEntries(currentCatalog, currentNamespace)
+      .exists(CatalogManager.isSystemSessionPathEntry)
+
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
@@ -244,6 +281,10 @@ private[sql] object CatalogManager {
       isFullyQualifiedSystemSessionViewName(nameParts)
   }
 
+  /** True if a SQL path entry is the well-known `system.session` entry. */
+  def isSystemSessionPathEntry(parts: Seq[String]): Boolean =
+    parts == Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE)
+
   /**
    * A single entry in the session SQL path: either a literal schema
    * or the current-schema marker.
@@ -272,4 +313,40 @@ private[sql] object CatalogManager {
       currentCatalog: String,
       currentNamespace: Seq[String]): Seq[Seq[String]] =
     entries.map(_.resolve(currentCatalog, currentNamespace))
+
+  /**
+   * Compute the resolved path entries to persist in view or SQL function metadata.
+   * When PATH is enabled, resolves the stored session path (or falls back to the
+   * legacy resolutionSearchPath). If `stripSession` is true, removes `system.session`
+   * entries (persisted objects cannot reference temporary objects).
+   */
+  def pathEntriesForPersistence(
+      catalogManager: CatalogManager,
+      conf: SQLConf,
+      stripSession: Boolean): Seq[Seq[String]] = {
+    if (!conf.pathEnabled) return Seq.empty
+    val currentCatalog = catalogManager.currentCatalog.name()
+    val currentNamespace = catalogManager.currentNamespace.toSeq
+    val entries = catalogManager.sessionPathEntries match {
+      case Some(stored) =>
+        resolvePathEntries(stored, currentCatalog, currentNamespace)
+      case None =>
+        val catalogPath =
+          (currentCatalog +: currentNamespace).toSeq
+        conf.resolutionSearchPath(catalogPath)
+    }
+    if (stripSession) {
+      entries.filterNot(isSystemSessionPathEntry)
+    } else {
+      entries
+    }
+  }
+
+  /** Serialize resolved path entries to JSON for storage in view/function properties. */
+  def serializePathEntries(entries: Seq[Seq[String]]): String = {
+    import org.json4s.JsonAST.{JArray, JString}
+    import org.json4s.jackson.JsonMethods.compact
+    compact(JArray(entries.map(parts =>
+      JArray(parts.map(JString(_)).toList)).toList))
+  }
 }

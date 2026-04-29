@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.IntegerType
  * This tests the system.builtin, system.session, and system.extension namespaces.
  *
  */
-class FunctionQualificationSuite extends QueryTest with SharedSparkSession {
+class FunctionQualificationSuite extends SharedSparkSession {
 
   override protected def sparkConf = {
     super.sparkConf.set("spark.sql.extensions", classOf[TestExtensions].getName)

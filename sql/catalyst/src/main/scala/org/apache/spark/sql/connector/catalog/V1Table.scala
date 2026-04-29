@@ -22,8 +22,8 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, CatalogUtils}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
@@ -49,7 +49,6 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override lazy val schema: StructType = v1Table.schema
 
   override lazy val partitioning: Array[Transform] = {
-    import CatalogV2Implicits._
     val partitions = new mutable.ArrayBuffer[Transform]()
 
     v1Table.partitionColumnNames.foreach { col =>
@@ -108,6 +107,108 @@ private[sql] object V1Table {
       case CatalogTableType.VIEW => Some(TableSummary.VIEW_TABLE_TYPE)
       case _ => None
     }
+  }
+
+  def toCatalogTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      t: MetadataOnlyTable): CatalogTable = t.getTableInfo match {
+    case viewInfo: ViewInfo => toCatalogTable(catalog, ident, viewInfo)
+    case tableInfo => toCatalogTable(catalog, ident, tableInfo)
+  }
+
+  private def toCatalogTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      info: TableInfo): CatalogTable = {
+    val props = info.properties.asScala.toMap
+    // PROP_TABLE_TYPE is advisory on the v2 side: it may be absent or carry a value that has no
+    // v1 mapping (e.g. TableSummary.FOREIGN_TABLE_TYPE). v1 only has EXTERNAL/MANAGED, so
+    // anything other than the explicit MANAGED mapping falls back to EXTERNAL for the v1
+    // representation -- the same default v1 uses when the value is missing. VIEW is reached
+    // only through the ViewInfo branch above.
+    val tableType = props.get(TableCatalog.PROP_TABLE_TYPE) match {
+      case Some(TableSummary.MANAGED_TABLE_TYPE) => CatalogTableType.MANAGED
+      case _ => CatalogTableType.EXTERNAL
+    }
+    // Reserved keys are promoted to first-class CatalogTable fields; strip them from the
+    // user-visible properties map so they're not double-persisted or leaked into the serde bag.
+    val userProps = props -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
+    val (serdeProps, tableProps) = userProps.toSeq
+      .partition(_._1.startsWith(TableCatalog.OPTION_PREFIX))
+    val tablePropsMap = tableProps.toMap
+    val (partCols, bucketSpec, clusterBySpec) = info.partitions.toSeq.convertTransforms
+    CatalogTable(
+      // `asLegacyTableIdentifier` collapses multi-part namespaces to their last segment (v1
+      // limitation). We record the full multi-part form in `multipartIdentifier` below;
+      // callers needing the real fully-qualified name should read `CatalogTable.fullIdent`.
+      identifier = ident.asLegacyTableIdentifier(catalog.name()),
+      tableType = tableType,
+      storage = CatalogStorageFormat.empty.copy(
+        locationUri = props.get(TableCatalog.PROP_LOCATION).map(CatalogUtils.stringToURI),
+        // v2 table properties should be put into the serde properties as well in case
+        // they contain data source options.
+        properties = tablePropsMap ++ serdeProps.map {
+          case (k, v) => k.drop(TableCatalog.OPTION_PREFIX.length) -> v
+        }
+      ),
+      schema = CatalogV2Util.v2ColumnsToStructType(info.columns),
+      provider = props.get(TableCatalog.PROP_PROVIDER),
+      partitionColumnNames = partCols,
+      bucketSpec = bucketSpec,
+      owner = props.getOrElse(TableCatalog.PROP_OWNER, ""),
+      comment = props.get(TableCatalog.PROP_COMMENT),
+      collation = props.get(TableCatalog.PROP_COLLATION),
+      properties = tablePropsMap ++
+        clusterBySpec.map(ClusterBySpec.toPropertyWithoutValidation),
+      multipartIdentifier = Some(catalog.name() +: ident.asMultipartIdentifier)
+    )
+  }
+
+  def toCatalogTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      info: ViewInfo): CatalogTable = {
+    val props = info.properties.asScala.toMap
+    val userProps = props -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
+    // Serde/OPTION properties only apply to data-source tables; views' user properties are a
+    // plain TBLPROPERTIES bag.
+    val tablePropsMap = userProps
+    val viewContextProps = if (info.currentCatalog != null && info.currentCatalog.nonEmpty) {
+      CatalogTable.catalogAndNamespaceToProps(
+        info.currentCatalog, info.currentNamespace.toSeq)
+    } else {
+      Map.empty[String, String]
+    }
+    val sqlConfigProps = info.sqlConfigs.asScala.map {
+      case (k, v) => s"${CatalogTable.VIEW_SQL_CONFIG_PREFIX}$k" -> v
+    }.toMap
+    val queryOutputProps = if (info.queryColumnNames.isEmpty) {
+      Map.empty[String, String]
+    } else {
+      val numCols = info.queryColumnNames.length
+      val perColProps = info.queryColumnNames.zipWithIndex.map { case (name, idx) =>
+        s"${CatalogTable.VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX}$idx" -> name
+      }.toMap
+      perColProps + (CatalogTable.VIEW_QUERY_OUTPUT_NUM_COLUMNS -> numCols.toString)
+    }
+    val schemaModeProps = Option(info.schemaMode)
+      .map(m => Map(CatalogTable.VIEW_SCHEMA_MODE -> m))
+      .getOrElse(Map.empty)
+    CatalogTable(
+      identifier = ident.asLegacyTableIdentifier(catalog.name()),
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = CatalogV2Util.v2ColumnsToStructType(info.columns),
+      owner = props.getOrElse(TableCatalog.PROP_OWNER, ""),
+      viewText = Some(info.queryText),
+      viewOriginalText = Some(info.queryText),
+      comment = props.get(TableCatalog.PROP_COMMENT),
+      collation = props.get(TableCatalog.PROP_COLLATION),
+      properties = tablePropsMap ++ viewContextProps ++ sqlConfigProps ++
+        queryOutputProps ++ schemaModeProps,
+      multipartIdentifier = Some(catalog.name() +: ident.asMultipartIdentifier)
+    )
   }
 }
 

@@ -1858,6 +1858,11 @@ private[spark] class DAGScheduler(
             throw SparkCoreErrors.accessNonExistentAccumulatorError(id)
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
+        if (acc.isInstanceOf[LastAttemptAccumulator[_, _, _]]) {
+          acc.asInstanceOf[LastAttemptAccumulator[_, _, _]].mergeLastAttempt(
+            updates, stage.rdd, event.taskInfo,
+            task.stageId, task.stageAttemptId, task.localProperties)
+        }
         // To avoid UI cruft, ignore cases where value wasn't updated
         if (acc.name.isDefined && !updates.isZero) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
@@ -2333,6 +2338,19 @@ private[spark] class DAGScheduler(
                 // The epoch of the task is acceptable (i.e., the task was launched after the most
                 // recent failure we're aware of for the executor), so mark the task's output as
                 // available.
+                // For testing purposes, inject fetch failures controlled from the driver-side by
+                // supplying an invalid location.
+                if (Utils.isTesting &&
+                    sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES) &&
+                    task.stageAttemptId == 0) {
+                  val currentLocation = status.location
+                  val invalidLocation = BlockManagerId(
+                    execId = BlockManagerId.INVALID_EXECUTOR_ID,
+                    host = currentLocation.host,
+                    port = currentLocation.port,
+                    topologyInfo = currentLocation.topologyInfo)
+                  status.updateLocation(invalidLocation)
+                }
                 val isChecksumMismatched = mapOutputTracker.registerMapOutput(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
                 if (isChecksumMismatched) {

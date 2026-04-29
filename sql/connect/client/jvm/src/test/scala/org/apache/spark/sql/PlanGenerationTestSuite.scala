@@ -403,7 +403,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   test("read changes with options") {
     session.read
       .option("startingTimestamp", "2026-01-01")
-      .option("deduplicationMode", "netChanges")
+      .option("deduplicationMode", "dropCarryovers")
       .option("computeUpdates", "true")
       .changes("myTable")
   }

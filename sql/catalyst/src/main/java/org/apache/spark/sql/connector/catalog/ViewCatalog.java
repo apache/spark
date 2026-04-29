@@ -14,80 +14,70 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Arrays;
-import java.util.List;
-
-import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
 import org.apache.spark.sql.catalyst.analysis.ViewAlreadyExistsException;
 
 /**
- * Catalog methods for working with views.
+ * Catalog API for connectors that expose views.
+ * <p>
+ * Connectors that expose <i>only</i> views implement this interface. Connectors that expose
+ * both tables and views must implement {@link RelationCatalog} (which extends both this
+ * interface and {@link TableCatalog} and adds the cross-cutting contract for the combined
+ * case); the methods on this interface remain view-only -- they do not interact with tables.
+ * <p>
+ * The presence of {@code ViewCatalog} on the catalog plugin <i>is</i> the signal that it
+ * supports views; there is no capability flag to declare.
+ *
+ * @since 4.2.0
  */
-@DeveloperApi
+@Evolving
 public interface ViewCatalog extends CatalogPlugin {
 
   /**
-   * A reserved property to specify the description of the view.
-   */
-  String PROP_COMMENT = "comment";
-
-  /**
-   * A reserved property to specify the owner of the view.
-   */
-  String PROP_OWNER = "owner";
-
-  /**
-   * A reserved property to specify the software version used to create the view.
-   */
-  String PROP_CREATE_ENGINE_VERSION = "create_engine_version";
-
-  /**
-   * A reserved property to specify the software version used to change the view.
-   */
-  String PROP_ENGINE_VERSION = "engine_version";
-
-  /**
-   * All reserved properties of the view.
-   */
-  List<String> RESERVED_PROPERTIES = Arrays.asList(
-        PROP_COMMENT,
-        PROP_OWNER,
-        PROP_CREATE_ENGINE_VERSION,
-        PROP_ENGINE_VERSION);
-
-  /**
    * List the views in a namespace from the catalog.
-   * <p>
-   * If the catalog supports tables, this must return identifiers for only views and not tables.
    *
    * @param namespace a multi-part namespace
-   * @return an array of Identifiers for views
-   * @throws NoSuchNamespaceException If the namespace does not exist (optional).
+   * @return an array of identifiers for views
+   * @throws NoSuchNamespaceException if the namespace does not exist (optional)
    */
-  Identifier[] listViews(String... namespace) throws NoSuchNamespaceException;
+  Identifier[] listViews(String[] namespace) throws NoSuchNamespaceException;
 
   /**
-   * Load view metadata by {@link Identifier ident} from the catalog.
-   * <p>
-   * If the catalog supports tables and contains a table for the identifier and not a view,
-   * this must throw {@link NoSuchViewException}.
+   * Load view metadata by identifier.
    *
    * @param ident a view identifier
-   * @return the view description
-   * @throws NoSuchViewException If the view doesn't exist or is a table
+   * @return the view metadata
+   * @throws NoSuchViewException if the view does not exist
    */
-  View loadView(Identifier ident) throws NoSuchViewException;
+  ViewInfo loadView(Identifier ident) throws NoSuchViewException;
 
   /**
-   * Invalidate cached view metadata for an {@link Identifier identifier}.
+   * Test whether a view exists.
    * <p>
-   * If the view is already loaded or cached, drop cached data. If the view does not exist or is
-   * not cached, do nothing. Calling this method should not query remote services.
+   * The default implementation calls {@link #loadView} and catches {@link NoSuchViewException}.
+   * Catalogs that can answer existence cheaply should override.
+   *
+   * @param ident a view identifier
+   * @return true if a view exists at {@code ident}, false otherwise
+   */
+  default boolean viewExists(Identifier ident) {
+    try {
+      loadView(ident);
+      return true;
+    } catch (NoSuchViewException e) {
+      return false;
+    }
+  }
+
+  /**
+   * Invalidate cached metadata for a view.
+   * <p>
+   * If the view is currently cached, drop the cached entry; otherwise do nothing. This must not
+   * issue remote calls.
    *
    * @param ident a view identifier
    */
@@ -95,105 +85,64 @@ public interface ViewCatalog extends CatalogPlugin {
   }
 
   /**
-   * Test whether a view exists using an {@link Identifier identifier} from the catalog.
-   * <p>
-   * If the catalog supports views and contains a view for the identifier and not a table,
-   * this must return false.
+   * Create a view.
    *
-   * @param ident a view identifier
-   * @return true if the view exists, false otherwise
+   * @param ident the view identifier
+   * @param info  the view metadata
+   * @return the metadata of the newly created view; may equal {@code info}
+   * @throws ViewAlreadyExistsException if a view already exists at {@code ident}
+   * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
-  default boolean viewExists(Identifier ident) {
+  ViewInfo createView(Identifier ident, ViewInfo info)
+      throws ViewAlreadyExistsException, NoSuchNamespaceException;
+
+  /**
+   * Atomically replace an existing view's metadata.
+   * <p>
+   * Used by {@code ALTER VIEW ... AS}. Implementations should commit the new metadata
+   * atomically; views carry no data, so a single transactional metastore call (or equivalent)
+   * is sufficient -- there is no separate staging API.
+   *
+   * @param ident the view identifier
+   * @param info  the new view metadata
+   * @return the metadata of the replaced view; may equal {@code info}
+   * @throws NoSuchViewException if no view exists at {@code ident}
+   */
+  ViewInfo replaceView(Identifier ident, ViewInfo info) throws NoSuchViewException;
+
+  /**
+   * Create a view if one does not exist at {@code ident}, or atomically replace it if one does.
+   * <p>
+   * Used by {@code CREATE OR REPLACE VIEW}. The default implementation calls
+   * {@link #replaceView}, falling back to {@link #createView} on
+   * {@link NoSuchViewException}. The fallback is non-atomic across the two calls (a concurrent
+   * drop or create can race), so catalogs that can answer the upsert in a single transactional
+   * call should override this method to collapse to one RPC and to make the swap atomic.
+   *
+   * @param ident the view identifier
+   * @param info  the view metadata
+   * @return the metadata of the created or replaced view; may equal {@code info}
+   * @throws ViewAlreadyExistsException if {@code ident} cannot host this view -- either a
+   *                                    concurrent {@code CREATE VIEW} won the race in the
+   *                                    default impl's gap between {@link #replaceView} and
+   *                                    the fallback {@link #createView}, or, in a
+   *                                    {@link RelationCatalog}, a table sits at {@code ident}
+   * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
+   */
+  default ViewInfo createOrReplaceView(Identifier ident, ViewInfo info)
+      throws ViewAlreadyExistsException, NoSuchNamespaceException {
     try {
-      return loadView(ident) != null;
+      return replaceView(ident, info);
     } catch (NoSuchViewException e) {
-      return false;
+      return createView(ident, info);
     }
   }
 
   /**
-   * Create a view in the catalog.
-   *
-   * @param viewInfo the info class holding all view information
-   * @return the created view. This can be null if getting the metadata for the view is expensive
-   * @throws ViewAlreadyExistsException If a view or table already exists for the identifier
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
-   */
-  View createView(ViewInfo viewInfo) throws ViewAlreadyExistsException, NoSuchNamespaceException;
-
-  /**
-   * Replace a view in the catalog.
-   * <p>
-   * The default implementation has a race condition.
-   * Catalogs are encouraged to implement this operation atomically.
-   *
-   * @param viewInfo the info class holding all view information
-   * @param orCreate create the view if it doesn't exist
-   * @return the created/replaced view. This can be null if getting the metadata
-   *         for the view is expensive
-   * @throws NoSuchViewException If the view doesn't exist or is a table
-   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
-   */
-  default View replaceView(
-      ViewInfo viewInfo,
-      boolean orCreate)
-      throws NoSuchViewException, NoSuchNamespaceException {
-    if (viewExists(viewInfo.ident())) {
-      dropView(viewInfo.ident());
-    } else if (!orCreate) {
-      throw new NoSuchViewException(viewInfo.ident());
-    }
-
-    try {
-      return createView(viewInfo);
-    } catch (ViewAlreadyExistsException e) {
-      throw new RuntimeException("Race condition when creating/replacing view", e);
-    }
-  }
-
-  /**
-   * Apply {@link ViewChange changes} to a view in the catalog.
-   * <p>
-   * Implementations may reject the requested changes. If any change is rejected, none of the
-   * changes should be applied to the view.
+   * Drop a view.
    *
    * @param ident a view identifier
-   * @param changes an array of changes to apply to the view
-   * @return the view altered
-   * @throws NoSuchViewException If the view doesn't exist or is a table.
-   * @throws IllegalArgumentException If any change is rejected by the implementation.
-   */
-  View alterView(Identifier ident, ViewChange... changes)
-      throws NoSuchViewException, IllegalArgumentException;
-
-  /**
-   * Drop a view in the catalog.
-   * <p>
-   * If the catalog supports tables and contains a table for the identifier and not a view, this
-   * must not drop the table and must return false.
-   *
-   * @param ident a view identifier
-   * @return true if a view was deleted, false if no view exists for the identifier
+   * @return true if a view was dropped, false otherwise
    */
   boolean dropView(Identifier ident);
-
-  /**
-   * Rename a view in the catalog.
-   * <p>
-   * If the catalog supports tables and contains a table with the old identifier, this throws
-   * {@link NoSuchViewException}. Additionally, if it contains a table with the new identifier,
-   * this throws {@link ViewAlreadyExistsException}.
-   * <p>
-   * If the catalog does not support view renames between namespaces, it throws
-   * {@link UnsupportedOperationException}.
-   *
-   * @param oldIdent the view identifier of the existing view to rename
-   * @param newIdent the new view identifier of the view
-   * @throws NoSuchViewException If the view to rename doesn't exist or is a table
-   * @throws ViewAlreadyExistsException If the new view name already exists or is a table
-   * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
-   * match (optional)
-   */
-  void renameView(Identifier oldIdent, Identifier newIdent)
-      throws NoSuchViewException, ViewAlreadyExistsException;
 }

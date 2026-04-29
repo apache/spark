@@ -22,8 +22,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class PlanMergeSuite extends QueryTest
-  with SharedSparkSession
+class PlanMergeSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

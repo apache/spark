@@ -55,8 +55,7 @@ import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with CommonFileDataSourceSuite
   with NestedDataSourceSuiteBase {
 

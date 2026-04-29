@@ -31,7 +31,7 @@ import org.apache.spark.tags.SlowSQLTest
  * End-to-end tests for approximate percentile aggregate function.
  */
 @SlowSQLTest
-class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
+class ApproximatePercentileQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   private val table = "percentile_approx"

@@ -20,11 +20,12 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.streaming.UserProvided
 import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.Changelog.{CHANGE_TYPE_DELETE, CHANGE_TYPE_INSERT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
@@ -34,7 +35,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * End-to-end tests for Change Data Capture (CDC) queries using
  * [[InMemoryChangelogCatalog]].
  */
-class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
+class ChangelogEndToEndSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_e2e"
   private val testTableName = "test_table"
@@ -93,12 +94,12 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() returns change data") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "delete", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_DELETE, 2L, 2000000L)))
 
     val expected = Seq(
-      Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
-      Row(2L, "b", "delete", 2L, new Timestamp(2000L)))
+      Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+      Row(2L, "b", CHANGE_TYPE_DELETE, 2L, new Timestamp(2000L)))
 
     // DataFrame API
     checkAnswer(
@@ -116,13 +117,13 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with open-ended version range") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
-      makeChangeRow(3L, "c", "insert", 3L, 3000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 2L, 2000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
     val expected = Seq(
-      Row(2L, "b", "insert", 2L, new Timestamp(2000L)),
-      Row(3L, "c", "insert", 3L, new Timestamp(3000L)))
+      Row(2L, "b", CHANGE_TYPE_INSERT, 2L, new Timestamp(2000L)),
+      Row(3L, "c", CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L)))
 
     // DataFrame API
     checkAnswer(
@@ -157,12 +158,12 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() select CDC metadata columns") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "delete", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_DELETE, 2L, 2000000L)))
 
     val expected = Seq(
-      Row(1L, "insert", 1L),
-      Row(2L, "delete", 2L))
+      Row(1L, CHANGE_TYPE_INSERT, 1L),
+      Row(2L, CHANGE_TYPE_DELETE, 2L))
 
     // DataFrame API
     checkAnswer(
@@ -179,9 +180,9 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with projection and filter") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
-      makeChangeRow(1L, "a2", "insert", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(1L, "a2", CHANGE_TYPE_INSERT, 2L, 2000000L)))
 
     val expected = Seq(Row(1L, "a2"))
 
@@ -200,13 +201,13 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with aggregation on change types") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
-      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(1L, "a", CHANGE_TYPE_DELETE, 2L, 2000000L)))
 
     val expected = Seq(
-      Row("insert", 2L),
-      Row("delete", 1L))
+      Row(CHANGE_TYPE_INSERT, 2L),
+      Row(CHANGE_TYPE_DELETE, 1L))
 
     // DataFrame API
     checkAnswer(
@@ -223,7 +224,7 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("schema includes CDC metadata columns") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     // DataFrame API
     val dfApi = spark.read.option("startingVersion", "1").changes(fullTableName)
@@ -242,14 +243,14 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() version range filters correctly") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
-      makeChangeRow(3L, "c", "insert", 3L, 3000000L),
-      makeChangeRow(4L, "d", "insert", 4L, 4000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 2L, 2000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 3L, 3000000L),
+      makeChangeRow(4L, "d", CHANGE_TYPE_INSERT, 4L, 4000000L)))
 
     val expected = Seq(
-      Row(2L, "b", "insert", 2L, new Timestamp(2000L)),
-      Row(3L, "c", "insert", 3L, new Timestamp(3000L)))
+      Row(2L, "b", CHANGE_TYPE_INSERT, 2L, new Timestamp(2000L)),
+      Row(3L, "c", CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L)))
 
     // DataFrame API
     checkAnswer(
@@ -269,14 +270,14 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() default bounds are inclusive") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
-      makeChangeRow(3L, "c", "insert", 3L, 3000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 2L, 2000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
     val expected = Seq(
-      Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
-      Row(2L, "b", "insert", 2L, new Timestamp(2000L)),
-      Row(3L, "c", "insert", 3L, new Timestamp(3000L)))
+      Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+      Row(2L, "b", CHANGE_TYPE_INSERT, 2L, new Timestamp(2000L)),
+      Row(3L, "c", CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L)))
 
     // DataFrame API - default (both inclusive)
     checkAnswer(
@@ -300,14 +301,14 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with startingBoundInclusive=false") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
-      makeChangeRow(3L, "c", "insert", 3L, 3000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 2L, 2000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
     // Exclusive start: version 1 excluded, versions 2 and 3 included
     val expected = Seq(
-      Row(2L, "b", "insert", 2L, new Timestamp(2000L)),
-      Row(3L, "c", "insert", 3L, new Timestamp(3000L)))
+      Row(2L, "b", CHANGE_TYPE_INSERT, 2L, new Timestamp(2000L)),
+      Row(3L, "c", CHANGE_TYPE_INSERT, 3L, new Timestamp(3000L)))
 
     // DataFrame API
     checkAnswer(
@@ -327,14 +328,14 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with endingBoundInclusive=false") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
-      makeChangeRow(3L, "c", "insert", 3L, 3000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 2L, 2000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
     // Exclusive end: versions 1 and 2 included, version 3 excluded
     val expected = Seq(
-      Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
-      Row(2L, "b", "insert", 2L, new Timestamp(2000L)))
+      Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+      Row(2L, "b", CHANGE_TYPE_INSERT, 2L, new Timestamp(2000L)))
 
     // DataFrame API
     checkAnswer(
@@ -354,13 +355,13 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with both bounds exclusive") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 2L, 2000000L),
-      makeChangeRow(3L, "c", "insert", 3L, 3000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 2L, 2000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 3L, 3000000L)))
 
     // Both exclusive: only version 2 included
     val expected = Seq(
-      Row(2L, "b", "insert", 2L, new Timestamp(2000L)))
+      Row(2L, "b", CHANGE_TYPE_INSERT, 2L, new Timestamp(2000L)))
 
     // DataFrame API
     checkAnswer(
@@ -383,7 +384,7 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() default deduplication mode is dropCarryovers") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     // DataFrame API
     spark.read.option("startingVersion", "1").changes(fullTableName).collect()
@@ -400,7 +401,7 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("changes() with deduplicationMode none") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     // DataFrame API
     spark.read
@@ -418,34 +419,29 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
       ChangelogInfo.DeduplicationMode.NONE)
   }
 
-  test("changes() passes deduplicationMode and computeUpdates to catalog") {
+  test("changes() passes computeUpdates to catalog") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     // DataFrame API
     spark.read
       .option("startingVersion", "1")
-      .option("deduplicationMode", "netChanges")
       .option("computeUpdates", "true")
       .changes(fullTableName)
       .collect()
-    val info1 = catalog.lastChangelogInfo.get
-    assert(info1.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-    assert(info1.computeUpdates() === true)
+    assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
 
     // SQL
     sql(s"SELECT * FROM $fullTableName CHANGES FROM VERSION 1 " +
-      "WITH (deduplicationMode = 'netChanges', computeUpdates = 'true')").collect()
-    val info2 = catalog.lastChangelogInfo.get
-    assert(info2.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-    assert(info2.computeUpdates() === true)
+      "WITH (computeUpdates = 'true')").collect()
+    assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
   }
 
   // ---------- Batch: timestamp range ----------
 
   test("changes() with timestamp range") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     // DataFrame API
     spark.read
@@ -480,14 +476,14 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("streaming changes() returns change data") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
-      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(1L, "a", CHANGE_TYPE_DELETE, 2L, 2000000L)))
 
     val expected = Seq(
-      Row(1L, "a", "insert", 1L, new Timestamp(1000L)),
-      Row(2L, "b", "insert", 1L, new Timestamp(1000L)),
-      Row(1L, "a", "delete", 2L, new Timestamp(2000L)))
+      Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+      Row(2L, "b", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)),
+      Row(1L, "a", CHANGE_TYPE_DELETE, 2L, new Timestamp(2000L)))
 
     // DataFrame API
     val dfApiStream = spark.readStream
@@ -517,12 +513,12 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("streaming changes() with startingVersion filters data") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
-      makeChangeRow(1L, "a", "delete", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(1L, "a", CHANGE_TYPE_DELETE, 2L, 2000000L)))
 
     val expected = Seq(
-      Row(1L, "a", "delete", 2L, new Timestamp(2000L)))
+      Row(1L, "a", CHANGE_TYPE_DELETE, 2L, new Timestamp(2000L)))
 
     // DataFrame API
     val dfApiStream = spark.readStream
@@ -552,9 +548,9 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("streaming changes() with projection and filter") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L),
-      makeChangeRow(2L, "b", "insert", 1L, 1000000L),
-      makeChangeRow(3L, "c", "insert", 2L, 2000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(2L, "b", CHANGE_TYPE_INSERT, 1L, 1000000L),
+      makeChangeRow(3L, "c", CHANGE_TYPE_INSERT, 2L, 2000000L)))
 
     val expected = Seq(Row(1L, "a"), Row(2L, "b"))
 
@@ -589,23 +585,20 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   // ---------- Streaming: CDC options ----------
 
-  test("streaming changes() passes deduplicationMode and computeUpdates to catalog") {
+  test("streaming changes() passes computeUpdates to catalog") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     // DataFrame API
     val dfApiStream = spark.readStream
       .option("startingVersion", "1")
-      .option("deduplicationMode", "netChanges")
       .option("computeUpdates", "true")
       .changes(fullTableName)
     val q1 = dfApiStream.writeStream
       .format("memory").queryName("cdc_stream_opts_df").start()
     try {
       q1.processAllAvailable()
-      val info1 = catalog.lastChangelogInfo.get
-      assert(info1.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-      assert(info1.computeUpdates() === true)
+      assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
     } finally {
       q1.stop()
     }
@@ -613,14 +606,12 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
     // SQL
     val sqlStream = sql(
       s"SELECT * FROM STREAM $fullTableName CHANGES FROM VERSION 1 " +
-        "WITH (deduplicationMode = 'netChanges', computeUpdates = 'true')")
+        "WITH (computeUpdates = 'true')")
     val q2 = sqlStream.writeStream
       .format("memory").queryName("cdc_stream_opts_sql").start()
     try {
       q2.processAllAvailable()
-      val info2 = catalog.lastChangelogInfo.get
-      assert(info2.deduplicationMode() === ChangelogInfo.DeduplicationMode.NET_CHANGES)
-      assert(info2.computeUpdates() === true)
+      assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
     } finally {
       q2.stop()
     }
@@ -630,10 +621,10 @@ class ChangelogEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("streaming changes() supports .name() API with source evolution enabled") {
     catalog.addChangeRows(ident, Seq(
-      makeChangeRow(1L, "a", "insert", 1L, 1000000L)))
+      makeChangeRow(1L, "a", CHANGE_TYPE_INSERT, 1L, 1000000L)))
 
     val expected = Seq(
-      Row(1L, "a", "insert", 1L, new Timestamp(1000L)))
+      Row(1L, "a", CHANGE_TYPE_INSERT, 1L, new Timestamp(1000L)))
 
     withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
       val stream = spark.readStream

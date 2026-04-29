@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -33,8 +33,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.HadoopFSUtils
 
 abstract class ParquetFileFormatSuite
-  extends QueryTest
-  with ParquetTest
+  extends ParquetTest
   with SharedSparkSession
   with CommonFileDataSourceSuite {
 

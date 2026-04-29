@@ -153,7 +153,7 @@ import org.apache.spark.util.Utils
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
-class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
+class SQLQueryTestSuite extends SharedSparkSession with SQLHelper
     with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._

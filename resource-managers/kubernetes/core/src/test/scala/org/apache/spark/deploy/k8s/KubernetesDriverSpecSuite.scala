@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.k8s
 
-import java.util.{Arrays, HashMap, Map => JMap}
+import java.util.{Arrays, HashMap, List => JList, Map => JMap}
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, SecretBuilder}
 
@@ -56,6 +56,16 @@ class KubernetesDriverSpecSuite extends SparkFunSuite {
     assert(javaProps.size() === 2)
     assert(javaProps.get("spark.key1") === "value1")
     assert(javaProps.get("spark.key2") === "value2")
+
+    val javaPreResources = spec.getDriverPreKubernetesResourcesAsJavaList
+    assert(javaPreResources.isInstanceOf[JList[_]])
+    assert(javaPreResources.size() === 1)
+    assert(javaPreResources.get(0) === secret)
+
+    val javaResources = spec.getDriverKubernetesResourcesAsJavaList
+    assert(javaResources.isInstanceOf[JList[_]])
+    assert(javaResources.size() === 1)
+    assert(javaResources.get(0) === secret)
   }
 
   test("create from empty Java collections") {
@@ -70,5 +80,7 @@ class KubernetesDriverSpecSuite extends SparkFunSuite {
     assert(spec.driverKubernetesResources.isEmpty)
     assert(spec.systemProperties.isEmpty)
     assert(spec.getSystemPropertiesAsJavaMap.isEmpty)
+    assert(spec.getDriverPreKubernetesResourcesAsJavaList.isEmpty)
+    assert(spec.getDriverKubernetesResourcesAsJavaList.isEmpty)
   }
 }

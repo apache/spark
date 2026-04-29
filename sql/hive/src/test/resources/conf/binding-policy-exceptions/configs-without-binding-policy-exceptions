@@ -1173,6 +1173,7 @@ spark.taskMetrics.trackUpdatedBlockStatuses
 spark.test.noStageRetry
 spark.testing
 spark.testing.dynamicAllocation.schedule.enabled
+spark.testing.injectShuffleFetchFailures
 spark.testing.memory
 spark.testing.nCoresPerExecutor
 spark.testing.nExecutorsPerHost

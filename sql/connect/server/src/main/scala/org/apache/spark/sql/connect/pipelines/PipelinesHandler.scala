@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResul
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
@@ -140,6 +140,7 @@ private[connect] object PipelinesHandler extends Logging {
   def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
     val allowlistedCommands = Set(
       classOf[DescribeRelation],
+      classOf[DescribeTablePartition],
       classOf[ShowTables],
       classOf[ShowTableProperties],
       classOf[ShowNamespacesCommand],

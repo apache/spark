@@ -21,7 +21,7 @@ import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.nio.file.Files
 import java.util.Arrays
-import java.util.jar.{JarEntry, JarOutputStream}
+import java.util.jar.{JarEntry, JarFile, JarOutputStream}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.jdk.CollectionConverters._
@@ -170,7 +170,14 @@ private[spark] trait SparkTestUtils {
     val compilerClass = SparkClassUtils.classForName[AnyRef]("scala.tools.nsc.Main")
     val processMethod = compilerClass.getMethod("process", classOf[Array[String]])
 
-    val cpStr = classpathUrls.map(_.getFile).mkString(File.pathSeparator)
+    // When the classpath is supplied via a "pathing JAR" (a single JAR whose manifest
+    // Class-Path attribute points to the real dependencies), `scala.tools.nsc.Main` does
+    // not resolve the manifest entries and ends up unable to see scala-library.jar,
+    // failing with "object scala in compiler mirror not found". Pathing JARs are used
+    // on Windows to work around CMD's command-line length limit and by some build/CI
+    // tools. Expand any such JARs before invoking scalac so the classpath is complete.
+    val expandedClasspath = classpathUrls.flatMap(expandManifestClasspath)
+    val cpStr = expandedClasspath.map(_.getFile).mkString(File.pathSeparator)
     val args = Array("-classpath", cpStr, "-d", classDir.getAbsolutePath) ++
       sourceFiles.map(_.getAbsolutePath)
 
@@ -200,6 +207,34 @@ private[spark] trait SparkTestUtils {
     }
 
     jarFile.toURI.toURL
+  }
+
+  /**
+   * If `url` points to a "pathing JAR" (a JAR whose manifest declares a `Class-Path`
+   * attribute), return the URLs referenced by that attribute (resolved relative to
+   * the JAR's parent directory) followed by the original URL. Otherwise return the
+   * original URL unchanged.
+   */
+  private[spark] def expandManifestClasspath(url: URL): Seq[URL] = {
+    val file = new File(url.getFile)
+    if (!file.exists() || !file.getName.endsWith(".jar")) return Seq(url)
+    try {
+      val jarFile = new JarFile(file)
+      try {
+        val cpAttr = Option(jarFile.getManifest)
+          .flatMap(m => Option(m.getMainAttributes.getValue("Class-Path")))
+        cpAttr match {
+          case Some(cp) =>
+            val parentUri = file.getParentFile.toURI
+            val expanded = cp.split(" ").filter(_.nonEmpty).flatMap { e =>
+              try Some(new File(parentUri.resolve(e)).toURI.toURL)
+              catch { case _: Exception => None }
+            }
+            expanded.toSeq :+ url
+          case None => Seq(url)
+        }
+      } finally jarFile.close()
+    } catch { case _: Exception => Seq(url) }
   }
 
   private def listFilesRecursively(dir: File): Seq[File] = {

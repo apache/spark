@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -221,6 +221,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(testCat.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -230,6 +237,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
@@ -237,6 +246,14 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath2 = SQLConf.get.resolutionSearchPath(
+      (v2SessionCatalog.name() +: Array("default")).toSeq)
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
     manager
   }
 
@@ -778,8 +795,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
     checkError(
       e,
-      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -943,13 +960,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -965,10 +982,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
+            case DescribeTablePartition(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
-              assert(partitionSpec == Map("a" -> "1"))
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+              assert(partitionSpec == UnresolvedPartitionSpec(Map("a" -> "1")))
+            case _ => fail("Expect DescribeTablePartition, but got:\n" + parsed3.treeString)
           }
         }
     }
@@ -1662,7 +1679,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, Bo
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{dataTypeForClass, externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, Literal, MapKeys, MapValues, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, DecodeUsingSerializer, InitializeJavaBean, Invoke, NewInstance, StaticInvoke, UnresolvedCatalystToExternalMap, UnresolvedMapObjects, WrapOption}
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharCodegenUtils, DateTimeUtils, IntervalUtils, STUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -289,6 +290,16 @@ object DeserializerBuildHelper {
    * @param isTopLevel true if we are creating a deserializer for the top level value.
    */
   private def createDeserializer(
+      enc: AgnosticEncoder[_],
+      path: Expression,
+      walkedTypePath: WalkedTypePath,
+      isTopLevel: Boolean = false): Expression =
+    // Framework dispatch runs before encoder-type checks in the default path. Safe because
+    // framework types use dedicated leaf encoders, never migration shims or native primitives.
+    TypeOps(enc.dataType).flatMap(_.createDeserializer(path, walkedTypePath, isTopLevel))
+      .getOrElse(createDeserializerDefault(enc, path, walkedTypePath, isTopLevel))
+
+  private def createDeserializerDefault(
       enc: AgnosticEncoder[_],
       path: Expression,
       walkedTypePath: WalkedTypePath,
