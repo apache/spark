@@ -89,18 +89,19 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       val req = evaluateRequirements(changelog, table.changelogInfo)
 
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
-      // Resolve rowId once against the bare DataSourceV2Relation. V2ExpressionUtils.resolveRefs
-      // requires a V2-shaped plan; downstream steps may wrap the relation in
-      // Project/Window, which would break a re-resolution there. Catalyst preserves these
-      // resolved attributes by ExprId through any wrapping operators.
-      val rowIdExprs =
-        V2ExpressionUtils.resolveRefs[NamedExpression](changelog.rowId().toSeq, resolvedRel)
       var updatedRel: LogicalPlan = resolvedRel
       if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
         updatedRel = addRowLevelPostProcessing(
           resolvedRel, changelog, req.requiresCarryOverRemoval, req.requiresUpdateDetection)
       }
       if (req.requiresNetChanges) {
+        // Resolve rowId against the bare DataSourceV2Relation. V2ExpressionUtils.resolveRefs
+        // requires a V2-shaped plan; addRowLevelPostProcessing may have wrapped the relation
+        // in Project/Window, which would break resolution against `updatedRel`. Catalyst
+        // preserves these resolved attributes by ExprId through any wrapping operators, so
+        // they remain valid references for the netChanges Window built on top.
+        val rowIdExprs =
+          V2ExpressionUtils.resolveRefs[NamedExpression](changelog.rowId().toSeq, resolvedRel)
         updatedRel = injectNetChangeComputation(
           updatedRel, rowIdExprs, table.changelogInfo.computeUpdates())
       }
