@@ -1698,7 +1698,10 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        "--ignore-source-errors", "-notree"
+        "--ignore-source-errors", "-notree",
+        "-Xmaxerrs", "0",
+        "-verbose",
+        "-Xdoclint:all", "-Xdoclint:-missing"
       )
     },
 
