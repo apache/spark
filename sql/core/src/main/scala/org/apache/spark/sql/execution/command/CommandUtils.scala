@@ -240,7 +240,8 @@ object CommandUtils extends Logging {
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
+    if (tableMeta.tableType == CatalogTableType.VIEW ||
+        tableMeta.tableType == CatalogTableType.METRIC_VIEW) {
       // Analyzes a catalog view if the view is cached
       val table = sparkSession.table(tableIdent.quotedString)
       val cacheManager = sparkSession.sharedState.cacheManager

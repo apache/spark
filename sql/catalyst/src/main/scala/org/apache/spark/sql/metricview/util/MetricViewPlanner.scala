@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.metricview.serde.{AssetSource, MetricView, MetricViewFactory, MetricViewValidationException, MetricViewYAMLParsingException, SQLSource}
 import org.apache.spark.sql.types.StructType
@@ -63,12 +64,13 @@ object MetricViewPlanner {
     val metricView = try {
       MetricViewFactory.fromYAML(yaml)
     } catch {
+      // Both cases are user-correctable errors in the YAML body, not internal Spark bugs;
+      // surface them as `INVALID_METRIC_VIEW_YAML` AnalysisExceptions so the message is
+      // categorized as user input error rather than "please contact support".
       case e: MetricViewValidationException =>
-        throw SparkException.internalError(
-          s"Invalid metric view YAML: ${e.getMessage}", e)
+        throw QueryCompilationErrors.invalidMetricViewYamlError(e.getMessage, e)
       case e: MetricViewYAMLParsingException =>
-        throw SparkException.internalError(
-          s"Failed to parse metric view YAML: ${e.getMessage}", e)
+        throw QueryCompilationErrors.invalidMetricViewYamlError(e.getMessage, e)
     }
     val source = metricView.from match {
       case asset: AssetSource => UnresolvedRelation(sqlParser.parseMultipartIdentifier(asset.name))

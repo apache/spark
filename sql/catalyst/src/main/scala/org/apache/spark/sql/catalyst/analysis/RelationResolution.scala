@@ -398,7 +398,8 @@ class RelationResolution(
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
       if (isStreaming) {
-        if (v1Table.tableType == CatalogTableType.VIEW) {
+        if (v1Table.tableType == CatalogTableType.VIEW ||
+            v1Table.tableType == CatalogTableType.METRIC_VIEW) {
           throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
             ident.quoted
           )

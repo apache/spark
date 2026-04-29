@@ -138,7 +138,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       assert(deps != null)
       assert(deps.dependencies().length === 1)
       val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.tableFullName() === fullSourceTableName)
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
 
@@ -216,7 +217,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       val deps = info.viewDependencies()
       assert(deps != null && deps.dependencies().length === 1)
       val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.tableFullName() === fullSourceTableName)
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
 
@@ -307,10 +309,12 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
 
         val deps = capturedViewInfo().viewDependencies()
         assert(deps != null)
-        val depNames =
-          deps.dependencies().map(_.asInstanceOf[TableDependency].tableFullName()).toSet
-        assert(depNames === Set(fullSourceTableName, secondSource),
-          s"Expected dependencies on both source tables, got $depNames")
+        val depParts =
+          deps.dependencies().map(_.asInstanceOf[TableDependency].nameParts().toSeq).toSet
+        assert(depParts === Set(
+          Seq(testCatalogName, testNamespace, sourceTableName),
+          Seq(testCatalogName, testNamespace, "customers")),
+          s"Expected dependencies on both source tables, got $depParts")
       } finally {
         sql(s"DROP TABLE IF EXISTS $secondSource")
       }
@@ -334,7 +338,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         s"Expected 1 deduplicated dependency, got " +
           s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
       val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.tableFullName() === fullSourceTableName)
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
 
@@ -358,12 +363,227 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         s"Expected 1 deduplicated dependency for self-join, got " +
           s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
       val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.tableFullName() === fullSourceTableName)
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
+    }
+  }
+
+  test("CREATE OR REPLACE VIEW ... WITH METRICS replaces an existing v2 metric view") {
+    withTestCatalogTables {
+      val first = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = Some("count > 0"),
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, first)
+      val firstYaml = capturedViewInfo().queryText()
+
+      // Replace with a new body (different WHERE clause).
+      val replacement = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = Some("count > 100"),
+        select = metricViewColumns)
+      val replacementYaml = MetricViewFactory.toYAML(replacement)
+      sql(
+        s"""CREATE OR REPLACE VIEW $fullMetricViewName
+           |WITH METRICS
+           |LANGUAGE YAML
+           |AS
+           |$$$$
+           |$replacementYaml
+           |$$$$""".stripMargin)
+
+      val finalInfo = capturedViewInfo()
+      assert(finalInfo.queryText() === replacementYaml,
+        "OR REPLACE should swap the captured ViewInfo's queryText.")
+      assert(finalInfo.queryText() !== firstYaml,
+        "OR REPLACE should not leave the original captured queryText in place.")
+    }
+  }
+
+  test("CREATE VIEW IF NOT EXISTS ... WITH METRICS is a no-op when the view exists") {
+    withTestCatalogTables {
+      val original = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, original)
+      val originalYaml = capturedViewInfo().queryText()
+
+      // Now CREATE VIEW IF NOT EXISTS with a different YAML body. The catalog should not see
+      // the second create at all (V2ViewPreparation's `viewExists` short-circuit fires before
+      // `buildViewInfo`), so the captured ViewInfo retains the original body.
+      val replacement = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = Some("count > 999"),
+        select = metricViewColumns)
+      val replacementYaml = MetricViewFactory.toYAML(replacement)
+      sql(
+        s"""CREATE VIEW IF NOT EXISTS $fullMetricViewName
+           |WITH METRICS
+           |LANGUAGE YAML
+           |AS
+           |$$$$
+           |$replacementYaml
+           |$$$$""".stripMargin)
+
+      assert(capturedViewInfo().queryText() === originalYaml,
+        "IF NOT EXISTS over an existing metric view should be a no-op.")
+    }
+  }
+
+  test("CREATE VIEW ... WITH METRICS over a v2 table at the ident throws " +
+      "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE") {
+    withTestCatalogTables {
+      // Pre-create a regular v2 table at the same ident the metric view will target. The
+      // catalog's `createView` call below should raise `ViewAlreadyExistsException`, which
+      // `CreateV2MetricViewExec` then decodes (via `tableExists`) into the precise cross-type
+      // collision error that `CreateV2ViewExec` emits.
+      sql(s"CREATE TABLE $fullMetricViewName (x INT) USING foo")
+
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      val yaml = MetricViewFactory.toYAML(mv)
+      val ex = intercept[AnalysisException] {
+        sql(
+          s"""CREATE VIEW $fullMetricViewName
+             |WITH METRICS
+             |LANGUAGE YAML
+             |AS
+             |$$$$
+             |$yaml
+             |$$$$""".stripMargin)
+      }
+      // CreateV2ViewExec / CreateV2MetricViewExec route this through
+      // `unsupportedCreateOrReplaceViewOnTableError` which maps to
+      // `EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE`.
+      assert(ex.getCondition === "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
+        s"Expected EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE, got ${ex.getCondition}: ${ex.getMessage}")
+    }
+  }
+
+  test("CREATE VIEW IF NOT EXISTS ... WITH METRICS is a no-op when a v2 table sits at the " +
+      "ident") {
+    withTestCatalogTables {
+      sql(s"CREATE TABLE $fullMetricViewName (x INT) USING foo")
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      val yaml = MetricViewFactory.toYAML(mv)
+      // IF NOT EXISTS over a table is a no-op (v1 parity), not an error.
+      sql(
+        s"""CREATE VIEW IF NOT EXISTS $fullMetricViewName
+           |WITH METRICS
+           |LANGUAGE YAML
+           |AS
+           |$$$$
+           |$yaml
+           |$$$$""".stripMargin)
+      val ident = Identifier.of(Array(testNamespace), metricViewName)
+      assert(!MetricViewRecordingCatalog.capturedViews.containsKey(ident),
+        "IF NOT EXISTS over a v2 table should not register a view in the catalog.")
+    }
+  }
+
+  test("dependency extraction: V1 session-catalog source emits 3-part nameParts") {
+    val v1Source = "metric_view_v2_v1source"
+    spark.range(0, 5).toDF("v")
+      .write.mode("overwrite").saveAsTable(v1Source)
+    try {
+      withTestCatalogTables {
+        val mv = MetricView(
+          "0.1",
+          // SQL source resolves through the current (session) catalog; the resolved
+          // `LogicalRelation` carries a session-catalog `CatalogTable`.
+          SQLSource(s"SELECT v AS region, v AS count FROM $v1Source"),
+          where = None,
+          select = metricViewColumns)
+        createMetricView(fullMetricViewName, mv)
+
+        val deps = capturedViewInfo().viewDependencies()
+        assert(deps != null && deps.dependencies().length === 1)
+        val parts = deps.dependencies()(0).asInstanceOf[TableDependency].nameParts().toSeq
+        // For a session-catalog source, `TableIdentifier.nameParts` includes catalog + db +
+        // table when the catalog is set; here we expect at least 2 parts (`db.table`) and
+        // up to 3 (`spark_catalog.db.table`) -- both are valid producer outputs depending
+        // on whether the analyzer captured the session-catalog component.
+        assert(parts.last === v1Source, s"Last part should be the table name, got $parts")
+        assert(parts.length >= 2 && parts.length <= 3,
+          s"V1 nameParts arity should be 2 or 3, got ${parts.length}: $parts")
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $v1Source")
+    }
+  }
+
+  test("dependency extraction: multi-level V2 namespace source emits N+2 nameParts") {
+    val multiNamespace = Array("ns_a", "ns_b")
+    val multiTable = "events_deep"
+    val multiFull = s"$testCatalogName.${multiNamespace.mkString(".")}.$multiTable"
+    withTestCatalogTables {
+      // The InMemoryTableCatalog (RelationCatalog mixin) supports multi-level namespaces.
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $testCatalogName.${multiNamespace.head}")
+      sql(s"CREATE NAMESPACE IF NOT EXISTS " +
+        s"$testCatalogName.${multiNamespace.mkString(".")}")
+      sql(s"CREATE TABLE $multiFull (region STRING, count INT) USING foo")
+      try {
+        val mv = MetricView(
+          "0.1",
+          SQLSource(s"SELECT region, count FROM $multiFull"),
+          where = None,
+          select = metricViewColumns)
+        createMetricView(fullMetricViewName, mv)
+
+        val deps = capturedViewInfo().viewDependencies()
+        assert(deps != null && deps.dependencies().length === 1)
+        val parts = deps.dependencies()(0).asInstanceOf[TableDependency].nameParts().toSeq
+        assert(parts === Seq(testCatalogName, multiNamespace(0), multiNamespace(1), multiTable),
+          s"Multi-level nameParts should preserve every namespace component, got $parts")
+      } finally {
+        sql(s"DROP TABLE IF EXISTS $multiFull")
+        sql(s"DROP NAMESPACE IF EXISTS " +
+          s"$testCatalogName.${multiNamespace.mkString(".")} CASCADE")
+        sql(s"DROP NAMESPACE IF EXISTS $testCatalogName.${multiNamespace.head} CASCADE")
+      }
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED on a v2 metric view round-trips through loadRelation") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      val yaml = createMetricView(fullMetricViewName, mv)
+
+      // DESCRIBE TABLE EXTENDED resolves the ident through `Analyzer.lookupTableOrView`,
+      // which calls `RelationCatalog.loadRelation` once and gets back a
+      // `MetadataOnlyTable(ViewInfo)`. `V1Table.toCatalogTable(ViewInfo)` reconstructs the
+      // V1 representation; the resulting `CatalogTable.toJsonLinkedHashMap` (interface.scala)
+      // then emits view-context rows because `tableType == METRIC_VIEW` was added to the
+      // VIEW gate. Without that gate fix, "View Text" / "View Original Text" disappear.
+      val rows = sql(s"DESCRIBE TABLE EXTENDED $fullMetricViewName").collect()
+      val rowMap = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+
+      assert(rowMap.contains("View Text"),
+        s"Expected 'View Text' row in DESCRIBE EXTENDED output, got keys: ${rowMap.keys}")
+      assert(rowMap("View Text") === yaml,
+        s"View Text should round-trip the YAML body, got: ${rowMap("View Text")}")
+      assert(rowMap.get("Type").exists(_.contains("METRIC_VIEW")),
+        s"Type row should reflect METRIC_VIEW, got: ${rowMap.get("Type")}")
     }
   }
 
   test("CREATE VIEW ... WITH METRICS on a non-ViewCatalog catalog fails with " +
-      "MISSING_CATALOG_ABILITY.VIEWS") {
     val ex = intercept[AnalysisException] {
       sql(
         s"""CREATE VIEW ${MetricViewV2CatalogSuite.noViewCatalogName}.default.mv

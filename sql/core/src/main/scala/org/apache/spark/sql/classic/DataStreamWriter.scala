@@ -190,7 +190,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
     val tableInstance = catalog.asTableCatalog.loadTable(identifier)
 
     def writeToV1Table(table: CatalogTable): StreamingQuery = {
-      if (table.tableType == CatalogTableType.VIEW) {
+      if (table.tableType == CatalogTableType.VIEW ||
+          table.tableType == CatalogTableType.METRIC_VIEW) {
         throw QueryCompilationErrors.streamingIntoViewNotSupportedError(tableName)
       }
       require(table.provider.isDefined)

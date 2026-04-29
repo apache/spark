@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -44,11 +44,12 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
-import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.command.{CommandUtils, CreateMetricViewCommand, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
+import org.apache.spark.sql.metricview.serde.MetricViewFactory
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -322,6 +323,33 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       CreateV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, userSpecifiedColumns, comment,
         collation, properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
+
+    // CREATE VIEW ... WITH METRICS on a non-session v2 catalog. Routes the metric-view path
+    // through `CreateV2MetricViewExec`, which extends `V2ViewPreparation` to share the
+    // `IF NOT EXISTS` short-circuit, `OR REPLACE`, and cross-type-collision decoding with
+    // `CreateV2ViewExec`. Session-catalog dispatch stays in `CreateMetricViewCommand.run`.
+    case CreateMetricViewCommand(
+        ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment, properties,
+        originalText, allowExisting, replace) if !CatalogV2Util.isSessionCatalog(catalog) =>
+      val viewCatalog = catalog match {
+        case vc: ViewCatalog => vc
+        case _ => throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
+      }
+      // Parse + analyze the YAML body here (during planning). This mirrors the v1 path's
+      // late analysis in `CreateMetricViewCommand.run` -- the metric-view source plan is not
+      // a SQL string, so it can't ride along as a regular `query` `LogicalPlan` field on the
+      // logical command the way `CreateView` does.
+      val analyzed = MetricViewHelper.analyzeMetricViewText(
+        session, ident.asTableIdentifier, originalText)
+      val metricView = MetricViewFactory.fromYAML(originalText)
+      val mergedProps = properties ++ metricView.getProperties
+      val depParts = MetricViewHelper.collectTableDependencies(analyzed)
+      val deps = if (depParts.nonEmpty) {
+        Some(DependencyList.of(
+          depParts.map(parts => Dependency.table(parts: _*)): _*))
+      } else None
+      CreateV2MetricViewExec(viewCatalog, ident, userSpecifiedColumns, comment, mergedProps,
+        originalText, analyzed, allowExisting, replace, deps) :: Nil
 
     case AlterViewAs(rpv @ ResolvedPersistentView(catalog, ident, _),
         originalText, query, _, _) =>

@@ -24,15 +24,25 @@ import org.apache.spark.annotation.Evolving;
 /**
  * A function dependency of a SQL object.
  * <p>
- * The dependent function is identified by its fully-qualified three-part name
- * in the form {@code catalog_name.schema_name.function_name}.
+ * The dependent function is identified by its structural multi-part name. See
+ * {@link TableDependency} for the parts-form contract.
  *
- * @param functionFullName fully-qualified three-part function name
+ * @param nameParts structural multi-part identifier (defensive copy made; never empty)
  * @since 4.2.0
  */
 @Evolving
-public record FunctionDependency(String functionFullName) implements Dependency {
+public record FunctionDependency(String[] nameParts) implements Dependency {
   public FunctionDependency {
-    Objects.requireNonNull(functionFullName, "functionFullName must not be null");
+    Objects.requireNonNull(nameParts, "nameParts must not be null");
+    if (nameParts.length == 0) {
+      throw new IllegalArgumentException("nameParts must not be empty");
+    }
+    nameParts = nameParts.clone();
+  }
+
+  /** Returns a defensive copy of the underlying parts array. */
+  @Override
+  public String[] nameParts() {
+    return nameParts.clone();
   }
 }

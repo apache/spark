@@ -2826,6 +2826,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def invalidMetricViewYamlError(message: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_METRIC_VIEW_YAML",
+      messageParameters = Map("message" -> message),
+      cause = Some(cause))
+  }
+
   def noSuchStructFieldInGivenFieldsError(
       fieldName: String, fields: Array[StructField]): Throwable = {
     new AnalysisException(

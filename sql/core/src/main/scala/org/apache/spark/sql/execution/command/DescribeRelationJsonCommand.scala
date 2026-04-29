@@ -309,7 +309,8 @@ case class DescribeRelationJsonCommand(
       catalog: SessionCatalog,
       metadata: CatalogTable,
       jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
-    if (metadata.tableType == CatalogTableType.VIEW) {
+    if (metadata.tableType == CatalogTableType.VIEW ||
+        metadata.tableType == CatalogTableType.METRIC_VIEW) {
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(metadata.identifier.identifier)
     }
 

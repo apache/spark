@@ -103,7 +103,8 @@ case class CreateTableLikeCommand(
       provider
     } else if (fileFormat.inputFormat.isDefined) {
       Some(DDLUtils.HIVE_PROVIDER)
-    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW ||
+        sourceTableDesc.tableType == CatalogTableType.METRIC_VIEW) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
@@ -267,7 +268,8 @@ case class AlterTableAddColumnsCommand(
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
-    if (catalogTable.tableType == CatalogTableType.VIEW) {
+    if (catalogTable.tableType == CatalogTableType.VIEW ||
+        catalogTable.tableType == CatalogTableType.METRIC_VIEW) {
       throw QueryCompilationErrors.alterAddColNotSupportViewError(table)
     }
 
@@ -730,7 +732,8 @@ case class DescribeTableCommand(
       catalog: SessionCatalog,
       metadata: CatalogTable,
       result: ArrayBuffer[Row]): Unit = {
-    if (metadata.tableType == CatalogTableType.VIEW) {
+    if (metadata.tableType == CatalogTableType.VIEW ||
+        metadata.tableType == CatalogTableType.METRIC_VIEW) {
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
@@ -1226,7 +1229,7 @@ case class ShowCreateTableCommand(
             tableMetadata)
         }
 
-        if (tableMetadata.tableType == VIEW) {
+        if (tableMetadata.tableType == VIEW || tableMetadata.tableType == METRIC_VIEW) {
           tableMetadata
         } else {
           convertTableMetadata(tableMetadata)
@@ -1235,7 +1238,11 @@ case class ShowCreateTableCommand(
 
       val builder = new StringBuilder
 
-      val stmt = if (tableMetadata.tableType == VIEW) {
+      // SHOW CREATE TABLE on a metric view falls through to the VIEW branch, which emits
+      // `CREATE VIEW ...` without the `WITH METRICS` qualifier. The output is not yet
+      // round-trippable for metric views; tracked as follow-up.
+      val stmt = if (tableMetadata.tableType == VIEW ||
+          tableMetadata.tableType == METRIC_VIEW) {
         builder ++= s"CREATE VIEW ${table.quoted} "
         showCreateView(metadata, builder)
 
@@ -1386,7 +1393,7 @@ case class ShowCreateTableAsSerdeCommand(
 
     builder ++= s"CREATE$tableTypeString ${table.quoted} "
 
-    if (metadata.tableType == VIEW) {
+    if (metadata.tableType == VIEW || metadata.tableType == METRIC_VIEW) {
       showCreateView(metadata, builder)
     } else {
       showHiveTableHeader(metadata, builder)

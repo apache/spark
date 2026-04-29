@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvoluti
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, TableCatalog, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
@@ -56,6 +56,21 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   // through the lossy v1 `TableIdentifier` for multi-level-namespace v2 catalogs.
   protected lazy val fullNameParts: Seq[String] =
     (catalog.name() +: identifier.asMultipartIdentifier).toSeq
+
+  /**
+   * Optional structured dependency list to stamp on the built `ViewInfo`. Plain views leave
+   * this `None`; metric views populate it with the source-table lineage produced by
+   * `MetricViewHelper.collectTableDependencies`.
+   */
+  protected def viewDependencies: Option[DependencyList] = None
+
+  /**
+   * Optional view sub-kind to stamp on `PROP_TABLE_TYPE`. Plain views leave this `None` so
+   * the `ViewInfo` constructor's `putIfAbsent` defaults it to `VIEW`; metric views set it to
+   * `TableSummary.METRIC_VIEW_TABLE_TYPE` so consumers (e.g. `V1Table.toCatalogTable`) can
+   * round-trip the discriminator.
+   */
+  protected def tableType: Option[String] = None
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -106,6 +121,8 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
     owner.foreach(builder.withOwner)
     comment.foreach(builder.withComment)
     collation.foreach(builder.withCollation)
+    viewDependencies.foreach(builder.withViewDependencies)
+    tableType.foreach(builder.withTableType)
     builder.build()
   }
 

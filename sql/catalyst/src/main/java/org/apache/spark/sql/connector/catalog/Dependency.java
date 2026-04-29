@@ -22,18 +22,31 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Represents a dependency of a SQL object such as a view or metric view.
  * <p>
- * A dependency is one of: {@link TableDependency} or {@link FunctionDependency}.
+ * A dependency is one of: {@link TableDependency} or {@link FunctionDependency}. The
+ * {@code sealed} declaration enforces this structurally.
  *
  * @since 4.2.0
  */
 @Evolving
-public interface Dependency {
+public sealed interface Dependency permits TableDependency, FunctionDependency {
 
-  static TableDependency table(String tableFullName) {
-    return new TableDependency(tableFullName);
+  /**
+   * Construct a {@link TableDependency} from the structural multi-part name of the dependent
+   * table. {@code nameParts} should contain at least one element; for catalog-managed tables
+   * the first element is typically the catalog name and subsequent elements are namespace
+   * components followed by the table name.
+   */
+  static TableDependency table(String... nameParts) {
+    return new TableDependency(nameParts);
   }
 
-  static FunctionDependency function(String functionFullName) {
-    return new FunctionDependency(functionFullName);
+  /**
+   * Construct a {@link FunctionDependency} from the structural multi-part name of the
+   * dependent function. {@code nameParts} should contain at least one element; for
+   * catalog-managed functions the first element is typically the catalog name and subsequent
+   * elements are namespace components followed by the function name.
+   */
+  static FunctionDependency function(String... nameParts) {
+    return new FunctionDependency(nameParts);
   }
 }

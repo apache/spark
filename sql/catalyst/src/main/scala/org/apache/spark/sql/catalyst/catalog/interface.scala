@@ -667,7 +667,7 @@ case class CatalogTable(
     if (comment.isDefined) map += "Comment" -> JString(comment.get)
     if (collation.isDefined) map += "Collation" -> JString(collation.get)
 
-    if (tableType == CatalogTableType.VIEW) {
+    if (tableType == CatalogTableType.VIEW || tableType == CatalogTableType.METRIC_VIEW) {
       if (viewText.isDefined) {
         map += "View Text" -> JString(viewText.get)
       }

@@ -75,7 +75,8 @@ case class AnalyzePartitionCommand(
     val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
+    if (tableMeta.tableType == CatalogTableType.VIEW ||
+        tableMeta.tableType == CatalogTableType.METRIC_VIEW) {
       throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
     }
 

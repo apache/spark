@@ -174,6 +174,15 @@ private[sql] case class MetricView(
    * filter clauses. Mirrors the property keys used by the canonical metric view
    * representation on other Spark platforms so consumers of the catalog see a
    * consistent property layout.
+   *
+   * Note: `metric_view.from.sql` and `metric_view.where` values are truncated to
+   * [[Constants.MAXIMUM_PROPERTY_SIZE]] characters, so these are descriptive values
+   * for catalog browsers / lineage tooling -- not round-trippable representations
+   * of the source. Consumers that need the full SQL or filter expression for
+   * re-execution should read [[ViewInfo#queryText]] (the YAML body) and re-parse it
+   * rather than reconstruct the query from these properties; for any source whose
+   * SQL exceeds the size limit, this property would silently return a truncated
+   * string.
    */
   def getProperties: Map[String, String] = {
     val base = Map(MetricView.PROP_FROM_TYPE -> from.sourceType.toString)

@@ -274,7 +274,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // Spark-created views do not have to be Hive compatible. If the data type is not
         // Hive compatible, we can set schema to empty so that Spark can still read this
         // view as the schema is also encoded in the table properties.
-        case schema if tableDefinition.tableType == CatalogTableType.VIEW &&
+        case schema if (tableDefinition.tableType == CatalogTableType.VIEW ||
+            tableDefinition.tableType == CatalogTableType.METRIC_VIEW) &&
             schema.exists(f => !isHiveCompatibleDataType(f.dataType)) =>
           EMPTY_DATA_SCHEMA
         case other => other
@@ -294,7 +295,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       try {
         client.createTable(tableWithDataSourceProps, ignoreIfExists)
       } catch {
-        case NonFatal(e) if tableDefinition.tableType == CatalogTableType.VIEW &&
+        case NonFatal(e) if (tableDefinition.tableType == CatalogTableType.VIEW ||
+            tableDefinition.tableType == CatalogTableType.METRIC_VIEW) &&
             hiveCompatibleSchema != EMPTY_DATA_SCHEMA =>
           // If for some reason we fail to store the schema we store it as empty there
           // since we already store the real schema in the table properties. This try-catch
@@ -595,7 +597,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, tableDefinition.identifier.table)
     verifyTableProperties(tableDefinition)
 
-    if (tableDefinition.tableType == VIEW) {
+    if (tableDefinition.tableType == VIEW || tableDefinition.tableType == METRIC_VIEW) {
       val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
       val schemaWithNoCollation = removeCollation(tableDefinition.schema)
       val hiveCompatibleSchema =
@@ -835,7 +837,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     var table = inputTable
 
     table.properties.get(DATASOURCE_PROVIDER) match {
-      case None if table.tableType == VIEW =>
+      case None if table.tableType == VIEW || table.tableType == METRIC_VIEW =>
         // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
         // from table properties.
         getSchemaFromTableProperties(table.properties).foreach { schemaFromTableProps =>

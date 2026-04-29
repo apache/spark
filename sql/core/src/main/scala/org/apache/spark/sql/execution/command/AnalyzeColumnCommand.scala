@@ -104,7 +104,8 @@ case class AnalyzeColumnCommand(
   private def analyzeColumnInCatalog(sparkSession: SparkSession): Unit = {
     val sessionState = sparkSession.sessionState
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdent)
-    if (tableMeta.tableType == CatalogTableType.VIEW) {
+    if (tableMeta.tableType == CatalogTableType.VIEW ||
+        tableMeta.tableType == CatalogTableType.METRIC_VIEW) {
       // Analyzes a catalog view if the view is cached
       val plan = sparkSession.table(tableIdent.quotedString).logicalPlan
       if (!analyzeColumnInCachedData(plan, sparkSession)) {

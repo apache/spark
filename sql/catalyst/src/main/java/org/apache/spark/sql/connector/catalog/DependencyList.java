@@ -38,6 +38,13 @@ public record DependencyList(Dependency[] dependencies) {
 
   public DependencyList {
     Objects.requireNonNull(dependencies, "dependencies must not be null");
+    dependencies = dependencies.clone();
+  }
+
+  /** Returns a defensive copy of the underlying dependencies array. */
+  @Override
+  public Dependency[] dependencies() {
+    return dependencies.clone();
   }
 
   public static DependencyList of(Dependency... dependencies) {

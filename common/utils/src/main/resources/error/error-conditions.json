@@ -4123,6 +4123,12 @@
     },
     "sqlState" : "KD002"
   },
+  "INVALID_METRIC_VIEW_YAML" : {
+    "message" : [
+      "Failed to parse metric view YAML: <message>"
+    ],
+    "sqlState" : "42K0L"
+  },
   "INVALID_NAME_IN_USE_COMMAND" : {
     "message" : [
       "Invalid name '<name>' in <command> command. Reason: <reason>"

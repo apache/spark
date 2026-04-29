@@ -59,13 +59,10 @@ public class ViewInfo extends TableInfo {
     this.schemaMode = builder.schemaMode;
     this.queryColumnNames = builder.queryColumnNames;
     this.viewDependencies = builder.viewDependencies;
-    // Force PROP_TABLE_TYPE = VIEW by default so that `properties()` reflects the typed
-    // ViewInfo classification. Metric views intentionally set PROP_TABLE_TYPE = METRIC_VIEW
-    // before construction and must retain that more-specific view kind.
-    String tableType = properties().get(TableCatalog.PROP_TABLE_TYPE);
-    if (!TableSummary.METRIC_VIEW_TABLE_TYPE.equals(tableType)) {
-      properties().put(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
-    }
+    // Default PROP_TABLE_TYPE = VIEW so `properties()` reflects the typed ViewInfo
+    // classification. Callers can refine to a more specific view kind (for example,
+    // METRIC_VIEW) by calling BaseBuilder.withTableType(...) on the builder before build().
+    properties().putIfAbsent(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
   }
 
   /** The SQL text of the view. */
