@@ -796,11 +796,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `MetadataTable`) fall through; `AlterViewAs` is picked up by the v2
-    // strategy, and the remaining view DDL / inspection plans (SET/UNSET TBLPROPERTIES,
-    // ALTER VIEW ... WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW
-    // COLUMNS, DESCRIBE [COLUMN]) are rejected with `UNSUPPORTED_FEATURE.TABLE_OPERATION` by
-    // dedicated v2 strategy cases -- tracked for a follow-up PR (SPARK-52729).
+    // (produced for `MetadataTable`) fall through and are picked up by dedicated v2 strategy
+    // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
+    // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
+    // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`
+    // directly.
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))

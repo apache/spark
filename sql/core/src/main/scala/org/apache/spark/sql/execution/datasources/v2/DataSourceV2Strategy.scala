@@ -326,8 +326,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
     // `ResolveSessionCatalog` can't handle (its `ResolvedViewIdentifier` matcher is gated on
     // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `ViewInfo`
-    // resolved at analysis time directly from `ResolvedPersistentView.viewInfo` -- no
-    // re-loading at exec time.
+    // resolved at analysis time directly from `ResolvedPersistentView.info` -- no re-loading
+    // at exec time.
     case SetViewProperties(rpv @ ResolvedPersistentView(catalog, ident, _), props) =>
       AlterV2ViewSetPropertiesExec(
         catalog.asInstanceOf[ViewCatalog], ident, rpv.info, props) :: Nil

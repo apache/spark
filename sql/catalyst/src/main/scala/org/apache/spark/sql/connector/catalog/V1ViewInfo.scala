@@ -39,6 +39,13 @@ private[sql] object V1ViewInfo {
     val builder = new ViewInfo.Builder()
     builder.withSchema(v1Table.schema)
     builder.withProperties(v1Table.properties.asJava)
+    // v1 stores collation / comment in typed `CatalogTable` fields rather than in `properties`,
+    // but consumers reading off [[ViewInfo]] (`ApplyDefaultCollation.fetchDefaultCollation`,
+    // `ShowCreateV2ViewExec`, etc.) expect them under `PROP_COLLATION` / `PROP_COMMENT`. Bridge
+    // them through the typed setters so the v2 surface sees the same view metadata regardless
+    // of which catalog produced it.
+    v1Table.collation.foreach(builder.withCollation)
+    v1Table.comment.foreach(builder.withComment)
     // ViewInfo requires a non-null queryText; v1 views always have one, but defend against
     // an old/corrupt CatalogTable with `viewText = None` by falling back to an empty string.
     builder.withQueryText(v1Table.viewText.getOrElse(""))

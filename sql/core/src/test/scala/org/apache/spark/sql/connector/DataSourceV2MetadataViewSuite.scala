@@ -51,8 +51,8 @@ class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
     withTable("spark_catalog.default.t") {
       Seq("a", "b").toDF("col").write.saveAsTable("spark_catalog.default.t")
       // view_catalog.ansi.test_view stores view.sqlConfig.spark.sql.ansi.enabled=true;
-      // view_catalog.non_ansi.test_view stores it =false. The view body does
-      // `col::int` which errors in ANSI mode and yields NULL in non-ANSI mode.
+      // view_catalog.non_ansi.test_view stores the same key with value `false`. The view body
+      // does `col::int` which errors in ANSI mode and yields NULL in non-ANSI mode.
       intercept[Exception](spark.table("view_catalog.ansi.test_view").collect())
       checkAnswer(spark.table("view_catalog.non_ansi.test_view"), Row("b", null))
     }

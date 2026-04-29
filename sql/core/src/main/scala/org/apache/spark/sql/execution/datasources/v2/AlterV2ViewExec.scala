@@ -129,6 +129,9 @@ case class AlterV2ViewSetPropertiesExec(
     val info = V2ViewMetadataMutation.builderFrom(existingView)
       .withProperties(merged.asJava)
       .build()
+    // Match v1 `AlterTableSetPropertiesCommand`'s `invalidateCachedTable` so cached query
+    // plans referencing the view drop their stale entries.
+    CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     catalog.replaceView(identifier, info)
     Seq.empty
   }
@@ -154,6 +157,7 @@ case class AlterV2ViewUnsetPropertiesExec(
     val info = V2ViewMetadataMutation.builderFrom(existingView)
       .withProperties(remaining.asJava)
       .build()
+    CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     catalog.replaceView(identifier, info)
     Seq.empty
   }

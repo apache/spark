@@ -24,12 +24,12 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Read-side v2 view execs. Each receives the typed [[ViewInfo]] resolved at analysis time
- * (carried on `ResolvedPersistentView.viewInfo`) and formats output rows directly from it --
+ * (carried on `ResolvedPersistentView.info`) and formats output rows directly from it --
  * matching the way v2 table inspection execs (e.g. `ShowCreateTableExec`, `DescribeTableExec`)
  * consume the [[org.apache.spark.sql.connector.catalog.Table]] attached to `ResolvedTable`.
  *
@@ -82,14 +82,12 @@ case class ShowCreateV2ViewExec(
   }
 
   private def showViewProperties(builder: StringBuilder): Unit = {
-    // Drop the reserved keys that already appear as dedicated DDL clauses (PROP_COMMENT /
-    // PROP_COLLATION) and the auto-injected `table_type`. Anything left is user TBLPROPERTIES.
-    val reserved = Set(
-      TableCatalog.PROP_COMMENT,
-      TableCatalog.PROP_COLLATION,
-      TableCatalog.PROP_TABLE_TYPE)
+    // Drop the reserved keys that either already appear as dedicated DDL clauses
+    // (PROP_COMMENT / PROP_COLLATION) or are otherwise managed outside user TBLPROPERTIES
+    // (PROP_OWNER, PROP_TABLE_TYPE, etc.). Mirrors the v1 SHOW CREATE TABLE filter, which
+    // hides the same first-class fields from the rendered TBLPROPERTIES clause.
     val viewProps = viewInfo.properties.asScala
-      .filter { case (k, _) => !reserved.contains(k) }
+      .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
     if (viewProps.nonEmpty) {
       val props = viewProps.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
@@ -101,8 +99,11 @@ case class ShowCreateV2ViewExec(
 
 /**
  * Physical plan node for SHOW TBLPROPERTIES on a v2 view. Returns the user-facing properties
- * from [[ViewInfo#properties]] -- the auto-injected `table_type` is filtered out so users see
- * only what they (or the catalog) explicitly set.
+ * from [[ViewInfo#properties]] -- reserved first-class keys (PROP_COMMENT, PROP_COLLATION,
+ * PROP_OWNER, PROP_TABLE_TYPE, ...) are filtered out so users see only what they (or the
+ * catalog) explicitly set, matching v1 `SHOW TBLPROPERTIES` on a session-catalog view (which
+ * hides these because v1 stores them in typed `CatalogTable` fields rather than `properties`).
+ * A directly-requested reserved key still returns its value so users can ask for it by name.
  */
 case class ShowV2ViewPropertiesExec(
     output: Seq[Attribute],
@@ -124,7 +125,7 @@ case class ShowV2ViewPropertiesExec(
         }
       case None =>
         redacted
-          .filter { case (k, _) => k != TableCatalog.PROP_TABLE_TYPE }
+          .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
           .toSeq.sortBy(_._1).map(p => toCatalystRow(p._1, p._2))
     }
   }
@@ -186,8 +187,11 @@ case class DescribeV2ViewExec(
         result += toCatalystRow(
           "View Query Output Columns", queryColumns.mkString("[", ", ", "]"), "")
       }
+      // Filter the same reserved set as `ShowV2ViewPropertiesExec` so the EXTENDED
+      // `Properties` row mirrors `SHOW TBLPROPERTIES` and matches v1 (which hides these
+      // first-class fields because they live in typed `CatalogTable` fields).
       val userProps = viewInfo.properties.asScala
-        .filter { case (k, _) => k != TableCatalog.PROP_TABLE_TYPE }
+        .filter { case (k, _) => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(k) }
       if (userProps.nonEmpty) {
         val props = conf.redactOptions(userProps.toMap).toSeq.sortBy(_._1).map {
           case (k, v) => s"$k=$v"

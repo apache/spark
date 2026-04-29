@@ -67,13 +67,15 @@ case class DescribeRelationJsonCommand(
         describeColsJson(v.metadata.schema, jsonMap)
         describeFormattedTableInfoJson(v.metadata, jsonMap)
 
-      case v: ResolvedPersistentView =>
+      case v @ ResolvedPersistentView(_, _, v1Info: V1ViewInfo) =>
+        // Only session-catalog (v1) views are supported here. Non-session v2 views fall
+        // through to the catch-all below and surface
+        // `describeAsJsonNotSupportedForV2TablesError`, mirroring the v2 table path -- there
+        // is no `DESC ... AS JSON` exec on the v2 view side yet.
         if (partitionSpec.nonEmpty) {
           throw QueryCompilationErrors.descPartitionNotAllowedOnView(v.identifier.name())
         }
-        // v1 paths reach here only for session-catalog views (`V1ViewInfo`); v2 views go
-        // through `DescribeV2ViewExec` in the v2 strategy.
-        val metadata = v.info.asInstanceOf[V1ViewInfo].v1Table
+        val metadata = v1Info.v1Table
         describeIdentifier(v.identifier.toQualifiedNameParts(v.catalog), jsonMap)
         describeColsJson(metadata.schema, jsonMap)
         describeFormattedTableInfoJson(metadata, jsonMap)
