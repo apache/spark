@@ -46,8 +46,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  *     pass over a (rowId, _commit_version)-partitioned Window: the Filter drops CoW
  *     carry-over pairs (same rowVersion on both sides) and the subsequent Project relabels
  *     real delete+insert pairs as update_preimage / update_postimage. Net change
- *     computation runs on top of that, collapsing intermediate states per `rowId` per
- *     the SPIP `Deduplication Semantics`.
+ *     computation runs on top of that, collapsing intermediate states per `rowId`.
  *   - Streaming: post-processing is not yet supported. If the requested options would
  *     require any post-processing, the rule throws an explicit [[AnalysisException]] to
  *     prevent silent wrong results. Streams that don't require post-processing pass
@@ -90,6 +89,12 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       val req = evaluateRequirements(changelog, table.changelogInfo)
 
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
+      // Resolve rowId once against the bare DataSourceV2Relation. V2ExpressionUtils.resolveRefs
+      // requires a V2-shaped plan; downstream steps may wrap the relation in
+      // Project/Window, which would break a re-resolution there. Catalyst preserves these
+      // resolved attributes by ExprId through any wrapping operators.
+      val rowIdExprs =
+        V2ExpressionUtils.resolveRefs[NamedExpression](changelog.rowId().toSeq, resolvedRel)
       var updatedRel: LogicalPlan = resolvedRel
       if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
         updatedRel = addRowLevelPostProcessing(
@@ -97,7 +102,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       }
       if (req.requiresNetChanges) {
         updatedRel = injectNetChangeComputation(
-          updatedRel, changelog, table.changelogInfo.computeUpdates())
+          updatedRel, rowIdExprs, table.changelogInfo.computeUpdates())
       }
       updatedRel
 
@@ -294,7 +299,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   // ---------------------------------------------------------------------------
 
   /**
-   * Collapses multiple changes per row identity into the net effect:
+   * Collapses multiple changes per row identity across versions into the net effect:
    *
    * | existedBefore | existsAfter | output                              |
    * |---------------|-------------|-------------------------------------|
@@ -310,14 +315,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    * `update_preimage`. `existsAfter` is true iff the partition's last event is
    * `insert` or `update_postimage`.
    *
-   * Pipeline: Window (per-rowId aggregates) -> Filter (keep first/last per partition)
-   * -> Project (relabel `_change_type` and drop helper columns).
+   * Pipeline: Window (per-rowId aggregates, sort by version) -> Filter (keep first/last per
+   * partition) -> Project (relabel `_change_type` and drop helper columns).
    */
   private def injectNetChangeComputation(
       plan: LogicalPlan,
-      cl: Changelog,
+      rowIdExprs: Seq[NamedExpression],
       computeUpdates: Boolean): LogicalPlan = {
-    val windowedPlan = addNetChangesWindow(plan, cl)
+    val windowedPlan = addNetChangesWindow(plan, rowIdExprs)
     val filteredAndRelabeledPlan =
       removeIntermediateChangelogEntriesAndRelabelChangeTypes(windowedPlan, computeUpdates)
     filteredAndRelabeledPlan
@@ -335,16 +340,21 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *     `__spark_cdc_last_row_change_type_value` drive the first/last classification at
    *     filter and relabel time.
    */
-  private def addNetChangesWindow(plan: LogicalPlan, cl: Changelog): LogicalPlan = {
+  private def addNetChangesWindow(
+      plan: LogicalPlan,
+      rowIdExprs: Seq[NamedExpression]): LogicalPlan = {
     val changeTypeAttr = getAttribute(plan, "_change_type")
-    val rowIdExprs = V2ExpressionUtils.resolveRefs[NamedExpression](cl.rowId().toSeq, plan)
     val commitVersionAttr = getAttribute(plan, "_commit_version")
+    val raiseUnexpectedChangeType = RaiseError(
+      Literal("CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_CHANGE_TYPE"),
+      CreateMap(Nil),
+      IntegerType)
     val changeTypeRank = CaseWhen(Seq(
       EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_UPDATE_PREIMAGE)) -> Literal(0),
       EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_DELETE)) -> Literal(0),
       EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_INSERT)) -> Literal(1),
       EqualTo(changeTypeAttr, Literal(Changelog.CHANGE_TYPE_UPDATE_POSTIMAGE)) -> Literal(1)),
-      Literal(2))
+      raiseUnexpectedChangeType)
     val partitionByCols = rowIdExprs
     val orderSpec = Seq(
       SortOrder(commitVersionAttr, Ascending),
@@ -429,10 +439,10 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       // for persisting new row keep only last state
       And(Not(existedBeforeVersionRange), existsAfterVersionRange) -> isLast,
       // for previously existing row keep first state
-      And(existedBeforeVersionRange, Not(existsAfterVersionRange)) -> isFirst,
+      And(existedBeforeVersionRange, Not(existsAfterVersionRange)) -> isFirst),
       // for persisting row keep first and last state
-      And(existedBeforeVersionRange, existsAfterVersionRange) -> Or(isFirst, isLast)),
-      Literal(false)) // dont keep row by default
+      // existedBeforeVersionRange = true, existsAfterVersionRange = true
+      Or(isFirst, isLast))
 
     val filteredPlan = Filter(keep, windowedPlan)
 
@@ -445,6 +455,16 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
     val changeTypeAttr = getAttribute(filteredPlan, "_change_type")
 
+    // Each case relabels the kept row(s) to match the required output label. The tuple
+    // is (first event, last event) of the partition; cases below assume computeUpdates=true.
+    //   Case 1 (insert, update_postimage): keep update_postimage; relabel it to insert.
+    //   Case 2 (update_preimage, delete): keep update_preimage; relabel it to delete.
+    //   Case 3 (delete, update_postimage): keep delete and update_postimage; relabel delete to
+    //           update_preimage.
+    //   Case 4 (update_preimage, insert): keep update_preimage and insert; relabel insert to
+    //           update_postimage.
+    // No-op cases (e.g. (insert, insert)) are not listed. If computeUpdates=false insert/deletes
+    // will be used instead of update_pre/postimage.
     val relabel = CaseWhen(Seq(
       And(Not(existedBeforeVersionRange), isLast) -> Literal(Changelog.CHANGE_TYPE_INSERT),
       And(Not(existsAfterVersionRange), isFirst) -> Literal(Changelog.CHANGE_TYPE_DELETE),

@@ -3869,12 +3869,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changelogName" -> changelogName))
   }
 
-  def cdcNetChangesNotYetSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
   def cdcStreamingPostProcessingNotSupported(changelogName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",

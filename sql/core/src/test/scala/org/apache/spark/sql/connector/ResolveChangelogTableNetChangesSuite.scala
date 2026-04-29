@@ -37,17 +37,22 @@ import org.apache.spark.unsafe.types.UTF8String
  * Shared test bodies for the `netChanges` deduplication mode handled by
  * [[org.apache.spark.sql.catalyst.analysis.ResolveChangelogTable]].
  *
- * Concrete subclasses fix the [[computeUpdates]] flag and therefore run the
- * entire suite twice (once with `computeUpdates = true`, once with
- * `computeUpdates = false`). Test bodies use [[computedPreUpdateLabel]] /
- * [[computedPostUpdateLabel]] in their expected outputs.
+ * Concrete subclasses fix the [[computeUpdates]] and
+ * [[representsUpdateAsDeleteAndInsert]] flags. Test bodies use
+ * [[computedPreUpdateLabel]] / [[computedPostUpdateLabel]] in their expected outputs.
  *
  * Setup convention: every test runs against an in-memory connector configured
  * with `containsIntermediateChanges = true` and
- * `representsUpdateAsDeleteAndInsert = false`, which means
- *   - netChanges is enabled (the only post-processing pass under test);
- *   - update detection is disabled (so the test directly controls the
- *     change_type labels reaching netChanges).
+ * `containsCarryoverRows = false`, which means
+ *   - netChanges is enabled;
+ *   - carry-over removal is disabled (so the test directly controls events).
+ *
+ * When `representsUpdateAsDeleteAndInsert = true` AND `computeUpdates = true`, update
+ * detection runs upstream of netChanges, exercising the chained pipeline. The
+ * `addUpdatePre` / `addUpdatePost` helpers then emit raw `delete` / `insert` events
+ * (decomposed updates) which update detection relabels back to update pre/post before
+ * netChanges sees them. Output assertions stay identical because both paths produce
+ * the same `_change_type` labels at the netChanges input.
  */
 trait ResolveChangelogTableNetChangesTestsBase
     extends QueryTest
@@ -56,10 +61,17 @@ trait ResolveChangelogTableNetChangesTestsBase
 
   /**
    * Value of the user-facing CDC option `computeUpdates` that this test run
-   * exercises. Concrete subclasses pin this to `true` or `false` so the same
-   * test bodies cover both modes via two suite classes.
+   * exercises. Concrete subclasses pin this to `true` or `false`.
    */
   protected def computeUpdates: Boolean
+
+  /**
+   * Value of the connector capability `representsUpdateAsDeleteAndInsert`. When `true`
+   * (combined with `computeUpdates = true`), update detection runs upstream of netChanges
+   * and the test helpers `addUpdatePre` / `addUpdatePost` emit decomposed `delete` /
+   * `insert` events instead of native pre/post events.
+   */
+  protected def representsUpdateAsDeleteAndInsert: Boolean = false
 
   private val catalogName = "cdc_netchanges_catalog"
   private val testTableName = "events"
@@ -87,7 +99,7 @@ trait ResolveChangelogTableNetChangesTestsBase
     cat.setChangelogProperties(ident, ChangelogProperties(
       containsIntermediateChanges = true,
       containsCarryoverRows = false,
-      representsUpdateAsDeleteAndInsert = false,
+      representsUpdateAsDeleteAndInsert = representsUpdateAsDeleteAndInsert,
       rowIdNames = Seq("id"),
       rowVersionName = Some("row_commit_version")))
   }
@@ -126,13 +138,19 @@ trait ResolveChangelogTableNetChangesTestsBase
   private def addDelete(commitVersion: Long, id: Long, name: String): Unit =
     catalog.addChangeRows(ident, Seq(cdcEntry(id, name, CHANGE_TYPE_DELETE, commitVersion)))
 
-  private def addUpdatePre(commitVersion: Long, id: Long, name: String): Unit =
-    catalog.addChangeRows(
-      ident, Seq(cdcEntry(id, name, CHANGE_TYPE_UPDATE_PREIMAGE, commitVersion)))
+  private def addUpdatePre(commitVersion: Long, id: Long, name: String): Unit = {
+    val changeType =
+      if (representsUpdateAsDeleteAndInsert) CHANGE_TYPE_DELETE
+      else CHANGE_TYPE_UPDATE_PREIMAGE
+    catalog.addChangeRows(ident, Seq(cdcEntry(id, name, changeType, commitVersion)))
+  }
 
-  private def addUpdatePost(commitVersion: Long, id: Long, name: String): Unit =
-    catalog.addChangeRows(
-      ident, Seq(cdcEntry(id, name, CHANGE_TYPE_UPDATE_POSTIMAGE, commitVersion)))
+  private def addUpdatePost(commitVersion: Long, id: Long, name: String): Unit = {
+    val changeType =
+      if (representsUpdateAsDeleteAndInsert) CHANGE_TYPE_INSERT
+      else CHANGE_TYPE_UPDATE_POSTIMAGE
+    catalog.addChangeRows(ident, Seq(cdcEntry(id, name, changeType, commitVersion)))
+  }
 
   // ---------------------------------------------------------------------------
   // Expected output helpers
@@ -399,4 +417,18 @@ class ResolveChangelogTableNetChangesWithComputeUpdatesSuite
 class ResolveChangelogTableNetChangesWithoutComputeUpdatesSuite
     extends ResolveChangelogTableNetChangesTestsBase {
   override protected def computeUpdates: Boolean = false
+}
+
+/**
+ * Runs the netChanges test bodies against a connector with
+ * `representsUpdateAsDeleteAndInsert = true` and `computeUpdates = true`. Update
+ * detection runs upstream of netChanges, exercising the chained post-processing
+ * pipeline end-to-end. The `addUpdatePre` / `addUpdatePost` helpers emit decomposed
+ * `delete` / `insert` events that update detection relabels back to update pre/post
+ * before netChanges sees them, so the same expected outputs hold.
+ */
+class ResolveChangelogTableNetChangesWithUpdateDetectionSuite
+    extends ResolveChangelogTableNetChangesTestsBase {
+  override protected def computeUpdates: Boolean = true
+  override protected def representsUpdateAsDeleteAndInsert: Boolean = true
 }
