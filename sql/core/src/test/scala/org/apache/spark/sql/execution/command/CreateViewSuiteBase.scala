@@ -38,6 +38,14 @@ trait CreateViewSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  /**
+   * Seed a non-view table at `qualified` (full `catalog.ns.name`) and run `body`. The leaf
+   * suite implements the path-specific seeding (v1 SQL `CREATE TABLE`, v2 catalog API call)
+   * and the matching cleanup so the test does not have to know which catalog is under test.
+   * The seeded table has a single `col STRING` column.
+   */
+  protected def withSeededTable(qualified: String)(body: => Unit): Unit
+
   test("CREATE VIEW persists the body and the SELECT round-trips") {
     val view = s"$catalog.$namespace.v_create_basic"
     withSourceTable(1, 2, 3) {
@@ -154,6 +162,30 @@ trait CreateViewSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE OR REPLACE VIEW $a AS SELECT x FROM $b")
       }
       assert(ex.getCondition == "RECURSIVE_VIEW")
+    }
+  }
+
+  test("CREATE VIEW over a non-view table entry surfaces the v1-parity errors") {
+    // v1-parity error conditions when CREATE [OR REPLACE | IF NOT EXISTS] VIEW collides
+    // with an existing non-view table at the same identifier. Running on both v1 and v2
+    // pins parity from each side -- v1 hits the conditions through the long-established
+    // session-catalog path, v2 hits them through the new `CreateV2ViewExec`.
+    val view = s"$catalog.$namespace.v_create_table_collide"
+    withSeededTable(view) {
+      // CREATE OR REPLACE VIEW must not silently destroy a non-view table.
+      val replaceEx = intercept[AnalysisException] {
+        sql(s"CREATE OR REPLACE VIEW $view AS SELECT 1 AS col")
+      }
+      assert(replaceEx.getCondition == "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE")
+
+      // Plain CREATE VIEW over a table surfaces TABLE_OR_VIEW_ALREADY_EXISTS.
+      val createEx = intercept[AnalysisException] {
+        sql(s"CREATE VIEW $view AS SELECT 1 AS col")
+      }
+      assert(createEx.getCondition == "TABLE_OR_VIEW_ALREADY_EXISTS")
+
+      // CREATE VIEW IF NOT EXISTS is a no-op -- the existing table is left alone.
+      sql(s"CREATE VIEW IF NOT EXISTS $view AS SELECT 1 AS col")
     }
   }
 }

@@ -18,12 +18,18 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, TableCatalog, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, TableCatalog, ViewInfo}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.types.StructType
 
 class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteBase {
   import testImplicits._
+
+  override protected def withSeededTable(qualified: String)(body: => Unit): Unit = {
+    withTable(qualified) {
+      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
+      body
+    }
+  }
 
   test("V2: CREATE VIEW propagates DEFAULT COLLATION onto the stored ViewInfo") {
     val view = s"$catalog.$namespace.v2_create_collation"
@@ -53,34 +59,17 @@ class CreateViewSuite extends command.CreateViewSuiteBase with ViewCommandSuiteB
     }
   }
 
-  test("V2: CREATE VIEW over a non-view table entry surfaces v1-parity errors") {
-    val ident = Identifier.of(Array(namespace), "v2_create_table_collide")
-    val tableInfo = new TableInfo.Builder()
-      .withSchema(new StructType().add("col", "string"))
-      .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
-      .build()
-    viewCatalog.createTable(ident, tableInfo)
-    try {
-      // CREATE OR REPLACE VIEW must not silently destroy a non-view table -- v1 parity.
-      val replaceEx = intercept[AnalysisException] {
-        sql(s"CREATE OR REPLACE VIEW $catalog.$namespace.v2_create_table_collide AS " +
-          "SELECT 1 AS col")
-      }
-      assert(replaceEx.getCondition == "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE")
-
-      // Plain CREATE VIEW over a table surfaces TABLE_OR_VIEW_ALREADY_EXISTS, matching v1.
-      val createEx = intercept[AnalysisException] {
-        sql(s"CREATE VIEW $catalog.$namespace.v2_create_table_collide AS SELECT 1 AS col")
-      }
-      assert(createEx.getCondition == "TABLE_OR_VIEW_ALREADY_EXISTS")
-
-      // CREATE VIEW IF NOT EXISTS is a no-op -- the table entry is untouched.
-      sql(s"CREATE VIEW IF NOT EXISTS $catalog.$namespace.v2_create_table_collide AS " +
-        "SELECT 1 AS col")
-      val stored = viewCatalog.getStoredInfo(Array(namespace), "v2_create_table_collide")
-      assert(!stored.isInstanceOf[org.apache.spark.sql.connector.catalog.ViewInfo])
-    } finally {
-      viewCatalog.dropTable(ident)
+  test("V2: CREATE VIEW IF NOT EXISTS over a table leaves the underlying TableInfo untouched") {
+    // The Base version of this scenario asserts the SQL behavior (errors / no-op);
+    // here we additionally pin the v2-only post-condition that the persisted entry under
+    // the colliding identifier remains a `TableInfo` and is NOT silently swapped for a
+    // `ViewInfo` by the IF NOT EXISTS path.
+    val name = "v2_ifne_keeps_table"
+    val view = s"$catalog.$namespace.$name"
+    withSeededTable(view) {
+      sql(s"CREATE VIEW IF NOT EXISTS $view AS SELECT 1 AS col")
+      val stored = viewCatalog.getStoredInfo(Array(namespace), name)
+      assert(!stored.isInstanceOf[ViewInfo])
     }
   }
 }

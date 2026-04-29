@@ -18,11 +18,17 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.types.StructType
 
 class DropViewSuite extends command.DropViewSuiteBase with ViewCommandSuiteBase {
+
+  override protected def withSeededTable(qualified: String)(body: => Unit): Unit = {
+    withTable(qualified) {
+      sql(s"CREATE TABLE $qualified (col STRING) USING parquet")
+      body
+    }
+  }
 
   test("V2: drop removes the entry from the catalog store") {
     val view = s"$catalog.$namespace.v2_drop_remove"
@@ -32,23 +38,17 @@ class DropViewSuite extends command.DropViewSuiteBase with ViewCommandSuiteBase 
     assert(!viewCatalog.viewExists(Identifier.of(Array(namespace), "v2_drop_remove")))
   }
 
-  test("V2: DROP VIEW on a non-view table entry is rejected (v1-parity)") {
-    val ident = Identifier.of(Array(namespace), "v2_drop_table_collide")
-    val tableInfo = new TableInfo.Builder()
-      .withSchema(new StructType().add("x", "int"))
-      .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
-      .build()
-    viewCatalog.createTable(ident, tableInfo)
-    try {
-      val ex = intercept[AnalysisException] {
-        sql(s"DROP VIEW $catalog.$namespace.v2_drop_table_collide")
-      }
-      assert(ex.getCondition.startsWith("EXPECT_VIEW_NOT_TABLE"),
-        s"expected EXPECT_VIEW_NOT_TABLE, got ${ex.getCondition}")
-      // The table entry is untouched.
+  test("V2: DROP VIEW on a non-view table entry leaves the table untouched") {
+    // The Base version of this scenario asserts the SQL behavior (rejection with
+    // EXPECT_VIEW_NOT_TABLE); here we additionally pin the v2-only post-condition that
+    // the underlying entry under the colliding identifier remains a table and was not
+    // silently dropped by the rejected DROP VIEW.
+    val name = "v2_drop_keeps_table"
+    val view = s"$catalog.$namespace.$name"
+    val ident = Identifier.of(Array(namespace), name)
+    withSeededTable(view) {
+      intercept[AnalysisException](sql(s"DROP VIEW $view"))
       assert(viewCatalog.tableExists(ident))
-    } finally {
-      viewCatalog.dropTable(ident)
     }
   }
 
