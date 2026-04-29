@@ -175,6 +175,7 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  // Regression guard: frozen resolution path must not leak into CURRENT_SCHEMA/CURRENT_PATH.
   test("SPARK-56639: current_schema/current_path in SQL functions use invoker context") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("path_ctx_fn_a", "path_ctx_fn_b") {

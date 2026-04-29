@@ -235,7 +235,7 @@ class CatalogManager(
   }
 }
 
-private[sql] object CatalogManager {
+private[sql] object CatalogManager extends Logging {
 
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
@@ -360,20 +360,35 @@ private[sql] object CatalogManager {
     import org.json4s.jackson.JsonMethods.parse
 
     Try(parse(storedPathStr)).toOption match {
-      case Some(JArray(entries)) if entries.nonEmpty =>
-        val converted = entries.foldLeft(Option(Seq.empty[Seq[String]])) { (acc, entry) =>
+      case Some(JArray(entries)) =>
+        entries.foldLeft(Option(Seq.empty[Seq[String]])) { (acc, entry) =>
           acc.flatMap { collected =>
             entry match {
-              case JArray(parts) if parts.nonEmpty =>
+              case JArray(parts) =>
                 val strings = parts.collect { case JString(s) => s }
                 if (strings.size == parts.size) Some(collected :+ strings)
-                else None
-              case _ => None
+                else {
+                  logWarning(
+                    s"Invalid stored SQL path metadata: expected string parts in array entry: " +
+                      s"$storedPathStr")
+                  None
+                }
+              case _ =>
+                logWarning(
+                  s"Invalid stored SQL path metadata: expected array entry but found non-array: " +
+                    s"$storedPathStr")
+                None
             }
           }
         }
-        converted.filter(_.nonEmpty)
-      case _ => None
+      case Some(_) =>
+        logWarning(
+          s"Invalid stored SQL path metadata: expected top-level JSON array: $storedPathStr")
+        None
+      case None =>
+        logWarning(
+          s"Invalid stored SQL path metadata: failed to parse JSON payload: $storedPathStr")
+        None
     }
   }
 }

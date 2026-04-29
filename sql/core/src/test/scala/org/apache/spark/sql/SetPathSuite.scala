@@ -26,8 +26,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * DEFAULT_PATH, SYSTEM_PATH, CURRENT_SCHEMA/CURRENT_DATABASE expansion,
  * PATH (append), duplicate detection, and error conditions.
  *
- * Resolution-level tests (tables/functions resolving via the stored path)
- * belong in a separate suite once the resolution engine is wired.
+ * Resolution-level tests (tables/functions resolving via stored frozen path)
+ * are covered in SQLViewSuite and SQLFunctionSuite (SPARK-56639).
  */
 class SetPathSuite extends SharedSparkSession {
 

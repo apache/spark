@@ -1436,6 +1436,7 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
+  // Regression guard: frozen resolution path must not leak into CURRENT_SCHEMA/CURRENT_PATH.
   test("SPARK-56639: current_schema/current_path in persisted view use invoker context") {
     withSQLConf(PATH_ENABLED.key -> "true") {
       withDatabase("path_ctx_view_a", "path_ctx_view_b") {

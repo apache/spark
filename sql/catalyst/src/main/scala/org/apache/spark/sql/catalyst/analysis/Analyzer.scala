@@ -225,6 +225,7 @@ object AnalysisContext {
 
   def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
     val originContext = value.get()
+    // Function body analysis should not inherit any caller-pinned path; use only function metadata.
     val context = originContext.copy(
       resolutionPathEntries = function.functionStoredResolutionPath
         .flatMap(CatalogManager.deserializePathEntries),
@@ -1007,8 +1008,8 @@ class Analyzer(
     // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
-    // with it, instead of current catalog and namespace. Unqualified relation PATH will be
-    // snapshotted in `AnalysisContext.resolutionPathEntries` in a follow-up PR.
+    // with it, instead of current catalog and namespace. For views/functions with persisted frozen
+    // PATH, `AnalysisContext.resolutionPathEntries` drives unqualified relation lookup order.
     private def resolveViews(
         plan: LogicalPlan,
         options: CaseInsensitiveStringMap): LogicalPlan = plan match {
