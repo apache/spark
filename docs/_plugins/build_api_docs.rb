@@ -134,42 +134,15 @@ def build_spark_scala_and_java_docs_if_necessary
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
 
-  # Suppress genjavadoc-stub diagnostic blocks from the visible log. javadoc
-  # emits ~3500 `[error]` lines per unidoc run on stubs under `target/java/`
-  # -- all benign because `--ignore-source-errors` is set, but they bury
-  # everything else. Each diagnostic is a header line followed by 3-5
-  # `[error|warn]`-prefixed continuation lines (snippet, caret,
-  # symbol/location); the state machine drops both.
-  #
-  # Match by *message text*, not just by `target/java/` path. Otherwise
-  # legitimate doclint diagnostics on stub paths (e.g. a heading-out-of-sequence
-  # in a Scala doc comment that genjavadoc preserves into the stub) would be
-  # hidden too -- those messages are the actual signal we surface unidoc-time
-  # doclint for. The patterns below are the three known-benign genjavadoc
-  # structural errors; anything else on a `target/java/` path is echoed.
-  ansi = /\e\[[0-9;]*[A-Za-z]/
-  stub_header = %r{
-    \[(?:error|warn)\]\s+
-    \S*?/target/java/\S+\.java:\d+(?::\d+)?:\s+
-    error:\s+
-    (?:cannot\s+find\s+symbol
-     |illegal\s+combination\s+of\s+modifiers
-     |non-static\s+type\s+variable\b)
-  }x
-  stub_cont = %r{\A\s*\[(?:error|warn)\]\s+(?!/\S+\.java:\d+(?::\d+)?:\s)}
-  in_stub = false
+  # TEMPORARY DEBUG: bypass the genjavadoc-stub filter and echo every line
+  # verbatim. We're diagnosing why doclint heading violations on real `.java`
+  # sources cause unidoc to fail without surfacing a per-file diagnostic in
+  # stdout. If the diagnostic appears with the filter off, the filter has a
+  # bug; if it doesn't, the issue is upstream of build_api_docs.rb.
   IO.popen("#{command} 2>&1", 'r') do |pipe|
     pipe.each_line do |line|
-      plain = line.gsub(ansi, '')
-      if plain =~ stub_header
-        in_stub = true
-      elsif in_stub && plain =~ stub_cont
-        # continuation of a stub block; suppress
-      else
-        in_stub = false
-        $stdout.write(line)
-        $stdout.flush
-      end
+      $stdout.write(line)
+      $stdout.flush
     end
   end
   raise("Unidoc generation failed") unless $?.success?
