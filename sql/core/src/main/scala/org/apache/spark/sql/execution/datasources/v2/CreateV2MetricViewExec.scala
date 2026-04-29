@@ -17,19 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaUnsupported, ViewAlreadyExistsException, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.CurrentUserContext
+import org.apache.spark.sql.catalyst.analysis.{SchemaUnsupported, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, TableCatalog, TableSummary, ViewCatalog}
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, TableSummary, ViewCatalog}
 
 /**
- * Physical plan node for `CREATE VIEW ... WITH METRICS` on a v2 [[ViewCatalog]]. Mirrors
- * [[CreateV2ViewExec]]'s flag handling and cross-type collision decoding via the shared
- * [[V2ViewPreparation]] trait, and adds metric-view-specific bits (typed
- * [[DependencyList]] view-dependencies and `PROP_TABLE_TYPE = METRIC_VIEW`) through the
- * trait's optional hooks.
+ * Physical plan node for `CREATE VIEW ... WITH METRICS` on a v2 [[ViewCatalog]]. Inherits the
+ * shared CREATE-side `run()` (viewExists short-circuit, OR REPLACE, cross-type collision
+ * decoding) from [[V2CreateViewPreparation]]; only supplies the metric-view-specific bits
+ * (no collation, schema-mode UNSUPPORTED, typed view dependencies, `PROP_TABLE_TYPE =
+ * METRIC_VIEW`) via the [[V2ViewPreparation]] hooks.
  *
  * Routed by [[DataSourceV2Strategy]] from
  * [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]] when the resolved
@@ -45,7 +43,7 @@ case class CreateV2MetricViewExec(
     query: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    deps: Option[DependencyList]) extends V2ViewPreparation {
+    deps: Option[DependencyList]) extends V2CreateViewPreparation {
 
   // Metric views don't carry a default-collation override.
   override def collation: Option[String] = None
@@ -62,42 +60,4 @@ case class CreateV2MetricViewExec(
 
   override protected def tableType: Option[String] =
     Some(TableSummary.METRIC_VIEW_TABLE_TYPE)
-
-  override protected def run(): Seq[InternalRow] = {
-    // CREATE VIEW IF NOT EXISTS short-circuit, identical to CreateV2ViewExec: skip the
-    // `buildViewInfo` work when a view already sits at the ident. The mixed-catalog
-    // "table at ident" no-op is handled in the catch block below.
-    if (allowExisting && catalog.viewExists(identifier)) return Seq.empty
-
-    val info = buildViewInfo()
-    try {
-      if (replace) {
-        CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
-        catalog.createOrReplaceView(identifier, info)
-      } else {
-        catalog.createView(identifier, info)
-      }
-    } catch {
-      case _: ViewAlreadyExistsException =>
-        // Catalog refused: decode whether a table sits at the ident (cross-type collision)
-        // or a view (race for plain CREATE / OR REPLACE), and emit the precise error -- or
-        // no-op for IF NOT EXISTS. Same shape as CreateV2ViewExec.
-        val isTable = catalog match {
-          case tc: TableCatalog => tc.tableExists(identifier)
-          case _ => false
-        }
-        if (isTable) {
-          if (!allowExisting) {
-            throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
-              fullNameParts, replace)
-          }
-          // CREATE VIEW IF NOT EXISTS over a table is a no-op (v1 parity).
-        } else if (!allowExisting) {
-          throw viewAlreadyExists()
-        }
-        // else: a view appeared between our viewExists probe and createView; IF NOT EXISTS
-        // semantics make this a no-op.
-    }
-    Seq.empty
-  }
 }

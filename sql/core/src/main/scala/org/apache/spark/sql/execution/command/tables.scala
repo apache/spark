@@ -1213,6 +1213,14 @@ case class ShowCreateTableCommand(
     } else {
       val tableMetadata = catalog.getTableRawMetadata(table)
 
+      // SHOW CREATE TABLE / VIEW does not have a WITH METRICS round-trippable form yet,
+      // so explicitly reject metric views rather than emit a misleading `CREATE VIEW`
+      // statement that loses the METRIC_VIEW kind. Tracked as follow-up.
+      if (tableMetadata.tableType == METRIC_VIEW) {
+        throw QueryCompilationErrors.showCreateTableNotSupportedOnMetricViewError(
+          table.identifier)
+      }
+
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
       val metadata = if (DDLUtils.isDatasourceTable(tableMetadata)) {
@@ -1229,7 +1237,7 @@ case class ShowCreateTableCommand(
             tableMetadata)
         }
 
-        if (tableMetadata.tableType == VIEW || tableMetadata.tableType == METRIC_VIEW) {
+        if (tableMetadata.tableType == VIEW) {
           tableMetadata
         } else {
           convertTableMetadata(tableMetadata)
@@ -1238,11 +1246,7 @@ case class ShowCreateTableCommand(
 
       val builder = new StringBuilder
 
-      // SHOW CREATE TABLE on a metric view falls through to the VIEW branch, which emits
-      // `CREATE VIEW ...` without the `WITH METRICS` qualifier. The output is not yet
-      // round-trippable for metric views; tracked as follow-up.
-      val stmt = if (tableMetadata.tableType == VIEW ||
-          tableMetadata.tableType == METRIC_VIEW) {
+      val stmt = if (tableMetadata.tableType == VIEW) {
         builder ++= s"CREATE VIEW ${table.quoted} "
         showCreateView(metadata, builder)
 
@@ -1393,7 +1397,7 @@ case class ShowCreateTableAsSerdeCommand(
 
     builder ++= s"CREATE$tableTypeString ${table.quoted} "
 
-    if (metadata.tableType == VIEW || metadata.tableType == METRIC_VIEW) {
+    if (metadata.tableType == VIEW) {
       showCreateView(metadata, builder)
     } else {
       showHiveTableHeader(metadata, builder)

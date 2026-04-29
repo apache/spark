@@ -117,6 +117,11 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     info
   }
 
+  // ============================================================
+  // Section 1: CREATE-related tests
+  // ============================================================
+
+
   test("V2 catalog receives METRIC_VIEW table type and view text via ViewInfo") {
     withTestCatalogTables {
       val metricView = MetricView(
@@ -169,29 +174,6 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         spark.sessionState.catalogManager.currentCatalog.name())
       assert(info.currentNamespace().toSeq ===
         spark.sessionState.catalogManager.currentNamespace.toSeq)
-    }
-  }
-
-  test("DROP VIEW succeeds on a V2 metric view") {
-    withTestCatalogTables {
-      val metricView = MetricView(
-        "0.1",
-        AssetSource(fullSourceTableName),
-        where = None,
-        select = metricViewColumns)
-      createMetricView(fullMetricViewName, metricView)
-      val ident = Identifier.of(Array(testNamespace), metricViewName)
-
-      assert(MetricViewRecordingCatalog.capturedViews.containsKey(ident))
-
-      sql(s"DROP VIEW $fullMetricViewName")
-      assert(!MetricViewRecordingCatalog.capturedViews.containsKey(ident))
-    }
-  }
-
-  test("DROP VIEW IF EXISTS on a non-existent V2 metric view is a no-op") {
-    withTestCatalogTables {
-      sql(s"DROP VIEW IF EXISTS $testCatalogName.$testNamespace.does_not_exist")
     }
   }
 
@@ -288,86 +270,6 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("dependency extraction: SQL source JOIN captures both tables") {
-    withTestCatalogTables {
-      val secondSource = s"$testCatalogName.$testNamespace.customers"
-      sql(
-        s"""CREATE TABLE $secondSource (id INT, name STRING)
-           |USING foo""".stripMargin)
-      try {
-        val joinSql =
-          s"SELECT c.name, t.count FROM $fullSourceTableName t " +
-            s"JOIN $secondSource c ON t.count = c.id"
-        val metricView = MetricView(
-          "0.1",
-          SQLSource(joinSql),
-          where = None,
-          select = Seq(
-            Column("name", DimensionExpression("name"), 0),
-            Column("count_sum", MeasureExpression("sum(count)"), 1)))
-        createMetricView(fullMetricViewName, metricView)
-
-        val deps = capturedViewInfo().viewDependencies()
-        assert(deps != null)
-        val depParts =
-          deps.dependencies().map(_.asInstanceOf[TableDependency].nameParts().toSeq).toSet
-        assert(depParts === Set(
-          Seq(testCatalogName, testNamespace, sourceTableName),
-          Seq(testCatalogName, testNamespace, "customers")),
-          s"Expected dependencies on both source tables, got $depParts")
-      } finally {
-        sql(s"DROP TABLE IF EXISTS $secondSource")
-      }
-    }
-  }
-
-  test("dependency extraction: SQL source subquery deduplicates same-table references") {
-    withTestCatalogTables {
-      val subquerySql =
-        s"SELECT * FROM $fullSourceTableName " +
-          s"WHERE count > (SELECT avg(count) FROM $fullSourceTableName)"
-      val metricView = MetricView(
-        "0.1",
-        SQLSource(subquerySql),
-        where = None,
-        select = metricViewColumns)
-      createMetricView(fullMetricViewName, metricView)
-
-      val deps = capturedViewInfo().viewDependencies()
-      assert(deps != null && deps.dependencies().length === 1,
-        s"Expected 1 deduplicated dependency, got " +
-          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
-        Seq(testCatalogName, testNamespace, sourceTableName))
-    }
-  }
-
-  test("dependency extraction: SQL source self-join deduplicates same-table references") {
-    withTestCatalogTables {
-      val selfJoinSql =
-        s"SELECT a.region AS a_region, a.count AS a_count " +
-          s"FROM $fullSourceTableName a JOIN $fullSourceTableName b " +
-          s"ON a.region = b.region"
-      val metricView = MetricView(
-        "0.1",
-        SQLSource(selfJoinSql),
-        where = None,
-        select = Seq(
-          Column("region", DimensionExpression("a_region"), 0),
-          Column("count_sum", MeasureExpression("sum(a_count)"), 1)))
-      createMetricView(fullMetricViewName, metricView)
-
-      val deps = capturedViewInfo().viewDependencies()
-      assert(deps != null && deps.dependencies().length === 1,
-        s"Expected 1 deduplicated dependency for self-join, got " +
-          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
-        Seq(testCatalogName, testNamespace, sourceTableName))
-    }
-  }
-
   test("CREATE OR REPLACE VIEW ... WITH METRICS replaces an existing v2 metric view") {
     withTestCatalogTables {
       val first = MetricView(
@@ -376,7 +278,6 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         where = Some("count > 0"),
         select = metricViewColumns)
       createMetricView(fullMetricViewName, first)
-      val firstYaml = capturedViewInfo().queryText()
 
       // Replace with a new body (different WHERE clause).
       val replacement = MetricView(
@@ -395,10 +296,14 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
            |$$$$""".stripMargin)
 
       val finalInfo = capturedViewInfo()
-      assert(finalInfo.queryText() === replacementYaml,
-        "OR REPLACE should swap the captured ViewInfo's queryText.")
-      assert(finalInfo.queryText() !== firstYaml,
-        "OR REPLACE should not leave the original captured queryText in place.")
+      // Assert on the distinguishing fields of the replacement, not on diff vs. the original.
+      assert(finalInfo.queryText() === replacementYaml)
+      assert(finalInfo.properties().get(MetricView.PROP_WHERE) === "count > 100")
+      val deps = finalInfo.viewDependencies()
+      assert(deps != null && deps.dependencies().length === 1)
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
 
@@ -493,6 +398,111 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("CREATE VIEW ... WITH METRICS on a non-ViewCatalog catalog fails with " +
+      "MISSING_CATALOG_ABILITY.VIEWS") {
+    val ex = intercept[AnalysisException] {
+      sql(
+        s"""CREATE VIEW ${MetricViewV2CatalogSuite.noViewCatalogName}.default.mv
+           |WITH METRICS
+           |LANGUAGE YAML
+           |AS
+           |$$$$
+           |${MetricViewFactory.toYAML(MetricView(
+              "0.1",
+              AssetSource(fullSourceTableName),
+              where = None,
+              select = metricViewColumns))}
+           |$$$$""".stripMargin)
+    }
+    assert(ex.getCondition === "MISSING_CATALOG_ABILITY")
+    assert(ex.getMessage.contains("VIEWS"))
+  }
+
+  // ============================================================
+  // Section 2: Dependency extraction
+  // ============================================================
+
+
+  test("dependency extraction: SQL source JOIN captures both tables") {
+    withTestCatalogTables {
+      val secondSource = s"$testCatalogName.$testNamespace.customers"
+      sql(
+        s"""CREATE TABLE $secondSource (id INT, name STRING)
+           |USING foo""".stripMargin)
+      try {
+        val joinSql =
+          s"SELECT c.name, t.count FROM $fullSourceTableName t " +
+            s"JOIN $secondSource c ON t.count = c.id"
+        val metricView = MetricView(
+          "0.1",
+          SQLSource(joinSql),
+          where = None,
+          select = Seq(
+            Column("name", DimensionExpression("name"), 0),
+            Column("count_sum", MeasureExpression("sum(count)"), 1)))
+        createMetricView(fullMetricViewName, metricView)
+
+        val deps = capturedViewInfo().viewDependencies()
+        assert(deps != null)
+        val depParts =
+          deps.dependencies().map(_.asInstanceOf[TableDependency].nameParts().toSeq).toSet
+        assert(depParts === Set(
+          Seq(testCatalogName, testNamespace, sourceTableName),
+          Seq(testCatalogName, testNamespace, "customers")),
+          s"Expected dependencies on both source tables, got $depParts")
+      } finally {
+        sql(s"DROP TABLE IF EXISTS $secondSource")
+      }
+    }
+  }
+
+  test("dependency extraction: SQL source subquery deduplicates same-table references") {
+    withTestCatalogTables {
+      val subquerySql =
+        s"SELECT * FROM $fullSourceTableName " +
+          s"WHERE count > (SELECT avg(count) FROM $fullSourceTableName)"
+      val metricView = MetricView(
+        "0.1",
+        SQLSource(subquerySql),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView)
+
+      val deps = capturedViewInfo().viewDependencies()
+      assert(deps != null && deps.dependencies().length === 1,
+        s"Expected 1 deduplicated dependency, got " +
+          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
+    }
+  }
+
+  test("dependency extraction: SQL source self-join deduplicates same-table references") {
+    withTestCatalogTables {
+      val selfJoinSql =
+        s"SELECT a.region AS a_region, a.count AS a_count " +
+          s"FROM $fullSourceTableName a JOIN $fullSourceTableName b " +
+          s"ON a.region = b.region"
+      val metricView = MetricView(
+        "0.1",
+        SQLSource(selfJoinSql),
+        where = None,
+        select = Seq(
+          Column("region", DimensionExpression("a_region"), 0),
+          Column("count_sum", MeasureExpression("sum(a_count)"), 1)))
+      createMetricView(fullMetricViewName, metricView)
+
+      val deps = capturedViewInfo().viewDependencies()
+      assert(deps != null && deps.dependencies().length === 1,
+        s"Expected 1 deduplicated dependency for self-join, got " +
+          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
+      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().toSeq ===
+        Seq(testCatalogName, testNamespace, sourceTableName))
+    }
+  }
+
   test("dependency extraction: V1 session-catalog source emits 3-part nameParts") {
     val v1Source = "metric_view_v2_v1source"
     spark.range(0, 5).toDF("v")
@@ -556,6 +566,37 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  // ============================================================
+  // Section 3: SELECT cases
+  // ============================================================
+
+
+  test("SELECT from a v2 metric view returns aggregated rows") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      // The fixture's `events` source has rows ("region_1", 1, 5.0), ("region_2", 2, 10.0).
+      // The metric view aggregates by `region` summing `count`. Resolution flows through
+      // loadRelation -> MetadataOnlyTable(ViewInfo) -> V1Table.toCatalogTable(ViewInfo) ->
+      // CatalogTableType.METRIC_VIEW -> ResolveMetricView, then the analyzer rewrites the
+      // view body into Aggregate(Seq(region), Seq(sum(count) AS count_sum)) over `events`.
+      val rows = sql(s"SELECT region, count_sum FROM $fullMetricViewName ORDER BY region")
+        .collect()
+      assert(rows.length === 2)
+      assert(rows(0).getString(0) === "region_1" && rows(0).getLong(1) === 1L)
+      assert(rows(1).getString(0) === "region_2" && rows(1).getLong(1) === 2L)
+    }
+  }
+
+  // ============================================================
+  // Section 4: DESCRIBE cases
+  // ============================================================
+
+
   test("DESCRIBE TABLE EXTENDED on a v2 metric view round-trips through loadRelation") {
     withTestCatalogTables {
       val mv = MetricView(
@@ -583,23 +624,82 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("CREATE VIEW ... WITH METRICS on a non-ViewCatalog catalog fails with " +
-    val ex = intercept[AnalysisException] {
-      sql(
-        s"""CREATE VIEW ${MetricViewV2CatalogSuite.noViewCatalogName}.default.mv
-           |WITH METRICS
-           |LANGUAGE YAML
-           |AS
-           |$$$$
-           |${MetricViewFactory.toYAML(MetricView(
-              "0.1",
-              AssetSource(fullSourceTableName),
-              where = None,
-              select = metricViewColumns))}
-           |$$$$""".stripMargin)
+  test("DESCRIBE TABLE on a v2 metric view returns the aliased columns") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      val rows = sql(s"DESCRIBE TABLE $fullMetricViewName").collect()
+      val byName = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(byName.contains("region"), s"Missing 'region' col, got: ${byName.keys}")
+      assert(byName.contains("count_sum"), s"Missing 'count_sum' col, got: ${byName.keys}")
     }
-    assert(ex.getCondition === "MISSING_CATALOG_ABILITY")
-    assert(ex.getMessage.contains("VIEWS"))
+  }
+
+  // ============================================================
+  // Section 5: DROP / SHOW cases
+  // ============================================================
+
+
+  test("DROP VIEW succeeds on a V2 metric view") {
+    withTestCatalogTables {
+      val metricView = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, metricView)
+      val ident = Identifier.of(Array(testNamespace), metricViewName)
+
+      assert(MetricViewRecordingCatalog.capturedViews.containsKey(ident))
+
+      sql(s"DROP VIEW $fullMetricViewName")
+      assert(!MetricViewRecordingCatalog.capturedViews.containsKey(ident))
+    }
+  }
+
+  test("DROP VIEW IF EXISTS on a non-existent V2 metric view is a no-op") {
+    withTestCatalogTables {
+      sql(s"DROP VIEW IF EXISTS $testCatalogName.$testNamespace.does_not_exist")
+    }
+  }
+
+  test("SHOW TABLES does not list v2 metric views") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      val tables = sql(s"SHOW TABLES IN $testCatalogName.$testNamespace")
+        .collect().map(_.getString(1)).toSet
+      // The fixture's `events` source table is a regular table, so SHOW TABLES sees it.
+      assert(tables.contains(sourceTableName),
+        s"SHOW TABLES should list the source table, got: $tables")
+      // Per the RelationCatalog contract, SHOW TABLES returns tables only -- metric views
+      // belong on SHOW VIEWS instead.
+      assert(!tables.contains(metricViewName),
+        s"SHOW TABLES should not list metric views, got: $tables")
+    }
+  }
+
+  test("SHOW VIEWS lists v2 metric views") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      val views = sql(s"SHOW VIEWS IN $testCatalogName.$testNamespace")
+        .collect().map(_.getString(1)).toSet
+      assert(views.contains(metricViewName),
+        s"SHOW VIEWS should list metric views, got: $views")
+    }
   }
 }
 

@@ -46,13 +46,6 @@ case class CreateMetricViewCommand(
     child match {
       case v: ResolvedIdentifier if CatalogV2Util.isSessionCatalog(v.catalog) =>
         createMetricViewInSessionCatalog(sparkSession, v)
-      case _: ResolvedIdentifier =>
-        // Non-session v2 catalogs are intercepted by `DataSourceV2Strategy` before the
-        // `ExecutedCommandExec(RunnableCommand)` fallback, so this branch is unreachable in
-        // practice. Keep the assertion for defensive clarity if a future strategy reorder
-        // accidentally exposes this code path.
-        throw SparkException.internalError(
-          "V2 metric-view CREATE should be handled by DataSourceV2Strategy, not run here")
       case _ => throw SparkException.internalError(
         s"Failed to resolve identifier for creating metric view")
     }

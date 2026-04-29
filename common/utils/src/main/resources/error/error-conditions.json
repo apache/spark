@@ -8267,6 +8267,11 @@
           "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
         ]
       },
+      "ON_METRIC_VIEW" : {
+        "message" : [
+          "The command is not supported on a metric view <tableName>."
+        ]
+      },
       "ON_TEMPORARY_VIEW" : {
         "message" : [
           "The command is not supported on a temporary view <tableName>."

@@ -57,19 +57,10 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   protected lazy val fullNameParts: Seq[String] =
     (catalog.name() +: identifier.asMultipartIdentifier).toSeq
 
-  /**
-   * Optional structured dependency list to stamp on the built `ViewInfo`. Plain views leave
-   * this `None`; metric views populate it with the source-table lineage produced by
-   * `MetricViewHelper.collectTableDependencies`.
-   */
+  /** Optional structured dependency list to stamp on the built `ViewInfo`. */
   protected def viewDependencies: Option[DependencyList] = None
 
-  /**
-   * Optional view sub-kind to stamp on `PROP_TABLE_TYPE`. Plain views leave this `None` so
-   * the `ViewInfo` constructor's `putIfAbsent` defaults it to `VIEW`; metric views set it to
-   * `TableSummary.METRIC_VIEW_TABLE_TYPE` so consumers (e.g. `V1Table.toCatalogTable`) can
-   * round-trip the discriminator.
-   */
+  /** Optional view sub-kind to stamp on `PROP_TABLE_TYPE`; defaults to `VIEW` when `None`. */
   protected def tableType: Option[String] = None
 
   override def output: Seq[Attribute] = Seq.empty
@@ -131,27 +122,19 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 }
 
 /**
- * Physical plan node for CREATE VIEW on a v2 [[ViewCatalog]]. Dispatches to
- * [[ViewCatalog#createView]] for plain CREATE, [[ViewCatalog#createOrReplaceView]] for
- * `OR REPLACE`, and short-circuits `IF NOT EXISTS` early via [[ViewCatalog#viewExists]] so
- * the view body isn't analyzed when the view already exists.
+ * Shared CREATE-side `run()` for v2 view-create execs. Adds the `IF NOT EXISTS` short-circuit
+ * via [[ViewCatalog#viewExists]], dispatches `OR REPLACE` to
+ * [[ViewCatalog#createOrReplaceView]] vs. plain CREATE to [[ViewCatalog#createView]], and
+ * decodes `ViewAlreadyExistsException` into the dedicated cross-type collision error when a
+ * non-view table sits at the ident in a mixed catalog. Subclasses supply only the
+ * view-shape-specific fields (`allowExisting`, `replace`, plus the [[V2ViewPreparation]] hooks
+ * such as `viewDependencies` / `tableType`) and inherit `run()` unchanged.
  */
-case class CreateV2ViewExec(
-    catalog: ViewCatalog,
-    identifier: Identifier,
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    collation: Option[String],
-    userProperties: Map[String, String],
-    originalText: String,
-    query: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
+private[v2] trait V2CreateViewPreparation extends V2ViewPreparation {
+  def allowExisting: Boolean
+  def replace: Boolean
 
-  override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
-
-  override protected def run(): Seq[InternalRow] = {
+  override final protected def run(): Seq[InternalRow] = {
     // CREATE VIEW IF NOT EXISTS: short-circuit before `buildViewInfo` if a view already sits
     // at the ident -- avoids `aliasPlan` / config capture for the common no-op case (matches
     // v1 `CreateViewCommand.run`). The mixed-catalog "table at ident" no-op is handled in the
@@ -189,4 +172,26 @@ case class CreateV2ViewExec(
     }
     Seq.empty
   }
+}
+
+/**
+ * Physical plan node for CREATE VIEW on a v2 [[ViewCatalog]]. Inherits the create-side
+ * `run()` (viewExists short-circuit + OR REPLACE + cross-type decoding) from
+ * [[V2CreateViewPreparation]]; only supplies the case-class fields and stamps the current
+ * user as owner.
+ */
+case class CreateV2ViewExec(
+    catalog: ViewCatalog,
+    identifier: Identifier,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    collation: Option[String],
+    userProperties: Map[String, String],
+    originalText: String,
+    query: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewSchemaMode: ViewSchemaMode) extends V2CreateViewPreparation {
+
+  override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
 }
