@@ -36,9 +36,9 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * [[CacheManager]]. This simulates a truly external writer whose changes are invisible to cached
  * reads.
  *
- * Each scenario validates both server-side cache state (via [[assertCached]] and [[checkAnswer]]
- * on the server session) and the client-side Connect round-trip (via [[assertRows]] on the
- * Connect session).
+ * Each scenario validates server-side cache state (via [[assertCached]] on the server session,
+ * since cache plan internals are not exposed through Connect) and reads data through the Connect
+ * client (via [[assertRows]]) to simulate the real client experience.
  */
 class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
@@ -74,7 +74,6 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       // get server session after first RPC establishes it
       val serverSession = getServerSession(connectSession)
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // S1: external writer adds (2, 200) via direct catalog API
@@ -88,7 +87,6 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
       // cache is pinned, external write invisible
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // S2: UNCACHE + re-CACHE picks up external write, then session
@@ -96,12 +94,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       connectSession.sql(s"UNCACHE TABLE $T").collect()
       connectSession.sql(s"CACHE TABLE $T").collect()
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
 
       connectSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
       assertRows(
         connectSession.sql(s"SELECT * FROM $T").collect(),
         Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
@@ -114,7 +110,6 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
       // cache is re-pinned, external write invisible
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
       assertRows(
         connectSession.sql(s"SELECT * FROM $T").collect(),
         Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
@@ -133,7 +128,6 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       connectSession.sql(s"CACHE TABLE $T").collect()
       val serverSession = getServerSession(connectSession)
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // external schema change via catalog API
@@ -151,14 +145,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
       // cache stays pinned at original 2-column schema
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
-      // Connect client also sees the pinned 2-column cached data
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // REFRESH TABLE picks up external schema change and data
       connectSession.sql(s"REFRESH TABLE $T").collect()
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100, null), Row(2, 200, -1)))
       assertRows(
         connectSession.sql(s"SELECT * FROM $T").collect(),
         Seq(Row(1, 100, null), Row(2, 200, -1)))
@@ -177,13 +168,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       connectSession.sql(s"CACHE TABLE $T").collect()
       val serverSession = getServerSession(connectSession)
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // session schema change via Connect: invalidates cache, rebuilds with new schema
       connectSession.sql(s"ALTER TABLE $T ADD COLUMN new_column INT").collect()
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100, null)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100, null)))
 
       // external writer adds (2, 200, -1) via catalog API
@@ -197,13 +186,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
       // external write invisible: cache still shows (1, 100, null)
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100, null)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100, null)))
 
       // REFRESH TABLE picks up external write
       connectSession.sql(s"REFRESH TABLE $T").collect()
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100, null), Row(2, 200, -1)))
       assertRows(
         connectSession.sql(s"SELECT * FROM $T").collect(),
         Seq(Row(1, 100, null), Row(2, 200, -1)))
@@ -221,7 +208,6 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       connectSession.sql(s"CACHE TABLE $T").collect()
       val serverSession = getServerSession(connectSession)
       assertCached(serverSession.table(T))
-      checkAnswer(serverSession.table(T), Seq(Row(1, 100)))
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // external drop and recreate via catalog API
@@ -234,7 +220,6 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
         Collections.emptyMap[String, String])
 
       // query sees the new empty table
-      checkAnswer(serverSession.table(T), Seq.empty)
       assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq.empty)
 
       connectSession.sql(s"DROP TABLE IF EXISTS $T").collect()
