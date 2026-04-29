@@ -1686,6 +1686,12 @@ object Unidoc {
     },
 
     (JavaUnidoc / unidoc / javacOptions) := {
+      // Force the tools module to compile so SparkUnidocDoclet is on the
+      // classpath we point `-docletpath` at below. `.value` on a task key
+      // creates the build-graph dependency.
+      val doclet_classes =
+        (LocalProject("tools") / Compile / classDirectory).value.getAbsolutePath
+      val _ = (LocalProject("tools") / Compile / compile).value
       Seq(
         "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
         "-public",
@@ -1700,16 +1706,24 @@ object Unidoc {
         "-tag", "inheritdoc",
         // Run the `html` doclint group at unidoc time so heading-out-of-sequence,
         // malformed HTML, self-closing elements and similar HTML structure
-        // issues fail the doc-gen job with a per-file `path/X.java:LINE: error:
-        // ...` instead of a generic `javadoc exited with exit code 1`. Scope
-        // is intentionally narrow: the `reference` group surfaces ~30 spurious
-        // `X is not public in org.apache.spark.Y; cannot be accessed from
-        // outside package` errors on genjavadoc stubs (where stubs reference
-        // package-private types from outside their package), which causes
-        // javadoc to bail before doclint finishes -- `--ignore-source-errors`
-        // does not suppress these. `html`-only avoids the bail-out and still
-        // catches the original failure class motivating this PR.
+        // issues fail the doc-gen job. Scope is intentionally narrow: the
+        // `reference` group surfaces ~30 spurious `X is not public in
+        // org.apache.spark.Y; cannot be accessed from outside package` errors
+        // on genjavadoc stubs (where stubs reference package-private types
+        // from outside their package), which causes javadoc to bail before
+        // doclint finishes -- `--ignore-source-errors` does not suppress
+        // these. `html`-only avoids the bail-out and catches the original
+        // failure class motivating this PR.
         "-Xdoclint:html",
+        // Wrap the standard doclet so doclint diagnostics (including
+        // heading-out-of-sequence, malformed HTML, etc.) are mirrored to
+        // stdout with a `[unidoc-doclet]` prefix BEFORE javadoc forwards
+        // them. javadoc 17 sometimes drops per-file diagnostics on its own
+        // way to exit 1 (the failure surfaces as a generic
+        // `javadoc exited with exit code 1` with no file/line context); the
+        // wrapper makes sure they always surface in the CI log.
+        "-doclet", "org.apache.spark.tools.SparkUnidocDoclet",
+        "-docletpath", doclet_classes,
         "--ignore-source-errors", "-notree"
       )
     },
