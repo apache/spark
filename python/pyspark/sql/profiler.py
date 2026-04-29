@@ -132,7 +132,7 @@ class WorkerPerfProfiler:
 
     def __init__(
         self,
-        accumulator: Accumulator["ProfileResults"],
+        accumulator: Accumulator[Optional["ProfileResults"]],
         accumulator_v2: Accumulator["ProfileResultsV2"],
         result_key: Union[int, str],
     ) -> None:
@@ -181,7 +181,7 @@ class WorkerMemoryProfiler:
 
     def __init__(
         self,
-        accumulator: Accumulator["ProfileResults"],
+        accumulator: Accumulator[Optional["ProfileResults"]],
         accumulator_v2: Accumulator["ProfileResultsV2"],
         result_key: Union[int, str],
         func_or_code: Union[Callable, CodeType],
@@ -329,7 +329,7 @@ class ProfilerCollector(ABC):
 
     @property
     @abstractmethod
-    def _profile_results(self) -> "ProfileResults":
+    def _profile_results(self) -> "ProfileResultsV2":
         """
         Get the profile results.
         """
@@ -464,7 +464,7 @@ class AccumulatorProfilerCollector(ProfilerCollector):
             )
 
     @property
-    def _profile_results(self) -> "ProfileResults":
+    def _profile_results(self) -> "ProfileResultsV2":
         with self._lock:
             value = self._accumulator.value
             return value if value is not None else {}
