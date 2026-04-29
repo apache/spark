@@ -170,6 +170,18 @@ case class DescribeV2ViewExec(
       val qualified = (identifier.namespace() :+ identifier.name())
         .map(quoteIfNeeded).mkString(".")
       result += toCatalystRow("Identifier", qualified, "")
+      // Promote first-class reserved fields (Owner / Comment / Collation) to top-level rows
+      // before the EXTENDED Properties block, mirroring v1 `CatalogTable.toJsonLinkedHashMap`
+      // which renders these as their own rows rather than burying them in `Table Properties`.
+      Option(viewInfo.properties.get(TableCatalog.PROP_OWNER)).filter(_.nonEmpty).foreach { o =>
+        result += toCatalystRow("Owner", o, "")
+      }
+      Option(viewInfo.properties.get(TableCatalog.PROP_COMMENT)).foreach { c =>
+        result += toCatalystRow("Comment", c, "")
+      }
+      Option(viewInfo.properties.get(TableCatalog.PROP_COLLATION)).foreach { c =>
+        result += toCatalystRow("Collation", c, "")
+      }
       result += toCatalystRow("View Text", viewInfo.queryText, "")
       Option(viewInfo.currentCatalog).foreach { c =>
         result += toCatalystRow("View Current Catalog", c, "")

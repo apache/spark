@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvolution, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewCatalog, ViewInfo}
@@ -144,7 +144,10 @@ case class AlterV2ViewUnsetPropertiesExec(
  * Physical plan node for ALTER VIEW ... WITH SCHEMA BINDING on a v2 [[ViewCatalog]]. Replaces
  * the schema-binding mode on the analysis-time view payload and dispatches to
  * [[ViewCatalog#replaceView]]. The view body itself is not re-analyzed -- only the binding mode
- * field changes.
+ * field changes. When the new mode is EVOLUTION, `queryColumnNames` is also cleared, mirroring
+ * v1 `generateViewProperties` -- in EVOLUTION mode the view always uses its current schema as
+ * the column source, so leaving stale `queryColumnNames` would produce non-canonical persisted
+ * metadata.
  */
 case class AlterV2ViewSchemaBindingExec(
     catalog: ViewCatalog,
@@ -155,9 +158,12 @@ case class AlterV2ViewSchemaBindingExec(
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val info = CatalogV2Util.viewInfoBuilderFrom(existingView)
+    val builder = CatalogV2Util.viewInfoBuilderFrom(existingView)
       .withSchemaMode(viewSchemaMode.toString)
-      .build()
+    if (viewSchemaMode == SchemaEvolution) {
+      builder.withQueryColumnNames(Array.empty[String])
+    }
+    val info = builder.build()
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, identifier))
     catalog.replaceView(identifier, info)
     Seq.empty

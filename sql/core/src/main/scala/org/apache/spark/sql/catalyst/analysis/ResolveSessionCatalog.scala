@@ -224,15 +224,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // typically resolves the column to an `Attribute` here. We also accept the legacy
       // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
       // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
-      val nameParts = column match {
-        case u: UnresolvedAttribute => u.nameParts
-        case a: Attribute => a.qualifier :+ a.name
-        case Alias(child, _) =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(child))
-        case _ =>
-          throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
-      }
+      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
+      val nameParts = DescribeColumn.extractColumnNameParts(column)
       DescribeColumnCommand(ident, nameParts, isExtended, output)
 
     case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>

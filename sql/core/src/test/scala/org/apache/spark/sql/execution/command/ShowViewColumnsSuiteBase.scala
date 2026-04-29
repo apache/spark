@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 /**
  * Unified tests for `SHOW COLUMNS` against a view, on V1 (session) and V2 view catalogs.
@@ -39,5 +39,18 @@ trait ShowViewColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"CREATE VIEW $view (alpha, beta) AS SELECT 1, 2")
     val cols = sql(s"SHOW COLUMNS IN $view").collect().map(_.getString(0)).toSeq
     assert(cols == Seq("alpha", "beta"))
+  }
+
+  test("FROM <ns> mismatching the view's namespace is rejected") {
+    // `SHOW COLUMNS IN <view> FROM <ns>` cross-checks the view's resolved namespace against
+    // the explicit FROM namespace. Mismatch must error rather than silently ignoring FROM --
+    // v1 enforces this in `ResolveSessionCatalog`; v2 enforces it in `DataSourceV2Strategy`.
+    val view = s"$catalog.$namespace.v_show_cols_ns"
+    sql(s"CREATE VIEW $view AS SELECT 1 AS a")
+    val ex = intercept[AnalysisException] {
+      sql(s"SHOW COLUMNS IN $view FROM other_ns")
+    }
+    assert(ex.getCondition == "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+      s"unexpected error condition: ${ex.getCondition}")
   }
 }

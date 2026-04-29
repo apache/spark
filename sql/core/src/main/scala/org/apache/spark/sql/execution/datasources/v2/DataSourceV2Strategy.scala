@@ -24,10 +24,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -363,7 +363,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val quoted = (catalog.name() +: ident.asMultipartIdentifier).map(quoteIfNeeded).mkString(".")
       ShowV2ViewPropertiesExec(output, quoted, rpv.info, propertyKey) :: Nil
 
-    case ShowColumns(rpv @ ResolvedPersistentView(_, _, _), _, output) =>
+    case ShowColumns(rpv @ ResolvedPersistentView(_, ident, _), ns, output) =>
+      // If `SHOW COLUMNS IN <view> FROM <ns>` was written with both the view's namespace and
+      // an explicit `FROM <ns>`, validate they agree -- mirrors the v1 rewrite in
+      // `ResolveSessionCatalog`. For multi-level v2 namespaces we compare the full namespace
+      // sequence (case-insensitively) rather than v1's single-part `database` check.
+      ns.foreach { nsSeq =>
+        val resolver = session.sessionState.conf.resolver
+        val viewNs = ident.namespace().toSeq
+        val mismatch = viewNs.length != nsSeq.length ||
+          viewNs.zip(nsSeq).exists { case (a, b) => !resolver(a, b) }
+        if (mismatch) {
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(nsSeq, viewNs)
+        }
+      }
       ShowV2ViewColumnsExec(output, rpv.info) :: Nil
 
     case DescribeRelation(rpv @ ResolvedPersistentView(catalog, ident, _), isExtended, output) =>
@@ -372,18 +385,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeColumn(rpv @ ResolvedPersistentView(_, _, _), column, isExtended, output) =>
       // `ResolvedPersistentView.output` exposes the view's schema, so `ResolveReferences`
       // resolves the column against it -- meaning we typically receive an `Attribute` here.
-      // Accept the legacy `UnresolvedAttribute` form too, mirroring the v1 rewrite for
-      // session-catalog views in `ResolveSessionCatalog`.
-      val nameParts = column match {
-        case u: UnresolvedAttribute => u.nameParts
-        case a: Attribute => a.qualifier :+ a.name
-        case Alias(child, _) =>
-          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "DESC TABLE COLUMN", toPrettySQL(child))
-        case _ =>
-          throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
-      }
-      DescribeV2ViewColumnExec(output, rpv.info, nameParts, isExtended) :: Nil
+      // Accept the legacy `UnresolvedAttribute` form too. The unwrap logic is shared with the
+      // v1 rewrite for session-catalog views in `ResolveSessionCatalog`.
+      DescribeV2ViewColumnExec(
+        output, rpv.info, DescribeColumn.extractColumnNameParts(column), isExtended) :: Nil
 
     // Plans that resolve through `UnresolvedTableOrView` reach here with a
     // `ResolvedPersistentView` child for non-session v2 views (the v1 rewrite in

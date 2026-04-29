@@ -47,4 +47,21 @@ trait DescribeViewSuiteBase extends QueryTest with DDLCommandTestUtils {
         rows.contains("# Detailed View Information"),
       s"expected a detailed-info block in:\n${rows.mkString("\n")}")
   }
+
+  test("describe extended promotes Comment and Collation to top-level rows") {
+    // v1 `CatalogTable.toJsonLinkedHashMap` and v2 `DescribeV2ViewExec` both render Comment /
+    // Collation as their own rows in the EXTENDED block, separately from the generic
+    // Properties row, so users don't have to scrape the Properties string for first-class
+    // fields.
+    val view = s"$catalog.$namespace.v_describe_first_class"
+    sql(s"CREATE VIEW $view COMMENT 'hello' DEFAULT COLLATION UTF8_LCASE AS SELECT 'a' AS x")
+    val rows = sql(s"DESCRIBE TABLE EXTENDED $view").collect().map { r =>
+      r.getString(0) -> Option(r.getString(1)).getOrElse("")
+    }.toMap
+    assert(rows.get("Comment").contains("hello"),
+      s"expected Comment=hello in:\n$rows")
+    // v1 renders the collation name verbatim (UTF8_LCASE); v2 does the same.
+    assert(rows.get("Collation").exists(_.equalsIgnoreCase("UTF8_LCASE")),
+      s"expected Collation=UTF8_LCASE in:\n$rows")
+  }
 }

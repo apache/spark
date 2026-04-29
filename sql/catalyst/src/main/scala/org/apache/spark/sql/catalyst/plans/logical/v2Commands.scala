@@ -949,6 +949,36 @@ case class DescribeColumn(
 
 object DescribeColumn {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+
+  /**
+   * Extract the column nameParts from the (possibly resolved) column expression on a
+   * `DescribeColumn` command. Used by both the v1 rewrite in `ResolveSessionCatalog` and the
+   * v2 strategy case in `DataSourceV2Strategy` -- centralizing the unwrap means the two paths
+   * cannot drift.
+   *
+   * `ResolveReferences` typically resolves the column against the relation's `output`, so we
+   * see an `Attribute` here. The legacy `UnresolvedAttribute` form is also accepted (e.g. when
+   * the column name doesn't exist in the relation and resolution is skipped). `Alias`
+   * indicates a nested-column reference (`a.b`) which `ResolveReferences` rewrites to
+   * `Alias(GetStructField(...), b)` -- nested columns are unsupported on this command.
+   */
+  def extractColumnNameParts(column: org.apache.spark.sql.catalyst.expressions.Expression)
+      : Seq[String] = {
+    import org.apache.spark.SparkException
+    import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+    import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+    import org.apache.spark.sql.catalyst.util.toPrettySQL
+    import org.apache.spark.sql.errors.QueryCompilationErrors
+    column match {
+      case u: UnresolvedAttribute => u.nameParts
+      case a: Attribute => a.qualifier :+ a.name
+      case Alias(child, _) =>
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "DESC TABLE COLUMN", toPrettySQL(child))
+      case _ =>
+        throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
+    }
+  }
 }
 
 /**

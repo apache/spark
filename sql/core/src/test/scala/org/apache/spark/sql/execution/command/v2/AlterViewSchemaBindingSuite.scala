@@ -29,4 +29,30 @@ class AlterViewSchemaBindingSuite
     val stored = viewCatalog.getStoredView(Array(namespace), "v2_schema_mode")
     assert(stored.schemaMode == "EVOLUTION")
   }
+
+  test("V2: switching to EVOLUTION clears queryColumnNames; switching back restores them") {
+    // Mirrors v1 `generateViewProperties`: in EVOLUTION mode the view always uses its current
+    // schema as the column source, so persisting `queryColumnNames` would be non-canonical.
+    // After flipping back to BINDING via a CREATE OR REPLACE (which re-captures column names),
+    // the field must be populated again so view-text expansion has the original aliases.
+    val name = "v2_schema_mode_qcols"
+    val view = s"$catalog.$namespace.$name"
+    sql(s"CREATE VIEW $view AS SELECT 1 AS x, 2 AS y")
+    val initial = viewCatalog.getStoredView(Array(namespace), name)
+    assert(initial.queryColumnNames.toSeq == Seq("x", "y"))
+
+    sql(s"ALTER VIEW $view WITH SCHEMA EVOLUTION")
+    val afterEvo = viewCatalog.getStoredView(Array(namespace), name)
+    assert(afterEvo.schemaMode == "EVOLUTION")
+    assert(afterEvo.queryColumnNames.isEmpty,
+      "queryColumnNames must be cleared in EVOLUTION mode")
+
+    sql(s"ALTER VIEW $view WITH SCHEMA BINDING")
+    val afterBinding = viewCatalog.getStoredView(Array(namespace), name)
+    assert(afterBinding.schemaMode == "BINDING")
+    // ALTER VIEW WITH SCHEMA BINDING does not re-analyze the view body; the queryColumnNames
+    // field stays at whatever ALTER VIEW WITH SCHEMA EVOLUTION left it as. Users who want the
+    // original aliases back run CREATE OR REPLACE VIEW, which re-captures them.
+    assert(afterBinding.queryColumnNames.isEmpty)
+  }
 }
