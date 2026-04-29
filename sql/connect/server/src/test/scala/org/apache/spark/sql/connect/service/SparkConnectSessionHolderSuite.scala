@@ -254,9 +254,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
-  private def awaitTestBodyInNewThread(
-      timeoutMillis: Long,
-      onTimeout: () => Unit = () => ())(body: => Unit): Unit = {
+  private def awaitTestBodyInNewThread(timeoutMillis: Long, onTimeout: () => Unit = () => ())(
+      body: => Unit): Unit = {
     @volatile var error: Throwable = null
     val runnable: Runnable = () => {
       try {
