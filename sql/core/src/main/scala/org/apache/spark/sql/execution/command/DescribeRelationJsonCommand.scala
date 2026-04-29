@@ -71,11 +71,11 @@ case class DescribeRelationJsonCommand(
         if (partitionSpec.nonEmpty) {
           throw QueryCompilationErrors.descPartitionNotAllowedOnView(v.identifier.name())
         }
-        // For session-catalog (v1) views, recover the original `CatalogTable` from
-        // `V1ViewInfo`. For non-session v2 views (which carry a plain `ViewInfo`), synthesize
-        // an equivalent `CatalogTable` via `V1Table.toCatalogTable` -- mirrors the
-        // `CreateTableLike` strategy case in `DataSourceV2Strategy` and preserves pre-PR
-        // behavior of `DESC ... AS JSON` working on any persistent view.
+        // Resolve `v.info` to a `CatalogTable` so the JSON renderer below can read v1-shaped
+        // fields uniformly. Session-catalog views carry the original `CatalogTable` inside
+        // `V1ViewInfo`; non-session v2 views carry a plain `ViewInfo` and are projected to a
+        // `CatalogTable` via `V1Table.toCatalogTable`, the same conversion the
+        // `CreateTableLike` strategy case in `DataSourceV2Strategy` uses.
         val metadata = v.info match {
           case v1Info: V1ViewInfo => v1Info.v1Table
           case info => V1Table.toCatalogTable(v.catalog, v.identifier, info)

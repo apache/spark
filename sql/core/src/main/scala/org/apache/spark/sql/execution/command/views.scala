@@ -236,13 +236,12 @@ case class AlterViewAsCommand(
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty,
-    // Analysis-time collation for the resolved view (after `ApplyDefaultCollation` has had a
-    // chance to fill the namespace default into a previously-empty `CatalogTable.collation`).
-    // `ResolveSessionCatalog` populates this from `ResolvedPersistentView.info.properties`'s
-    // `PROP_COLLATION`; only `alterPermanentView` consumes it. `None` means "no collation
-    // specified at analysis time" -- `alterPermanentView` then preserves the existing
-    // `CatalogTable.collation` so external constructors that omit this argument retain the
-    // pre-PR behavior.
+    // Analysis-time collation for the resolved view. `ApplyDefaultCollation` may have folded
+    // the namespace default into the resolved view's `CatalogTable.collation` if it was empty;
+    // `ResolveSessionCatalog` then reads `ResolvedPersistentView.info.properties`'s
+    // `PROP_COLLATION` and passes it here. Only `alterPermanentView` consumes it: `Some(x)`
+    // overwrites `CatalogTable.collation`, `None` falls through to the existing typed field
+    // so callers that omit this argument keep the existing view's collation untouched.
     collation: Option[String] = None)
   extends RunnableCommand with AnalysisOnlyCommand with CTEInChildren {
 
