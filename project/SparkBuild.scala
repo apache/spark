@@ -1698,14 +1698,18 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        // Run doclint at unidoc time so heading-out-of-sequence, broken
-        // `{@link}`, malformed HTML and similar issues fail the doc-gen
-        // job with a per-file `path/X.java:LINE: error: ...` instead of a
-        // generic `javadoc exited with exit code 1`. javadoc rejects the
-        // `/access` modifier (javac-only); access filtering already comes
-        // from the `-public` flag above plus `ignoreUndocumentedPackages`
-        // applied to the source set.
-        "-Xdoclint:all", "-Xdoclint:-missing",
+        // Run the `html` doclint group at unidoc time so heading-out-of-sequence,
+        // malformed HTML, self-closing elements and similar HTML structure
+        // issues fail the doc-gen job with a per-file `path/X.java:LINE: error:
+        // ...` instead of a generic `javadoc exited with exit code 1`. Scope
+        // is intentionally narrow: the `reference` group surfaces ~30 spurious
+        // `X is not public in org.apache.spark.Y; cannot be accessed from
+        // outside package` errors on genjavadoc stubs (where stubs reference
+        // package-private types from outside their package), which causes
+        // javadoc to bail before doclint finishes -- `--ignore-source-errors`
+        // does not suppress these. `html`-only avoids the bail-out and still
+        // catches the original failure class motivating this PR.
+        "-Xdoclint:html",
         "--ignore-source-errors", "-notree"
       )
     },
