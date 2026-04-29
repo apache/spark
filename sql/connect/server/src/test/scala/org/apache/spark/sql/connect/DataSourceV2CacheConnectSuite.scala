@@ -49,7 +49,9 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   private val T = "testcat.ns1.ns2.tbl"
   private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
 
-  /** Assert that rows collected through the Connect client match expected rows (order-agnostic). */
+  /**
+   * Assert that rows collected through the Connect client match expected rows (order-agnostic).
+   */
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
     assert(
       actual.map(_.toString()).toSet == expected.map(_.toString()).toSet,
