@@ -30,4 +30,21 @@ class AlterViewRenameSuite
     assert(!viewCatalog.viewExists(Identifier.of(Array(namespace), "v2_rename_src")))
     assert(viewCatalog.viewExists(Identifier.of(Array(namespace), "v2_rename_dst")))
   }
+
+  test("V2: rename to a 2-part target moves the view across namespaces") {
+    // Exercises `RenameV2ViewExec`'s non-empty-namespace branch -- when the new identifier
+    // already carries a namespace, the exec passes it through verbatim rather than defaulting
+    // to the source namespace.
+    val src = s"$catalog.$namespace.v2_rename_xns_src"
+    val otherNs = "other_ns"
+    sql(s"CREATE NAMESPACE IF NOT EXISTS $catalog.$otherNs")
+    createView(src)
+    try {
+      sql(s"ALTER VIEW $src RENAME TO $otherNs.v2_rename_xns_dst")
+      assert(!viewCatalog.viewExists(Identifier.of(Array(namespace), "v2_rename_xns_src")))
+      assert(viewCatalog.viewExists(Identifier.of(Array(otherNs), "v2_rename_xns_dst")))
+    } finally {
+      sql(s"DROP VIEW IF EXISTS $catalog.$otherNs.v2_rename_xns_dst")
+    }
+  }
 }

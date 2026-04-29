@@ -83,4 +83,26 @@ trait AlterViewRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
     assert(ex.getCondition.startsWith("EXPECT_TABLE_NOT_VIEW"),
       s"unexpected error condition: ${ex.getCondition}")
   }
+
+  test("rename re-caches a previously cached view") {
+    // v1 `AlterTableRenameCommand` and v2 `RenameTableExec` both capture the cached storage
+    // level before rename and re-instate it on the new identifier afterwards. The v2 view
+    // path (`RenameV2ViewExec`) follows the same pattern -- without it, a user-cached view
+    // would silently lose its cache entry after RENAME.
+    val src = s"$catalog.$namespace.v_rename_cached_src"
+    val dstName = "v_rename_cached_dst"
+    val dst = s"$catalog.$namespace.$dstName"
+    createView(src)
+    spark.catalog.cacheTable(src)
+    assert(spark.catalog.isCached(src), "bad test: view was not cached in the first place")
+    try {
+      sql(s"ALTER VIEW $src RENAME TO $dstName")
+      // After rename, the destination's plan must still be cached. Resolving the old name
+      // post-rename throws TABLE_OR_VIEW_NOT_FOUND, so we only check the destination side.
+      assert(spark.catalog.isCached(dst),
+        s"$dst should still be cached after RENAME")
+    } finally {
+      spark.catalog.uncacheTable(dst)
+    }
+  }
 }

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ViewSchemaMod
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.execution.command.CommandUtils
 
 /**
@@ -168,6 +169,11 @@ case class AlterV2ViewSchemaBindingExec(
  * [[ViewCatalog#renameView]]; if the source view is missing or has been replaced with a non-view
  * table between analysis and exec, the catalog throws `NoSuchViewException` and the error
  * propagates.
+ *
+ * If the view was cached at the old identifier, the cache entry is captured before the rename
+ * and re-instated at the new identifier afterwards -- matches v1 `AlterTableRenameCommand` and
+ * v2 `RenameTableExec`, so users on a v2 view catalog who explicitly cached a view do not
+ * silently lose the cache after a rename.
  */
 case class RenameV2ViewExec(
     catalog: ViewCatalog,
@@ -182,9 +188,24 @@ case class RenameV2ViewExec(
     val qualifiedNewIdent = if (newIdent.namespace.isEmpty) {
       Identifier.of(oldIdent.namespace, newIdent.name)
     } else newIdent
+
+    // Capture the old view's storage level before uncaching, mirroring v1
+    // `AlterTableRenameCommand`. Resolving the old identifier via `session.table` runs through
+    // view-text expansion so the cache lookup keys off the same plan that was originally
+    // cached via `CACHE TABLE <view>`.
+    val oldQualified = (catalog.name() +: oldIdent.asMultipartIdentifier).quoted
+    val optStorageLevel = session.sharedState.cacheManager
+      .lookupCachedData(session.table(oldQualified))
+      .map(_.cachedRepresentation.cacheBuilder.storageLevel)
+
     CommandUtils.uncacheTableOrView(session, ResolvedIdentifier(catalog, oldIdent))
     catalog.invalidateView(oldIdent)
     catalog.renameView(oldIdent, qualifiedNewIdent)
+
+    optStorageLevel.foreach { storageLevel =>
+      val newQualified = (catalog.name() +: qualifiedNewIdent.asMultipartIdentifier).quoted
+      session.catalog.cacheTable(newQualified, storageLevel)
+    }
     Seq.empty
   }
 }

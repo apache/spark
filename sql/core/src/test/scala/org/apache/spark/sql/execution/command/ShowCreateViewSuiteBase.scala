@@ -45,9 +45,11 @@ trait ShowCreateViewSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("renders the column list") {
     val view = s"$catalog.$namespace.v_show_create_cols"
-    sql(s"CREATE VIEW $view (a, b) AS SELECT 1, 2")
+    sql(s"CREATE VIEW $view (col_alpha, col_beta) AS SELECT 1, 2")
     val ddl = sql(s"SHOW CREATE TABLE $view").collect().head.getString(0)
-    assert(ddl.contains("a"))
-    assert(ddl.contains("b"))
+    // Use distinctive column names so `contains` checks aren't satisfied by tokens that
+    // appear elsewhere in the rendered DDL (e.g. inside `CREATE VIEW`, `AS SELECT`, etc.).
+    assert(ddl.contains("col_alpha"), s"col_alpha missing in DDL: $ddl")
+    assert(ddl.contains("col_beta"), s"col_beta missing in DDL: $ddl")
   }
 }

@@ -26,6 +26,17 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
  * the v2 [[Table]] surface. Holds the original [[CatalogTable]] in [[v1Table]] for v1-only
  * paths that need the full v1 metadata representation (e.g. `DescribeTableCommand`,
  * `ShowCreateTableCommand`, anything that calls `CatalogTable#toLinkedHashMap`).
+ *
+ * Note on `properties()`: the inherited [[ViewInfo#properties]] bag is built from the entire
+ * `v1Table.properties` map, which intermixes user TBLPROPERTIES with v1-internal storage keys
+ * (`view.sqlConfig.*`, `view.catalogAndNamespace.*`, `view.query.out.*`, `view.schemaMode`).
+ * v2 view inspection / SET execs (`ShowV2ViewPropertiesExec`, `AlterV2ViewSetPropertiesExec`,
+ * etc.) never see a `V1ViewInfo` -- `ResolveSessionCatalog` rewrites session-catalog views to
+ * v1 commands first -- so the bag stays internal to v1-only paths. Consumers that do receive
+ * a `V1ViewInfo` should prefer the typed accessors ([[ViewInfo#sqlConfigs]],
+ * [[ViewInfo#currentNamespace]], [[ViewInfo#currentCatalog]], [[ViewInfo#queryColumnNames]],
+ * [[ViewInfo#schemaMode]]) for the v1-internal fields rather than scraping `properties()` for
+ * them.
  */
 private[sql] class V1ViewInfo(val v1Table: CatalogTable)
     extends ViewInfo(V1ViewInfo.builderFrom(v1Table))
