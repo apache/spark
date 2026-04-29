@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RDDScanExec, SimpleMode, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -3910,6 +3910,81 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
                 "SortExec should be added before SMJ")
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
+    // Both tables are partitioned by id/item_id and report a two-column ordering.
+    // Key 1 appears on two splits on each side, so GroupPartitionsExec must coalesce.
+    //
+    // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
+    // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true"
+    ) {
+      val hashDf = sql(
+        s"""
+           |SELECT /*+ SHUFFLE_HASH(i, p) */ i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(hashDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      val hashPlan = hashDf.queryExecution.executedPlan
+      assert(collect(hashPlan) { case j: ShuffledHashJoinExec => j }.nonEmpty,
+        "expected ShuffledHashJoinExec")
+      assert(collectAllShuffles(hashPlan).isEmpty, "should not shuffle for compatible partitioning")
+      val hashCoalescing =
+        collectAllGroupPartitions(hashPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
+      assert(hashCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+      hashCoalescing.foreach { gp =>
+        assert(!gp.enableSortedMerge,
+          "hash join does not require ordering: enableSortedMerge must stay false")
+        assert(!gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+          "hash join does not require ordering: must use simple CoalescedRDD")
+      }
+
+      val smjDf = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(smjDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      val smjPlan = smjDf.queryExecution.executedPlan
+      assert(collectAllShuffles(smjPlan).isEmpty, "should not shuffle for compatible partitioning")
+      val smjCoalescing =
+        collectAllGroupPartitions(smjPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
+      assert(smjCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+      smjCoalescing.foreach { gp =>
+        assert(gp.enableSortedMerge,
+          "sort-merge join requires ordering: enableSortedMerge must be true")
+        assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+          "sort-merge join requires ordering: must use SortedMergeCoalescedRDD")
       }
     }
   }

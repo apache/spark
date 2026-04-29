@@ -1219,6 +1219,7 @@ class NameScopeSuite extends SharedSparkSession {
 
   private def newNameScopeStack() = new NameScopeStack(
     tempVariableManager = spark.sessionState.analyzer.catalogManager.tempVariableManager,
+    catalogManager = spark.sessionState.analyzer.catalogManager,
     subqueryRegistry = new SubqueryRegistry
   )
 

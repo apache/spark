@@ -222,6 +222,18 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
+  test("PATH enabled: unqualified CALL skips missing candidate and keeps searching") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        catalog("cat2").createProcedure(Identifier.of(Array("ns_hit"), "sum"), UnboundLongSum)
+        sql("SET PATH = cat.ns_miss, cat2.ns_hit")
+        checkAnswer(sql("CALL sum(1, 2)"), Row(3L) :: Nil)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   test("required parameter not found") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkError(

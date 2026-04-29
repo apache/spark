@@ -4286,8 +4286,12 @@ class AstBuilder extends DataTypeAstBuilder
   protected def createUnresolvedTableOrView(
       ctx: IdentifierReferenceContext,
       commandName: String,
-      allowTempView: Boolean = true): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTableOrView(_, commandName, allowTempView))
+      allowTempView: Boolean = true,
+      tableNotFoundSearchPathMode: UnresolvedTableOrViewSearchPathMode =
+        UnresolvedTableOrViewSearchPathMode.Ddl): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(
+      ctx,
+      UnresolvedTableOrView(_, commandName, allowTempView, tableNotFoundSearchPathMode))
   }
 
   private def createUnresolvedTableOrView(

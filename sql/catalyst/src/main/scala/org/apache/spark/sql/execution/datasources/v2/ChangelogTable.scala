@@ -22,6 +22,8 @@ import java.util.{EnumSet => JEnumSet, Set => JSet}
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -36,6 +38,11 @@ case class ChangelogTable(
     changelogInfo: ChangelogInfo,
     resolved: Boolean = false) extends Table with SupportsRead {
 
+  // Validate that the connector returned a schema with the required CDC metadata columns
+  // and correct types. `_commit_version` is connector-defined per the Changelog contract,
+  // so its type is not checked.
+  ChangelogTable.validateSchema(changelog)
+
   override def name: String = changelog.name
 
   override def columns: Array[Column] = changelog.columns
@@ -45,4 +52,40 @@ case class ChangelogTable(
   }
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
+}
+
+object ChangelogTable {
+
+  private[v2] def validateSchema(cl: Changelog): Unit = {
+    val byName = cl.columns.map(c => c.name -> c).toMap
+    def check(name: String, expected: DataType*): Unit = {
+      val col = byName.getOrElse(name,
+        throw QueryCompilationErrors.changelogMissingColumnError(cl.name, name))
+      if (expected.nonEmpty && col.dataType != expected.head) {
+        throw QueryCompilationErrors.changelogInvalidColumnTypeError(
+          cl.name, name, expected.head.sql, col.dataType.sql)
+      }
+    }
+    check("_change_type", StringType)
+    check("_commit_version")           // connector-defined, any type accepted
+    check("_commit_timestamp", TimestampType)
+
+    // Only call `rowId()` / `rowVersion()` when a capability requires them; a connector
+    // that advertises a capability without overriding the method surfaces the default
+    // UnsupportedOperationException directly.
+    val needsRowId = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert() ||
+      cl.containsIntermediateChanges()
+    if (needsRowId) {
+      val rowIds = cl.rowId()
+      if (rowIds == null || rowIds.isEmpty) {
+        throw QueryCompilationErrors.changelogMissingRowIdError(cl.name)
+      }
+    }
+    val needsRowVersion = cl.containsCarryoverRows() ||
+      cl.representsUpdateAsDeleteAndInsert()
+    if (needsRowVersion) {
+      cl.rowVersion()
+    }
+  }
 }

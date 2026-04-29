@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, Query
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
-import org.apache.spark.sql.execution.command.CommandCheck
+import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
@@ -189,7 +189,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache, Some(conf)) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
 
@@ -259,6 +259,7 @@ abstract class BaseSessionStateBuilder(
         HiveOnlyCheck +:
         TableCapabilityCheck +:
         CommandCheck +:
+        CheckViewReferences +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
   }

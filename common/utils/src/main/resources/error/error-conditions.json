@@ -3310,6 +3310,29 @@
     },
     "sqlState" : "42K03"
   },
+  "INVALID_CHANGELOG_SCHEMA" : {
+    "message" : [
+      "The Change Data Capture (CDC) schema returned by connector <changelogName> is invalid."
+    ],
+    "subClass" : {
+      "INVALID_COLUMN_TYPE" : {
+        "message" : [
+          "Column `<columnName>` has type <actualType>, expected <expectedType>."
+        ]
+      },
+      "MISSING_COLUMN" : {
+        "message" : [
+          "Required column `<columnName>` is missing."
+        ]
+      },
+      "MISSING_ROW_ID" : {
+        "message" : [
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."

@@ -273,6 +273,7 @@ case class AppendDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write,
+    tableName: String,
     rowLevelCommand: Option[RowLevelOperation.Command] = None) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
     copy(query = newChild)
@@ -309,7 +310,8 @@ case class AppendDataExec(
 case class OverwriteByExpressionExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    tableName: String) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): OverwriteByExpressionExec =
     copy(query = newChild)
 }
@@ -326,7 +328,8 @@ case class OverwriteByExpressionExec(
 case class OverwritePartitionsDynamicExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec {
+    write: Write,
+    tableName: String) extends V2ExistingTableWriteExec {
   override protected def withNewChildInternal(newChild: SparkPlan): OverwritePartitionsDynamicExec =
     copy(query = newChild)
 }
@@ -339,7 +342,8 @@ case class ReplaceDataExec(
     refreshCache: () => Unit,
     projections: ReplaceDataProjections,
     write: Write,
-    rowLevelCommand: RowLevelOperation.Command) extends RowLevelWriteExec {
+    rowLevelCommand: RowLevelOperation.Command,
+    tableName: String) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
     projections.metadataProjection match {
@@ -383,7 +387,8 @@ case class WriteDeltaExec(
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
     write: DeltaWrite,
-    rowLevelCommand: RowLevelOperation.Command) extends RowLevelWriteExec {
+    rowLevelCommand: RowLevelOperation.Command,
+    tableName: String) extends RowLevelWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
@@ -423,8 +428,11 @@ case class WriteToDataSourceV2Exec(
 trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
+  def tableName: String
 
   override def stringArgs: Iterator[Any] = Iterator(query, write)
+
+  override def nodeName: String = s"${super.nodeName} $tableName"
 
   override val customMetrics: Map[String, SQLMetric] =
     write.supportedCustomMetrics().map { customMetric =>

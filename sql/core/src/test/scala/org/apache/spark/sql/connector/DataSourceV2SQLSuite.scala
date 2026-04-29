@@ -2966,13 +2966,13 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  test("View commands are not supported in v2 catalogs that don't implement ViewCatalog") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = analysisException(sqlStatement)
       checkError(
         e,
-        condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+        condition = "MISSING_CATALOG_ABILITY.VIEWS",
+        parameters = Map("plugin" -> "testcat"))
     }
 
     validateViewCommand("DROP VIEW testcat.v")
@@ -4299,6 +4299,28 @@ class DataSourceV2SQLSuiteV1Filter
         sql(s"INSERT INTO v VALUES (1)")
         checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1)))
       }
+    }
+  }
+
+  test("SPARK-56587: Show table names for V2 write nodes in UI") {
+    val t1 = s"testcat.ns1.ns2.table_name"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df1 = sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+      val executed1 = df1.queryExecution.executedPlan
+      assert(executed1.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+
+      val df2 = sql(s"INSERT OVERWRITE $t1 VALUES (2, 'b')")
+      val executed2 = df2.queryExecution.executedPlan
+      assert(executed2.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
     }
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.api.python.PythonEvalType
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.DirectShufflePartitionID
@@ -27,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, _}
 import org.apache.spark.sql.catalyst.statsEstimation.StatsTestPlan
 import org.apache.spark.sql.connector.catalog.functions._
-import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
+import org.apache.spark.sql.execution.{BinaryExecNode, DummySparkPlan, LeafExecNode, SafeForKWayMerge, SortExec, UnaryExecNode}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, GroupPartitionsExec}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
@@ -1037,10 +1038,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: KeyedPartitioning, _, _),
-                _, _, _, _), _),
+                _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _), _),
+                _, _, _, _, _), _),
             _) =>
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
           assert(right.expressions === Seq(bucket(4, exprC), bucket(8, exprB)))
@@ -1061,10 +1062,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _), _),
+                _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: KeyedPartitioning, _, _),
-                _, _, _, _), _),
+                _, _, _, _, _), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1096,10 +1097,10 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         case SortMergeJoinExec(_, _, _, _,
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, left: PartitioningCollection, _, _),
-                _, _, _, _), _),
+                _, _, _, _, _), _),
             SortExec(_, _,
               GroupPartitionsExec(DummySparkPlan(_, _, right: PartitioningCollection, _, _),
-                _, _, _, _), _),
+                _, _, _, _, _), _),
             _) =>
           assert(left.partitionings.length == 2)
           assert(left.partitionings.head.isInstanceOf[KeyedPartitioning])
@@ -1397,4 +1398,159 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       requiredChildDistribution = Seq(UnspecifiedDistribution),
       requiredChildOrdering = Seq(Seq.empty)
     )
+
+  test("SPARK-56549: tryEnableSortedMerge traversal continues through plain unary nodes") {
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val exprKey = AttributeReference("k", IntegerType)()
+      val partitionKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(1))
+      val ordering = Seq(SortOrder(exprKey, Ascending))
+      val leaf = DummyLeafSafeForKWayMerge(
+        outputPartitioning = KeyedPartitioning(Seq(exprKey), partitionKeys),
+        outputOrdering = ordering)
+      val gpe = GroupPartitionsExec(leaf)
+
+      // Baseline: GPE at root -- at least one alternative has sorted merge enabled.
+      assert(EnsureRequirements.tryEnableSortedMerge(gpe).exists(anyGpeEnabled))
+      // Plain unary wrapper (e.g. FilterExec): traversal continues and sorted merge is enabled.
+      assert(EnsureRequirements.tryEnableSortedMerge(DummyPassthroughUnaryExec(gpe))
+        .exists(anyGpeEnabled))
+      // Two levels of plain unary wrappers: still enabled.
+      assert(EnsureRequirements.tryEnableSortedMerge(
+        DummyPassthroughUnaryExec(DummyPassthroughUnaryExec(gpe)))
+        .exists(anyGpeEnabled))
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge traversal continues through binary nodes that " +
+    "propagate ordering from one child (e.g. ShuffledHashJoinExec stream side)") {
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val exprKey = AttributeReference("k", IntegerType)()
+      val partitionKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(1))
+      val ordering = Seq(SortOrder(exprKey, Ascending))
+      val leaf = DummyLeafSafeForKWayMerge(
+        outputPartitioning = KeyedPartitioning(Seq(exprKey), partitionKeys),
+        outputOrdering = ordering)
+      val gpe = GroupPartitionsExec(leaf)
+      val otherChild = DummyLeafSafeForKWayMerge()
+
+      // Binary node whose ordering comes from left child (GPE side): sorted merge enabled.
+      assert(EnsureRequirements.tryEnableSortedMerge(DummyOrderFromLeftBinaryExec(gpe, otherChild))
+        .exists(anyGpeEnabled))
+      // Binary node with GPE only on the non-ordering (right) side: the binary node's
+      // outputPartitioning = left.outputPartitioning carries no KeyedPartitioning, so the pruning
+      // condition stops traversal at the root; no GPE is enabled.
+      assert(!EnsureRequirements.tryEnableSortedMerge(DummyOrderFromLeftBinaryExec(otherChild, gpe))
+        .exists(anyGpeEnabled))
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge traversal through binary nodes with " +
+    "PartitioningCollection (KP from both children, e.g. SHJ InnerLike)") {
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val exprKey = AttributeReference("k", IntegerType)()
+      val partitionKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(1))
+      val ordering = Seq(SortOrder(exprKey, Ascending))
+      val leaf = DummyLeafSafeForKWayMerge(
+        outputPartitioning = KeyedPartitioning(Seq(exprKey), partitionKeys),
+        outputOrdering = ordering)
+      val gpe = GroupPartitionsExec(leaf)
+      val otherChild = DummyLeafSafeForKWayMerge(
+        outputPartitioning = UnknownPartitioning(gpe.outputPartitioning.numPartitions))
+
+      // GPE on ordering (left) side: sorted merge is enabled and the binary's outputOrdering
+      // becomes non-empty.
+      assert(EnsureRequirements.tryEnableSortedMerge(DummyBothKPBinaryExec(gpe, otherChild))
+        .exists(p => anyGpeEnabled(p) && p.outputOrdering.nonEmpty))
+
+      // GPE on non-ordering (right) side: the PartitioningCollection on the binary node includes
+      // KP from the right child, so traversal enters the binary and sorted merge IS enabled on the
+      // GPE. However, the binary's outputOrdering remains empty: it comes from the left (non-GPE)
+      // child. The call site's find correctly rejects all such alternatives.
+      assert(EnsureRequirements.tryEnableSortedMerge(DummyBothKPBinaryExec(otherChild, gpe))
+        .exists(anyGpeEnabled))
+      assert(!EnsureRequirements.tryEnableSortedMerge(DummyBothKPBinaryExec(otherChild, gpe))
+        .exists(_.outputOrdering.nonEmpty))
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge traversal stops at SortExec and Exchange") {
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val exprKey = AttributeReference("k", IntegerType)()
+      val partitionKeys = Seq(InternalRow(1), InternalRow(2), InternalRow(1))
+      val ordering = Seq(SortOrder(exprKey, Ascending))
+      val leaf = DummyLeafSafeForKWayMerge(
+        outputPartitioning = KeyedPartitioning(Seq(exprKey), partitionKeys),
+        outputOrdering = ordering)
+      val gpe = GroupPartitionsExec(leaf)
+
+      // SortExec: the pruning condition (!isInstanceOf[SortExec]) stops traversal, so the GPE
+      // inside is not enabled in any alternative.
+      assert(!EnsureRequirements.tryEnableSortedMerge(
+        SortExec(ordering, global = false, child = gpe)).exists(anyGpeEnabled))
+      // Exchange produces non-KeyedPartitioning output so the hasKeyedPartitioning half of the
+      // pruning condition stops traversal; GPE inside is not enabled.
+      assert(!EnsureRequirements.tryEnableSortedMerge(DummyExchangeExec(gpe)).exists(anyGpeEnabled))
+      // Plain unary wrapper above a SortExec: traversal reaches the wrapper but stops at the
+      // SortExec; GPE inside is still not enabled.
+      assert(!EnsureRequirements.tryEnableSortedMerge(
+        DummyPassthroughUnaryExec(SortExec(ordering, global = false, child = gpe)))
+        .exists(anyGpeEnabled))
+    }
+  }
+
+  private def anyGpeEnabled(plan: SparkPlan): Boolean =
+    plan.collectFirst { case gpe: GroupPartitionsExec if gpe.enableSortedMerge => true }.isDefined
+}
+
+private case class DummyLeafSafeForKWayMerge(
+    override val outputOrdering: Seq[SortOrder] = Nil,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0)
+  ) extends LeafExecNode with SafeForKWayMerge {
+  override protected def doExecute(): RDD[InternalRow] = null
+  override def output: Seq[Attribute] = Seq.empty
+}
+
+private case class DummyPassthroughUnaryExec(child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override protected def doExecute(): RDD[InternalRow] = null
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
+// Models a binary join whose output ordering comes from the left child (e.g. SHJ stream=left).
+private case class DummyOrderFromLeftBinaryExec(left: SparkPlan, right: SparkPlan)
+    extends BinaryExecNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+  override def outputOrdering: Seq[SortOrder] = left.outputOrdering
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override protected def doExecute(): RDD[InternalRow] = null
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+    copy(left = newLeft, right = newRight)
+}
+
+// Models a binary join whose outputPartitioning is a PartitioningCollection containing both
+// children's partitionings (e.g. SHJ InnerLike), while outputOrdering still comes from the left
+// child only.
+private case class DummyBothKPBinaryExec(left: SparkPlan, right: SparkPlan)
+    extends BinaryExecNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+  override def outputOrdering: Seq[SortOrder] = left.outputOrdering
+  override def outputPartitioning: Partitioning =
+    PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+  override protected def doExecute(): RDD[InternalRow] = null
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =
+    copy(left = newLeft, right = newRight)
+}
+
+// Exchange produces non-KeyedPartitioning output (UnknownPartitioning by default);
+// do not override outputPartitioning or outputOrdering here.
+private case class DummyExchangeExec(child: SparkPlan) extends Exchange {
+  override def output: Seq[Attribute] = child.output
+  override protected def doExecute(): RDD[InternalRow] = null
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }
