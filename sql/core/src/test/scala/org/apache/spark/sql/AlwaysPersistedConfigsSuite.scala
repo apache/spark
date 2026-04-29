@@ -228,6 +228,29 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
     }
   }
 
+  test("Session-only path is omitted from persisted view metadata and remains queryable") {
+    withTable("default.path_empty_src") {
+      withView(testViewName) {
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          sql("CREATE TABLE default.path_empty_src (id INT) USING parquet")
+          sql("INSERT INTO default.path_empty_src VALUES (1)")
+          try {
+            // Persisted objects strip system.session; a session-only path should not be persisted.
+            sql("SET PATH = system.session")
+            sql(
+              s"CREATE VIEW $testViewName AS SELECT id FROM spark_catalog.default.path_empty_src")
+            val metadata =
+              spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
+            assert(metadata.viewStoredResolutionPath.isEmpty)
+            checkAnswer(sql(s"SELECT id FROM default.$testViewName"), Row(1))
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+          }
+        }
+      }
+    }
+  }
+
   private def testView(confName: String, expectedValue: String): Unit = {
     sql(s"CREATE VIEW $testViewName AS SELECT CAST('string' AS BIGINT) AS alias")
 

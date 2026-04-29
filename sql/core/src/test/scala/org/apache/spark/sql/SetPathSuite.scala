@@ -361,6 +361,50 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("PATH enabled: case-sensitive mode does not treat differently cased entries as duplicates") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.CASE_SENSITIVE.key -> "true") {
+      sql("SET PATH = spark_catalog.DEFAULT, spark_catalog.default")
+      val stored = spark.sessionState.catalogManager.sessionPathEntries.get
+      val rendered = stored.map(_.resolve("ignored", Nil).mkString("."))
+      assert(rendered === Seq("spark_catalog.DEFAULT", "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: unqualified session variable lookup follows PATH") {
+    withPathEnabled {
+      sql("DECLARE VARIABLE system.session.path_var_gate = 7")
+      try {
+        sql("SET PATH = spark_catalog.default")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("DROP TEMPORARY VARIABLE path_var_gate")
+          },
+          condition = "UNRESOLVED_VARIABLE",
+          sqlState = "42883",
+          parameters = Map(
+            "variableName" -> "`path_var_gate`",
+            "searchPath" -> "`SYSTEM`.`SESSION`"))
+
+        sql("SET PATH = spark_catalog.default, system.session")
+        sql("DROP TEMPORARY VARIABLE path_var_gate")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.path_var_gate")
+      }
+    }
+  }
+
+  test("PATH enabled: current_path does not accept arguments") {
+    withPathEnabled {
+      val e = intercept[AnalysisException] {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("SELECT current_path(1)")
+      }
+      assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", e.getMessage)
+    }
+  }
+
   test("PATH enabled: DEFAULT_PATH respects sessionFunctionResolutionOrder = first") {
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
