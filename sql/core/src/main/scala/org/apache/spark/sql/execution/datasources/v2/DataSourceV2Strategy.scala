@@ -265,13 +265,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     // CREATE TABLE ... LIKE ... for a v2 catalog target.
     // Source is an already-resolved Table object; no extra catalog round-trip is needed.
-    // Views are wrapped in V1Table so the exec can extract schema and provider uniformly.
+    // Views are wrapped in V1Table so the exec can extract schema and provider uniformly --
+    // session-catalog (v1) views unwrap to their original `CatalogTable`; non-session v2
+    // views go through `V1Table.toCatalogTable` to synthesize an equivalent `CatalogTable`
+    // from the resolved `ViewInfo`.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
         locationStr, provider, serdeInfo, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
         case ResolvedPersistentView(_, _, info: V1ViewInfo) => V1Table(info.v1Table)
+        case rpv @ ResolvedPersistentView(viewCatalog, viewIdent, _) =>
+          V1Table(V1Table.toCatalogTable(viewCatalog, viewIdent, rpv.info))
         case ResolvedTempView(_, meta) => V1Table(meta)
       }
       val location = locationStr.map { loc =>
