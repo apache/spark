@@ -1313,6 +1313,25 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("SPARK-54157: allow nested struct field addition after DataFrame analysis") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice'))")
+
+      // create DataFrame and trigger analysis
+      val df = spark.table(t)
+
+      // add nested field to struct column
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
+      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25))")
+
+      // stale DataFrame reads use ALLOW_NEW_FIELDS mode, so adding nested
+      // fields is permitted. The stale DataFrame reads the original columns.
+      checkAnswer(df, Seq(Row(1, Row("Alice")), Row(2, Row("Bob"))))
+    }
+  }
+
   test("SPARK-54157: allow compatible schema changes in join with same table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -2362,7 +2381,9 @@ class DataSourceV2DataFrameSuite
 
       // a fresh DataFrame succeeds (all current column IDs are consistent)
       sql(s"INSERT INTO $t VALUES (2, 200, 50)")
-      checkAnswer(spark.table(t), Seq(Row(1, 100, null), Row(2, 200, 50)))
+      // After DROP + re-ADD, InMemoryTable loses the old salary data for
+      // existing rows, so row 1 reads null for both re-added and new columns.
+      checkAnswer(spark.table(t), Seq(Row(1, null, null), Row(2, 200, 50)))
     }
   }
 
@@ -2745,6 +2766,30 @@ class DataSourceV2DataFrameSuite
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
           "errors" -> "- `age` INT has been removed"))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects nested column removal") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, address STRUCT<street: STRING, city: STRING>) USING foo")
+
+      // create temp view using DataFrame API
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // drop nested column from underlying table
+      sql(s"ALTER TABLE $t DROP COLUMN address.city")
+
+      // accessing temp view should detect schema change for nested removals
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `address`.`city` STRING has been removed"))
     }
   }
 
