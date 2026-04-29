@@ -965,27 +965,21 @@ case class SchemaOfVariantAgg(
   since = "4.2.0",
   group = "variant_funcs"
 )
-case class IsValidVariant(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class IsValidVariant(child: Expression) extends UnaryExpression
+  with Predicate with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    BooleanType,
+    "isValidVariant",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
-
-  override def dataType: DataType = BooleanType
-
-  override def nullIntolerant: Boolean = true
 
   override def prettyName: String = "is_valid_variant"
 
-  protected override def nullSafeEval(value: Any): Any = {
-    val variantVal = value.asInstanceOf[VariantVal]
-    VariantUtil.isValidVariant(variantVal.getValue, variantVal.getMetadata)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val utilClass = classOf[VariantUtil].getName
-    defineCodeGen(ctx, ev, c => {
-      s"$utilClass.isValidVariant(($c).getValue(), ($c).getMetadata())"
-    })
-  }
-
-  override protected def withNewChildInternal(newChild: Expression): Expression =
+  override protected def withNewChildInternal(newChild: Expression): IsValidVariant =
     copy(child = newChild)
 }

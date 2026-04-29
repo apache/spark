@@ -590,10 +590,18 @@ public class VariantUtil {
     return handler.apply(size, offsetSize, offsetStart, dataStart);
   }
 
-  // Validate whether a variant is well-formed. Returns true if the variant is valid, false if it
-  // is malformed.
-  // Specifically, it returns true if and only if `toJson` doesn't throw an exception. The
-  // implementation also has the same structure as `toJson` (see `Variant.toJsonImpl`).
+  // Validate whether a variant is well-formed. Returns true if the variant binary is structurally
+  // well-formed (all bounds and type-info checks pass), false if it is malformed.
+  //
+  // This is close to, but not strictly equivalent to, "`toJson` does not throw": this function
+  // does not enforce the `SIZE_LIMIT` check that the `Variant` constructor applies (which throws
+  // `VARIANT_CONSTRUCTOR_SIZE_LIMIT`). The implementation otherwise has the same structure as
+  // `toJson` (see `Variant.toJsonImpl`).
+  //
+  // Implementation note: this `try { ... } catch (SparkRuntimeException e)` is sound only because
+  // every helper invoked by `validateImpl` throws `MALFORMED_VARIANT` /
+  // `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` rather than a raw `ArrayIndexOutOfBoundsException` on
+  // malformed input. Preserve that invariant when adding new cases.
   public static boolean isValidVariant(byte[] value, byte[] metadata) {
     if (value == null || metadata == null) return false;
     // Validate the metadata version, similar to the check in the `Variant` constructor.
