@@ -96,7 +96,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
         options,
         relationOpt.map(r => r.options.asCaseSensitiveMap.asScala.toMap).getOrElse(Map.empty))
       val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId = queryId)
-      val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
+      val write = buildWriteForMicroBatch(tableDataSourceV2Strategy, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
       val funCatalogOpt = relationOpt.flatMap(_.funCatalog)

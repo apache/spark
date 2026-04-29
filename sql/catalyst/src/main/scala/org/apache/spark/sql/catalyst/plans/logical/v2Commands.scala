@@ -157,7 +157,7 @@ case class AppendData(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
@@ -205,7 +205,7 @@ case class OverwriteByExpression(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
@@ -265,7 +265,7 @@ case class OverwritePartitionsDynamic(
     writeOptions: Map[String, String],
     isByName: Boolean,
     withSchemaEvolution: Boolean,
-    write: Option[Write] = None) extends V2WriteCommand {
+    write: Option[Write] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
@@ -956,7 +956,8 @@ object DescribeColumn {
  */
 case class DeleteFromTable(
     table: LogicalPlan,
-    condition: Expression) extends UnaryCommand with SupportsSubquery {
+    condition: Expression)
+  extends UnaryCommand with TransactionalWrite with SupportsSubquery {
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
@@ -978,7 +979,8 @@ case class DeleteFromTableWithFilters(
 case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
-    condition: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+    condition: Option[Expression])
+  extends UnaryCommand with TransactionalWrite with SupportsSubquery {
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 
@@ -1011,8 +1013,13 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with WriteWithSchemaEvolution with SupportsSubquery {
+  extends BinaryCommand
+  with WriteWithSchemaEvolution
+  with TransactionalWrite
+  with SupportsSubquery {
 
+  // Implements SupportsSchemaEvolution.table.
+  // Implements TransactionalWrite.table, identifying the MERGE target as the table being written.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1270,6 +1277,10 @@ case class Assignment(key: Expression, value: Expression) extends Expression
   override def sql: String = s"${key.sql} = ${value.sql}"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Assignment = copy(key = newLeft, value = newRight)
+}
+
+trait TransactionalWrite extends LogicalPlan {
+  def table: LogicalPlan
 }
 
 /**

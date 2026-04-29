@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -39,7 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 //       need to track current database at all.
 private[sql]
 class CatalogManager(
-    defaultSessionCatalog: CatalogPlugin,
+    val defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
@@ -56,6 +57,11 @@ class CatalogManager(
       catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
     }
   }
+
+  def transaction: Option[Transaction] = None
+
+  def withTransaction(transaction: Transaction): CatalogManager =
+    new TransactionAwareCatalogManager(this, transaction)
 
   def isCatalogRegistered(name: String): Boolean = {
     try {

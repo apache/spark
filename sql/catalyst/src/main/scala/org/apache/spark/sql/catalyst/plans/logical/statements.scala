@@ -188,7 +188,7 @@ case class InsertIntoStatement(
     byName: Boolean = false,
     replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
     withSchemaEvolution: Boolean = false)
-  extends UnaryParsedStatement {
+  extends UnaryParsedStatement with TransactionalWrite {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")

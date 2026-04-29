@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -215,6 +216,16 @@ class InMemoryTable(
 
 object InMemoryTable {
 
+  // V1 filter values (from PredicateUtils.toV1) are Scala types (e.g. String), but partition
+  // keys stored in dataMap are Catalyst internal types (e.g. UTF8String). Normalize both sides
+  // before comparing so that string partitions work correctly.
+  private def valuesEqual(filterValue: Any, partitionValue: Any): Boolean =
+    (filterValue, partitionValue) match {
+      case (s: String, u: UTF8String) => u.toString == s
+      case (u: UTF8String, s: String) => u.toString == s
+      case _ => filterValue == partitionValue
+    }
+
   def filtersToKeys(
       keys: Iterable[Seq[Any]],
       partitionNames: Seq[String],
@@ -222,7 +233,7 @@ object InMemoryTable {
     keys.filter { partValues =>
       filters.flatMap(splitAnd).forall {
         case EqualTo(attr, value) =>
-          value == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+          valuesEqual(value, InMemoryBaseTable.extractValue(attr, partitionNames, partValues))
         case EqualNullSafe(attr, value) =>
           val attrVal = InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
           if (attrVal == null && value == null) {
@@ -230,7 +241,7 @@ object InMemoryTable {
           } else if (attrVal == null || value == null) {
             false
           } else {
-            value == attrVal
+            valuesEqual(value, attrVal)
           }
         case IsNull(attr) =>
           null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)

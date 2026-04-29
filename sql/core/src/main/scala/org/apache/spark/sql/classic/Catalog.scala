@@ -933,6 +933,23 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
     // this will clear the relation cache and caches of all its dependents.
     CommandUtils.recacheTableOrView(sparkSession, relation)
+    /*
+    EliminateSubqueryAliases(relation) match {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
+      case _ =>
+        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
+    */
+    /*
+    relation match {
+      case r: DataSourceV2Relation if r.catalog.isDefined && r.identifier.isDefined =>
+        val nameParts = r.identifier.get.toQualifiedNameParts(r.catalog.get)
+        sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
+      case _ =>
+        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
+    }
+    */
   }
 
   private def resolveRelation(tableName: String): LogicalPlan = {

@@ -28,16 +28,16 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, TableInfo, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, Table, TableInfo, Txn, TxnTable, Update, Write}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
@@ -82,6 +82,7 @@ abstract class RowLevelOperationSuiteBase
   protected val namespace: Array[String] = Array("ns1")
   protected val ident: Identifier = Identifier.of(namespace, "test_table")
   protected val tableNameAsString: String = "cat." + ident.toString
+  protected val sourceNameAsString: String = "cat.ns1.source_table"
 
   protected def extraTableProps: java.util.Map[String, String] = {
     Collections.emptyMap[String, String]
@@ -133,24 +134,36 @@ abstract class RowLevelOperationSuiteBase
     }
   }
 
+  protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
+    val qe = execute(func)
+    val tables = collectWithSubqueries(qe.executedPlan) {
+      case BatchScanExec(_, _, _, _, table: TxnTable, _) =>
+        table
+      case BatchScanExec(_, _, _, _, RowLevelOperationTable(table: TxnTable, _), _) =>
+        table
+    }
+    (catalog.lastTransaction, indexByName(tables))
+  }
+
+  private def indexByName[T <: Table](tables: Seq[T]): Map[String, T] = {
+    tables.groupBy(_.name).map {
+      case (name, sameNameTables) =>
+        val Seq(table) = sameNameTables.distinct
+        name -> table
+    }
+  }
+
   // executes an operation and keeps the executed plan
   protected def executeAndKeepPlan(func: => Unit): SparkPlan = {
-    var executedPlan: SparkPlan = null
+    val qe = execute(func)
+    stripAQEPlan(qe.executedPlan)
+  }
 
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        executedPlan = qe.executedPlan
-      }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
-      }
+  private def execute(func: => Unit): QueryExecution = {
+    withQueryExecutionsCaptured(spark)(func) match {
+      case Seq(qe) => qe
+      case other => fail(s"expected only one query execution, but got ${other.size}")
     }
-    spark.listenerManager.register(listener)
-
-    func
-
-    sparkContext.listenerBus.waitUntilEmpty()
-
-    stripAQEPlan(executedPlan)
   }
 
   // executes an operation and extracts conditions from ReplaceData or WriteDelta

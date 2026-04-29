@@ -59,6 +59,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     tables.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
   }
 
+  def loadTableAs[T <: Table](ident: Identifier): T = {
+    loadTable(ident).asInstanceOf[T]
+  }
+
   // load table for scans
   override def loadTable(ident: Identifier): Table = {
     Option(tables.get(ident)) match {

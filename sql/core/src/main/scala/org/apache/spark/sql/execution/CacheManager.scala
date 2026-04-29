@@ -260,6 +260,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
 
+      // case r: TableReference =>
+      //  isSameName(name, r.identifier.toQualifiedNameParts(r.catalog), resolver)
+
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
 

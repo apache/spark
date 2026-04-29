@@ -26,9 +26,11 @@ import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
+import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
@@ -273,7 +275,9 @@ case class AppendDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write,
-    tableName: String) extends V2ExistingTableWriteExec {
+    tableName: String,
+    transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
+  override def withTransaction(txn: Option[Transaction]): AppendDataExec = copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
     copy(query = newChild)
 }
@@ -292,7 +296,10 @@ case class OverwriteByExpressionExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write,
-    tableName: String) extends V2ExistingTableWriteExec {
+    tableName: String,
+    transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
+  override def withTransaction(txn: Option[Transaction]): OverwriteByExpressionExec =
+    copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): OverwriteByExpressionExec =
     copy(query = newChild)
 }
@@ -310,7 +317,10 @@ case class OverwritePartitionsDynamicExec(
     query: SparkPlan,
     refreshCache: () => Unit,
     write: Write,
-    tableName: String) extends V2ExistingTableWriteExec {
+    tableName: String,
+    transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
+  override def withTransaction(txn: Option[Transaction]): OverwritePartitionsDynamicExec =
+    copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): OverwritePartitionsDynamicExec =
     copy(query = newChild)
 }
@@ -324,7 +334,8 @@ case class ReplaceDataExec(
     projections: ReplaceDataProjections,
     write: Write,
     rowLevelCommand: RowLevelOperation.Command,
-    tableName: String) extends RowLevelWriteExec {
+    tableName: String,
+    transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {
     projections.metadataProjection match {
@@ -335,6 +346,7 @@ case class ReplaceDataExec(
     }
   }
 
+  override def withTransaction(txn: Option[Transaction]): ReplaceDataExec = copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): ReplaceDataExec = {
     copy(query = newChild)
   }
@@ -369,7 +381,8 @@ case class WriteDeltaExec(
     projections: WriteDeltaProjections,
     write: DeltaWrite,
     rowLevelCommand: RowLevelOperation.Command,
-    tableName: String) extends RowLevelWriteExec {
+    tableName: String,
+    transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
@@ -379,6 +392,7 @@ case class WriteDeltaExec(
     }
   }
 
+  override def withTransaction(txn: Option[Transaction]): WriteDeltaExec = copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): WriteDeltaExec = {
     copy(query = newChild)
   }
@@ -406,7 +420,16 @@ case class WriteToDataSourceV2Exec(
     copy(query = newChild)
 }
 
-trait V2ExistingTableWriteExec extends V2TableWriteExec {
+/**
+ * Trait for physical plan nodes that write to an existing table as part of a transaction.
+ * The [[transaction]] is injected post-planning by [[QueryExecution]].
+ */
+trait TransactionalExec extends SparkPlan {
+  def transaction: Option[Transaction]
+  def withTransaction(txn: Option[Transaction]): SparkPlan
+}
+
+trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
   def refreshCache: () => Unit
   def write: Write
   def tableName: String
@@ -426,6 +449,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
     } finally {
       postDriverMetrics()
     }
+    transaction.foreach(TransactionUtils.commit)
     refreshCache()
     writtenRows
   }

@@ -351,6 +351,31 @@ class Analyzer(
     }
   }
 
+  /**
+   * Returns a copy of this analyzer that uses the given [[CatalogManager]] for all catalog
+   * lookups. All other configuration (extended rules, checks, etc.) is preserved. Used by
+   * [[QueryExecution]] to create a per-query analyzer for transactional queries so that
+   * transaction-aware catalog resolution is an instance-level property rather than thread-local
+   * state.
+   */
+  def withCatalogManager(newCatalogManager: CatalogManager): Analyzer = {
+    val self = this
+    new Analyzer(newCatalogManager, sharedRelationCache) {
+      override val hintResolutionRules: Seq[Rule[LogicalPlan]] = self.hintResolutionRules
+      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = self.extendedResolutionRules
+      override val postHocResolutionRules: Seq[Rule[LogicalPlan]] = self.postHocResolutionRules
+      override val extendedCheckRules: Seq[LogicalPlan => Unit] = self.extendedCheckRules
+      override val singlePassResolverExtensions: Seq[ResolverExtension] =
+        self.singlePassResolverExtensions
+      override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
+        self.singlePassMetadataResolverExtensions
+      override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
+        self.singlePassPostHocResolutionRules
+      override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] =
+        self.singlePassExtendedResolutionChecks
+    }
+  }
+
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.withNewAnalysisContext {
       executeSameContext(plan)
@@ -458,7 +483,9 @@ class Analyzer(
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs)
+      KeepLegacyOutputs),
+    Batch("Unresolve Relations", Once,
+      new UnresolveTransactionRelations(catalogManager))
   )
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(

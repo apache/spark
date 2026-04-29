@@ -478,6 +478,8 @@ class RelationResolution(
     }
   }
 
+  // TODO: how to validate the output is compatible?
+  // TODO: what shall we do if the output mismatches (schema changes?)
   def resolveReference(ref: V2TableReference): LogicalPlan = {
     val relation = getOrLoadRelation(ref)
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
@@ -485,6 +487,11 @@ class RelationResolution(
   }
 
   private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
+    // Skip cache when a transaction is active.
+    if (catalogManager.transaction.isDefined) {
+      return loadRelation(ref)
+    }
+
     val key = toCacheKey(ref.catalog, ref.identifier)
     relationCache.get(key) match {
       case Some(cached) =>
@@ -497,9 +504,13 @@ class RelationResolution(
   }
 
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
-    val table = ref.catalog.loadTable(ref.identifier)
+    val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+    val table = resolvedCatalog.loadTable(ref.identifier)
+    // val table = ref.catalog.loadTable(ref.identifier)
     V2TableReferenceUtils.validateLoadedTable(table, ref)
-    ref.toRelation(table)
+    // ref.toRelation(table)
+    DataSourceV2Relation(
+      table, ref.output, Some(resolvedCatalog), Some(ref.identifier), ref.options)
   }
 
   private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
