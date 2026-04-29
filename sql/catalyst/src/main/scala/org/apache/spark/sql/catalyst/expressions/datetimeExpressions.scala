@@ -3904,8 +3904,9 @@ case class TimestampDiff(
  * Aligns a timestamp to the start of a fixed-size interval bucket.
  *
  * Returns the start of the half-open bucket [start, start + bucketSize) containing ts.
- * For TIMESTAMP_NTZ, bucketing is performed in UTC. For TIMESTAMP, buckets align to
- * the session time zone.
+ * For TIMESTAMP_NTZ, bucketing is performed in UTC. For TIMESTAMP, year-month
+ * interval buckets and calendar-day components of day-time interval buckets align
+ * to the session time zone.
  */
 case class TimeBucket(
     bucketSize: Expression,
@@ -3922,6 +3923,8 @@ case class TimeBucket(
 
   override def withTimeZone(timeZoneId: String): TimeBucket =
     copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(ts.dataType)
 
   def this(bucketSize: Expression, ts: Expression, originTs: Expression) =
     this(bucketSize, ts, originTs, None)
@@ -3991,11 +3994,11 @@ case class TimeBucket(
       case _: DayTimeIntervalType =>
         DateTimeUtils.timeBucketDTInterval(
           bucketSizeVal.asInstanceOf[Long], tsVal.asInstanceOf[Long],
-          originVal.asInstanceOf[Long], zoneIdForType(ts.dataType))
+          originVal.asInstanceOf[Long], zoneIdInEval)
       case _: YearMonthIntervalType =>
         DateTimeUtils.timeBucketYMInterval(
           bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[Long],
-          originVal.asInstanceOf[Long], zoneIdForType(ts.dataType))
+          originVal.asInstanceOf[Long], zoneIdInEval)
       case other => throw SparkException.internalError(
         s"Unexpected bucketSize type: $other")
     }
@@ -4003,8 +4006,7 @@ case class TimeBucket(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj(
-      "zoneId", zoneIdForType(ts.dataType), classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     first.dataType match {
       case _: DayTimeIntervalType =>
         defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>

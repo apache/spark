@@ -8489,7 +8489,8 @@ object functions {
   /**
    * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
    * aligned to the default origin (1970-01-01 00:00:00). For `TIMESTAMP_NTZ`, bucketing is
-   * performed in UTC. For `TIMESTAMP`, buckets align to the session time zone.
+   * performed in UTC. For `TIMESTAMP`, year-month interval buckets and calendar-day components
+   * of day-time interval buckets align to the session time zone.
    *
    * @param bucketSize
    *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
@@ -8504,7 +8505,8 @@ object functions {
   /**
    * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
    * aligned to `origin`. For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`,
-   * buckets align to the session time zone.
+   * year-month interval buckets and calendar-day components of day-time interval buckets align
+   * to the session time zone.
    *
    * @param bucketSize
    *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
