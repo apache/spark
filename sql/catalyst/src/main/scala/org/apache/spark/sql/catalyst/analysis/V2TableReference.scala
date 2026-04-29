@@ -93,7 +93,7 @@ private[sql] object V2TableReference {
   }
 
   // V2TableReference nodes in the transaction context are produced by
-  // UnresolveTransactionRelations which unresolves already resolved relations.
+  // UnresolveRelationsInTransaction which unresolves already resolved relations.
   def createForTransaction(relation: DataSourceV2Relation): V2TableReference = {
     create(relation, TransactionContext)
   }

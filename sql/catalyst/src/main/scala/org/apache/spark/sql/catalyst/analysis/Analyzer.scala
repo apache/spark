@@ -484,7 +484,7 @@ class Analyzer(
     Batch("Keep Legacy Outputs", Once,
       KeepLegacyOutputs),
     Batch("Unresolve Relations", Once,
-      new UnresolveTransactionRelations(catalogManager))
+      new UnresolveRelationsInTransaction(catalogManager))
   )
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
@@ -1041,7 +1041,7 @@ class Analyzer(
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
       case view: View if view.isTempViewStoringAnalyzedPlan =>
-        view.copy(child = resolveTableReferences(view.child))
+        view.copy(child = resolveTableReferencesInTempView(view.child))
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
       case _ => plan
@@ -1050,7 +1050,7 @@ class Analyzer(
     // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
-        case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferences(v.child)
+        case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferencesInTempView(v.child)
         case other => other
       }
     }
@@ -1077,13 +1077,16 @@ class Analyzer(
       }
     }
 
-    // Resolve V2TableReference nodes created for:
-    // 1 Temp views (via createForTempView).
-    // 2. Transaction references (via createForTransaction). These are resolved by a
-    // separate analysis batch in the transaction-aware analyzer instance.
-    private def resolveTableReferences(plan: LogicalPlan): LogicalPlan = {
+    // Resolve V2TableReference nodes inside temp view plans. These are created by
+    // V2TableReference.createForTempView. We only need to resolve it when returning
+    // the plan of temp views (in resolveViews and unwrapRelationPlan).
+    private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference => relationResolution.resolveReference(r)
+        case r: V2TableReference =>
+          assert(r.context.isInstanceOf[V2TableReference.TemporaryViewContext],
+            s"""Expected TemporaryViewContext in temp view but got
+               |${r.context.getClass.getSimpleName}""".stripMargin)
+          relationResolution.resolveReference(r)
       }
     }
 

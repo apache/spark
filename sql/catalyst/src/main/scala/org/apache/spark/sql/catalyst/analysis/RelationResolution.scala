@@ -501,13 +501,19 @@ class RelationResolution(
     }
   }
 
+  /**
+   * Loads the table for a [[V2TableReference]] and returns a resolved [[DataSourceV2Relation]].
+   *
+   * The catalog is re-resolved by name through the [[CatalogManager]] rather than reusing
+   * [[V2TableReference#catalog]] directly. When a transaction is active, the
+   * [[TransactionAwareCatalogManager]] redirects catalog lookups to the transaction's catalog
+   * instance, so the [[TableCatalog#loadTable]] call is intercepted by the transaction catalog,
+   * which uses it to track which tables are read as part of the transaction.
+   */
   private def loadRelation(ref: V2TableReference): LogicalPlan = {
-    // Resolve catalog. When a transaction is active we return the transaction
-    // aware catalog instance.
     val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
     val table = resolvedCatalog.loadTable(ref.identifier)
     V2TableReferenceUtils.validateLoadedTable(table, ref)
-    // Create relation with resolved Catalog.
     DataSourceV2Relation(
       table = table,
       output = ref.output,

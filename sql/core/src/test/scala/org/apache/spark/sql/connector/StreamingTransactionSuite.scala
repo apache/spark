@@ -147,7 +147,7 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
       val inputData = MemoryStream[Int]
 
       // spark.read produces a DataSourceV2Relation (batch), not a streaming source.
-      // UnresolveTransactionRelations converts it to V2TableReference each micro-batch so
+      // UnresolveRelationsInTransaction converts it to V2TableReference each micro-batch so
       // the transaction-aware catalog can record the scan event.
       val staticData = spark.read.table(sourceNameAsString)
 
