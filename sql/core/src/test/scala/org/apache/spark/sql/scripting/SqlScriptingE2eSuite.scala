@@ -215,12 +215,12 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
         verifySqlScriptResult(sqlScript, Seq(Row(2, 200, "software")))
 
         // Each DML statement in a script runs in its own independent QE and transaction.
-        assert(catalog.seenTransactions.size === 2)
-        assert(catalog.seenTransactions.forall(t =>
+        assert(catalog.observedTransactions.size === 2)
+        assert(catalog.observedTransactions.forall(t =>
           t.currentState === Committed && t.isClosed))
 
         // The DELETE subquery scans the table with a dep='hr' predicate; verify it was tracked.
-        val deleteTxnTable = loadTxnTable(catalog.seenTransactions(1), "t")
+        val deleteTxnTable = loadTxnTable(catalog.observedTransactions(1), "t")
         assert(deleteTxnTable.scanEvents.flatten.exists {
           case sources.EqualTo("dep", "hr") => true
           case _ => false
@@ -254,11 +254,11 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
           queryContext = Array(ExpectedContext("nonexistent_column")))
 
         // INSERT committed; DELETE was aborted because analysis failed on the bad column.
-        assert(catalog.seenTransactions.size === 2)
-        assert(catalog.seenTransactions(0).currentState === Committed)
-        assert(catalog.seenTransactions(0).isClosed)
-        assert(catalog.seenTransactions(1).currentState === Aborted)
-        assert(catalog.seenTransactions(1).isClosed)
+        assert(catalog.observedTransactions.size === 2)
+        assert(catalog.observedTransactions(0).currentState === Committed)
+        assert(catalog.observedTransactions(0).isClosed)
+        assert(catalog.observedTransactions(1).currentState === Aborted)
+        assert(catalog.observedTransactions(1).isClosed)
         assert(catalog.lastTransaction.currentState === Aborted)
       }
     }
@@ -296,11 +296,11 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
             Row(4, 400, "finance")))
 
         // INSERT (x2), MERGE, and UPDATE each run in their own independent QE and transaction.
-        assert(catalog.seenTransactions.size === 4)
-        assert(catalog.seenTransactions.forall(t => t.currentState === Committed && t.isClosed))
+        assert(catalog.observedTransactions.size === 4)
+        assert(catalog.observedTransactions.forall(t => t.currentState === Committed && t.isClosed))
 
         def txnTable(txnIdx: Int): TxnTable =
-          loadTxnTable(catalog.seenTransactions(txnIdx), "t")
+          loadTxnTable(catalog.observedTransactions(txnIdx), "t")
 
         // Both inserts are pure writes - no scan.
         assert(txnTable(0).scanEvents.isEmpty)
@@ -342,8 +342,8 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
           Seq(Row(1, 100, "hr"), Row(2, 200, "hr"), Row(3, 300, "hr")))
 
         // Each loop iteration's INSERT runs in its own independent transaction.
-        assert(catalog.seenTransactions.size === 3)
-        assert(catalog.seenTransactions.forall(t => t.currentState === Committed && t.isClosed))
+        assert(catalog.observedTransactions.size === 3)
+        assert(catalog.observedTransactions.forall(t => t.currentState === Committed && t.isClosed))
       }
     }
   }
@@ -373,8 +373,8 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
           Seq(Row(-1, -1, "error"), Row(1, 100, "hr"), Row(2, 200, "software")))
 
         // INSERT(1), handler INSERT(-1), INSERT(2) - each in its own transaction.
-        assert(catalog.seenTransactions.size === 3)
-        assert(catalog.seenTransactions.forall(t => t.currentState === Committed && t.isClosed))
+        assert(catalog.observedTransactions.size === 3)
+        assert(catalog.observedTransactions.forall(t => t.currentState === Committed && t.isClosed))
       }
     }
   }

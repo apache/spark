@@ -82,7 +82,7 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
       assert(table.version() === "1")
 
       // Transaction must be scoped to the streaming session; main session catalog is untouched.
-      assert(catalog.seenTransactions.isEmpty)
+      assert(catalog.observedTransactions.isEmpty)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -112,17 +112,17 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
       query.stop()
 
       val sc = streamCatalog(query)
-      assert(sc.seenTransactions.size === 2)
-      assert(sc.seenTransactions.forall(_.currentState === Committed))
+      assert(sc.observedTransactions.size === 2)
+      assert(sc.observedTransactions.forall(_.currentState === Committed))
       // Pure streaming append: write target is not read in any micro-batch.
-      assert(sc.seenTransactions.forall { t =>
+      assert(sc.observedTransactions.forall { t =>
         indexByName(t.catalog.txnTables.values.toSeq)(tableNameAsString).scanEvents.isEmpty
       })
       // Each committed micro-batch increments the delegate version exactly once.
       assert(table.version() === "2")
 
       // Transaction must be scoped to the streaming session; main session catalog is untouched.
-      assert(catalog.seenTransactions.isEmpty)
+      assert(catalog.observedTransactions.isEmpty)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -141,7 +141,7 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
     sql(s"INSERT INTO $sourceNameAsString VALUES (1), (2), (3)")
     // The INSERT above runs a transaction on the main session catalog; capture the count now
     // so we can assert the streaming query does not add more.
-    val mainTxnsBefore = catalog.seenTransactions.size
+    val mainTxnsBefore = catalog.observedTransactions.size
 
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[Int]
@@ -178,7 +178,7 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
 
       // Streaming must not add transactions to the main session catalog beyond the pre-existing
       // INSERT transaction.
-      assert(catalog.seenTransactions.size === mainTxnsBefore)
+      assert(catalog.observedTransactions.size === mainTxnsBefore)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -214,7 +214,7 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
       assert(table.version() === "0")
 
       // Transaction must be scoped to the streaming session; main session catalog is untouched.
-      assert(catalog.seenTransactions.isEmpty)
+      assert(catalog.observedTransactions.isEmpty)
 
       // Writes must not be visible after an aborted transaction.
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Seq.empty)
@@ -244,7 +244,7 @@ class StreamingTransactionSuite extends RowLevelOperationSuiteBase {
         query.processAllAvailable()
         query.stop()
 
-        assert(catalog.seenTransactions.isEmpty,
+        assert(catalog.observedTransactions.isEmpty,
           "no transaction expected for non-transactional catalog")
         checkAnswer(spark.table("nonTxnCat.ns.tbl"), Seq(Row(1), Row(2), Row(3)))
       }

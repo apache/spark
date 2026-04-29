@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -70,7 +71,10 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 // Note, the in-memory data store does not handle concurrency at the moment. The assumes that the
 // underlying delegate table cannot change from concurrent transactions. Data sources need to
 // implement isolation semantics and make sure they are enforced.
-class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
+class TxnTable(
+    val delegate: InMemoryRowLevelOperationTable,
+    schema: StructType,
+    catalog: TxnTableCatalog)
   extends InMemoryRowLevelOperationTable(
     delegate.name,
     schema,
@@ -84,9 +88,6 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
 
   alterTableWithData(delegate.data, schema)
 
-  // Keep initial version to detect any changes during the transaction.
-  private val initialVersion: String = version()
-
   // A tracker of filters used in each scan.
   val scanEvents = new ArrayBuffer[Array[Filter]]()
 
@@ -95,19 +96,32 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
     scanEvents += filters
   }
 
-  // Perform commit if there are any changes. This push metadata and data changes to the
-  // delegate table.
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+    catalog.writeTarget = this
+    super.newWriteBuilder(info)
+  }
+
+  override def newRowLevelOperationBuilder(
+      info: RowLevelOperationInfo): RowLevelOperationBuilder = {
+    catalog.writeTarget = this
+    super.newRowLevelOperationBuilder(info)
+  }
+
+  override def deleteWhere(filters: Array[Filter]): Unit = {
+    catalog.writeTarget = this
+    super.deleteWhere(filters)
+  }
+
+  // Propagates staged data and metadata changes to the delegate table.
   def commit(): Unit = {
-    if (version() != initialVersion) {
-      delegate.dataMap.clear()
-      delegate.updateColumns(columns()) // Evolve schema if needed.
-      delegate.alterTableWithData(data, schema)
-      delegate.replacedPartitions = replacedPartitions
-      delegate.lastWriteInfo = lastWriteInfo
-      delegate.lastWriteLog = lastWriteLog
-      delegate.commits ++= commits
-      delegate.increaseVersion()
-    }
+    delegate.dataMap.clear()
+    delegate.updateColumns(columns()) // Evolve schema if needed.
+    delegate.alterTableWithData(data, schema)
+    delegate.replacedPartitions = replacedPartitions
+    delegate.lastWriteInfo = lastWriteInfo
+    delegate.lastWriteLog = lastWriteLog
+    delegate.commits ++= commits
+    delegate.increaseVersion()
   }
 }
 
@@ -119,6 +133,8 @@ class TxnTable(val delegate: InMemoryRowLevelOperationTable, schema: StructType)
 class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends TableCatalog {
 
   private val tables: util.Map[Identifier, TxnTable] = new ConcurrentHashMap[Identifier, TxnTable]()
+
+  var writeTarget: TxnTable = _
 
   override def name: String = delegate.name
 
@@ -134,7 +150,7 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   override def loadTable(ident: Identifier): Table = {
     tables.computeIfAbsent(ident, _ => {
       val table = delegate.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
-      new TxnTable(table, table.schema())
+      new TxnTable(table, table.schema(), this)
     })
   }
 
@@ -154,7 +170,7 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
     }
 
     // TODO: We need to pass all tracked predicates to the new TXN table.
-    val newTxnTable = new TxnTable(txnTable.delegate, schema)
+    val newTxnTable = new TxnTable(txnTable.delegate, schema, this)
     tables.put(ident, newTxnTable)
     newTxnTable
   }
@@ -178,17 +194,16 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   // Returns all tables that participated in this transaction, keyed by identifier.
   def txnTables: scala.collection.Map[Identifier, TxnTable] = tables.asScala
 
-  // Invoke commit for all tables participated in the transaction. If a table is read-only
-  // this is a no-op.
+  // Commit the write target table, propagating staged changes to the delegate.
   def commit(): Unit = {
-    tables.values.forEach(table => table.commit())
+    if (writeTarget != null) writeTarget.commit()
   }
 
   // Clear transaction context.
   def clearActiveTransaction(): Unit = {
     val txn = delegate.transaction
     delegate.lastTransaction = txn
-    delegate.seenTransactions += txn
+    delegate.observedTransactions += txn
     delegate.transaction = null
   }
 

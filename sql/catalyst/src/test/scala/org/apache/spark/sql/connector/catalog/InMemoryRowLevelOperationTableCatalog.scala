@@ -34,7 +34,7 @@ class InMemoryRowLevelOperationTableCatalog
   var lastTransaction: Txn = _
   // All transactions in order (committed and aborted), allowing per-statement
   // validation in SQL scripting tests.
-  val seenTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
+  val observedTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
 
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
