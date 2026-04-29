@@ -1081,6 +1081,55 @@ class GroupedMapPandasUDFPeakmemBench(_GroupedMapPandasBenchMixin, _PeakmemBench
     pass
 
 
+# -- SQL_GROUPED_MAP_PANDAS_ITER_UDF -------------------------------------------
+# UDF receives ``Iterator[pandas.DataFrame]`` per group, returns
+# ``Iterator[pandas.DataFrame]``.
+
+
+class _GroupedMapPandasIterBenchMixin(_GroupedMapPandasBenchMixin):
+    """Provides ``_write_scenario`` for SQL_GROUPED_MAP_PANDAS_ITER_UDF."""
+
+    def _grouped_map_pandas_iter_identity(pdfs):
+        yield from pdfs
+
+    def _grouped_map_pandas_iter_sort(pdfs):
+        for pdf in pdfs:
+            yield pdf.sort_values(pdf.columns[0])
+
+    def _grouped_map_pandas_iter_key_identity(key, pdfs):
+        yield from pdfs
+
+    _udfs = {
+        "identity_udf": (_grouped_map_pandas_iter_identity, None, 1),
+        "sort_udf": (_grouped_map_pandas_iter_sort, None, 1),
+        "key_identity_udf": (_grouped_map_pandas_iter_key_identity, None, 2),
+    }
+    params = [list(_GroupedMapPandasBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, schema = self._build_scenario(scenario)
+        udf_func, ret_type, n_args = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = StructType(schema.fields[n_args - 1 :]) if n_args > 1 else schema
+        n_cols = len(schema.fields)
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(n_args - 1, n_cols - (n_args - 1))
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
+            buf,
+        )
+
+
+class GroupedMapPandasIterUDFTimeBench(_GroupedMapPandasIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedMapPandasIterUDFPeakmemBench(_GroupedMapPandasIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
 # -- SQL_MAP_ARROW_ITER_UDF ------------------------------------------------
 # UDF receives ``Iterator[pa.RecordBatch]``, returns ``Iterator[pa.RecordBatch]``.
 
