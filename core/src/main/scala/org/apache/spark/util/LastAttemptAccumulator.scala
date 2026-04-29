@@ -303,25 +303,37 @@ private class LastAttemptRDDVals[@specialized T](
 
   override def toString: String = {
     val n = numPartitions
-    val sIds = new Array[Int](n)
-    val saIds = new Array[Int](n)
-    val tans = new Array[Int](n)
+    val partVals = new StringBuilder("[")
+    val sIds = new StringBuilder("[")
+    val saIds = new StringBuilder("[")
+    val tans = new StringBuilder("[")
     var i = 0
     while (i < n) {
+      if (i > 0) {
+        partVals.append(',')
+        sIds.append(',')
+        saIds.append(',')
+        tans.append(',')
+      }
+      partVals.append(partitionPartialVals(i))
       val pv = partialValueAt(i)
-      sIds(i) = pv.stageId
-      saIds(i) = pv.stageAttemptId
-      tans(i) = pv.taskAttemptNumber
+      sIds.append(pv.stageId)
+      saIds.append(pv.stageAttemptId)
+      tans.append(pv.taskAttemptNumber)
       i += 1
     }
+    partVals.append(']')
+    sIds.append(']')
+    saIds.append(']')
+    tans.append(']')
     s"""LastAttemptVal(
        |  rddId=$rddId,
        |  rddScopeId=$rddScopeId,
        |  lastSqlExecutionId=$lastSqlExecutionId,
-       |  partitionPartialVals=${partitionPartialVals.mkString("[", ",", "]")},
-       |  stageIds=${sIds.mkString("[", ",", "]")},
-       |  stageAttemptIds=${saIds.mkString("[", ",", "]")},
-       |  taskAttemptNumbers=${tans.mkString("[", ",", "]")}
+       |  partitionPartialVals=$partVals,
+       |  stageIds=$sIds,
+       |  stageAttemptIds=$saIds,
+       |  taskAttemptNumbers=$tans
        |)""".stripMargin
   }
 }
