@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ExprId, ListQuery, Literal, NamedExpression, PlanExpression, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class QueryPlanSuite extends SparkFunSuite {
 
@@ -186,17 +186,78 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(visited.forall(_.containsPattern(TreePattern.FILTER)))
   }
 
-  test("SPARK-54560: subqueries filters out plans of incompatible type") {
+  test("SPARK-54560: subqueries includes plans of the same plan family") {
     val a: NamedExpression = AttributeReference("a", IntegerType)()
     val innerPlan = Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))
 
-    // Normal case: LogicalPlan with LogicalPlan subquery should still work.
-    val normalPlan = Filter(ListQuery(innerPlan), UnresolvedRelation(TableIdentifier("t", None)))
-    assert(normalPlan.subqueries.size == 1)
+    // Baseline: a LogicalPlan containing a ListQuery (whose `.plan` is a LogicalPlan)
+    // should expose the subquery in `subqueries`. This verifies the common path is
+    // unchanged by the SPARK-54560 fix.
+    val logicalOuter = Filter(ListQuery(innerPlan), UnresolvedRelation(TableIdentifier("t", None)))
+    assert(logicalOuter.subqueries.size === 1)
+    assert(logicalOuter.subqueries.head eq innerPlan)
+  }
 
-    // Test planFamilyClass utility returns the correct direct subclass of QueryPlan.
-    assert(QueryPlan.planFamilyClass(classOf[Project]) == classOf[LogicalPlan])
-    assert(QueryPlan.planFamilyClass(classOf[Filter]) == classOf[LogicalPlan])
-    assert(QueryPlan.planFamilyClass(classOf[LocalRelation]) == classOf[LogicalPlan])
+  test("SPARK-54560: subqueries excludes plans of an incompatible plan family") {
+    // This is the regression test for SPARK-54560. In AQE, a SparkPlan can
+    // transiently hold a PlanExpression whose `.plan` is still a LogicalPlan
+    // (or vice-versa) because logical-to-physical planning runs separately for
+    // the main and sub-queries. Before the fix, `_subqueries` blindly cast such
+    // plans to the enclosing plan's type, and the resulting unchecked generic
+    // Seq[PlanType] would cause a ClassCastException as soon as downstream code
+    // used a PlanType-specific method on the element.
+    //
+    // We simulate the cross-family scenario with a minimal alternative plan
+    // family (QueryPlanSuite.FakePhysicalPlan) holding a PlanExpression whose
+    // `.plan` is a LogicalPlan. With the fix, `subqueries` filters the
+    // incompatible plan out; without the fix, it would be included.
+
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val logicalChild: LogicalPlan =
+      Project(Seq(a), UnresolvedRelation(TableIdentifier("t", None)))
+
+    val fakePhysicalOuter = QueryPlanSuite.FakePhysicalPlan(
+      Seq(QueryPlanSuite.FakePlanExpr(logicalChild)))
+
+    assert(fakePhysicalOuter.subqueries.isEmpty,
+      "LogicalPlan subquery should be filtered out of FakePhysicalPlan.subqueries " +
+        "(regression for SPARK-54560)")
+  }
+}
+
+object QueryPlanSuite {
+  /**
+   * A minimal alternative plan family used only by the SPARK-54560 regression
+   * test. Distinct from [[LogicalPlan]] and [[SparkPlan]]. The `exprs` field is
+   * a product member so `QueryPlan.expressions` surfaces them automatically.
+   */
+  case class FakePhysicalPlan(exprs: Seq[Expression]) extends QueryPlan[FakePhysicalPlan] {
+    override def output: Seq[AttributeReference] = Nil
+    override def children: Seq[FakePhysicalPlan] = Nil
+    override protected def withNewChildrenInternal(
+        newChildren: IndexedSeq[FakePhysicalPlan]): FakePhysicalPlan = this
+  }
+
+  /**
+   * A minimal [[PlanExpression]] whose wrapped plan is a [[LogicalPlan]]. Used
+   * only by the SPARK-54560 regression test to construct a cross-family
+   * embedding. `eval` and `doGenCode` are not exercised by the test; they
+   * throw to make misuse loud.
+   */
+  case class FakePlanExpr(plan: LogicalPlan) extends PlanExpression[LogicalPlan] {
+    override def exprId: ExprId = ExprId(0)
+    override def dataType: DataType = IntegerType
+    override def nullable: Boolean = true
+    override def children: Seq[Expression] = Nil
+    override def withNewPlan(newPlan: LogicalPlan): FakePlanExpr = copy(plan = newPlan)
+    override protected def withNewChildrenInternal(
+        newChildren: IndexedSeq[Expression]): FakePlanExpr = this
+    override def eval(input: org.apache.spark.sql.catalyst.InternalRow): Any =
+      throw new UnsupportedOperationException("FakePlanExpr is test-only and not evaluable")
+    override protected def doGenCode(
+        ctx: org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext,
+        ev: org.apache.spark.sql.catalyst.expressions.codegen.ExprCode):
+      org.apache.spark.sql.catalyst.expressions.codegen.ExprCode =
+      throw new UnsupportedOperationException("FakePlanExpr is test-only and not codegen-able")
   }
 }

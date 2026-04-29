@@ -527,7 +527,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   def subqueries: Seq[PlanType] = _subqueries()
 
   private val _subqueries = new TransientBestEffortLazyVal(() => {
-    val planFamily = QueryPlan.planFamilyClass(getClass)
+    // Determine the plan family (the direct subclass of QueryPlan, e.g. LogicalPlan
+    // or SparkPlan) for this plan. In AQE, a SparkPlan can transiently hold
+    // PlanExpressions whose `.plan` is still a LogicalPlan (or vice-versa) because
+    // logical-to-physical planning runs separately for the main and sub-queries.
+    // Filtering by plan family prevents a `ClassCastException` on the cast below.
+    val planFamily: Class[_] = {
+      var c: Class[_] = getClass
+      while (c != null && c.getSuperclass != classOf[QueryPlan[_]]) {
+        c = c.getSuperclass
+      }
+      if (c != null) c else classOf[QueryPlan[_]]
+    }
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] if planFamily.isInstance(e.plan) =>
         e.plan.asInstanceOf[PlanType]
@@ -870,20 +881,5 @@ object QueryPlan extends PredicateHelper {
     case str: String if (str == null || str.isEmpty) => s"${fieldName}: None"
     case str: String => s"${fieldName}: ${str}"
     case _ => throw new IllegalArgumentException(s"Unsupported type for argument values: $values")
-  }
-
-  /**
-   * Returns the direct subclass of [[QueryPlan]] in the given class's hierarchy.
-   * Used to determine the "plan family" (e.g. LogicalPlan, SparkPlan) for safe type filtering.
-   */
-  def planFamilyClass(clazz: Class[_]): Class[_] = {
-    val base = classOf[QueryPlan[_]]
-    var current: Class[_] = clazz
-    while (current != null) {
-      val parent: Class[_] = current.getSuperclass
-      if (parent == base) return current
-      current = parent
-    }
-    base
   }
 }
