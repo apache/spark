@@ -840,8 +840,6 @@ object InMemoryBaseTable {
 
 /**
  * A partition for [[InMemoryBaseTable]] micro-batch streaming reads, holding a slice of rows.
- * Defined at the top level (not as an inner class) so that Java serialization to executors
- * does not attempt to serialize the enclosing [[InMemoryBaseTable]] instance.
  */
 case class InMemoryMicroBatchPartition(rows: Seq[InternalRow]) extends InputPartition
 
