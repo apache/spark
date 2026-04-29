@@ -1558,6 +1558,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.annotateExitException</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
   <td><code>SingleStack</code></td>
   <td>
@@ -1574,6 +1582,14 @@ See the [configuration page](configuration.html) for information on Spark config
     <code>IPv4</code> and <code>IPv6</code>.
   </td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, executor pods use Driver pod IP directly instead of Driver Service.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
@@ -1671,6 +1687,17 @@ See the [configuration page](configuration.html) for information on Spark config
     allocation for all the used resource profiles.
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.maxPendingPodsPerRp</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    Maximum number of pending PODs allowed per resource profile ID during executor
+    allocation. This provides finer-grained control over pending pods by limiting them
+    per resource profile rather than globally. When set, this limit is enforced
+    independently for each resource profile ID.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
