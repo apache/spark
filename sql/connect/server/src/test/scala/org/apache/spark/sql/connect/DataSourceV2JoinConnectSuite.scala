@@ -47,20 +47,20 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
   // Scenario 1: join after insert refreshes both sides to latest version.
   test("[connect] join refreshes both sides after insert") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df1 = s.table(T)
-      s.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-      val df2 = s.table(T)
+      val df1 = session.table(T)
+      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      val df2 = session.table(T)
 
       // Both sides re-analyze to latest version
       assertRows(
         df1.join(df2, df1("id") === df2("id")).collect(),
         Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
@@ -68,20 +68,20 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // In Connect, df1 also re-analyzes to the 3-column schema
   // (unlike classic where df1 keeps original 2-column schema).
   test("[connect] join after ADD COLUMN sees new schema on both sides") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df1 = s.table(T)
-      s.sql(s"ALTER TABLE $T ADD COLUMN new_column INT").collect()
-      s.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
-      val df2 = s.table(T)
+      val df1 = session.table(T)
+      session.sql(s"ALTER TABLE $T ADD COLUMN new_column INT").collect()
+      session.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+      val df2 = session.table(T)
 
       assertRows(
         df1.join(df2, df1("id") === df2("id")).collect(),
         Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
@@ -89,18 +89,18 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see only 'id'.
   test("[connect] join after DROP COLUMN succeeds") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df1 = s.table(T)
-      s.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      s.sql(s"INSERT INTO $T VALUES (2)").collect()
-      val df2 = s.table(T)
+      val df1 = session.table(T)
+      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      session.sql(s"INSERT INTO $T VALUES (2)").collect()
+      val df2 = session.table(T)
 
       assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(1, 1), Row(2, 2)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
@@ -108,19 +108,19 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Classic fails with TABLE_ID_MISMATCH; Connect succeeds because
   // both sides re-analyze against the new table.
   test("[connect] join after drop and recreate table succeeds") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df1 = s.table(T)
-      s.sql(s"DROP TABLE $T").collect()
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-      val df2 = s.table(T)
+      val df1 = session.table(T)
+      session.sql(s"DROP TABLE $T").collect()
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      val df2 = session.table(T)
 
       assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(2, 200, 2, 200)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
@@ -128,21 +128,21 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // InMemoryTableCatalog does not migrate old data on schema change,
   // so the original salary value (100) is retained after drop+re-add.
   test("[connect] join after drop and re-add column with same type") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df1 = s.table(T)
-      s.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      s.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
-      s.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-      val df2 = s.table(T)
+      val df1 = session.table(T)
+      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      session.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      val df2 = session.table(T)
 
       assertRows(
         df1.join(df2, df1("id") === df2("id")).collect(),
         Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
@@ -152,21 +152,21 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // InMemoryTableCatalog does not migrate old data on schema change,
   // so the original salary value (100) is retained after drop+re-add.
   test("[connect] join after drop and re-add column with different type succeeds") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df1 = s.table(T)
-      s.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      s.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
-      s.sql(s"INSERT INTO $T VALUES (2, 'high')").collect()
-      val df2 = s.table(T)
+      val df1 = session.table(T)
+      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+      session.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
+      session.sql(s"INSERT INTO $T VALUES (2, 'high')").collect()
+      val df2 = session.table(T)
 
       assertRows(
         df1.join(df2, df1("id") === df2("id")).collect(),
         Seq(Row(1, 100, 1, 100), Row(2, "high", 2, "high")))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 }
