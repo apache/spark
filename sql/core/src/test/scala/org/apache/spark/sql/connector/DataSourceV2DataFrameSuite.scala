@@ -2041,6 +2041,23 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("composed nested IDs tolerate nested field reorder end-to-end") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ALTER COLUMN person.age FIRST")
+
+      // InMemoryTable does not actually reorder nested struct fields in stored
+      // data, so the read still returns the original field order. This is fine
+      // because the purpose of this test is to verify that the column ID check
+      // passes (no COLUMN_ID_MISMATCH) after a nested field reorder.
+      checkAnswer(df, Seq(Row(1, Row("Alice", 30))))
+    }
+  }
+
   test("composed nested IDs detect drop+re-add in map key struct") {
     val t = "composedidcat.ns1.ns2.tbl"
     withTable(t) {

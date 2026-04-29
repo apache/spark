@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_FIELDS, ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
@@ -627,6 +627,153 @@ class V2TableUtilSuite extends SparkFunSuite {
     val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
     assert(errors.size == 1)
     assert(errors.head.contains("`metadata`.`value`.`timestamp` BIGINT has been added"))
+  }
+
+  // ALLOW_NEW_TOP_LEVEL_FIELDS: column removal tests (temp view scenarios)
+
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS catches top-level column removal") {
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true),
+      col("age", IntegerType, nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head == "`age` INT has been removed")
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS catches nested field removal") {
+    val originAddress = StructType(Seq(
+      StructField("street", StringType),
+      StructField("city", StringType),
+      StructField("zipCode", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("address", originAddress, nullable = true))
+    val currentAddress = StructType(Seq(
+      StructField("street", StringType),
+      StructField("city", StringType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("address", currentAddress, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head == "`address`.`zipCode` STRING has been removed")
+  }
+
+  test("validateCapturedColumns -" +
+      " ALLOW_NEW_TOP_LEVEL_FIELDS catches nested field removal in array element") {
+    val originItem = StructType(Seq(
+      StructField("itemId", LongType),
+      StructField("itemName", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("items", ArrayType(originItem), nullable = true))
+    val currentItem = StructType(Seq(
+      StructField("itemId", LongType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("items", ArrayType(currentItem), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head == "`items`.`element`.`itemName` STRING has been removed")
+  }
+
+  test("validateCapturedColumns -" +
+      " ALLOW_NEW_TOP_LEVEL_FIELDS catches nested field removal in map value") {
+    val originValue = StructType(Seq(
+      StructField("count", IntegerType),
+      StructField("status", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("metadata", MapType(StringType, originValue), nullable = true))
+    val currentValue = StructType(Seq(
+      StructField("count", IntegerType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("metadata", MapType(StringType, currentValue), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head == "`metadata`.`value`.`status` STRING has been removed")
+  }
+
+  // ALLOW_NEW_FIELDS: stale DataFrame query scenarios
+  // Per design doc: "new top-level and nested fields are allowed, removing existing ones fail"
+
+  test("validateCapturedColumns - ALLOW_NEW_FIELDS allows top-level column addition") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("name", StringType, nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("name", StringType, nullable = true),
+      col("age", IntegerType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_FIELDS)
+    assert(errors.isEmpty)
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_FIELDS allows nested struct field addition") {
+    val originStruct = StructType(Seq(
+      StructField("name", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("info", originStruct, nullable = true))
+    val currentStruct = StructType(Seq(
+      StructField("name", StringType),
+      StructField("age", IntegerType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("info", currentStruct, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_FIELDS)
+    assert(errors.isEmpty)
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_FIELDS catches top-level column removal") {
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("name", StringType, nullable = true),
+      col("salary", IntegerType, nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("name", StringType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head == "`salary` INT has been removed")
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_FIELDS catches nested field removal") {
+    val originStruct = StructType(Seq(
+      StructField("name", StringType),
+      StructField("age", IntegerType)))
+    val originCols = Array(
+      col("id", LongType, nullable = true),
+      col("info", originStruct, nullable = true))
+    val currentStruct = StructType(Seq(
+      StructField("name", StringType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = true),
+      col("info", currentStruct, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head == "`info`.`age` INT has been removed")
   }
 
   // simple table without metadata column support
