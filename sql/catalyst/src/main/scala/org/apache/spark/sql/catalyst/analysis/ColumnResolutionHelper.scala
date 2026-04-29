@@ -504,7 +504,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //    5, resolve the expression against the target node, the resolved attribute will be
   //       filtered by the output attributes of nodes in the path (from matching to root node);
   //    6. if more than one resolved attributes are found in the above recursive process,
-  //       fails with 'AMBIGUOUS_COLUMN_REFERENCE'.
+  //       disambiguate by preferring regular candidates (visible via `output`) over
+  //       hidden ones (only via `metadataOutput`), then preferring depth-0 (direct)
+  //       matches over deeper ones; fails with 'AMBIGUOUS_COLUMN_REFERENCE' if neither
+  //       tiebreaker yields a single winner.
   //    7. if all the resolved attributes are filtered out, return the original expression
   //       as it is.
   private def tryResolveDataFrameColumns(
