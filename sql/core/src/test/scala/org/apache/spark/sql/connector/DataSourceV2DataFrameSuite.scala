@@ -2009,6 +2009,38 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("composed nested IDs: reorder preserves composed column ID") {
+    val t = "composedidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+
+      val cat = catalog("composedidcat")
+      val personBefore = cat.loadTable(ident).columns().find(_.name() == "person").get
+      val idBefore = personBefore.id()
+      val typeBefore = personBefore.dataType()
+
+      // REPLACE COLUMNS does not support nested fields, so use ALTER
+      // COLUMN ... FIRST to reorder within the struct.
+      sql(s"ALTER TABLE $t ALTER COLUMN person.age FIRST")
+
+      val personAfter = cat.loadTable(ident).columns().find(_.name() == "person").get
+      val idAfter = personAfter.id()
+      val typeAfter = personAfter.dataType()
+
+      // Confirm the schema actually changed (age moved to first position).
+      assert(typeBefore != typeAfter,
+        "Struct field order should have changed after ALTER COLUMN ... FIRST")
+      assert(typeAfter.toString.startsWith("StructType(StructField(age"),
+        s"age should be first field after reorder, got: $typeAfter")
+
+      // Position-based keys: each ordinal position keeps its old ID after
+      // reorder, so the composed string is unchanged despite the schema change.
+      assert(idBefore == idAfter,
+        s"Composed ID should be unchanged after reorder: $idBefore vs $idAfter")
+    }
+  }
+
   test("composed nested IDs detect drop+re-add in map key struct") {
     val t = "composedidcat.ns1.ns2.tbl"
     withTable(t) {
