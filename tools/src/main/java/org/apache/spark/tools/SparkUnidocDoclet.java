@@ -25,6 +25,7 @@ import javax.lang.model.element.Element;
 import javax.tools.Diagnostic;
 
 import java.io.PrintWriter;
+import java.io.Writer;
 import java.util.Locale;
 
 /**
@@ -82,19 +83,20 @@ public final class SparkUnidocDoclet extends StandardDoclet {
       delegate.print(kind, element, message);
     }
 
-    // JDK 17 Reporter has `getStandardWriter()` and `getDiagnosticWriter()` as
-    // default methods returning null. The standard doclet calls these on
-    // whatever Reporter we install; if we don't delegate to the wrapped
-    // reporter (which has the real PrintWriter), the doclet NPEs trying to
-    // use the null writer.
+    // The standard doclet emits per-file diagnostics through these writers,
+    // not through the print() overloads above. To capture them we wrap the
+    // returned writer so every line is mirrored to stdout before being
+    // forwarded to the original PrintWriter.
     @Override
     public PrintWriter getStandardWriter() {
-      return delegate.getStandardWriter();
+      PrintWriter w = delegate.getStandardWriter();
+      return w == null ? null : new MirrorWriter(w, "[unidoc-doclet stdout]");
     }
 
     @Override
     public PrintWriter getDiagnosticWriter() {
-      return delegate.getDiagnosticWriter();
+      PrintWriter w = delegate.getDiagnosticWriter();
+      return w == null ? null : new MirrorWriter(w, "[unidoc-doclet diag]");
     }
 
     private static String locationOf(DocTreePath path) {
@@ -106,6 +108,51 @@ public final class SparkUnidocDoclet extends StandardDoclet {
       } catch (Throwable t) {
         return null;
       }
+    }
+  }
+
+  /**
+   * A {@link PrintWriter} that mirrors every write to {@code System.out} with a
+   * recognizable prefix on each new line, then delegates to the underlying
+   * writer. Used to capture diagnostics that the standard doclet writes
+   * directly to {@link Reporter#getStandardWriter()} or
+   * {@link Reporter#getDiagnosticWriter()} (rather than through
+   * {@link Reporter#print}).
+   *
+   * <p>We override {@code write(String, int, int)} -- {@link PrintWriter}'s
+   * print/println/printf paths funnel through it eventually, so this catches
+   * everything without overriding every overload individually.
+   */
+  private static final class MirrorWriter extends PrintWriter {
+    private final String prefix;
+    private final StringBuilder buffer = new StringBuilder();
+
+    MirrorWriter(Writer delegate, String prefix) {
+      super(delegate, true);
+      this.prefix = prefix;
+    }
+
+    @Override
+    public void write(String s, int off, int len) {
+      mirror(s, off, len);
+      super.write(s, off, len);
+    }
+
+    @Override
+    public void write(char[] buf, int off, int len) {
+      mirror(new String(buf, off, len), 0, len);
+      super.write(buf, off, len);
+    }
+
+    private synchronized void mirror(String s, int off, int len) {
+      buffer.append(s, off, off + len);
+      int nl;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        String line = buffer.substring(0, nl);
+        buffer.delete(0, nl + 1);
+        System.out.println(prefix + " " + line);
+      }
+      System.out.flush();
     }
   }
 }
