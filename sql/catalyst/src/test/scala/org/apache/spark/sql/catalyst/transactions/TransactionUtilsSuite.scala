@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.transactions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -98,7 +98,7 @@ class TransactionUtilsSuite extends SparkFunSuite {
 
   test("beginTransaction: fails when transaction catalog name does not match") {
     val catalog = mockTransactionalCatalog(catalogName = testCatalogName, txnCatalogName = "other")
-    val e = intercept[IllegalStateException] {
+    val e = intercept[SparkException] {
       TransactionUtils.beginTransaction(catalog)
     }
     assert(e.getMessage.contains("other"))
@@ -117,7 +117,7 @@ class TransactionUtilsSuite extends SparkFunSuite {
           onAbort = () => { aborted = true },
           onClose = () => { closed = true })
     }
-    intercept[IllegalStateException] { TransactionUtils.beginTransaction(catalog) }
+    intercept[SparkException] { TransactionUtils.beginTransaction(catalog) }
     assert(aborted)
     assert(closed)
   }
