@@ -253,9 +253,7 @@ object SparkBuild extends PomBuild {
   // violations surface, with file/line annotations from `dev/scalastyle`.
   def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
     scalaStyleOnCompile := cachedScalaStyle(Compile).value,
-    scalaStyleOnTest := cachedScalaStyle(Test).value,
-    (scalaStyleOnCompile / logLevel) := Level.Warn,
-    (scalaStyleOnTest / logLevel) := Level.Warn
+    scalaStyleOnTest := cachedScalaStyle(Test).value
   )
 
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
