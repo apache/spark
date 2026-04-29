@@ -522,7 +522,7 @@ class DataFrameReader(OptionUtils):
                 },
             )
 
-    def table(self, tableName: str) -> "DataFrame":
+    def table(self, tableName: Union[str, "Table"]) -> "DataFrame":
         """Returns the specified table as a :class:`DataFrame`.
 
         .. versionadded:: 1.4.0
@@ -530,10 +530,14 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            ``tableName`` may be a :class:`~pyspark.sql.catalog.Table` object returned by
+            :meth:`~pyspark.sql.Catalog.getTable` or :meth:`~pyspark.sql.Catalog.listTables`.
+
         Parameters
         ----------
-        tableName : str
-            string, name of the table.
+        tableName : str or :class:`~pyspark.sql.catalog.Table`
+            Name of the table, or a :class:`~pyspark.sql.catalog.Table` catalog object.
 
         Examples
         --------
@@ -556,6 +560,10 @@ class DataFrameReader(OptionUtils):
         +---+
         >>> _ = spark.sql("DROP TABLE tblA")
         """
+        from pyspark.sql.catalog import Table
+
+        if isinstance(tableName, Table):
+            tableName = tableName.qualifiedName
         return self._df(self._jreader.table(tableName))
 
     def changes(self, tableName: str) -> "DataFrame":

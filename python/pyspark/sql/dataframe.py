@@ -70,6 +70,7 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.plot import PySparkPlotAccessor
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql import catalog
 
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -6264,7 +6265,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def writeTo(self, table: str) -> DataFrameWriterV2:
+    def writeTo(self, table: Union[str, "catalog.Table"]) -> DataFrameWriterV2:
         """
         Create a write configuration builder for v2 sources.
 
@@ -6277,10 +6278,15 @@ class DataFrame:
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            ``table`` may be a :class:`~pyspark.sql.catalog.Table` object returned by
+            :meth:`~pyspark.sql.Catalog.getTable` or :meth:`~pyspark.sql.Catalog.listTables`.
+
         Parameters
         ----------
-        table : str
-            Target table name to write to.
+        table : str or :class:`~pyspark.sql.catalog.Table`
+            Target table name to write to, or a catalog :class:`~pyspark.sql.catalog.Table`
+            object.
 
         Returns
         -------

@@ -901,4 +901,29 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     insertDF.cache()
     checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
   }
+
+  test("writeTo accepts catalog Table object from catalog API") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    val t = spark.catalog.getTable("testcat.table_name")
+
+    spark.table("source").writeTo(t).append()
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+    spark.table("source2").writeTo(t).append()
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+  }
+
+  test("read.table accepts catalog Table object from catalog API") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("INSERT INTO testcat.table_name VALUES (1, 'a'), (2, 'b')")
+    val t = spark.catalog.getTable("testcat.table_name")
+
+    checkAnswer(
+      spark.read.table(t),
+      Seq(Row(1L, "a"), Row(2L, "b")))
+  }
 }

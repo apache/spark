@@ -500,6 +500,26 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       "Table[name='volley', tableType='world', isTemporary='true']")
   }
 
+  test("Table.qualifiedName") {
+    // catalog + namespace + name
+    assert(new Table("tbl", "cat", Array("db"), null, "MANAGED", false).qualifiedName ==
+      "`cat`.`db`.`tbl`")
+    // no catalog
+    assert(new Table("tbl", null, Array("db"), null, "MANAGED", false).qualifiedName ==
+      "`db`.`tbl`")
+    // multi-part namespace
+    assert(new Table("tbl", "cat", Array("ns1", "ns2"), null, "MANAGED", false).qualifiedName ==
+      "`cat`.`ns1`.`ns2`.`tbl`")
+    // temporary view: no catalog, no namespace
+    assert(new Table("tmp", null, null, null, "TEMPORARY", true).qualifiedName == "`tmp`")
+    // names with special characters are backtick-escaped
+    assert(new Table("my-tbl", "my-cat", Array("my-db"), null, "MANAGED", false).qualifiedName ==
+      "`my-cat`.`my-db`.`my-tbl`")
+    // embedded backticks are doubled
+    assert(new Table("t`b", null, Array("d`b"), null, "MANAGED", false).qualifiedName ==
+      "`d``b`.`t``b`")
+  }
+
   test("Function.toString") {
     assert(
       new Function("nama", "databasa", "commenta", "classNameAh", isTemporary = true).toString ==
@@ -1236,6 +1256,35 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     spark.sql(s"INSERT INTO $t VALUES (1)")
     spark.catalog.analyzeTable(t, noScan = true)
     spark.catalog.dropTable(t)
+  }
+
+  test("read.table and writeTo accept catalog Table object") {
+    // read.table with session-catalog Table
+    val tName = "catalog_api_tbl_obj_t"
+    spark.sql(s"DROP TABLE IF EXISTS $tName")
+    spark.sql(s"CREATE TABLE $tName (id INT, name STRING) USING parquet")
+    spark.sql(s"INSERT INTO $tName VALUES (1, 'a'), (2, 'b')")
+    try {
+      val t = spark.catalog.getTable(s"default.$tName")
+      assert(t.qualifiedName == s"`spark_catalog`.`default`.`$tName`")
+      val rows = spark.read.table(t).collect().map(r => (r.getInt(0), r.getString(1))).toSet
+      assert(rows == Set((1, "a"), (2, "b")))
+    } finally {
+      spark.catalog.dropTable(tName)
+    }
+
+    // writeTo with V2 catalog Table
+    sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns")
+    sql("CREATE TABLE testcat.ns.writetarget (id INT, name STRING) USING foo")
+    try {
+      val t = spark.catalog.getTable("testcat.ns.writetarget")
+      assert(t.qualifiedName == "`testcat`.`ns`.`writetarget`")
+      spark.createDataFrame(Seq((3, "c"), (4, "d"))).toDF("id", "name").writeTo(t).append()
+      val rows = spark.read.table(t).collect().map(r => (r.getInt(0), r.getString(1))).toSet
+      assert(rows == Set((3, "c"), (4, "d")))
+    } finally {
+      sql("DROP TABLE testcat.ns.writetarget")
+    }
   }
 
   private def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {

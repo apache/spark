@@ -588,6 +588,103 @@ class CatalogTestsMixin:
             spark.sql(f"INSERT INTO {t} VALUES (1)")
             spark.catalog.analyzeTable(t, noScan=True)
 
+    def test_qualified_name_consistent_with_jvm(self):
+        # Verify that the Python qualifiedName quoting is consistent with the JVM parser:
+        # a name produced by Python must be accepted by Spark and resolve to the same table.
+        spark = self.spark
+        with self.table("qn_consistency_tab"):
+            spark.sql("CREATE TABLE qn_consistency_tab (id INT) USING parquet")
+            t = spark.catalog.getTable("spark_catalog.default.qn_consistency_tab")
+            # The Python-computed qualifiedName must be parseable by Spark as the same table.
+            self.assertEqual(
+                spark.read.table(t.qualifiedName).schema,
+                spark.read.table(t).schema,
+            )
+
+    def test_table_qualified_name(self):
+        from pyspark.sql.catalog import Table
+
+        # fully qualified: catalog + namespace + name
+        t = Table(
+            name="tbl", catalog="cat", namespace=["db"], description=None,
+            tableType="MANAGED", isTemporary=False
+        )
+        self.assertEqual(t.qualifiedName, "`cat`.`db`.`tbl`")
+
+        # no catalog
+        t = Table(
+            name="tbl", catalog=None, namespace=["db"], description=None,
+            tableType="MANAGED", isTemporary=False
+        )
+        self.assertEqual(t.qualifiedName, "`db`.`tbl`")
+
+        # multi-part namespace
+        t = Table(
+            name="tbl", catalog="cat", namespace=["ns1", "ns2"], description=None,
+            tableType="MANAGED", isTemporary=False
+        )
+        self.assertEqual(t.qualifiedName, "`cat`.`ns1`.`ns2`.`tbl`")
+
+        # temporary view: no catalog, no namespace
+        t = Table(
+            name="tmp", catalog=None, namespace=None, description=None,
+            tableType="TEMPORARY", isTemporary=True
+        )
+        self.assertEqual(t.qualifiedName, "`tmp`")
+
+        # names with special characters are backtick-escaped
+        t = Table(
+            name="my-tbl", catalog="my-cat", namespace=["my-db"], description=None,
+            tableType="MANAGED", isTemporary=False
+        )
+        self.assertEqual(t.qualifiedName, "`my-cat`.`my-db`.`my-tbl`")
+
+        # embedded backticks are doubled
+        t = Table(
+            name="t`b", catalog=None, namespace=["d`b"], description=None,
+            tableType="MANAGED", isTemporary=False
+        )
+        self.assertEqual(t.qualifiedName, "`d``b`.`t``b`")
+
+    def test_read_table_and_write_to_accept_table_object(self):
+        spark = self.spark
+        t_name = "py_catalog_tbl_obj_t"
+        with self.table(t_name):
+            spark.sql(f"CREATE TABLE {t_name} (id INT, name STRING) USING parquet")
+            spark.sql(f"INSERT INTO {t_name} VALUES (1, 'a'), (2, 'b')")
+
+            # getTable returns a Table whose qualifiedName can be used with read.table / writeTo
+            t = spark.catalog.getTable(f"default.{t_name}")
+            self.assertEqual(t.qualifiedName, f"`spark_catalog`.`default`.`{t_name}`")
+
+            # read.table accepts a Table object directly
+            rows = sorted(spark.read.table(t).collect(), key=lambda r: r[0])
+            self.assertEqual(rows[0][0], 1)
+            self.assertEqual(rows[0][1], "a")
+            self.assertEqual(rows[1][0], 2)
+            self.assertEqual(rows[1][1], "b")
+
+        # writeTo accepts a Table object directly; requires a V2 catalog
+        # typical use: filter listTables then write
+        with self.sql_conf(
+            {
+                "spark.sql.catalog.testcat": (
+                    "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog"
+                )
+            }
+        ):
+            spark.sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns")
+            with self.table("testcat.ns.tbl"):
+                spark.sql("CREATE TABLE testcat.ns.tbl (id INT, name STRING) USING foo")
+                non_temp = [
+                    t
+                    for t in spark.catalog.listTables("testcat.ns")
+                    if not t.isTemporary
+                ]
+                self.assertEqual(len(non_temp), 1)
+                spark.createDataFrame([(3, "c")], ["id", "name"]).writeTo(non_temp[0]).append()
+                self.assertEqual(spark.read.table(non_temp[0]).count(), 1)
+
 
 class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):
     pass

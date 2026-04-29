@@ -2342,7 +2342,12 @@ class DataFrame(ParentDataFrame):
             plan=self._plan.to_proto(self._session.client),
         )
 
-    def writeTo(self, table: str) -> "DataFrameWriterV2":
+    def writeTo(self, table: Union[str, "Table"]) -> "DataFrameWriterV2":
+        from pyspark.sql.catalog import Table
+
+        if isinstance(table, Table):
+            table = table.qualifiedName
+
         def cb(ei: "ExecutionInfo") -> None:
             self._execution_info = ei
 

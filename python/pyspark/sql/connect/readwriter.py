@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.catalog import Table
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -149,7 +150,11 @@ class DataFrameReader(OptionUtils):
 
         return DataFrame(plan, self._client)
 
-    def table(self, tableName: str) -> "DataFrame":
+    def table(self, tableName: Union[str, "Table"]) -> "DataFrame":
+        from pyspark.sql.catalog import Table
+
+        if isinstance(tableName, Table):
+            tableName = tableName.qualifiedName
         return self._df(Read(tableName, self._options))
 
     table.__doc__ = PySparkDataFrameReader.table.__doc__

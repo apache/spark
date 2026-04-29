@@ -1910,7 +1910,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     groupby = groupBy
     drop_duplicates = dropDuplicates
 
-    def writeTo(self, table: str) -> "DataFrameWriterV2":
+    def writeTo(self, table: Union[str, "Table"]) -> "DataFrameWriterV2":
+        from pyspark.sql.catalog import Table
+
+        if isinstance(table, Table):
+            table = table.qualifiedName
         return DataFrameWriterV2(self, table)
 
     def mergeInto(self, table: str, condition: Column) -> "MergeIntoWriter":

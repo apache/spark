@@ -57,6 +57,38 @@ class Table(NamedTuple):
         else:
             return None
 
+    @property
+    def qualifiedName(self) -> str:
+        """
+        Returns the fully qualified, backtick-quoted name of this table suitable for use as
+        a table identifier in SQL or directly with :meth:`DataFrameReader.table` and
+        :meth:`DataFrame.writeTo`.
+
+        .. versionadded:: 4.2.0
+
+        Examples
+        --------
+        >>> from pyspark.sql.catalog import Table
+        >>> t = Table(name="my_table", catalog="spark_catalog",
+        ...           namespace=["default"], description=None,
+        ...           tableType="MANAGED", isTemporary=False)
+        >>> t.qualifiedName
+        '`spark_catalog`.`default`.`my_table`'
+        """
+
+        # Must mirror Scala's QuotingUtils.quoteIdentifier: wrap in backticks,
+        # doubling any embedded backtick.
+        def quote(part: str) -> str:
+            return "`" + part.replace("`", "``") + "`"
+
+        parts = []
+        if self.catalog is not None:
+            parts.append(self.catalog)
+        if self.namespace is not None:
+            parts.extend(self.namespace)
+        parts.append(self.name)
+        return ".".join(quote(p) for p in parts)
+
 
 class Column(NamedTuple):
     name: str
