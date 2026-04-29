@@ -250,6 +250,14 @@ case class ResolvedPersistentView(
   // it output does not affect query resolution.
   override lazy val output: Seq[Attribute] =
     toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(info.schema))
+
+  // Render `info` in plan-tree output as the qualified view name. The default case-class
+  // `toString` would format `info` via `Object.toString`, which produces `V1ViewInfo@<hash>`
+  // for the v1 leg and a similarly opaque hash for the v2 leg -- non-deterministic and useless
+  // in EXPLAIN / golden file output. Replace it with the multi-part `catalog.namespace.name`
+  // form so EXPLAIN, plan-tree dumps, and `SQLQueryTestSuite` golden files remain stable.
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(catalog, identifier, (catalog.name +: identifier.namespace :+ identifier.name).quoted)
 }
 
 /**
