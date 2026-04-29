@@ -63,26 +63,26 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   // Scenario 1: external writes
 
   test("[connect] repeated sql() reflects session write") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
-      s.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
+      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   test("[connect] repeated sql() reflects external write") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // external writer adds (2, 200)
-      val serverSession = getServerSession(s)
+      val serverSession = getServerSession(session)
       val cat = serverSession.sessionState.catalogManager
         .catalog("testcat")
         .asInstanceOf[InMemoryTableCatalog]
@@ -92,36 +92,38 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         .asInstanceOf[InMemoryBaseTable]
       extTable.withData(Array(new BufferedRows(Seq.empty, schema2).withRow(InternalRow(2, 200))))
 
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   // Scenario 2: external schema changes
 
   test("[connect] repeated sql() reflects session schema change") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
-      s.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
-      s.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
+      session.sql(s"ALTER TABLE $T ADD COLUMN new_col INT").collect()
+      session.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+      assertRows(
+        session.sql(s"SELECT * FROM $T").collect(),
+        Seq(Row(1, 100, null), Row(2, 200, -1)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   test("[connect] repeated sql() reflects external schema change") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // external schema change + data write via catalog API
-      val serverSession = getServerSession(s)
+      val serverSession = getServerSession(session)
       val cat = serverSession.sessionState.catalogManager
         .catalog("testcat")
         .asInstanceOf[InMemoryTableCatalog]
@@ -135,36 +137,38 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       extTable.withData(
         Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
 
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
+      assertRows(
+        session.sql(s"SELECT * FROM $T").collect(),
+        Seq(Row(1, 100, null), Row(2, 200, -1)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   // Scenario 3: drop and recreate table
 
   test("[connect] repeated sql() reflects session drop/recreate") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
-      s.sql(s"DROP TABLE $T").collect()
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq.empty)
+      session.sql(s"DROP TABLE $T").collect()
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq.empty)
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   test("[connect] repeated sql() reflects external drop/recreate") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
       // external drop and recreate via catalog API
-      val serverSession = getServerSession(s)
+      val serverSession = getServerSession(session)
       val cat = serverSession.sessionState.catalogManager
         .catalog("testcat")
         .asInstanceOf[InMemoryTableCatalog]
@@ -175,9 +179,9 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         Array.empty,
         Collections.emptyMap[String, String])
 
-      assertRows(s.sql(s"SELECT * FROM $T").collect(), Seq.empty)
+      assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq.empty)
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
@@ -186,15 +190,15 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   // the plan for fresh analysis on every action.
 
   test("[connect] reused DataFrame reflects external write") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df = s.sql(s"SELECT * FROM $T")
+      val df = session.sql(s"SELECT * FROM $T")
       assertRows(df.collect(), Seq(Row(1, 100)))
 
       // external write via catalog API
-      val serverSession = getServerSession(s)
+      val serverSession = getServerSession(session)
       val cat = serverCatalog(serverSession)
       val schema2 = StructType.fromDDL("id INT, salary INT")
       val extTable = cat
@@ -205,20 +209,20 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // same df object, Connect re-analyzes and sees the new row
       assertRows(df.collect(), Seq(Row(1, 100), Row(2, 200)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   test("[connect] reused DataFrame reflects external schema change") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df = s.sql(s"SELECT * FROM $T")
+      val df = session.sql(s"SELECT * FROM $T")
       assertRows(df.collect(), Seq(Row(1, 100)))
 
       // external schema change + write via catalog API
-      val serverSession = getServerSession(s)
+      val serverSession = getServerSession(session)
       val cat = serverCatalog(serverSession)
       val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
       cat.alterTable(ident, addCol)
@@ -233,20 +237,20 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // same df object, Connect re-analyzes and sees the new schema
       assertRows(df.collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   test("[connect] reused DataFrame reflects external drop/recreate") {
-    withSession { s =>
-      s.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      s.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
-      val df = s.sql(s"SELECT * FROM $T")
+      val df = session.sql(s"SELECT * FROM $T")
       assertRows(df.collect(), Seq(Row(1, 100)))
 
       // external drop and recreate via catalog API
-      val serverSession = getServerSession(s)
+      val serverSession = getServerSession(session)
       val cat = serverCatalog(serverSession)
       cat.dropTable(ident)
       cat.createTable(
@@ -258,7 +262,7 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // same df object, Connect re-analyzes against the new empty table
       assertRows(df.collect(), Seq.empty)
 
-      s.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 }
