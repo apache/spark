@@ -421,15 +421,16 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
   /**
    * Move the cast to the literal side for String to Date comparisons.
-   * Transform CAST(string_col AS DATE) op date_literal to
-   * string_col op CAST(date_literal AS STRING).
+   * Transform CAST(string_col AS DATE) op date_literal
+   * to string_col op string_literal
    * This allows the comparison to be pushed down to data sources and avoids casting every row.
    */
   private def unwrapStringToDate(
       exp: BinaryComparison,
       fromExp: Expression,
       date: Literal): Expression = {
-    val dateAsString = Cast(date, StringType)
+    val dateAsStringValue = Cast(date, StringType).eval()
+    val dateAsString = Literal.create(dateAsStringValue, StringType)
     exp match {
       case _: GreaterThan => GreaterThan(fromExp, dateAsString)
       case _: GreaterThanOrEqual => GreaterThanOrEqual(fromExp, dateAsString)

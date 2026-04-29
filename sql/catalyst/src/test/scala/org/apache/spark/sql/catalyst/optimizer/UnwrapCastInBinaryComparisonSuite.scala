@@ -503,7 +503,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     doTest(tsNtzLit4)
   }
 
-  test("Support unwrap String to Date cast") {
+  test("SPARK-56391: Support unwrap String to Date cast") {
     val date = java.sql.Date.valueOf("2023-01-01")
     val dateLit = Literal.create(date, DateType)
 

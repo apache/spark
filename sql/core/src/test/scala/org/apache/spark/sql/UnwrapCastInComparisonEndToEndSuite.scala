@@ -289,5 +289,32 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("SPARK-56391: String to date comparison in repeated grouping expression") {
+    withTable(t) {
+      Seq("2026-01-01", "2026-03-15", "2026-03-16", "2026-05-01", null)
+        .toDF("date_key").write.saveAsTable(t)
+
+      checkAnswer(
+        spark.sql(
+          s"""
+             |SELECT
+             |  CASE
+             |    WHEN date_key <= date_add(DATE'2026-05-01', -60) THEN 'new'
+             |    ELSE 'old'
+             |  END AS freshness,
+             |  count(*)
+             |FROM $t
+             |GROUP BY
+             |  CASE
+             |    WHEN date_key <= date_add(DATE'2026-05-01', -60) THEN 'new'
+             |    ELSE 'old'
+             |  END
+             |""".stripMargin),
+        Seq(
+          Row("new", 1),
+          Row("old", 4)))
+    }
+  }
+
   private def decimal(v: BigDecimal): Decimal = Decimal(v, 5, 2)
 }
