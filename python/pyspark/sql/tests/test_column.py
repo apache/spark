@@ -576,7 +576,10 @@ class ColumnTestsMixin:
             .join(enriched, "txn_id", "full_outer")
             .select(dim["dim_id"])
         )
-        self.assertEqual(result.count(), 2)
+        self.assertEqual(
+            [r["dim_id"] for r in result.sort("txn_id").collect()],
+            [10, 20],
+        )
 
     def test_drop_notexistent_col(self):
         df1 = self.spark.createDataFrame(
