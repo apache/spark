@@ -23,9 +23,7 @@ import jdk.javadoc.doclet.StandardDoclet;
 
 import javax.lang.model.element.Element;
 import javax.tools.Diagnostic;
-import javax.tools.FileObject;
 
-import java.io.PrintWriter;
 import java.util.Locale;
 
 /**
@@ -81,31 +79,6 @@ public final class SparkUnidocDoclet extends StandardDoclet {
     public void print(Diagnostic.Kind kind, Element element, String message) {
       mirror(kind, element == null ? null : element.toString(), message);
       delegate.print(kind, element, message);
-    }
-
-    @Override
-    public void print(
-        Diagnostic.Kind kind, DocTreePath path, int start, int pos, int end, String message) {
-      mirror(kind, locationOf(path), message);
-      delegate.print(kind, path, start, pos, end, message);
-    }
-
-    @Override
-    public void print(
-        Diagnostic.Kind kind, FileObject file, int start, int pos, int end, String message) {
-      String loc = (file == null) ? null : (file.getName() + ":" + pos);
-      mirror(kind, loc, message);
-      delegate.print(kind, file, start, pos, end, message);
-    }
-
-    @Override
-    public PrintWriter getStandardWriter() {
-      return delegate.getStandardWriter();
-    }
-
-    @Override
-    public PrintWriter getDiagnosticWriter() {
-      return delegate.getDiagnosticWriter();
     }
 
     private static String locationOf(DocTreePath path) {
