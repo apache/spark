@@ -175,7 +175,8 @@ private[sql] object V2TableUtil extends SQLConfHelper {
           case _ =>
             // 1. Column exists in the original schema but not in the current table.
             // 2. Column IDs have not changed.
-            // Note, dropped columns are handled separately by
+            // 3. The current column's ID is null (connector disabled ID tracking).
+            // Note that dropped columns are handled separately by
             // [[columnsMissingOrAddedAfterAnalysis]].
         }
       }
