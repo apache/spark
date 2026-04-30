@@ -107,6 +107,33 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
     }
   }
 
+  // Scenario 1 connector w/ cache (external write, caching connector)
+  test("[connect] connector w/ cache: repeated sql() stale after external write") {
+    withSession { session =>
+      session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      val serverSession = getServerSession(session)
+      val cat = serverCachingCatalog(serverSession)
+      val schema = StructType.fromDDL("id INT, salary INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+
+      // Caching connector returns stale table: external write invisible
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, external write becomes visible
+      session.sql(s"REFRESH TABLE $CT").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100), Row(2, 200)))
+
+      session.sql(s"DROP TABLE IF EXISTS $CT").collect()
+      CachingInMemoryTableCatalog.clearCache()
+    }
+  }
+
   // Scenario 2: external schema changes
 
   test("[connect] repeated sql() reflects session schema change") {
@@ -154,6 +181,39 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
     }
   }
 
+  // Scenario 2 connector w/ cache (external schema change, caching connector)
+  test("[connect] connector w/ cache: repeated sql() stale after external schema change") {
+    withSession { session =>
+      session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      val serverSession = getServerSession(session)
+      val cat = serverCachingCatalog(serverSession)
+      val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
+      cat.alterTable(ident, addCol)
+
+      val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+
+      // Caching connector returns stale table: external changes invisible
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, schema change + data visible
+      session.sql(s"REFRESH TABLE $CT").collect()
+      assertRows(
+        session.sql(s"SELECT * FROM $CT").collect(),
+        Seq(Row(1, 100, null), Row(2, 200, -1)))
+
+      session.sql(s"DROP TABLE IF EXISTS $CT").collect()
+      CachingInMemoryTableCatalog.clearCache()
+    }
+  }
+
   // Scenario 3: drop and recreate table
 
   test("[connect] repeated sql() reflects session drop/recreate") {
@@ -191,6 +251,34 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq.empty)
 
       session.sql(s"DROP TABLE IF EXISTS $T").collect()
+    }
+  }
+
+  // Scenario 3 connector w/ cache (external drop/recreate, caching connector)
+  test("[connect] connector w/ cache: repeated sql() stale after external drop/recreate") {
+    withSession { session =>
+      session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      val serverSession = getServerSession(session)
+      val cat = serverCachingCatalog(serverSession)
+      cat.dropTable(ident)
+      cat.createTable(
+        ident,
+        Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
+        Array.empty,
+        Collections.emptyMap[String, String])
+
+      // Caching connector returns stale table: drop/recreate invisible
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, new empty table visible
+      session.sql(s"REFRESH TABLE $CT").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq.empty)
+
+      session.sql(s"DROP TABLE IF EXISTS $CT").collect()
+      CachingInMemoryTableCatalog.clearCache()
     }
   }
 
@@ -275,96 +363,4 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  // Connector w/ cache: repeated sql() tests.
-  // CachingInMemoryTableCatalog caches the first loadTable result.
-  // External changes go to the original table but reads return the
-  // cached (stale) copy, so external mutations are invisible.
-
-  test("[connect] connector w/ cache: repeated sql() stale after external write") {
-    withSession { session =>
-      session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-      session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
-
-      // external writer adds (2, 200) via catalog API (bypasses cache)
-      val serverSession = getServerSession(session)
-      val cat = serverCachingCatalog(serverSession)
-      val schema = StructType.fromDDL("id INT, salary INT")
-      val extTable = cat
-        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-        .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
-
-      // Caching connector returns stale table: external write invisible
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
-
-      // REFRESH TABLE invalidates the connector cache, external write becomes visible
-      session.sql(s"REFRESH TABLE $CT").collect()
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100), Row(2, 200)))
-
-      session.sql(s"DROP TABLE IF EXISTS $CT").collect()
-      CachingInMemoryTableCatalog.clearCache()
-    }
-  }
-
-  test("[connect] connector w/ cache: repeated sql() stale after external schema change") {
-    withSession { session =>
-      session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-      session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
-
-      // external schema change + data via catalog API
-      val serverSession = getServerSession(session)
-      val cat = serverCachingCatalog(serverSession)
-      val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
-      cat.alterTable(ident, addCol)
-
-      val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
-      val extTable = cat
-        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-        .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(
-        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
-
-      // Caching connector returns stale table: external changes invisible
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
-
-      // REFRESH TABLE invalidates the connector cache, schema change + data visible
-      session.sql(s"REFRESH TABLE $CT").collect()
-      assertRows(
-        session.sql(s"SELECT * FROM $CT").collect(),
-        Seq(Row(1, 100, null), Row(2, 200, -1)))
-
-      session.sql(s"DROP TABLE IF EXISTS $CT").collect()
-      CachingInMemoryTableCatalog.clearCache()
-    }
-  }
-
-  test("[connect] connector w/ cache: repeated sql() stale after external drop/recreate") {
-    withSession { session =>
-      session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-      session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
-
-      // external drop and recreate via catalog API
-      val serverSession = getServerSession(session)
-      val cat = serverCachingCatalog(serverSession)
-      cat.dropTable(ident)
-      cat.createTable(
-        ident,
-        Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
-        Array.empty,
-        Collections.emptyMap[String, String])
-
-      // Caching connector returns stale table: drop/recreate invisible
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
-
-      // REFRESH TABLE invalidates the connector cache, new empty table visible
-      session.sql(s"REFRESH TABLE $CT").collect()
-      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq.empty)
-
-      session.sql(s"DROP TABLE IF EXISTS $CT").collect()
-      CachingInMemoryTableCatalog.clearCache()
-    }
-  }
 }
