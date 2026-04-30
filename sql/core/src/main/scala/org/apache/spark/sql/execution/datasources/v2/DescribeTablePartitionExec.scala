@@ -38,7 +38,11 @@ case class DescribeTablePartitionExec(
   override protected def run(): Seq[InternalRow] = {
     val partitionRow = validateAndGetPartition()
 
-    // Delegate schema + partitioning + clustering to DescribeTableExec.
+    // Delegate schema + partitioning + clustering to DescribeTableExec. We pass
+    // `catalogName` / `tableIdent` for ctor completeness only -- with `isExtended = false`,
+    // only `addBaseDescription` runs, which reads neither field; the structured
+    // `# Detailed Table Information` block (which is what consumes them) is gated on
+    // `isExtended`.
     val rows = new ArrayBuffer[InternalRow]()
     DescribeTableExec(output, catalogName, tableIdent, table, isExtended = false)
       .addBaseDescription(rows)

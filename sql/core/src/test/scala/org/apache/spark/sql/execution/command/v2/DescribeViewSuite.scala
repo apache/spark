@@ -49,10 +49,11 @@ class DescribeViewSuite
     assert(byName.get("View").contains("v2_desc_struct_rows"))
   }
 
-  test("V2: extended on a multi-segment namespace omits Database and dot-quotes Namespace") {
+  test("V2: extended on a multi-segment namespace omits Database and joins Namespace with dots") {
     // Multi-segment v2 namespaces can't be rendered as a single-string `database`
     // losslessly, so the v1-compat `Database` row is omitted; only `Namespace` is
-    // emitted, with `quoteIfNeeded` applied per segment.
+    // emitted, with segments joined by `.` (and `quoteIfNeeded` applied per segment --
+    // not exercised here because both segments are valid bare identifiers).
     val ns = s"$catalog.ns1.ns2"
     withNamespace(ns) {
       sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")

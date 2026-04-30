@@ -242,10 +242,11 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
   }
 
   test("DESCRIBE TABLE EXTENDED with a multi-segment namespace omits Database " +
-      "and dot-quotes Namespace") {
+      "and joins Namespace with dots") {
     // Multi-segment v2 namespaces can't be rendered as a single-string `database`
     // losslessly, so the v1-compat `Database` row is omitted; only `Namespace` is
-    // emitted, with `quoteIfNeeded` applied per segment.
+    // emitted, with segments joined by `.` (and `quoteIfNeeded` applied per segment --
+    // not exercised here because both segments are valid bare identifiers).
     withNamespaceAndTable("ns1.ns2", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing")
       val rows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
