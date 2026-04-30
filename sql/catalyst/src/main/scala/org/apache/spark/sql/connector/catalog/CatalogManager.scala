@@ -65,6 +65,19 @@ class CatalogManager(
   def withTransaction(transaction: Transaction): CatalogManager =
     new TransactionAwareCatalogManager(this, transaction)
 
+  /**
+   * Called after a table is loaded during relation resolution. Overridden by
+   * [[TransactionAwareCatalogManager]] to enforce single-catalog isolation per transaction.
+   */
+  def validateCatalogForTableLoad(catalog: CatalogPlugin): Unit = {}
+
+  /**
+   * Returns the catalog name that owns path-based tables for the given data source format name,
+   * or None if the format is unknown or does not implement SupportsCatalogOptions.
+   * Overridden in sql/core via [[BaseSessionStateBuilder]] to use the real DataSource API.
+   */
+  def catalogForDataSource(formatName: String): Option[String] = None
+
   def isCatalogRegistered(name: String): Boolean = {
     try {
       catalog(name)

@@ -7150,6 +7150,14 @@
     ],
     "sqlState" : "42601"
   },
+  "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED" : {
+    "message" : [
+      "All tables participating in a transactional operation must belong to the same catalog.",
+      "The write target belongs to catalog '<txnCatalog>', but the query also references",
+      "table(s) from catalog(s): <foreignCatalogs>."
+    ],
+    "sqlState" : "0A000"
+  },
   "TRANSFORM_WITH_STATE_SCHEMA_MUST_BE_NULLABLE" : {
     "message" : [
       "If Avro encoding is enabled, all the fields in the schema for column family <columnFamilyName> must be nullable",

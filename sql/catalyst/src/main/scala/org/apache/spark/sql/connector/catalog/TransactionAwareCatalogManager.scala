@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.TempVariableManager
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A [[CatalogManager]] decorator that redirects catalog lookups to the transaction's catalog
@@ -45,6 +46,20 @@ private[sql] class TransactionAwareCatalogManager(
     val resolved = delegate.catalog(name)
     if (txn.catalog.name() == resolved.name()) txn.catalog else resolved
   }
+
+  /**
+   * Validates that a table loaded during relation resolution belongs to the transaction catalog.
+   * All table loads during a transaction must come from the same catalog to ensure isolation.
+   */
+  override def validateCatalogForTableLoad(catalog: CatalogPlugin): Unit = {
+    if (catalog.name() != txn.catalog.name()) {
+      throw QueryCompilationErrors.transactionMultiCatalogNotSupportedError(
+        txn.catalog.name(), catalog.name())
+    }
+  }
+
+  override def catalogForDataSource(formatName: String): Option[String] =
+    delegate.catalogForDataSource(formatName)
 
   override def currentCatalog: CatalogPlugin = {
     val c = delegate.currentCatalog

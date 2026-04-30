@@ -21,16 +21,17 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, TransactionalWr
 import org.apache.spark.sql.catalyst.plans.logical.AnalysisHelper.allowInvokingTransformsInAnalyzer
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /**
- * When a transaction is active, converts resolved [[DataSourceV2Relation]] nodes back to
- * [[V2TableReference]] placeholders for all relations loaded by a catalog with the same
- * name as the transaction catalog.
- *
- * This forces re-resolution of those relations against the transaction's catalog, which
- * intercepts [[TableCatalog#loadTable]] calls to track which tables are read as part of
- * the transaction.
+ * When a transaction is active, inspects all resolved [[DataSourceV2Relation]] nodes inside a
+ * [[TransactionalWrite]] subtree:
+ *  - Relations from the transaction's catalog are converted back to [[V2TableReference]]
+ *    placeholders, forcing re-resolution so that [[TableCatalog#loadTable]] is intercepted
+ *    by the transaction catalog to track reads.
+ *  - If any relation from a different catalog is detected we produce an error. We only support
+ *    single-catalog transactions so that the transaction catalog can track all accessed tables.
  */
 class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
@@ -57,6 +58,9 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
     plan.transform {
       case r: DataSourceV2Relation if isLoadedFromCatalog(r, catalog) =>
         V2TableReference.createForTransaction(r)
+      case r: DataSourceV2Relation if r.catalog.isDefined && r.identifier.isDefined =>
+        throw QueryCompilationErrors.transactionMultiCatalogNotSupportedError(
+          catalog.name(), r.catalog.get.name())
     }
   }
 

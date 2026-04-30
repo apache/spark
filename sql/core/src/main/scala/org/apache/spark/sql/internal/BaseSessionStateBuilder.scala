@@ -29,7 +29,11 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, SupportsCatalogOptions}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
@@ -161,7 +165,19 @@ abstract class BaseSessionStateBuilder(
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
   protected lazy val catalogManager = {
-    val cm = new CatalogManager(v2SessionCatalog, catalog)
+    val cm = new CatalogManager(v2SessionCatalog, catalog) {
+      override def catalogForDataSource(formatName: String): Option[String] =
+        try {
+          DataSource.lookupDataSourceV2(formatName, this.conf).flatMap {
+            case sco: SupportsCatalogOptions =>
+              val options = DataSourceV2Utils.extractSessionConfigs(sco, this.conf)
+              Option(sco.extractCatalog(new CaseInsensitiveStringMap(options.asJava)))
+            case _ => None
+          }
+        } catch {
+          case NonFatal(_) => None
+        }
+    }
     parentState.foreach(ps => cm.copySessionPathFrom(ps.catalogManager))
     cm
   }

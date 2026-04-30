@@ -135,7 +135,16 @@ private[sql] trait LookupCatalog extends Logging {
           Some((catalog, ident))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((currentCatalog, nameParts.asIdentifier))
+            // For path-based data sources (e.g. `pathformat2.'/path/to/t'`): if the format
+            // implements SupportsCatalogOptions and returns a catalog name, route the identifier
+            // to that catalog. This ensures CREATE TABLE and DML both land in the same catalog,
+            // which is necessary for transactional routing via pathBased().
+            val dataSourceCatalog = catalogManager.catalogForDataSource(nameParts.head).flatMap {
+              catName =>
+                try Some(catalogManager.catalog(catName))
+                catch { case _: CatalogNotFoundException => None }
+            }
+            Some((dataSourceCatalog.getOrElse(currentCatalog), nameParts.asIdentifier))
         }
       }
     }
