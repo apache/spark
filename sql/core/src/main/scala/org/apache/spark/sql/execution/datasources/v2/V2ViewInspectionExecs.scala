@@ -147,10 +147,12 @@ case class ShowV2ViewColumnsExec(
 
 /**
  * Physical plan node for DESCRIBE TABLE on a v2 view. Schema rows first; when EXTENDED is
- * specified, an additional `# Detailed View Information` block emits the v2-native fields
- * (catalog, identifier, view text, captured creation context, schema-binding mode, query
- * column names, user TBLPROPERTIES). v2 views are unpartitioned by definition, so the
- * partition-spec branch from v1 `DescribeTableCommand` is unreachable here.
+ * specified, an additional `# Detailed View Information` block emits the v2-native fields:
+ * the resolved-identifier components as separate rows (`Catalog`, `Namespace`, an optional
+ * v1-compat `Database` row when the namespace is a single segment, and `View`), followed by
+ * view text, captured creation context, schema-binding mode, query column names, and user
+ * TBLPROPERTIES. v2 views are unpartitioned by definition, so the partition-spec branch from
+ * v1 `DescribeTableCommand` is unreachable here.
  */
 case class DescribeV2ViewExec(
     output: Seq[Attribute],

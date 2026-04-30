@@ -72,7 +72,9 @@ case class DescribeTableExec(
     // part of `TableIdentifier` as `Database`. Multi-segment namespaces can't be rendered
     // as a single-string `database` losslessly, and a zero-segment (root) namespace has no
     // single-name representation, so the `Database` row is omitted in those cases and
-    // consumers must read `Namespace` instead.
+    // consumers must read `Namespace` instead. The value is the raw segment (no
+    // `quoteIfNeeded`), matching v1's `identifier.database.get`; consumers needing a
+    // quoting-safe form should read `Namespace`, where `quoted` is applied per segment.
     if (identifier.namespace().length == 1) {
       rows += toCatalystRow("Database", identifier.namespace().head, "")
     }
