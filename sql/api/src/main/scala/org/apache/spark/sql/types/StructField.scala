@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, parse, pretty, render}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
@@ -74,6 +75,17 @@ case class StructField(
       ("nullable" -> nullable) ~
       ("metadata" -> metadataJson)
   }
+
+  /**
+   * Internal: compact JSON representation of this StructField (name, type, nullable,
+   * metadata). Inverse of `StructField.fromJson(String)`. Connectors should round-trip
+   * a [[org.apache.spark.sql.connector.catalog.Column]] via `Column.toJson` /
+   * `Column.fromJson` instead.
+   */
+  private[sql] def json: String = compact(render(jsonValue))
+
+  /** Internal: pretty (i.e. indented) JSON representation of this StructField. */
+  private[sql] def prettyJson: String = pretty(render(jsonValue))
 
   private[sql] def dataTypeJsonValue: JValue = {
     if (collationMetadata.isEmpty) return dataType.jsonValue
@@ -272,4 +284,19 @@ case class StructField(
     s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}$nullDDL" +
       s"$getDDLDefault$getDDLComment"
   }
+}
+
+/**
+ * Internal companion. Holds the `private[sql]` JSON parsing helper that powers
+ * [[org.apache.spark.sql.connector.catalog.Column.fromJson]]. Connectors should not call
+ * methods on this companion directly; use the public `Column.toJson` / `Column.fromJson`
+ * APIs instead.
+ */
+object StructField {
+
+  /**
+   * Internal: parses a JSON string produced by `StructField.json` back into a `StructField`.
+   * The JSON must encode a single field with `name`, `type`, `nullable`, and `metadata`.
+   */
+  private[sql] def fromJson(json: String): StructField = DataType.parseStructField(parse(json))
 }
