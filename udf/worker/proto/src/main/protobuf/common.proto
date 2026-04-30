@@ -32,6 +32,13 @@ enum UDFWorkerDataFormat {
 }
 
 // The UDF execution type/shape.
+//
+// BIDIRECTIONAL_STREAMING is the only pattern supported by the engine for
+// now. It may be possible to express all UDF types (scalar, mapPartitions,
+// and eventually UDAF/UDTF/streaming) on top of this single pattern by
+// framing their phases as messages on the stream, but that is a design
+// question worth revisiting as additional UDF types are added -- for
+// example, aggregation may prefer a multi-round or specialized pattern.
 enum UDFProtoCommunicationPattern {
     UDF_PROTO_COMMUNICATION_PATTERN_UNSPECIFIED = 0;
 

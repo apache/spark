@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchViewException
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
@@ -27,8 +28,8 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Physical plan node for DROP VIEW on a v2 [[ViewCatalog]]. Calls [[ViewCatalog#dropView]]; if
  * it returns false and the catalog also implements [[TableCatalog]] with a table at this
- * identifier, surfaces the dedicated `EXPECT_VIEW_NOT_TABLE` error rather than a generic
- * "view not found" -- matching v1 `DropTableCommand(isView = true)`.
+ * identifier, surfaces `WRONG_COMMAND_FOR_OBJECT_TYPE` ("Use DROP TABLE instead") rather than
+ * a generic "view not found" -- matching v1 `DropTableCommand(isView = true)`.
  */
 case class DropViewExec(
     catalog: ViewCatalog,
@@ -45,8 +46,12 @@ case class DropViewExec(
         (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
       catalog match {
         case tc: TableCatalog if tc.tableExists(ident) =>
-          throw QueryCompilationErrors.expectViewNotTableError(
-            nameParts, cmd = "DROP VIEW", suggestAlternative = false, t = this)
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP VIEW",
+            requiredType = "VIEW",
+            objectName = nameParts.map(quoteIfNeeded).mkString("."),
+            foundType = "TABLE",
+            alternative = "DROP TABLE")
         case _ if !ifExists =>
           throw new NoSuchViewException(ident)
         case _ =>

@@ -29,7 +29,9 @@ import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.api.plugin.PluginContext
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_ALLOCATION_PODS_ALLOCATOR
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -286,5 +288,22 @@ class ExecutorResizePluginSuite
     plugin.invokePrivate(_checkAndIncreaseMemory(namespace, 0.9, 0.1))
 
     verify(podResource, times(1)).patch(any(), any(classOf[Pod]))
+  }
+
+  Seq("statefulset", "deployment").foreach { allocator =>
+    test(s"init returns early when pods allocator is '$allocator'") {
+      val plugin = new ExecutorResizeDriverPlugin()
+      val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, allocator)
+      val sc = mock(classOf[SparkContext])
+      when(sc.conf).thenReturn(sparkConf)
+      val pluginCtx = mock(classOf[PluginContext])
+
+      val result = plugin.init(sc, pluginCtx)
+
+      assert(result.isEmpty)
+      val clientField = plugin.getClass.getDeclaredField("kubernetesClient")
+      clientField.setAccessible(true)
+      assert(clientField.get(plugin) == null)
+    }
   }
 }

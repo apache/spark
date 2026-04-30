@@ -19,19 +19,26 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.connector.catalog.SupportsDeleteV2
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 case class DeleteFromTableExec(
     table: SupportsDeleteV2,
     condition: Array[Predicate],
-    refreshCache: () => Unit)
+    refreshCache: () => Unit,
+    transaction: Option[Transaction] = None)
   extends LeafV2CommandExec
+  with TransactionalExec
   with SupportsCustomDriverMetrics {
 
   override lazy val customMetrics: Map[String, SQLMetric] =
     createCustomMetrics(table.supportedCustomMetrics())
+
+  override def withTransaction(txn: Option[Transaction]): DeleteFromTableExec =
+    copy(transaction = txn)
 
   override protected def run(): Seq[InternalRow] = {
     try {
@@ -39,6 +46,7 @@ case class DeleteFromTableExec(
     } finally {
       postDriverMetrics(table.reportDriverMetrics())
     }
+    transaction.foreach(TransactionUtils.commit)
     refreshCache()
     Seq.empty
   }

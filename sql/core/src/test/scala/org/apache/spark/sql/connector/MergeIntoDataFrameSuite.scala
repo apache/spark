@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.{sources, Column, Row}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.Column
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableInfo
 import org.apache.spark.sql.functions._
@@ -30,6 +30,134 @@ import org.apache.spark.sql.types.StringType
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  private def targetTableCol(colName: String): Column = {
+    col(tableNameAsString + "." + colName)
+  }
+
+  test("self merge with transactional checks") {
+    // create table
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // create a source on top of itself that will be fully resolved and analyzed
+    val sourceDF = spark.table(tableNameAsString)
+      .where("salary == 100")
+      .as("source")
+    sourceDF.queryExecution.assertAnalyzed()
+
+    // merge into table using the source on top of itself
+    val (txn, txnTables) = executeTransaction {
+      sourceDF
+        .mergeInto(
+          tableNameAsString,
+          $"source.pk" === targetTableCol("pk") && targetTableCol("dep") === "hr")
+        .whenMatched()
+        .update(Map("salary" -> targetTableCol("salary").plus(1)))
+        .whenNotMatched()
+        .insertAll()
+        .merge()
+    }
+
+    // check txn was properly committed and closed
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 1)
+    assert(table.version() == "2")
+
+    // check all table scans
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.size == 4)
+
+    // check table scans as MERGE target
+    val numTargetScans = targetTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    }
+    assert(numTargetScans == 2)
+
+    // check table scans as MERGE source
+    val numSourceScans = targetTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("salary", 100) => true
+      case _ => false
+    }
+    assert(numSourceScans == 2)
+
+    // check txn state was propagated correctly
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 101, "hr"), // update
+        Row(2, 200, "software"), // unchanged
+        Row(3, 300, "hr"))) // unchanged
+  }
+
+  for (alterClause <- Seq(
+         "ADD COLUMN new_col INT",
+         "DROP COLUMN salary",
+         "ALTER COLUMN salary TYPE BIGINT",
+         "ALTER COLUMN pk DROP NOT NULL"))
+  test(s"self merge fails when source schema changes after analysis - DDL: $alterClause" ) {
+    withTable(tableNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = spark.table(tableNameAsString).where("salary == 100").as("source")
+      sourceDF.queryExecution.assertAnalyzed()
+
+      sql(s"ALTER TABLE $tableNameAsString $alterClause")
+
+      val e = intercept[AnalysisException] {
+        sourceDF
+          .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+          .whenMatched()
+          .update(Map("salary" -> targetTableCol("salary").plus(1)))
+          .merge()
+      }
+
+      assert(
+        e.getCondition == "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        alterClause)
+      assert(catalog.lastTransaction.currentState == Aborted, alterClause)
+      assert(catalog.lastTransaction.isClosed, alterClause)
+    }
+  }
+
+  test("self merge fails when source table is dropped and recreated after analysis") {
+    withTable(tableNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = spark.table(tableNameAsString).where("salary == 100").as("source")
+      sourceDF.queryExecution.assertAnalyzed()
+
+      val originalId = catalog.loadTable(ident).id
+
+      sql(s"DROP TABLE $tableNameAsString")
+      sql(s"CREATE TABLE $tableNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      val newId = catalog.loadTable(ident).id
+      assert(originalId != newId)
+
+      val e = intercept[AnalysisException] {
+        sourceDF
+          .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+          .whenMatched()
+          .update(Map("salary" -> targetTableCol("salary").plus(1)))
+          .merge()
+      }
+
+      assert(e.getCondition == "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH")
+      assert(catalog.lastTransaction.currentState == Aborted)
+      assert(catalog.lastTransaction.isClosed)
+    }
+  }
 
   test("merge into empty table with NOT MATCHED clause") {
     withTempView("source") {
@@ -979,6 +1107,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
   }
 
   test("SPARK-54157: version is refreshed when source is V2 table") {
+    import org.apache.spark.sql.connector.catalog.Column
     val sourceTable = "cat.ns1.source_table"
     withTable(sourceTable) {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -1026,6 +1155,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
   }
 
   test("SPARK-54444: any schema changes after analysis are prohibited") {
+    import org.apache.spark.sql.connector.catalog.Column
     val sourceTable = "cat.ns1.source_table"
     withTable(sourceTable) {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

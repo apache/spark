@@ -19,7 +19,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.test_utils import UtilsTestsMixin
 
 
-class ConnectUtilsTests(ReusedConnectTestCase, UtilsTestsMixin):
+class ConnectUtilsTests(UtilsTestsMixin, ReusedConnectTestCase):
     pass
 
 

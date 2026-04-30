@@ -541,7 +541,7 @@ class MapInPandasTestsMixin:
             )
 
 
-class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
+class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedSQLTestCase.setUpClass()

@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, InMemoryTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.MergeSummary
 import org.apache.spark.sql.execution.SparkPlan
@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
@@ -37,6 +38,309 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   import testImplicits._
 
   protected def deltaMerge: Boolean = false
+
+  test("self merge with transactional checks") {
+    // create table
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // merge into table using a subquery on top of itself
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING (SELECT * FROM $tableNameAsString WHERE salary = 100) s
+           |ON t.pk = s.pk AND t.dep = 'hr'
+           |WHEN MATCHED THEN
+           | UPDATE SET salary = t.salary + 1
+           |WHEN NOT MATCHED THEN
+           | INSERT *
+           |""".stripMargin)
+    }
+
+    // check txn was properly committed and closed
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 1)
+    assert(table.version() == "2")
+
+    // check all table scans
+    val targetTxnTable = txnTables(tableNameAsString)
+    val expectedNumScans = if (deltaMerge) 2 else 4
+    assert(targetTxnTable.scanEvents.size == expectedNumScans)
+
+    // check table scans as MERGE target
+    val numTargetScans = targetTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    }
+    val expectedNumTargetScans = if (deltaMerge) 1 else 2
+    assert(numTargetScans == expectedNumTargetScans)
+
+    // check table scans as MERGE source
+    val numSourceScans = targetTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("salary", 100) => true
+      case _ => false
+    }
+    val expectedNumSourceScans = if (deltaMerge) 1 else 2
+    assert(numSourceScans == expectedNumSourceScans)
+
+    // check txn state was propagated correctly
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 101, "hr"), // update
+        Row(2, 200, "software"), // unchanged
+        Row(3, 300, "hr"))) // unchanged
+  }
+
+  test("merge into table with analysis failure and transactional checks") {
+    createAndInitTable(
+      "pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'support'), (4, 400, 'finance')")
+
+    val exception = intercept[AnalysisException] {
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING $sourceNameAsString s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET salary = s.invalid_column
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'pending')
+           |""".stripMargin)
+    }
+
+    assert(exception.getMessage.contains("invalid_column"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("merge into table using view with transactional checks") {
+    withView("temp_view") {
+      // create target table
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      // create source table
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT)")
+      sql(s"INSERT INTO $sourceNameAsString (pk, salary) VALUES (1, 150), (4, 400)")
+
+      // create view on top of source and target tables
+      sql(
+        s"""CREATE VIEW temp_view AS
+           |SELECT s.pk, s.salary, t.dep
+           |FROM $sourceNameAsString s
+           |LEFT JOIN (
+           | SELECT * FROM $tableNameAsString WHERE pk < 10
+           |) t ON s.pk = t.pk
+           |""".stripMargin)
+
+      // merge into target table using view
+      val (txn, txnTables) = executeTransaction {
+        sql(s"""MERGE INTO $tableNameAsString t
+           |USING temp_view s
+           |ON t.pk = s.pk AND t.dep = 'hr'
+           |WHEN MATCHED THEN
+           | UPDATE SET salary = s.salary, dep = s.dep
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'pending')
+           |""".stripMargin)
+      }
+
+      // check txn covers both tables and was properly committed and closed
+      assert(txn.currentState == Committed)
+      assert(txn.isClosed)
+      assert(txnTables.size == 2)
+      assert(table.version() == "2")
+
+      // check target table was scanned correctly
+      val targetTxnTable = txnTables(tableNameAsString)
+      val expectedNumTargetScans = if (deltaMerge) 2 else 4
+      assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+      // check target table scans as MERGE target (dep = 'hr')
+      val numMergeTargetScans = targetTxnTable.scanEvents.flatten.count {
+        case sources.EqualTo("dep", "hr") => true
+        case _ => false
+      }
+      val expectedNumMergeTargetScans = if (deltaMerge) 1 else 2
+      assert(numMergeTargetScans == expectedNumMergeTargetScans)
+
+      // check target table scans in view as MERGE source (pk < 10)
+      val numViewTargetScans = targetTxnTable.scanEvents.flatten.count {
+        case sources.LessThan("pk", 10L) => true
+        case _ => false
+      }
+      val expectedNumViewTargetScans = if (deltaMerge) 1 else 2
+      assert(numViewTargetScans == expectedNumViewTargetScans)
+
+      // check source table scans in view as MERGE source (no predicate)
+      val sourceTxnTable = txnTables(sourceNameAsString)
+      val expectedNumSourceScans = if (deltaMerge) 1 else 2
+      assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+      // check txn state was propagated correctly
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 150, "hr"), // update
+          Row(2, 200, "software"), // unchanged
+          Row(3, 300, "hr"), // unchanged
+          Row(4, 400, "pending"))) // new
+    }
+  }
+
+  test("merge into table using nested view with transactional checks") {
+    withView("base_view", "nested_view") {
+      withTable(sourceNameAsString) {
+        // create target table
+        createAndInitTable(
+          "pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |""".stripMargin)
+
+        // create source table
+        sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT)")
+        sql(s"INSERT INTO $sourceNameAsString (pk, salary) VALUES (1, 150), (4, 400)")
+
+        // create base view
+        sql(
+          s"""CREATE VIEW base_view AS
+             |SELECT s.pk, s.salary, t.dep
+             |FROM $sourceNameAsString s
+             |LEFT JOIN (
+             | SELECT * FROM $tableNameAsString WHERE pk < 10
+             |) t ON s.pk = t.pk
+             |""".stripMargin)
+
+        // create nested view on top of base view
+        sql(
+          s"""CREATE VIEW nested_view AS
+             |SELECT * FROM base_view
+             |""".stripMargin)
+
+        // merge into target table using nested view
+        val (txn, txnTables) = executeTransaction {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING nested_view s
+               |ON t.pk = s.pk AND t.dep = 'hr'
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary, dep = s.dep
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'pending')
+               |""".stripMargin)
+        }
+
+        // check txn covers both tables and was properly committed and closed
+        assert(txn.currentState == Committed)
+        assert(txn.isClosed)
+        assert(txnTables.size == 2)
+        assert(table.version() == "2")
+
+        // check target table was scanned correctly
+        val targetTxnTable = txnTables(tableNameAsString)
+        val expectedNumTargetScans = if (deltaMerge) 2 else 4
+        assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+        // check target table scans as MERGE target (dep = 'hr')
+        val numMergeTargetScans = targetTxnTable.scanEvents.flatten.count {
+          case sources.EqualTo("dep", "hr") => true
+          case _ => false
+        }
+        val expectedNumMergeTargetScans = if (deltaMerge) 1 else 2
+        assert(numMergeTargetScans == expectedNumMergeTargetScans)
+
+        // check target table scans in view as MERGE source (pk < 10)
+        val numViewTargetScans = targetTxnTable.scanEvents.flatten.count {
+          case sources.LessThan("pk", 10L) => true
+          case _ => false
+        }
+        val expectedNumViewTargetScans = if (deltaMerge) 1 else 2
+        assert(numViewTargetScans == expectedNumViewTargetScans)
+
+        // check source table scans in view as MERGE source (no predicate)
+        val sourceTxnTable = txnTables(sourceNameAsString)
+        val expectedNumSourceScans = if (deltaMerge) 1 else 2
+        assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+        // check txn state was propagated correctly
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 150, "hr"), // update
+            Row(2, 200, "software"), // unchanged
+            Row(3, 300, "hr"), // unchanged
+            Row(4, 400, "pending"))) // new
+      }
+    }
+  }
+
+  test("merge into table rewritten as INSERT with transactional checks") {
+    withTable(sourceNameAsString) {
+      // create target table
+      createAndInitTable(
+        "pk INT, value STRING, dep STRING",
+        """{ "pk": 1, "value": "a", "dep": "hr" }
+          |{ "pk": 2, "value": "b", "dep": "finance" }
+          |""".stripMargin)
+
+      // create source table
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT, value STRING, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (3, 'c', 'hr'), (4, 'd', 'software')")
+
+      // merge into target with only WHEN NOT MATCHED clauses (rewritten as insert)
+      val (txn, txnTables) = executeTransaction {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING $sourceNameAsString s
+             |ON t.pk = s.pk
+             |WHEN NOT MATCHED AND s.pk < 4 THEN
+             |  INSERT (pk, value, dep) VALUES (s.pk, concat(s.value, '_low'), s.dep)
+             |WHEN NOT MATCHED AND s.pk >= 4 THEN
+             |  INSERT (pk, value, dep) VALUES (s.pk, concat(s.value, '_high'), s.dep)
+             |""".stripMargin)
+      }
+
+      // check txn covers both tables and was properly committed and closed
+      assert(txn.currentState == Committed)
+      assert(txn.isClosed)
+      assert(txnTables.size == 2)
+      assert(table.version() == "2")
+
+      // check target table was scanned correctly
+      val targetTxnTable = txnTables(tableNameAsString)
+      assert(targetTxnTable.scanEvents.size == 1)
+
+      // check source table was scanned correctly
+      val sourceTxnTable = txnTables(sourceNameAsString)
+      assert(sourceTxnTable.scanEvents.size == 1)
+
+      // check txn state was propagated correctly
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, "a", "hr"), // unchanged
+          Row(2, "b", "finance"), // unchanged
+          Row(3, "c_low", "hr"), // inserted via first NOT MATCHED clause
+          Row(4, "d_high", "software"))) // inserted via second NOT MATCHED clause
+    }
+  }
 
   test("merge into table with expression-based default values") {
     val columns = Array(
@@ -767,6 +1071,131 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         Seq(
           Row(1, 101, "support"), // unchanged
           Row(2, 200, "software"))) // unchanged
+    }
+  }
+
+  test("merge with CTE with transactional checks") {
+    withTable(sourceNameAsString) {
+      // create target table
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      // create source table
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+      // merge into target table using CTE
+      val (txn, txnTables) = executeTransaction {
+        sql(
+          s"""WITH cte AS (
+             |  SELECT pk, salary + 50 AS salary, dep
+             |  FROM $sourceNameAsString
+             |  WHERE salary > 100
+             |)
+             |MERGE INTO $tableNameAsString t
+             |USING cte s
+             |ON t.pk = s.pk AND t.dep = 'hr'
+             |WHEN MATCHED THEN
+             | UPDATE SET salary = s.salary
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'pending')
+             |""".stripMargin)
+      }
+
+      // check txn covers both tables and was properly committed and closed
+      assert(txn.currentState == Committed)
+      assert(txn.isClosed)
+      assert(txnTables.size == 2)
+      assert(table.version() == "2")
+
+      // check target table was scanned correctly
+      val targetTxnTable = txnTables(tableNameAsString)
+      val expectedNumTargetScans = if (deltaMerge) 1 else 2
+      assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+      // check target table scans as MERGE target (dep = 'hr')
+      val numMergeTargetScans = targetTxnTable.scanEvents.flatten.count {
+        case sources.EqualTo("dep", "hr") => true
+        case _ => false
+      }
+      assert(numMergeTargetScans == expectedNumTargetScans)
+
+      // check source table was scanned correctly
+      val sourceTxnTable = txnTables(sourceNameAsString)
+      val expectedNumSourceScans = if (deltaMerge) 1 else 2
+      assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+      // check source table scans in CTE (salary > 100)
+      val numCteSourceScans = sourceTxnTable.scanEvents.flatten.count {
+        case sources.GreaterThan("salary", 100) => true
+        case _ => false
+      }
+      assert(numCteSourceScans == expectedNumSourceScans)
+
+      // check txn state was propagated correctly
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 200, "hr"), // updated (150 + 50)
+          Row(2, 200, "software"), // unchanged
+          Row(3, 300, "hr"), // unchanged
+          Row(4, 450, "pending"))) // inserted (400 + 50)
+    }
+  }
+
+  test("merge with cached source and transactional checks") {
+    withTable(sourceNameAsString) {
+      // create target table
+      createAndInitTable(
+        "pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      // create and populate source table
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'support'), (4, 400, 'finance')")
+
+      // Cache source table before the transaction. Make sure when the transation is active the
+      // catalog still creates a transaction table.
+      spark.table(sourceNameAsString).cache()
+
+      try {
+        val (txn, txnTables) = executeTransaction {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING $sourceNameAsString s
+               |ON t.pk = s.pk AND t.dep = 'hr'
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = s.salary, dep = s.dep
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'pending')
+               |""".stripMargin)
+        }
+
+        assert(txn.currentState == Committed)
+        assert(txn.isClosed)
+        // both target and source must have been read through the transaction catalog
+        assert(txnTables.size == 2)
+        assert(table.version() == "2")
+        assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
+        assert(txnTables(tableNameAsString).scanEvents.nonEmpty)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 150, "support"), // matched and updated
+            Row(2, 200, "software"), // unchanged
+            Row(3, 300, "hr"), // unchanged (no match in source)
+            Row(4, 400, "pending"))) // not matched, inserted
+      } finally {
+        spark.catalog.uncacheTable(sourceNameAsString)
+      }
     }
   }
 
@@ -2322,6 +2751,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       sql(query)
     }
     assert(e.getMessage.contains("ON search condition of the MERGE statement"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
   }
 
   private def assertMetric(

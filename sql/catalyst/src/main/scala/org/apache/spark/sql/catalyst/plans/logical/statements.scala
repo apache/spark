@@ -188,7 +188,11 @@ case class InsertIntoStatement(
     byName: Boolean = false,
     replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
     withSchemaEvolution: Boolean = false)
-  extends UnaryParsedStatement {
+  // Extends TransactionalWrite so that QueryExecution can detect a potential transaction on the
+  // unresolved logical plan before analysis runs. InsertIntoStatement is shared between V1 and V2
+  // inserts, but the LookupCatalog.TransactionalWrite extractor only matches when the target
+  // catalog implements TransactionalCatalogPlugin, so V1 inserts are never assigned a transaction.
+  extends UnaryParsedStatement with TransactionalWrite {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")

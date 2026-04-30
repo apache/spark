@@ -32,9 +32,9 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -102,6 +102,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     CatalogUtils.makeQualifiedDBObjectPath(session.sharedState.conf.get(WAREHOUSE_PATH),
       location, session.sharedState.hadoopConf)
   }
+
+  // Strategy cases that target v2 views read `ResolvedPersistentView.info` directly. For
+  // session-catalog (v1) views the payload is a `V1ViewInfo` wrapping the original
+  // `CatalogTable`; v2 catalogs supply a regular `ViewInfo` from the catalog.
+  // `ResolveSessionCatalog` rewrites session-catalog views to v1 commands before this strategy
+  // fires, so v2 cases that don't expect a `V1ViewInfo` won't see one.
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
     val newLoc = tableSpec.location.map { loc =>
@@ -259,13 +265,18 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     // CREATE TABLE ... LIKE ... for a v2 catalog target.
     // Source is an already-resolved Table object; no extra catalog round-trip is needed.
-    // Views are wrapped in V1Table so the exec can extract schema and provider uniformly.
+    // Views are wrapped in V1Table so the exec can extract schema and provider uniformly --
+    // session-catalog (v1) views unwrap to their original `CatalogTable`; non-session v2
+    // views go through `V1Table.toCatalogTable` to synthesize an equivalent `CatalogTable`
+    // from the resolved `ViewInfo`.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
         locationStr, provider, serdeInfo, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
-        case ResolvedPersistentView(_, _, meta) => V1Table(meta)
+        case ResolvedPersistentView(_, _, info: V1ViewInfo) => V1Table(info.v1Table)
+        case rpv @ ResolvedPersistentView(viewCatalog, viewIdent, _) =>
+          V1Table(V1Table.toCatalogTable(viewCatalog, viewIdent, rpv.info))
         case ResolvedTempView(_, meta) => V1Table(meta)
       }
       val location = locationStr.map { loc =>
@@ -312,49 +323,72 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CreateV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, userSpecifiedColumns, comment,
         collation, properties, sqlText, child, allowExisting, replace, viewSchemaMode) :: Nil
 
-    case AlterViewAs(ResolvedPersistentView(catalog, ident, _), originalText, query, _, _) =>
-      AlterV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, originalText, query) :: Nil
+    case AlterViewAs(rpv @ ResolvedPersistentView(catalog, ident, _),
+        originalText, query, _, _) =>
+      AlterV2ViewExec(catalog.asInstanceOf[ViewCatalog], ident, rpv.info,
+        originalText, query) :: Nil
 
     // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
-    // `ResolveSessionCatalog` can't handle. These are tracked as follow-up work in SPARK-52729;
-    // pin the current failure mode with a clean `UNSUPPORTED_FEATURE.TABLE_OPERATION` error
-    // so users get a meaningful message (and test coverage catches a future regression to a
-    // generic planner error).
-    case SetViewProperties(ResolvedPersistentView(catalog, ident, _), _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "ALTER VIEW ... SET TBLPROPERTIES")
+    // `ResolveSessionCatalog` can't handle (its `ResolvedViewIdentifier` matcher is gated on
+    // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `ViewInfo`
+    // resolved at analysis time directly from `ResolvedPersistentView.info` -- no re-loading
+    // at exec time.
+    case SetViewProperties(rpv @ ResolvedPersistentView(catalog, ident, _), props) =>
+      AlterV2ViewSetPropertiesExec(
+        catalog.asInstanceOf[ViewCatalog], ident, rpv.info, props) :: Nil
 
-    case UnsetViewProperties(ResolvedPersistentView(catalog, ident, _), _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "ALTER VIEW ... UNSET TBLPROPERTIES")
+    case UnsetViewProperties(rpv @ ResolvedPersistentView(catalog, ident, _), keys, _) =>
+      AlterV2ViewUnsetPropertiesExec(
+        catalog.asInstanceOf[ViewCatalog], ident, rpv.info, keys) :: Nil
 
-    case AlterViewSchemaBinding(ResolvedPersistentView(catalog, ident, _), _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "ALTER VIEW ... WITH SCHEMA")
+    case AlterViewSchemaBinding(rpv @ ResolvedPersistentView(catalog, ident, _), schemaMode) =>
+      AlterV2ViewSchemaBindingExec(
+        catalog.asInstanceOf[ViewCatalog], ident, rpv.info, schemaMode) :: Nil
 
-    case RenameTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "ALTER VIEW ... RENAME TO")
+    case RenameTable(ResolvedPersistentView(catalog, ident, _), newName, isView) =>
+      // Reject `ALTER TABLE <view> RENAME TO ...` -- the syntax says TABLE, but the resolved
+      // child is a view. Matches the v1 runtime check in `DDLUtils.verifyAlterTableType`.
+      if (!isView) {
+        throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(ident.name())
+      }
+      RenameV2ViewExec(
+        catalog.asInstanceOf[ViewCatalog], ident, newName.asIdentifier) :: Nil
 
-    case ShowCreateTable(ResolvedPersistentView(catalog, ident, _), _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "SHOW CREATE TABLE")
+    case ShowCreateTable(rpv @ ResolvedPersistentView(catalog, ident, _), _, output) =>
+      val quoted = (catalog.name() +: ident.asMultipartIdentifier).map(quoteIfNeeded).mkString(".")
+      ShowCreateV2ViewExec(output, quoted, rpv.info) :: Nil
 
-    case ShowTableProperties(ResolvedPersistentView(catalog, ident, _), _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "SHOW TBLPROPERTIES")
+    case ShowTableProperties(rpv @ ResolvedPersistentView(catalog, ident, _),
+        propertyKey, output) =>
+      val quoted = (catalog.name() +: ident.asMultipartIdentifier).map(quoteIfNeeded).mkString(".")
+      ShowV2ViewPropertiesExec(output, quoted, rpv.info, propertyKey) :: Nil
 
-    case ShowColumns(ResolvedPersistentView(catalog, ident, _), _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "SHOW COLUMNS")
+    case ShowColumns(rpv @ ResolvedPersistentView(_, ident, _), ns, output) =>
+      // If `SHOW COLUMNS IN <view> FROM <ns>` was written with both the view's namespace and
+      // an explicit `FROM <ns>`, validate they agree -- mirrors the v1 rewrite in
+      // `ResolveSessionCatalog`. For multi-level v2 namespaces we compare the full namespace
+      // sequence (case-insensitively) rather than v1's single-part `database` check.
+      ns.foreach { nsSeq =>
+        val resolver = session.sessionState.conf.resolver
+        val viewNs = ident.namespace().toSeq
+        val mismatch = viewNs.length != nsSeq.length ||
+          viewNs.zip(nsSeq).exists { case (a, b) => !resolver(a, b) }
+        if (mismatch) {
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(nsSeq, viewNs)
+        }
+      }
+      ShowV2ViewColumnsExec(output, rpv.info) :: Nil
 
-    case DescribeRelation(ResolvedPersistentView(catalog, ident, _), _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "DESCRIBE TABLE")
+    case DescribeRelation(rpv @ ResolvedPersistentView(catalog, ident, _), isExtended, output) =>
+      DescribeV2ViewExec(output, catalog.name(), ident, rpv.info, isExtended) :: Nil
 
-    case DescribeColumn(ResolvedPersistentView(catalog, ident, _), _, _, _) =>
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "DESCRIBE TABLE ... COLUMN")
+    case DescribeColumn(rpv @ ResolvedPersistentView(_, _, _), column, isExtended, output) =>
+      // `ResolvedPersistentView.output` exposes the view's schema, so `ResolveReferences`
+      // resolves the column against it -- meaning we typically receive an `Attribute` here.
+      // Accept the legacy `UnresolvedAttribute` form too. The unwrap logic is shared with the
+      // v1 rewrite for session-catalog views in `ResolveSessionCatalog`.
+      DescribeV2ViewColumnExec(
+        output, rpv.info, DescribeColumn.extractColumnNameParts(column), isExtended) :: Nil
 
     // Plans that resolve through `UnresolvedTableOrView` reach here with a
     // `ResolvedPersistentView` child for non-session v2 views (the v1 rewrite in

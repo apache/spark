@@ -31,9 +31,9 @@ import org.apache.spark.annotation.Evolving;
  * query output column names. Schema and user TBLPROPERTIES are inherited from {@link TableInfo}
  * via the typed builder.
  * <p>
- * {@code ViewInfo} extends {@link TableInfo} so that a {@link RelationCatalog} can opt into the
- * single-RPC perf path by returning a {@link MetadataOnlyTable} wrapping a {@code ViewInfo}
- * from {@link RelationCatalog#loadRelation} for a view identifier. Pure {@link ViewCatalog}
+ * {@code ViewInfo} extends {@link TableInfo} so that a {@link TableViewCatalog} can opt into the
+ * single-RPC perf path by returning a {@link MetadataTable} wrapping a {@code ViewInfo}
+ * from {@link TableViewCatalog#loadTableOrView} for a view identifier. Pure {@link ViewCatalog}
  * implementations never see {@code TableInfo}; the typed setters on {@link Builder} cover
  * everything they need to construct a {@code ViewInfo}.
  *
@@ -49,7 +49,7 @@ public class ViewInfo extends TableInfo {
   private final String schemaMode;
   private final String[] queryColumnNames;
 
-  private ViewInfo(Builder builder) {
+  protected ViewInfo(Builder builder) {
     super(builder);
     this.queryText = Objects.requireNonNull(builder.queryText, "queryText should not be null");
     this.currentCatalog = builder.currentCatalog;
