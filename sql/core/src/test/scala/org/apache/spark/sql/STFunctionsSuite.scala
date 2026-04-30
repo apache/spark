@@ -31,7 +31,7 @@ class STFunctionsSuite extends QueryTest with SharedSparkSession {
   test("st_asbinary") {
     // Test data: Well-Known Binary (WKB) representations.
     val wkbNdr = "0101000000000000000000f03f0000000000000040"
-    val wkbXdr = "0101000000000000000000f03f0000000000000040"
+    val wkbXdr = "00000000013ff00000000000004000000000000000"
     val df = Seq[(String, String, String, String)](
         (wkbNdr, wkbXdr, "NDR", "XDR")
       ).toDF("wkbNDR", "wkbXDR", "endNDR", "endXDR")

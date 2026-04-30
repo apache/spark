@@ -26248,10 +26248,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_asbinary(
-    geo: "ColumnOrName",
-    endianness: Optional["ColumnOrName"] = None
-) -> Column:
+def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
 
     .. versionadded:: 4.1.0

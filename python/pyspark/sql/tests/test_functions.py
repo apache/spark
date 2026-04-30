@@ -3854,11 +3854,11 @@ class FunctionsTestsMixin:
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "NDR")),
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "XDR")),
-            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "end")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), F.col("end"))),
             F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
             F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "NDR")),
             F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "XDR")),
-            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "end")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), F.col("end"))),
         ).collect()
         expected = Row(
             "0101000000000000000000F03F0000000000000040",
