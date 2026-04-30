@@ -1076,6 +1076,8 @@ class Analyzer(
         table: NamedRelation,
         withNewTable: NamedRelation => LogicalPlan): LogicalPlan = {
       table match {
+        // Streaming write targets are constructed with isStreaming=false even inside a streaming
+        // query, because the sink is a regular batch write destination.
         case u: UnresolvedRelation if !u.isStreaming =>
           resolveRelation(u).map(unwrapRelationPlan).map {
             case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
