@@ -6594,7 +6594,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED =
-    buildConf("spark.sql.optimizer.mergeSubplans.symmetricFilterPropagation.enabled")
+    buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled")
       .doc("When set to true, two non-grouping aggregate subplans that both have filter " +
         "conditions (but with different predicates) can be merged into a single scan using " +
         "FILTER (WHERE ...) clauses on each aggregate expression. " +
