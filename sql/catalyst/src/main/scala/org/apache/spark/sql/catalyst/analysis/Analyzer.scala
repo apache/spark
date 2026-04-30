@@ -211,7 +211,8 @@ object AnalysisContext {
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
       resolutionPathEntries = viewDesc.viewStoredResolutionPath
-        .flatMap(CatalogManager.deserializePathEntries),
+        .map(CatalogManager.deserializePathEntriesOrFail(
+          _, "view", viewDesc.identifier.unquotedString)),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -228,7 +229,8 @@ object AnalysisContext {
     // Function body analysis should not inherit any caller-pinned path; use only function metadata.
     val context = originContext.copy(
       resolutionPathEntries = function.functionStoredResolutionPath
-        .flatMap(CatalogManager.deserializePathEntries),
+        .map(CatalogManager.deserializePathEntriesOrFail(
+          _, "SQL function", function.name.unquotedString)),
       collation = function.collation)
     set(context)
     try f finally { set(originContext) }

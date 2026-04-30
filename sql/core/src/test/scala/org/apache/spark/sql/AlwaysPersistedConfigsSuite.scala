@@ -24,6 +24,7 @@ import org.scalatest.Tag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.analysis.SQLScalarFunction
 import org.apache.spark.sql.catalyst.catalog.{
   CatalogStorageFormat,
@@ -247,6 +248,27 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
             sql("SET PATH = DEFAULT_PATH")
           }
         }
+      }
+    }
+  }
+
+  test("Malformed persisted SQL function path fails analysis context setup") {
+    withUserDefinedFunction(testFunctionName -> false) {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql(
+          s"""
+             |CREATE OR REPLACE FUNCTION $testFunctionName()
+             |RETURN SELECT 1
+             |""".stripMargin)
+        val function = analyzedSqlFunction(testFunctionName)
+        val broken = function.copy(
+          properties = function.properties + (SQLFunction.FUNCTION_RESOLUTION_PATH -> "{bad-json"))
+        val e = intercept[AnalysisException] {
+          AnalysisContext.withAnalysisContext(broken) {
+            ()
+          }
+        }
+        assert(e.getMessage.contains("Invalid stored SQL path metadata for SQL function"))
       }
     }
   }

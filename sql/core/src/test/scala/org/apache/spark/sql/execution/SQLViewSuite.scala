@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -1433,6 +1434,22 @@ abstract class SQLViewSuite extends QueryTest {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-56639: malformed persisted view path fails analysis") {
+    withView("default.v_bad_path_metadata") {
+      sql("CREATE VIEW default.v_bad_path_metadata AS SELECT 1 AS id")
+      val ident = TableIdentifier("v_bad_path_metadata", Some("default"))
+      val metadata = spark.sessionState.catalog.getTableMetadata(ident)
+      val corrupted = metadata.copy(
+        properties = metadata.properties + (CatalogTable.VIEW_RESOLUTION_PATH -> "{bad-json"))
+      spark.sessionState.catalog.alterTable(corrupted)
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT * FROM default.v_bad_path_metadata").collect()
+      }
+      assert(e.getMessage.contains("Invalid stored SQL path metadata for view"), e.getMessage)
     }
   }
 

@@ -21,6 +21,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -351,44 +352,65 @@ private[sql] object CatalogManager extends Logging {
       JArray(parts.map(JString(_)).toList)).toList))
   }
 
-  /**
-   * Parse a stored frozen path string from view/function metadata.
-   * Returns None if the payload is malformed.
-   */
-  def deserializePathEntries(storedPathStr: String): Option[Seq[Seq[String]]] = {
+  private def parsePathEntries(storedPathStr: String): Either[String, Seq[Seq[String]]] = {
     import org.json4s.JsonAST.{JArray, JString}
     import org.json4s.jackson.JsonMethods.parse
 
     Try(parse(storedPathStr)).toOption match {
       case Some(JArray(entries)) =>
-        entries.foldLeft(Option(Seq.empty[Seq[String]])) { (acc, entry) =>
-          acc.flatMap { collected =>
-            entry match {
-              case JArray(parts) =>
-                val strings = parts.collect { case JString(s) => s }
-                if (strings.size == parts.size) Some(collected :+ strings)
-                else {
-                  logWarning(
-                    s"Invalid stored SQL path metadata: expected string parts in array entry: " +
-                      s"$storedPathStr")
-                  None
-                }
-              case _ =>
-                logWarning(
-                  s"Invalid stored SQL path metadata: expected array entry but found non-array: " +
-                    s"$storedPathStr")
-                None
+        entries.foldLeft(Right(Seq.empty[Seq[String]]): Either[String, Seq[Seq[String]]]) {
+          (acc, entry) =>
+            acc.flatMap { collected =>
+              entry match {
+                case JArray(parts) =>
+                  val strings = parts.collect { case JString(s) => s }
+                  if (strings.size == parts.size) Right(collected :+ strings)
+                  else Left("expected all array entry parts to be JSON strings")
+                case _ =>
+                  Left("expected each top-level array entry to be a JSON array")
+              }
             }
-          }
         }
       case Some(_) =>
-        logWarning(
-          s"Invalid stored SQL path metadata: expected top-level JSON array: $storedPathStr")
-        None
+        Left("expected top-level JSON array")
       case None =>
+        Left("failed to parse JSON payload")
+    }
+  }
+
+  /**
+   * Parse a stored frozen path string from view/function metadata.
+   * Returns None if the payload is malformed.
+   */
+  def deserializePathEntries(storedPathStr: String): Option[Seq[Seq[String]]] = {
+    parsePathEntries(storedPathStr) match {
+      case Right(entries) => Some(entries)
+      case Left(reason) =>
         logWarning(
-          s"Invalid stored SQL path metadata: failed to parse JSON payload: $storedPathStr")
+          s"Invalid stored SQL path metadata: $reason. Raw payload: $storedPathStr")
         None
+    }
+  }
+
+  /**
+   * Parse stored frozen path metadata and fail analysis if malformed.
+   */
+  def deserializePathEntriesOrFail(
+      storedPathStr: String,
+      objectType: String,
+      objectName: String): Seq[Seq[String]] = {
+    parsePathEntries(storedPathStr) match {
+      case Right(entries) => entries
+      case Left(reason) =>
+        throw new AnalysisException(
+          message = s"Invalid stored SQL path metadata for $objectType '$objectName': " +
+            s"$reason. Raw payload: $storedPathStr",
+          line = None,
+          startPosition = None,
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          context = Array.empty)
     }
   }
 }
