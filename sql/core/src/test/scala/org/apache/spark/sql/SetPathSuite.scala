@@ -397,6 +397,8 @@ class SetPathSuite extends SharedSparkSession {
 
   test("PATH enabled: current_path does not accept arguments") {
     withPathEnabled {
+      // Ensure built-in function lookup succeeds so this assertion targets arg-count semantics.
+      sql("SET PATH = DEFAULT_PATH")
       val e = intercept[AnalysisException] {
         sql("SELECT current_path(1)")
       }
