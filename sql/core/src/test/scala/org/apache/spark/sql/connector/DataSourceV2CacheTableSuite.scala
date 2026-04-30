@@ -213,6 +213,7 @@ class DataSourceV2CacheTableSuite
       // has a different ID. The refresh detects the ID change and
       // the query sees the new empty table.
       checkAnswer(spark.table(T), Seq.empty)
+      assert(spark.table(T).schema.fieldNames.toSeq == Seq("id", "salary"))
     }
   }
 
