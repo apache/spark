@@ -336,7 +336,13 @@ class CommitterBindingSuite extends SparkFunSuite {
     committer.setupJob(tContext)
     committer.setupTask(tContext)
 
-    committer.newTaskTempFile(tContext, Some("a=1"), FileNameSpec("", ".parquet"))
+    val tempPath = committer.newTaskTempFile(tContext, Some("a=1"), FileNameSpec("", ".parquet"))
+
+    // The temp file must be under the committer's own work dir (path/_temporary),
+    // not written directly to the final output location.
+    val expectedWorkDir = path.toUri.toString.stripSuffix("/") + "/_temporary"
+    assert(tempPath.startsWith(expectedWorkDir),
+      s"Expected temp path under committer work dir ($expectedWorkDir), got: $tempPath")
 
     assert(committer.capturedPartitionPaths.isEmpty,
       s"partitionPaths must stay empty for cloud committers that handle " +
