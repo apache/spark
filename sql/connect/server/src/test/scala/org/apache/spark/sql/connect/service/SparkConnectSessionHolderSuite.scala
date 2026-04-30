@@ -39,6 +39,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{PythonStreamingQueryListener, SparkConnectPlanner, StreamingForeachBatchHelper}
 import org.apache.spark.sql.connect.planner.StreamingForeachBatchHelper.RunnerCleaner
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.streaming.StreamingQueryListener
@@ -284,6 +285,11 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       // Best-effort: release any resource the worker is blocked on so it can unwind its own
       // finally and stop holding global state (SparkConnectService, listeners, ...).
       onTimeout()
+      // Also interrupt the worker so any interruptible blocking call (e.g. the Thread.join
+      // inside StreamExecution.interruptAndAwaitExecutionThreadTermination, which fires when
+      // spark.sql.streaming.stopTimeout is 0/infinite) wakes up. onTimeout() handles socket
+      // hangs; this handles the join/wait family.
+      worker.interrupt()
       // Give the now-unblocked worker time to finish its cleanup before we declare defeat.
       // 30s covers the body's 4s Thread.sleep plus SparkConnectService.stop().
       val gracePeriodMs = 30.seconds.toMillis
@@ -292,7 +298,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         s"Test body did not complete within $timeoutMillis ms " +
           s"(after a $gracePeriodMs ms post-cleanup grace period)")
       // If the body actually finished during the grace window, surface the original failure
-      // so we don't lose diagnostic context (e.g. a slow assertion failure misreported as a hang).
+      // as the cause so a slow assertion failure is not misreported as a pure hang.
       if (!worker.isAlive && error != null) te.initCause(error)
       throw te
     }
@@ -405,34 +411,41 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
-    retryWithVisibleLog(maxAttempts = 3) {
-      // Create the SessionHolder here (not inside the body) so the wrapper can reach into it
-      // on timeout. The body runs on a fresh daemon thread so the test thread can move on
-      // when the body hangs inside a non-interruptible socket read. On timeout, closing the
-      // cleaner cache closes the Python worker sockets; that unblocks the hung dataIn.readInt
-      // and the leaked thread can run its own finally (stop SparkConnectService, remove
-      // listeners) before the next retry starts.
-      // Outer cap budget: body uses up to 30s + 30s `eventually` plus a 4s sleep plus
-      // service start/stop overhead; 2 minutes leaves comfortable headroom on slow CI
-      // runners while still strictly bounding the original 150-minute hang.
-      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-      awaitTestBodyInNewThread(
-        timeoutMillis = TimeUnit.MINUTES.toMillis(2),
-        onTimeout = () => {
-          try sessionHolder.streamingForeachBatchRunnerCleanerCache.cleanUpAll()
-          catch {
-            case t: Throwable =>
-              // Surface suppressed cleanup errors: a failure here is exactly the case
-              // where the next attempt is most likely to also hang, so silently dropping
-              // it would make diagnosis impossible.
-              // scalastyle:off println
-              println(
-                s"===== onTimeout cleanUpAll suppressed " +
-                  s"${t.getClass.getSimpleName}: ${t.getMessage} =====")
-              // scalastyle:on println
-          }
-        }) {
-        runPythonForeachBatchTerminationTestBody(sessionHolder)
+    // Bound query.stop() so it cannot hang indefinitely on a stuck streaming execution
+    // thread. The default for spark.sql.streaming.stopTimeout is 0 (wait forever), which
+    // turns a stuck batch into an unkillable test. 30s is an order of magnitude larger
+    // than the body's typical green-path runtime (~5s) but small enough that an outer
+    // attempt-level retry can recover within the 2-minute cap below.
+    withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "30000") {
+      retryWithVisibleLog(maxAttempts = 3) {
+        // Create the SessionHolder here (not inside the body) so the wrapper can reach into
+        // it on timeout. The body runs on a fresh daemon thread so the test thread can move
+        // on when the body hangs inside a non-interruptible socket read. On timeout, closing
+        // the cleaner cache closes the Python worker sockets; that unblocks the hung
+        // dataIn.readInt and the leaked thread can run its own finally (stop
+        // SparkConnectService, remove listeners) before the next retry starts.
+        // Outer cap budget: body uses up to 30s + 30s `eventually` plus a 4s sleep plus
+        // service start/stop overhead; 2 minutes leaves comfortable headroom on slow CI
+        // runners while still strictly bounding the original 150-minute hang.
+        val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+        awaitTestBodyInNewThread(
+          timeoutMillis = TimeUnit.MINUTES.toMillis(2),
+          onTimeout = () => {
+            try sessionHolder.streamingForeachBatchRunnerCleanerCache.cleanUpAll()
+            catch {
+              case t: Throwable =>
+                // Surface suppressed cleanup errors: a failure here is exactly the case
+                // where the next attempt is most likely to also hang, so silently dropping
+                // it would make diagnosis impossible.
+                // scalastyle:off println
+                println(
+                  s"===== onTimeout cleanUpAll suppressed " +
+                    s"${t.getClass.getSimpleName}: ${t.getMessage} =====")
+                // scalastyle:on println
+            }
+          }) {
+          runPythonForeachBatchTerminationTestBody(sessionHolder)
+        }
       }
     }
   }
