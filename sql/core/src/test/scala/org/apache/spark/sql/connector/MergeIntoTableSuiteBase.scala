@@ -68,24 +68,21 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
     // check all table scans
     val targetTxnTable = txnTables(tableNameAsString)
-    val expectedNumScans = if (deltaMerge) 2 else 4
-    assert(targetTxnTable.scanEvents.size == expectedNumScans)
+    assert(targetTxnTable.scanEvents.size == 4)
 
     // check table scans as MERGE target
     val numTargetScans = targetTxnTable.scanEvents.flatten.count {
       case sources.EqualTo("dep", "hr") => true
       case _ => false
     }
-    val expectedNumTargetScans = if (deltaMerge) 1 else 2
-    assert(numTargetScans == expectedNumTargetScans)
+    assert(numTargetScans == 2)
 
     // check table scans as MERGE source
     val numSourceScans = targetTxnTable.scanEvents.flatten.count {
       case sources.EqualTo("salary", 100) => true
       case _ => false
     }
-    val expectedNumSourceScans = if (deltaMerge) 1 else 2
-    assert(numSourceScans == expectedNumSourceScans)
+    assert(numSourceScans == 2)
 
     // check txn state was propagated correctly
     checkAnswer(
@@ -168,29 +165,25 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
-      val expectedNumTargetScans = if (deltaMerge) 2 else 4
-      assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+      assert(targetTxnTable.scanEvents.size == 4)
 
       // check target table scans as MERGE target (dep = 'hr')
       val numMergeTargetScans = targetTxnTable.scanEvents.flatten.count {
         case sources.EqualTo("dep", "hr") => true
         case _ => false
       }
-      val expectedNumMergeTargetScans = if (deltaMerge) 1 else 2
-      assert(numMergeTargetScans == expectedNumMergeTargetScans)
+      assert(numMergeTargetScans == 2)
 
       // check target table scans in view as MERGE source (pk < 10)
       val numViewTargetScans = targetTxnTable.scanEvents.flatten.count {
         case sources.LessThan("pk", 10L) => true
         case _ => false
       }
-      val expectedNumViewTargetScans = if (deltaMerge) 1 else 2
-      assert(numViewTargetScans == expectedNumViewTargetScans)
+      assert(numViewTargetScans == 2)
 
       // check source table scans in view as MERGE source (no predicate)
       val sourceTxnTable = txnTables(sourceNameAsString)
-      val expectedNumSourceScans = if (deltaMerge) 1 else 2
-      assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+      assert(sourceTxnTable.scanEvents.size == 2)
 
       // check txn state was propagated correctly
       checkAnswer(
@@ -255,29 +248,25 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
         // check target table was scanned correctly
         val targetTxnTable = txnTables(tableNameAsString)
-        val expectedNumTargetScans = if (deltaMerge) 2 else 4
-        assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+        assert(targetTxnTable.scanEvents.size == 4)
 
         // check target table scans as MERGE target (dep = 'hr')
         val numMergeTargetScans = targetTxnTable.scanEvents.flatten.count {
           case sources.EqualTo("dep", "hr") => true
           case _ => false
         }
-        val expectedNumMergeTargetScans = if (deltaMerge) 1 else 2
-        assert(numMergeTargetScans == expectedNumMergeTargetScans)
+        assert(numMergeTargetScans == 2)
 
         // check target table scans in view as MERGE source (pk < 10)
         val numViewTargetScans = targetTxnTable.scanEvents.flatten.count {
           case sources.LessThan("pk", 10L) => true
           case _ => false
         }
-        val expectedNumViewTargetScans = if (deltaMerge) 1 else 2
-        assert(numViewTargetScans == expectedNumViewTargetScans)
+        assert(numViewTargetScans == 2)
 
         // check source table scans in view as MERGE source (no predicate)
         val sourceTxnTable = txnTables(sourceNameAsString)
-        val expectedNumSourceScans = if (deltaMerge) 1 else 2
-        assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+        assert(sourceTxnTable.scanEvents.size == 2)
 
         // check txn state was propagated correctly
         checkAnswer(
@@ -1114,27 +1103,25 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
-      val expectedNumTargetScans = if (deltaMerge) 1 else 2
-      assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+      assert(targetTxnTable.scanEvents.size == 2)
 
       // check target table scans as MERGE target (dep = 'hr')
       val numMergeTargetScans = targetTxnTable.scanEvents.flatten.count {
         case sources.EqualTo("dep", "hr") => true
         case _ => false
       }
-      assert(numMergeTargetScans == expectedNumTargetScans)
+      assert(numMergeTargetScans == 2)
 
       // check source table was scanned correctly
       val sourceTxnTable = txnTables(sourceNameAsString)
-      val expectedNumSourceScans = if (deltaMerge) 1 else 2
-      assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+      assert(sourceTxnTable.scanEvents.size == 2)
 
       // check source table scans in CTE (salary > 100)
       val numCteSourceScans = sourceTxnTable.scanEvents.flatten.count {
         case sources.GreaterThan("salary", 100) => true
         case _ => false
       }
-      assert(numCteSourceScans == expectedNumSourceScans)
+      assert(numCteSourceScans == 2)
 
       // check txn state was propagated correctly
       checkAnswer(
