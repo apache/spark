@@ -1,0 +1,163 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""
+End-to-end benchmarks for pipelined vs synchronous Python UDF execution.
+
+Unlike the microbenchmarks in bench_eval_type.py (which test the Python worker
+in isolation), these benchmarks run full Spark queries through a real
+SparkSession to measure the JVM-Python socket I/O pipeline overlap.
+"""
+
+import pandas as pd
+
+from pyspark import SparkConf
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, pandas_udf
+from pyspark.sql.types import LongType
+
+
+class _PipelinedUDFBenchBase:
+    """Base class for pipelined UDF benchmarks.
+
+    Each benchmark parameterizes over pipelined=true/false to compare
+    the two execution modes. SparkSession is created in setup() and
+    stopped in teardown() because spark.python.udf.pipelined.enabled
+    is a SparkConf-level config.
+    """
+
+    # Subclasses must define timeout (seconds per benchmark iteration).
+    timeout = 120
+
+    def _spark_conf(self, pipelined):
+        return (
+            SparkConf()
+            .setMaster("local[1]")
+            .setAppName("PipelinedUDFBench")
+            .set("spark.sql.execution.arrow.pyspark.enabled", "true")
+            .set("spark.python.worker.reuse", "true")
+            .set("spark.ui.enabled", "false")
+            .set("spark.sql.shuffle.partitions", "1")
+            .set("spark.python.udf.pipelined.enabled", str(pipelined).lower())
+        )
+
+    def _setup_spark(self, pipelined):
+        conf = self._spark_conf(pipelined)
+        self.spark = SparkSession.builder.config(conf=conf).getOrCreate()
+
+        @pandas_udf(LongType())
+        def _add_one(x: pd.Series) -> pd.Series:
+            return x + 1
+
+        self._add_one = _add_one
+
+        # Warmup: start Python worker, JIT
+        self.spark.range(100).select(_add_one(col("id"))).write.format("noop").mode(
+            "overwrite"
+        ).save()
+
+    def _teardown_spark(self):
+        if hasattr(self, "spark"):
+            self.spark.stop()
+            # Clear the active session so the next setup() creates a fresh one
+            SparkSession.builder._options = {}
+
+
+class ScalarUDFTimeBench(_PipelinedUDFBenchBase):
+    """Benchmark scalar Arrow UDF with light computation (x + 1)."""
+
+    params = [[False, True], [100000, 1000000]]
+    param_names = ["pipelined", "n_rows"]
+
+    def setup(self, pipelined, n_rows):
+        self._setup_spark(pipelined)
+
+    def teardown(self, pipelined, n_rows):
+        self._teardown_spark()
+
+    def time_scalar_udf(self, pipelined, n_rows):
+        self.spark.range(n_rows).select(self._add_one(col("id")).alias("result")).write.format(
+            "noop"
+        ).mode("overwrite").save()
+
+    def peakmem_scalar_udf(self, pipelined, n_rows):
+        self.spark.range(n_rows).select(self._add_one(col("id")).alias("result")).write.format(
+            "noop"
+        ).mode("overwrite").save()
+
+
+class MultiUDFTimeBench(_PipelinedUDFBenchBase):
+    """Benchmark multiple UDF columns in a single query."""
+
+    params = [[False, True], [100000, 1000000]]
+    param_names = ["pipelined", "n_rows"]
+
+    def setup(self, pipelined, n_rows):
+        self._setup_spark(pipelined)
+
+        @pandas_udf(LongType())
+        def _mul_two(x: pd.Series) -> pd.Series:
+            return x * 2
+
+        @pandas_udf(LongType())
+        def _sub_one(x: pd.Series) -> pd.Series:
+            return x - 1
+
+        self._mul_two = _mul_two
+        self._sub_one = _sub_one
+
+    def teardown(self, pipelined, n_rows):
+        self._teardown_spark()
+
+    def time_multi_udf(self, pipelined, n_rows):
+        self.spark.range(n_rows).select(
+            col("id"),
+            self._add_one(col("id")).alias("a"),
+            self._mul_two(col("id")).alias("b"),
+            self._sub_one(col("id")).alias("c"),
+        ).write.format("noop").mode("overwrite").save()
+
+    def peakmem_multi_udf(self, pipelined, n_rows):
+        self.spark.range(n_rows).select(
+            col("id"),
+            self._add_one(col("id")).alias("a"),
+            self._mul_two(col("id")).alias("b"),
+            self._sub_one(col("id")).alias("c"),
+        ).write.format("noop").mode("overwrite").save()
+
+
+class LargeDataUDFTimeBench(_PipelinedUDFBenchBase):
+    """Benchmark scalar UDF with large data to exercise throughput."""
+
+    params = [[False, True]]
+    param_names = ["pipelined"]
+
+    def setup(self, pipelined):
+        self._setup_spark(pipelined)
+
+    def teardown(self, pipelined):
+        self._teardown_spark()
+
+    def time_large_data(self, pipelined):
+        self.spark.range(5000000).select(
+            self._add_one(col("id")).alias("result")
+        ).write.format("noop").mode("overwrite").save()
+
+    def peakmem_large_data(self, pipelined):
+        self.spark.range(5000000).select(
+            self._add_one(col("id")).alias("result")
+        ).write.format("noop").mode("overwrite").save()
