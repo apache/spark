@@ -18,8 +18,10 @@
 #
 
 import os
+import re
 import sys
 import subprocess
+import time
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
 from sparktestsupport.toposort import toposort_flatten
@@ -91,6 +93,86 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     )
     # Remove any empty strings
     return [f for f in raw_output.split("\n") if f]
+
+
+def check_upgraded_pom_dependencies(patch_sha, target_branch=None, target_ref=None, buffer_days=7):
+    """
+    Check whether the pom.xml dependency upgrade has been released at least `buffer_days` days ago.
+    """
+
+    def get_release_timestamp(group_id, artifact_id, version):
+        import json
+        import urllib.request
+
+        query = (
+            f"g:{group_id}+AND+a:{artifact_id}+AND+v:{version}"
+            if version
+            else f"g:{group_id}+AND+a:{artifact_id}"
+        )
+
+        url = f"https://search.maven.org/solrsearch/select?q={query}&rows=1&wt=json"
+        try:
+            with urllib.request.urlopen(url) as response:
+                data = json.loads(response.read())
+                # The timestamp is in milliseconds
+                return int(data["response"]["docs"][0]["timestamp"]) / 1000
+        except Exception:
+            return None
+
+    if target_branch is None and target_ref is None:
+        raise AttributeError("must specify either target_branch or target_ref")
+    elif target_branch is not None and target_ref is not None:
+        raise AttributeError("must specify either target_branch or target_ref, not both")
+    if target_branch is not None:
+        diff_target = target_branch
+        run_cmd(["git", "fetch", "origin", str(target_branch + ":" + target_branch)])
+    else:
+        diff_target = target_ref
+    raw_output = subprocess.check_output(
+        ["git", "diff", patch_sha, diff_target, ":(top)pom.xml"], universal_newlines=True
+    )
+
+    changed_versions = []
+
+    # "+    <oro.version>2.0.9</oro.version>" -> "oro.version", "2.0.9"
+    new_version_regex = r"^\+\s*<(?P<dependency>.*?\.version)>(?P<version>.*?)</.*?>"
+    for line in raw_output.split("\n"):
+        if match := re.match(new_version_regex, line):
+            changed_versions.append((match.group("dependency"), match.group("version")))
+
+    if changed_versions:
+        # Okay now we parse the pom.xml to find the real dependency name
+        import xml.etree.ElementTree as ET
+
+        root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
+        pom_path = os.path.join(root_dir, "pom.xml")
+        tree = ET.parse(pom_path)
+        root = tree.getroot()
+        namespace = re.match(r"\{(.*?)\}project", root.tag).group(1)
+        ns = {"m": namespace}
+        for dependency in root.findall(".//m:dependency", ns):
+            group_id = dependency.find("m:groupId", ns).text
+            artifact_id = dependency.find("m:artifactId", ns).text
+            version = dependency.find("m:version", ns)
+            if version is not None:
+                version = version.text
+
+            for dep, ver in changed_versions:
+                template = "${" + dep + "}"
+                if version is not None and template in version:
+                    version = version.replace("${" + dep + "}", ver)
+                elif template in artifact_id:
+                    artifact_id = artifact_id.replace("${" + dep + "}", ver)
+                else:
+                    # If we can't find the related upgrade version, just skip
+                    continue
+                release_timestamp = get_release_timestamp(group_id, artifact_id, version)
+                if (
+                    release_timestamp is None
+                    or release_timestamp > time.time() - buffer_days * 24 * 60 * 60
+                ):
+                    return False
+    return True
 
 
 def determine_modules_to_test(changed_modules, deduplicated=True):
