@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -167,9 +168,13 @@ case class DescribeV2ViewExec(
       result += toCatalystRow("", "", "")
       result += toCatalystRow("# Detailed View Information", "", "")
       result += toCatalystRow("Catalog", catalogName, "")
-      val qualified = (identifier.namespace() :+ identifier.name())
-        .map(quoteIfNeeded).mkString(".")
-      result += toCatalystRow("Identifier", qualified, "")
+      result += toCatalystRow("Namespace", identifier.namespace().quoted, "")
+      // For v1 compatibility (see DescribeTableExec.addTableDetails), also emit a
+      // `Database` row when the namespace is a single segment.
+      if (identifier.namespace().length == 1) {
+        result += toCatalystRow("Database", identifier.namespace().head, "")
+      }
+      result += toCatalystRow("View", identifier.name(), "")
       // Promote first-class reserved fields (Owner / Comment / Collation) to top-level rows
       // before the EXTENDED Properties block, mirroring v1 `CatalogTable.toJsonLinkedHashMap`
       // which renders these as their own rows rather than burying them in `Table Properties`.

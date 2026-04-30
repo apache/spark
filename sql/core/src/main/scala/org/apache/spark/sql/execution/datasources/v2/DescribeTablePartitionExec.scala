@@ -29,6 +29,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 case class DescribeTablePartitionExec(
     output: Seq[Attribute],
+    catalogName: String,
     table: SupportsPartitionManagement,
     tableIdent: Identifier,
     partSpec: ResolvedPartitionSpec,
@@ -39,7 +40,8 @@ case class DescribeTablePartitionExec(
 
     // Delegate schema + partitioning + clustering to DescribeTableExec.
     val rows = new ArrayBuffer[InternalRow]()
-    DescribeTableExec(output, table, isExtended = false).addBaseDescription(rows)
+    DescribeTableExec(output, catalogName, tableIdent, table, isExtended = false)
+      .addBaseDescription(rows)
 
     if (isExtended) {
       addPartitionDetails(rows, partitionRow)

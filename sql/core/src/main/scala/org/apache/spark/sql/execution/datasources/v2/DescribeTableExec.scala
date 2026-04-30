@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -33,6 +34,8 @@ import org.apache.spark.util.ArrayImplicits._
 
 case class DescribeTableExec(
     output: Seq[Attribute],
+    catalogName: String,
+    identifier: Identifier,
     table: Table,
     isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
@@ -58,7 +61,17 @@ case class DescribeTableExec(
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
     rows += toCatalystRow("# Detailed Table Information", "", "")
-    rows += toCatalystRow("Name", table.name(), "")
+    rows += toCatalystRow("Catalog", catalogName, "")
+    rows += toCatalystRow("Namespace", identifier.namespace().quoted, "")
+    // For v1 compatibility, also emit a `Database` row when the namespace is a single
+    // segment, mirroring v1 `CatalogTable.toJsonLinkedHashMap` which renders the
+    // `database` part of `TableIdentifier` as `Database`. v2 multi-segment namespaces
+    // can't be rendered as a single-string `database` losslessly, so the `Database`
+    // row is omitted in that case and consumers must read `Namespace` instead.
+    if (identifier.namespace().length == 1) {
+      rows += toCatalystRow("Database", identifier.namespace().head, "")
+    }
+    rows += toCatalystRow("Table", identifier.name(), "")
 
     val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL.name
