@@ -20,6 +20,33 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
+## Test Base Classes
+
+When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. The chain is layered — each adds capability on top of the previous:
+
+    SparkFunSuite                                                           (core)
+      <- PlanTest = SparkFunSuite + PlanTestBase                            (sql/catalyst)
+      <- QueryTest = SparkFunSuite + QueryTestBase + PlanTest               (sql/core)
+        <- SharedSparkSession = QueryTest + SharedSparkSessionBase          (sql/core)
+
+| Test scope | Base | Notes |
+|------------|------|-------|
+| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, retry, `gridTest`. |
+| Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
+| DataFrame helpers — no session | `QueryTest` | Rarely used on its own; mostly a building block for other traits (e.g. `FileBasedDataSourceTest`). |
+| SQL/DataFrame integration tests — needs a session | `SharedSparkSession` | The default for most SQL suites. Provides a shared `TestSparkSession`, `testImplicits`, plus `checkAnswer` from `QueryTest`. |
+
+Helper traits like `ParquetTest`, `OrcTest`, `FileBasedDataSourceTest`, `DDLCommandTestUtils` already extend `QueryTest` but do NOT provide a `SparkSession`. Combine with `SharedSparkSession` when a session is needed (e.g. `extends ParquetTest with SharedSparkSession`).
+
+Common mistakes in the `extends` clause:
+- `extends QueryTest with SharedSparkSession` — `QueryTest` is redundant (`SharedSparkSession` already extends it). Use `extends SharedSparkSession`.
+- `extends QueryTest with ParquetTest` / `with FileBasedDataSourceTest` / `with OrcTest` — `QueryTest` is redundant; these helper traits all extend `QueryTest`.
+- `extends OrcTest with QueryTestBase` — `OrcTest -> QueryTest -> QueryTestBase` already.
+- `extends QueryTest with CommandSuiteBase with DDLCommandTestUtils` — both `CommandSuiteBase` (via `SharedSparkSession`) and `DDLCommandTestUtils` extend `QueryTest`, so `QueryTest` is redundant.
+- `extends ParquetTest with SharedSparkSession` is NOT redundant — the format helper trait and the session trait bring different things.
+
+Linearization gotcha: the first item in the `extends` clause must transitively extend `SparkFunSuite` (an `abstract class`, not a trait). All four bases above carry that chain. A "pure helper" trait (e.g. `*ErrorsBase`, `*Helper`) does not — if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
+
 ## Build and Test
 
 Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
