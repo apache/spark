@@ -82,9 +82,10 @@ public interface StreamingWrite {
    * multiple commits for the same epoch are idempotent.
    * <p>
    * Note: this method signals that all data for this write operation has been successfully written.
-   * It is NOT a transactional commit. When this write is part of a
-   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction}, the transaction is
-   * committed separately via
+   * When this write is part of a
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction}, connector
+   * implementations should stage the written data durably but must not make it visible to readers.
+   * Changes are propagated and made visible only when the enclosing transaction is committed via
    * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#commit()}.
    */
   void commit(long epochId, WriterCommitMessage[] messages);

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.analysis.NamedRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, StreamingV2WriteCommand, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2StreamingWriteCommand, UnaryNode}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -45,7 +45,7 @@ case class WriteToMicroBatchDataSource(
     writeOptions: Map[String, String],
     outputMode: OutputMode,
     batchId: Option[Long] = None)
-  extends UnaryNode with StreamingV2WriteCommand {
+  extends UnaryNode with V2StreamingWriteCommand {
 
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil

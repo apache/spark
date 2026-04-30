@@ -141,6 +141,12 @@ trait V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
 }
 
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait V2StreamingWriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): V2StreamingWriteCommand
+}
+
 trait V2PartitionCommand extends UnaryCommand {
   def table: LogicalPlan
   def allowPartialPartitionSpec: Boolean = false
@@ -1320,12 +1326,6 @@ case class Assignment(key: Expression, value: Expression) extends Expression
  */
 trait TransactionalWrite extends LogicalPlan {
   def table: LogicalPlan
-}
-
-/** Trait for streaming write commands that participate in DSv2 transactions. */
-trait StreamingV2WriteCommand extends TransactionalWrite {
-  override def table: NamedRelation
-  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
 }
 
 /**

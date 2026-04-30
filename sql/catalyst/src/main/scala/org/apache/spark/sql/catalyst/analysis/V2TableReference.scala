@@ -106,7 +106,7 @@ private[sql] object V2TableReference {
       relation.identifier.get,
       relation.options,
       TableInfo(
-        tableId = Option(relation.table.id()),
+        tableId = Option(relation.table.id),
         columns = relation.table.columns.toImmutableArraySeq,
         metadataColumns = V2TableUtil.extractMetadataColumns(relation)),
       relation.output,

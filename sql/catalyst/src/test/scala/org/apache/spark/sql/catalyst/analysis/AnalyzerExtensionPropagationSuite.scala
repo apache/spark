@@ -54,6 +54,22 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
       new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))
 
   test("withCatalogManager propagates all extension points") {
+    // Counts every declared field on Analyzer (backing fields for vals,
+    // constructor params, and fields inherited from mixed-in traits). When this assertion fails,
+    // a field was added to or removed from Analyzer. If the change is a new extension point,
+    // add it to Analyzer.withCatalogManager, add an assertion in the clone checks below,
+    // and update EXPECTED_FIELD_COUNT.
+    val EXPECTED_FIELD_COUNT = 12
+    val analyzerFields = classOf[Analyzer].getDeclaredFields
+      .filterNot(f => f.isSynthetic || f.getName.contains("$"))
+    assert(analyzerFields.length == EXPECTED_FIELD_COUNT,
+      s"Analyzer has ${analyzerFields.length} declared fields " +
+      s"(${analyzerFields.map(_.getName).sorted.mkString(", ")}), " +
+      s"but expected $EXPECTED_FIELD_COUNT. " +
+      s"If a new extension point was added, register it in Analyzer.withCatalogManager, " +
+      s"add an assertion in this test, and update EXPECTED_FIELD_COUNT.")
+
+
     val analyzer = new Analyzer(newCatalogManager()) {
       override val hintResolutionRules: Seq[Rule[LogicalPlan]] = Seq(dummyRule)
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(dummyRule)

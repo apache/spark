@@ -1097,10 +1097,7 @@ class Analyzer(
     // the plan of temp views (in resolveViews and unwrapRelationPlan).
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference =>
-          assert(r.context.isInstanceOf[V2TableReference.TemporaryViewContext],
-            s"""Expected TemporaryViewContext in temp view but got
-               |${r.context.getClass.getSimpleName}""".stripMargin)
+        case r: V2TableReference if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }
     }
@@ -1124,7 +1121,7 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      case write: StreamingV2WriteCommand =>
+      case write: V2StreamingWriteCommand =>
         resolveWriteTarget(write, write.table, write.withNewTable)
 
       case write: V2WriteCommand =>
