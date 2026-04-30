@@ -2496,9 +2496,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val WHOLESTAGE_UNION_MAX_CHILDREN = {
-    val key = "spark.sql.codegen.wholeStage.union.maxChildren"
-    buildConf(key)
+  val WHOLESTAGE_UNION_MAX_CHILDREN =
+    buildConf("spark.sql.codegen.wholeStage.union.maxChildren")
       .internal()
       .doc("Maximum number of UnionExec children eligible for whole-stage " +
         "codegen fusion. Each child is emitted as its own helper method, so " +
@@ -2511,9 +2510,8 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .checkValue(v => v >= 2,
-        s"The value of $key must be >= 2")
+        "The value of spark.sql.codegen.wholeStage.union.maxChildren must be >= 2")
       .createWithDefault(64)
-  }
 
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
