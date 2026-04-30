@@ -221,8 +221,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
         Array.empty,
         Collections.emptyMap[String, String])
 
-      // query sees the new empty table
-      assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq.empty)
+      // query sees the new empty table with preserved schema
+      val result = connectSession.sql(s"SELECT * FROM $T")
+      assertRows(result.collect(), Seq.empty)
+      assert(result.schema.fieldNames.toSeq == Seq("id", "salary"))
 
       connectSession.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
