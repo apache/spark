@@ -38,7 +38,14 @@ DropTable false, false
 -- !query
 CREATE TABLE view_base_table (key int /* PRIMARY KEY */, data varchar(20)) USING PARQUET
 -- !query analysis
-CreateDataSourceTableCommand `spark_catalog`.`default`.`view_base_table`, false
+org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+{
+  "errorClass" : "TABLE_OR_VIEW_ALREADY_EXISTS",
+  "sqlState" : "42P07",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`view_base_table`"
+  }
+}
 
 
 -- !query
