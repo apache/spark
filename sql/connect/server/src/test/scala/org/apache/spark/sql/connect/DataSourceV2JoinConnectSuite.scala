@@ -73,8 +73,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val extTable = cat
         .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
 
       val df2 = session.table(T)
 
@@ -108,8 +107,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val extTable = cat
         .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
 
       val df2 = session.table(T)
 
@@ -142,8 +141,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val extTable = cat
         .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema1).withRow(InternalRow(2))))
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema1).withRow(InternalRow(2))))
 
       val df2 = session.table(T)
 
@@ -170,9 +168,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       cat.createTable(
         ident,
         new TableInfo.Builder()
-          .withColumns(Array(
-            Column.create("id", IntegerType),
-            Column.create("salary", IntegerType)))
+          .withColumns(
+            Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)))
           .build())
 
       // external writer adds (2, 200) to the new table
@@ -180,8 +177,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val extTable = cat
         .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
 
       val df2 = session.table(T)
 
@@ -213,8 +209,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val extTable = cat
         .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
 
       val df2 = session.table(T)
 
@@ -250,8 +245,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val extTable = cat
         .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
         .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema2)
+      extTable.withData(
+        Array(new BufferedRows(Seq.empty, schema2)
           .withRow(InternalRow(2, UTF8String.fromString("high")))))
 
       val df2 = session.table(T)
