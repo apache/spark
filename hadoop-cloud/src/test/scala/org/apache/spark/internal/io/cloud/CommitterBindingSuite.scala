@@ -277,7 +277,7 @@ class CommitterBindingSuite extends SparkFunSuite {
       "org.apache.hadoop.mapreduce.lib.output.FileOutputCommitterFactory")
   }
 
-  /*
+  /**
    * With dynamicPartitionOverwrite=true and a FileOutputCommitter, newTaskTempFile must route
    * output through the staging directory (not the final output path) and must record the partition
    * in partitionPaths so that commitJob can delete the old partition directory and rename the
@@ -318,7 +318,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     }
   }
 
-  /*
+  /**
    * A cloud committer that handles dynamic partitioning natively (via StreamCapabilities) must NOT
    * have its partitions tracked in Spark's partitionPaths set: the committer takes care of
    * overwriting itself, and the commitJob rename loop must not interfere.
@@ -350,7 +350,7 @@ class CommitterBindingSuite extends SparkFunSuite {
         s"got: ${committer.capturedPartitionPaths}")
   }
 
-  /*
+  /**
    * Without dynamicPartitionOverwrite, partitionPaths must remain empty even for
    * FileOutputCommitter (baseline: existing behaviour must not regress).
    */
