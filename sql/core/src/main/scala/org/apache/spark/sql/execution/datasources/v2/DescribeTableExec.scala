@@ -48,11 +48,13 @@ private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
    * Row shapes:
    *  - `Catalog` carries the catalog plugin name (always present for v2).
    *  - `Namespace` is the canonical multi-segment representation, joined with `.` and with
-   *    `quoteIfNeeded` applied per segment (so segments containing dots round-trip).
+   *    `quoteIfNeeded` applied per segment (so segments containing dots round-trip). Always
+   *    emitted; for an empty namespace (root-level entity) the value is the empty string,
+   *    so the row's presence stays uniform across v2 outputs.
    *  - `Database` is emitted only when the namespace is exactly one segment, matching v1's
-   *    `identifier.database.get` (raw segment, no quoting). Multi-segment namespaces can't
-   *    be rendered as a single-string `database` losslessly, so the row is omitted in that
-   *    case; consumers needing a quoting-safe form should read `Namespace`.
+   *    `identifier.database.get` (raw segment, no quoting). Multi-segment and empty
+   *    namespaces can't be rendered as a single-string `database` losslessly, so the row is
+   *    omitted in those cases; consumers needing a quoting-safe form should read `Namespace`.
    *  - `<entityLabel>` is the unqualified entity name from `Identifier.name()`.
    */
   protected def addIdentifierRows(
@@ -83,6 +85,9 @@ private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
  */
 private[v2] trait DescribeTableBaseRows extends LeafV2CommandExec {
   def table: Table
+
+  /** A blank `("", "", "")` row used as a section separator in DESCRIBE output. */
+  protected def emptyRow(): InternalRow = toCatalystRow("", "", "")
 
   /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
   protected def addBaseDescription(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -152,7 +157,7 @@ private[v2] trait DescribeTableBaseRows extends LeafV2CommandExec {
               field.getComment().orNull)
           }
       } else {
-        rows += toCatalystRow("", "", "")
+        rows += emptyRow()
         rows += toCatalystRow("# Partitioning", "", "")
         rows ++= table.partitioning.zipWithIndex.map {
           case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
@@ -252,6 +257,4 @@ case class DescribeTableExec(
       }
     case _ =>
   }
-
-  private def emptyRow(): InternalRow = toCatalystRow("", "", "")
 }
