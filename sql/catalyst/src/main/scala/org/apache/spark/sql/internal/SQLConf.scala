@@ -2152,7 +2152,7 @@ object SQLConf {
         s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
         "is false."
       )
-      .version("4.0.0")
+      .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
