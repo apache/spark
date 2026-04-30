@@ -37,10 +37,11 @@ case class TruncateTableExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    if (table.truncateTable()) {
+    try {
+      if (table.truncateTable()) refreshCache()
+      Seq.empty
+    } finally {
       postDriverMetrics(table.reportDriverMetrics())
-      refreshCache()
     }
-    Seq.empty
   }
 }
