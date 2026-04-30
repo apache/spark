@@ -37,9 +37,9 @@ case class DescribeTablePartitionExec(
   override protected def run(): Seq[InternalRow] = {
     val partitionRow = validateAndGetPartition()
 
-    // Delegate schema + partitioning + clustering rows to the shared `DescribeTableBaseRows`
-    // trait (mixed in by both this exec and `DescribeTableExec`). The pre-PR shape constructed
-    // a `DescribeTableExec` inner instance just to invoke its `addBaseDescription` helper.
+    // Schema + partitioning + clustering rows come from the shared `DescribeTableBaseRows`
+    // trait, which is mixed in by both this exec and `DescribeTableExec` so each can call
+    // the helper directly off `this`.
     val rows = new ArrayBuffer[InternalRow]()
     addBaseDescription(rows)
 

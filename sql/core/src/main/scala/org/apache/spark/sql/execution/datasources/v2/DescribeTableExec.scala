@@ -33,14 +33,51 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
+ * Catalog / Namespace / [Database] / <entity> row formatting shared by
+ * `DescribeTableExec.addTableDetails` and `DescribeV2ViewExec.run`. Hosting it in one place
+ * keeps the v1-compat rule (single-segment namespaces additionally surface a `Database` row,
+ * mirroring v1 `CatalogTable.toJsonLinkedHashMap`) as a single source of truth so the table
+ * and view paths can't drift.
+ */
+private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
+  /**
+   * Append the structured identifier rows (`Catalog`, `Namespace`, optional v1-compat
+   * `Database`, `<entityLabel>`) to `rows`. `entityLabel` is `"Table"` for a v2 table and
+   * `"View"` for a v2 view -- the only divergence between the two paths.
+   *
+   * Row shapes:
+   *  - `Catalog` carries the catalog plugin name (always present for v2).
+   *  - `Namespace` is the canonical multi-segment representation, joined with `.` and with
+   *    `quoteIfNeeded` applied per segment (so segments containing dots round-trip).
+   *  - `Database` is emitted only when the namespace is exactly one segment, matching v1's
+   *    `identifier.database.get` (raw segment, no quoting). Multi-segment namespaces can't
+   *    be rendered as a single-string `database` losslessly, so the row is omitted in that
+   *    case; consumers needing a quoting-safe form should read `Namespace`.
+   *  - `<entityLabel>` is the unqualified entity name from `Identifier.name()`.
+   */
+  protected def addIdentifierRows(
+      rows: ArrayBuffer[InternalRow],
+      catalogName: String,
+      identifier: Identifier,
+      entityLabel: String): Unit = {
+    rows += toCatalystRow("Catalog", catalogName, "")
+    rows += toCatalystRow("Namespace", identifier.namespace().quoted, "")
+    if (identifier.namespace().length == 1) {
+      rows += toCatalystRow("Database", identifier.namespace().head, "")
+    }
+    rows += toCatalystRow(entityLabel, identifier.name(), "")
+  }
+}
+
+/**
  * Schema + partitioning + clustering row formatting shared by `DescribeTableExec.run()` (which
  * uses it for the schema-row prefix) and `DescribeTablePartitionExec.run()` (which uses it as
- * the entire pre-partition section). Pulling these helpers into a trait lets the partition
- * exec call them directly off `this` -- the prior shape constructed a `DescribeTableExec`
- * inner instance just to invoke `addBaseDescription`, which forced threading unused
- * `catalogName` / `identifier` constructor args through the partition exec.
+ * the entire pre-partition section). Mixing the helpers into a trait lets each exec invoke
+ * them directly off `this`, so the partition exec doesn't need to thread the table-only
+ * `catalogName` / `identifier` arguments that `DescribeTableExec` consumes for the EXTENDED
+ * `# Detailed Table Information` block.
  */
-private[v2] trait DescribeTableBaseRows extends LeafV2CommandExec {
+private[v2] trait DescribeTableBaseRows extends DescribeIdentifierRows {
   def table: Table
 
   /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
@@ -143,24 +180,7 @@ case class DescribeTableExec(
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
     rows += toCatalystRow("# Detailed Table Information", "", "")
-    rows += toCatalystRow("Catalog", catalogName, "")
-    // The `Namespace` row is always emitted as the canonical v2 representation. Multi-segment
-    // namespaces use `Identifier.namespace().quoted` so segments containing dots round-trip;
-    // a zero-segment (root) namespace renders as an empty string -- intentional, so consumers
-    // can distinguish "table at the catalog root" from a missing row.
-    rows += toCatalystRow("Namespace", identifier.namespace().quoted, "")
-    // For v1 compatibility, also emit a `Database` row when the namespace is exactly one
-    // segment, mirroring v1 `CatalogTable.toJsonLinkedHashMap` which renders the `database`
-    // part of `TableIdentifier` as `Database`. Multi-segment namespaces can't be rendered
-    // as a single-string `database` losslessly, and a zero-segment (root) namespace has no
-    // single-name representation, so the `Database` row is omitted in those cases and
-    // consumers must read `Namespace` instead. The value is the raw segment (no
-    // `quoteIfNeeded`), matching v1's `identifier.database.get`; consumers needing a
-    // quoting-safe form should read `Namespace`, where `quoted` is applied per segment.
-    if (identifier.namespace().length == 1) {
-      rows += toCatalystRow("Database", identifier.namespace().head, "")
-    }
-    rows += toCatalystRow("Table", identifier.name(), "")
+    addIdentifierRows(rows, catalogName, identifier, entityLabel = "Table")
 
     val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL.name

@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewInfo}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -148,9 +147,9 @@ case class ShowV2ViewColumnsExec(
 /**
  * Physical plan node for DESCRIBE TABLE on a v2 view. Schema rows first; when EXTENDED is
  * specified, an additional `# Detailed View Information` block emits the v2-native fields:
- * the resolved-identifier components as separate rows (`Catalog`, `Namespace`, an optional
- * v1-compat `Database` row when the namespace is a single segment, and `View`), followed by
- * view text, captured creation context, schema-binding mode, query column names, and user
+ * the resolved-identifier components via [[DescribeIdentifierRows#addIdentifierRows]] (which
+ * also surfaces a v1-compat `Database` row for single-segment namespaces), followed by view
+ * text, captured creation context, schema-binding mode, query column names, and user
  * TBLPROPERTIES. v2 views are unpartitioned by definition, so the partition-spec branch from
  * v1 `DescribeTableCommand` is unreachable here.
  */
@@ -159,7 +158,7 @@ case class DescribeV2ViewExec(
     catalogName: String,
     identifier: Identifier,
     viewInfo: ViewInfo,
-    isExtended: Boolean) extends LeafV2CommandExec with SQLConfHelper {
+    isExtended: Boolean) extends DescribeIdentifierRows with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val result = new ArrayBuffer[InternalRow]
@@ -169,14 +168,7 @@ case class DescribeV2ViewExec(
     if (isExtended) {
       result += toCatalystRow("", "", "")
       result += toCatalystRow("# Detailed View Information", "", "")
-      result += toCatalystRow("Catalog", catalogName, "")
-      result += toCatalystRow("Namespace", identifier.namespace().quoted, "")
-      // For v1 compatibility (see DescribeTableExec.addTableDetails), also emit a
-      // `Database` row when the namespace is a single segment.
-      if (identifier.namespace().length == 1) {
-        result += toCatalystRow("Database", identifier.namespace().head, "")
-      }
-      result += toCatalystRow("View", identifier.name(), "")
+      addIdentifierRows(result, catalogName, identifier, entityLabel = "View")
       // Promote first-class reserved fields (Owner / Comment / Collation) to top-level rows
       // before the EXTENDED Properties block, mirroring v1 `CatalogTable.toJsonLinkedHashMap`
       // which renders these as their own rows rather than burying them in `Table Properties`.
