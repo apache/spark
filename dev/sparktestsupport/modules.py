@@ -1195,7 +1195,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.client.test_client_call_stack_trace",
         "pyspark.sql.tests.connect.client.test_client_retries",
         "pyspark.sql.tests.connect.client.test_reattach",
-        "pyspark.sql.tests.connect.test_resources",
+        "pyspark.sql.tests.connect.test_parity_resources",
         "pyspark.sql.tests.connect.shell.test_progress",
         "pyspark.sql.tests.connect.test_df_debug",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow",

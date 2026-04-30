@@ -20,7 +20,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.tests.test_resources import ResourceProfileTestsMixin
 
 
-class ResourceProfileTests(ResourceProfileTestsMixin, ReusedConnectTestCase):
+class ResourceProfileParityTests(ResourceProfileTestsMixin, ReusedConnectTestCase):
     @classmethod
     def master(cls):
         return os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local-cluster[1, 4, 1024]")
