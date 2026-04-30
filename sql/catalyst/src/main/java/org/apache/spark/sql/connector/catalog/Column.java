@@ -24,6 +24,8 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
 
 /**
  * An interface representing a column of a {@link Table}. It defines basic properties of a column,
@@ -120,6 +122,21 @@ public interface Column {
         identityColumnSpec,
         metadataInJSON,
         /* id = */ null);
+  }
+
+  /**
+   * Creates a {@link Column} from a Spark {@link StructField}, preserving name, dataType,
+   * nullable, comment, and the field metadata as a JSON string. Fields with empty metadata
+   * map to a column with a {@code null} {@link #metadataInJSON()}.
+   *
+   * @since 4.2.0
+   */
+  static Column fromStructField(StructField field) {
+    String comment = field.getComment().isDefined() ? field.getComment().get() : null;
+    String metadataJson = field.metadata().equals(Metadata.empty())
+        ? null
+        : field.metadata().json();
+    return create(field.name(), field.dataType(), field.nullable(), comment, metadataJson);
   }
 
   /**

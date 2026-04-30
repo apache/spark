@@ -315,6 +315,30 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(structType)
   checkDataTypeFromDDL(structType)
 
+  test("StructField json round-trip preserves name, type, nullable, comment, metadata") {
+    val baseMetadata = new MetadataBuilder()
+      .putString("metric_view.type", "dimension")
+      .putString("metric_view.expr", "region")
+      .build()
+    val field = StructField("region", StringType, nullable = true, baseMetadata)
+      .withComment("dim col")
+    val parsed = StructField.fromJson(field.json)
+    assert(parsed.name == "region")
+    assert(parsed.dataType == StringType)
+    assert(parsed.nullable)
+    assert(parsed.getComment().contains("dim col"))
+    // `withComment` adds a "comment" key to metadata; it must round-trip alongside the
+    // metric_view.* keys.
+    assert(parsed.metadata.getString("metric_view.type") == "dimension")
+    assert(parsed.metadata.getString("metric_view.expr") == "region")
+  }
+
+  test("StructField json round-trip with empty metadata and no comment") {
+    val field = StructField("c", IntegerType, nullable = false)
+    val parsed = StructField.fromJson(field.json)
+    assert(parsed == field)
+  }
+
   test("fromJson throws an exception when given type string is invalid") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
