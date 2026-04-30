@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql.connect
 
+import java.util
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.classic
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, TableChange, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * DSv2 join tests for Spark Connect mirroring the classic DataSourceV2DataFrameSuite join
@@ -36,6 +42,13 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
 
   private val T = "testcat.ns1.ns2.tbl"
+  private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+
+  /** Get the catalog from the server-side session. */
+  private def serverCatalog(serverSession: classic.SparkSession): InMemoryTableCatalog =
+    serverSession.sessionState.catalogManager
+      .catalog("testcat")
+      .asInstanceOf[InMemoryTableCatalog]
 
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
     val actualStrs = actual.map(_.toString()).toSet
@@ -52,7 +65,17 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
       val df1 = session.table(T)
-      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      // external writer adds (2, 200) via direct catalog API
+      val serverSession = getServerSession(session)
+      val cat = serverCatalog(serverSession)
+      val schema = StructType.fromDDL("id INT, salary INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(
+        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+
       val df2 = session.table(T)
 
       // Both sides re-analyze to latest version
@@ -73,8 +96,21 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
       val df1 = session.table(T)
-      session.sql(s"ALTER TABLE $T ADD COLUMN new_column INT").collect()
-      session.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+
+      // external schema change via catalog API
+      val serverSession = getServerSession(session)
+      val cat = serverCatalog(serverSession)
+      val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+      cat.alterTable(ident, addCol)
+
+      // external writer adds (2, 200, -1) with new schema
+      val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(
+        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+
       val df2 = session.table(T)
 
       assertRows(
@@ -94,8 +130,21 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
       val df1 = session.table(T)
-      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      session.sql(s"INSERT INTO $T VALUES (2)").collect()
+
+      // external column removal via catalog API
+      val serverSession = getServerSession(session)
+      val cat = serverCatalog(serverSession)
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      cat.alterTable(ident, dropCol)
+
+      // external writer adds (2) with 1-col schema
+      val schema1 = StructType.fromDDL("id INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(
+        new BufferedRows(Seq.empty, schema1).withRow(InternalRow(2))))
+
       val df2 = session.table(T)
 
       assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(1, 1), Row(2, 2)))
@@ -113,9 +162,27 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
       val df1 = session.table(T)
-      session.sql(s"DROP TABLE $T").collect()
-      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      // external drop and recreate via catalog API
+      val serverSession = getServerSession(session)
+      val cat = serverCatalog(serverSession)
+      cat.dropTable(ident)
+      cat.createTable(
+        ident,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
+
+      // external writer adds (2, 200) to the new table
+      val schema = StructType.fromDDL("id INT, salary INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(
+        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+
       val df2 = session.table(T)
 
       assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(2, 200, 2, 200)))
@@ -133,9 +200,22 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
       val df1 = session.table(T)
-      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      session.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
-      session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+      // external drop and re-add column via catalog API
+      val serverSession = getServerSession(session)
+      val cat = serverCatalog(serverSession)
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
+      cat.alterTable(ident, dropCol, addCol)
+
+      // external writer adds (2, 200) with same schema
+      val schema = StructType.fromDDL("id INT, salary INT")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(
+        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+
       val df2 = session.table(T)
 
       assertRows(
@@ -157,9 +237,23 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
 
       val df1 = session.table(T)
-      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-      session.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
-      session.sql(s"INSERT INTO $T VALUES (2, 'high')").collect()
+
+      // external drop and re-add column with different type via catalog API
+      val serverSession = getServerSession(session)
+      val cat = serverCatalog(serverSession)
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      val addCol = TableChange.addColumn(Array("salary"), StringType, true)
+      cat.alterTable(ident, dropCol, addCol)
+
+      // external writer adds (2, "high") with new schema
+      val schema2 = StructType.fromDDL("id INT, salary STRING")
+      val extTable = cat
+        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+        .asInstanceOf[InMemoryBaseTable]
+      extTable.withData(Array(
+        new BufferedRows(Seq.empty, schema2)
+          .withRow(InternalRow(2, UTF8String.fromString("high")))))
+
       val df2 = session.table(T)
 
       assertRows(
