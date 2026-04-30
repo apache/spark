@@ -457,7 +457,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _, rowLevelCommand) =>
-      AppendDataExec(planLater(query), refreshCache(r), write, r.name, rowLevelCommand) :: Nil
+      AppendDataExec(planLater(query), refreshCache(r), write, r.name, None, rowLevelCommand) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>

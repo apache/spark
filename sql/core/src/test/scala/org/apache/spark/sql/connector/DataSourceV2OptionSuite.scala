@@ -110,7 +110,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case CommandResultExec(
-          _, AppendDataExec(_, _, write, _, _),
+          _, AppendDataExec(_, _, write, _, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
           assert(append.info.options.get("write.split-size") === "10")
@@ -142,7 +142,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case AppendDataExec(_, _, write, _, _) =>
+        case AppendDataExec(_, _, write, _, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
           assert(append.info.options.get("write.split-size") === "10")
       }
@@ -169,7 +169,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case AppendDataExec(_, _, write, _, _) =>
+        case AppendDataExec(_, _, write, _, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
           assert(append.info.options.get("write.split-size") === "10")
       }
