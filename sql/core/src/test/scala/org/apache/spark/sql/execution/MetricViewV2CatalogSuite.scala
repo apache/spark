@@ -911,7 +911,9 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with RelationCatal
     val key = (ident.namespace().toSeq, ident.name())
     Option(views.get(key)) match {
       case Some(info) => new MetadataOnlyTable(info, ident.toString)
-      case None => super.loadTable(ident) // delegate to InMemoryTableCatalog for tables
+      // Bypass `RelationCatalog.loadTable` (whose default delegates back to `loadRelation`)
+      // and call `InMemoryTableCatalog.loadTable` directly to avoid infinite recursion.
+      case None => super[InMemoryTableCatalog].loadTable(ident)
     }
   }
 }
