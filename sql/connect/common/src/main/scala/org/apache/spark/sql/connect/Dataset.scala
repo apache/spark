@@ -421,6 +421,51 @@ class Dataset[T] private[sql] (
     lateralJoin(right, Some(joinExprs), joinType)
   }
 
+  private def nearestByJoinImpl(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      joinType: String,
+      mode: String,
+      direction: String): DataFrame = {
+    // Validate locally so Connect users see the same errors as the classic path without a
+    // server round-trip. Acceptance lists must stay aligned with `NearestByJoinType` /
+    // `NearestByJoinMode` / `NearestByDirection` in sql/catalyst, which `sql/connect/common`
+    // cannot import.
+    Dataset.validateNearestByJoinArgs(numResults, joinType, mode, direction)
+    sparkSession.newDataFrame(Seq(rankingExpression)) { builder =>
+      builder.getNearestByJoinBuilder
+        .setLeft(plan.getRoot)
+        .setRight(right.plan.getRoot)
+        .setRankingExpression(toExpr(rankingExpression))
+        .setNumResults(numResults)
+        .setJoinType(joinType)
+        .setMode(mode)
+        .setDirection(direction)
+    }
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String): DataFrame = {
+    nearestByJoinImpl(right, rankingExpression, numResults, "inner", mode, direction)
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String,
+      joinType: String): DataFrame = {
+    nearestByJoinImpl(right, rankingExpression, numResults, joinType, mode, direction)
+  }
+
   override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
     val sortExprs = sortCols.map { c =>
       ColumnNodeToProtoConverter(c.sortOrder).getSortOrder
@@ -1568,4 +1613,52 @@ class Dataset[T] private[sql] (
 
   override def queryExecution: QueryExecution =
     throw ConnectClientUnsupportedErrors.queryExecution()
+}
+
+private[sql] object Dataset {
+  // Acceptance lists for `nearestByJoin`. Must stay aligned with `NearestByJoinType` /
+  // `NearestByJoinMode` / `NearestByDirection` in sql/catalyst, which `sql/connect/common`
+  // cannot import.
+  private val MaxNumResults: Int = 100000
+  private val SupportedJoinTypeDisplay = "'INNER', 'LEFT OUTER'"
+  private val SupportedJoinTypes = Set("inner", "leftouter", "left", "left_outer")
+  private val SupportedModes = Seq("approx", "exact")
+  private val SupportedDirections = Seq("distance", "similarity")
+
+  private[connect] def validateNearestByJoinArgs(
+      numResults: Int,
+      joinType: String,
+      mode: String,
+      direction: String): Unit = {
+    if (numResults < 1 || numResults > MaxNumResults) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+        messageParameters = Map(
+          "numResults" -> numResults.toString,
+          "min" -> "1",
+          "max" -> MaxNumResults.toString))
+    }
+    val canonicalJoinType = joinType.toLowerCase(java.util.Locale.ROOT).replace("_", "")
+    if (!SupportedJoinTypes.contains(canonicalJoinType)) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+        messageParameters = Map(
+          "joinType" -> joinType,
+          "supported" -> SupportedJoinTypeDisplay))
+    }
+    if (!SupportedModes.contains(mode.toLowerCase(java.util.Locale.ROOT))) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+        messageParameters = Map(
+          "mode" -> mode,
+          "supported" -> SupportedModes.mkString("'", "', '", "'")))
+    }
+    if (!SupportedDirections.contains(direction.toLowerCase(java.util.Locale.ROOT))) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
+        messageParameters = Map(
+          "direction" -> direction,
+          "supported" -> SupportedDirections.mkString("'", "', '", "'")))
+    }
+  }
 }

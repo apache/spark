@@ -1345,6 +1345,63 @@ class LateralJoin(LogicalPlan):
         """
 
 
+class NearestByJoin(LogicalPlan):
+    def __init__(
+        self,
+        left: Optional[LogicalPlan],
+        right: LogicalPlan,
+        ranking_expression: Column,
+        num_results: int,
+        join_type: str,
+        mode: str,
+        direction: str,
+    ) -> None:
+        super().__init__(left, self._collect_references([ranking_expression]))
+        self.left = cast(LogicalPlan, left)
+        self.right = right
+        self.ranking_expression = ranking_expression
+        self.num_results = int(num_results)
+        self.join_type = join_type
+        self.mode = mode
+        self.direction = direction
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.nearest_by_join.left.CopyFrom(self.left.plan(session))
+        plan.nearest_by_join.right.CopyFrom(self.right.plan(session))
+        plan.nearest_by_join.ranking_expression.CopyFrom(self.ranking_expression.to_plan(session))
+        plan.nearest_by_join.num_results = self.num_results
+        plan.nearest_by_join.join_type = self.join_type
+        plan.nearest_by_join.mode = self.mode
+        plan.nearest_by_join.direction = self.direction
+        return self._with_relations(plan, session)
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return {**super().observations, **self.right.observations}
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return (
+            f"{i}<NearestByJoin numResults={self.num_results} joinType={self.join_type} "
+            f"mode={self.mode} direction={self.direction}>\n{o}"
+            f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>NearestByJoin</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </uL>
+        """
+
+
 class SetOperation(LogicalPlan):
     def __init__(
         self,
