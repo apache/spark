@@ -21,7 +21,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.connector.catalog._
 
 /**
- * Design doc Section [5]: CACHE TABLE.
+ * Section [5]: CACHE TABLE.
  * Tests that CACHE TABLE pins table state against external changes,
  * while session writes invalidate and re-cache.
  *
@@ -168,7 +168,7 @@ class DataSourceV2CacheTableSuite
   }
 
 
-  // Scenario 4 from design doc: session schema change then external data write.
+  // Scenario 4: session schema change then external data write.
   // Session ALTER invalidates and rebuilds cache. Subsequent external write
   // does not invalidate (separate CacheManager), so cache stays pinned.
   test("[5.4-ext] session schema change then external write invisible") {
