@@ -76,8 +76,12 @@ private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
  * them directly off `this`, so the partition exec doesn't need to thread the table-only
  * `catalogName` / `identifier` arguments that `DescribeTableExec` consumes for the EXTENDED
  * `# Detailed Table Information` block.
+ *
+ * Kept orthogonal to [[DescribeIdentifierRows]] so `DescribeTablePartitionExec` (which only
+ * needs the schema/partitioning rows) doesn't inherit identifier-row helpers it never calls.
+ * `DescribeTableExec` mixes both traits in.
  */
-private[v2] trait DescribeTableBaseRows extends DescribeIdentifierRows {
+private[v2] trait DescribeTableBaseRows extends LeafV2CommandExec {
   def table: Table
 
   /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
@@ -163,7 +167,7 @@ case class DescribeTableExec(
     catalogName: String,
     identifier: Identifier,
     table: Table,
-    isExtended: Boolean) extends DescribeTableBaseRows {
+    isExtended: Boolean) extends DescribeTableBaseRows with DescribeIdentifierRows {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addBaseDescription(rows)
