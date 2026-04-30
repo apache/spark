@@ -241,6 +241,23 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     }
   }
 
+  test("DESCRIBE TABLE EXTENDED with a multi-segment namespace omits Database " +
+      "and dot-quotes Namespace") {
+    // Multi-segment v2 namespaces can't be rendered as a single-string `database`
+    // losslessly, so the v1-compat `Database` row is omitted; only `Namespace` is
+    // emitted, with `quoteIfNeeded` applied per segment.
+    withNamespaceAndTable("ns1.ns2", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing")
+      val rows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
+      val byName = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(byName.get("Catalog").contains(catalog))
+      assert(byName.get("Namespace").contains("ns1.ns2"))
+      assert(!byName.contains("Database"),
+        "multi-segment namespace must NOT emit the v1-compat `Database` row")
+      assert(byName.get("Table").contains("table"))
+    }
+  }
+
   test("describe a non-existent column") {
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"""

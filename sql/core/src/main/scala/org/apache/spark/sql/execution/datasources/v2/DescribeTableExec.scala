@@ -62,12 +62,17 @@ case class DescribeTableExec(
     rows += emptyRow()
     rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Catalog", catalogName, "")
+    // The `Namespace` row is always emitted as the canonical v2 representation. Multi-segment
+    // namespaces use `Identifier.namespace().quoted` so segments containing dots round-trip;
+    // a zero-segment (root) namespace renders as an empty string -- intentional, so consumers
+    // can distinguish "table at the catalog root" from a missing row.
     rows += toCatalystRow("Namespace", identifier.namespace().quoted, "")
-    // For v1 compatibility, also emit a `Database` row when the namespace is a single
-    // segment, mirroring v1 `CatalogTable.toJsonLinkedHashMap` which renders the
-    // `database` part of `TableIdentifier` as `Database`. v2 multi-segment namespaces
-    // can't be rendered as a single-string `database` losslessly, so the `Database`
-    // row is omitted in that case and consumers must read `Namespace` instead.
+    // For v1 compatibility, also emit a `Database` row when the namespace is exactly one
+    // segment, mirroring v1 `CatalogTable.toJsonLinkedHashMap` which renders the `database`
+    // part of `TableIdentifier` as `Database`. Multi-segment namespaces can't be rendered
+    // as a single-string `database` losslessly, and a zero-segment (root) namespace has no
+    // single-name representation, so the `Database` row is omitted in those cases and
+    // consumers must read `Namespace` instead.
     if (identifier.namespace().length == 1) {
       rows += toCatalystRow("Database", identifier.namespace().head, "")
     }

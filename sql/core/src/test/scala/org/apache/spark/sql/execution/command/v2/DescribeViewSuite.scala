@@ -33,4 +33,38 @@ class DescribeViewSuite
     assert(rows.contains("# Detailed View Information"),
       s"v2 extended describe should emit the View header; got:\n${rows.mkString("\n")}")
   }
+
+  test("V2: extended emits structured Catalog/Namespace/View rows") {
+    // Pin the v2 view layout: structured `Catalog`/`Namespace`/`View` rows under
+    // `# Detailed View Information`, plus the v1-compat `Database` row when the namespace
+    // is a single segment. Mirrors the table-side pin in `DescribeTableSuite`.
+    val view = s"$catalog.$namespace.v2_desc_struct_rows"
+    sql(s"CREATE VIEW $view AS SELECT 1 AS x")
+    val rows = sql(s"DESCRIBE TABLE EXTENDED $view").collect()
+    val byName = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+    assert(byName.get("Catalog").contains(catalog))
+    assert(byName.get("Namespace").contains(namespace))
+    assert(byName.get("Database").contains(namespace),
+      "single-segment namespace must also surface as a `Database` row for v1 parity")
+    assert(byName.get("View").contains("v2_desc_struct_rows"))
+  }
+
+  test("V2: extended on a multi-segment namespace omits Database and dot-quotes Namespace") {
+    // Multi-segment v2 namespaces can't be rendered as a single-string `database`
+    // losslessly, so the v1-compat `Database` row is omitted; only `Namespace` is
+    // emitted, with `quoteIfNeeded` applied per segment.
+    val ns = s"$catalog.ns1.ns2"
+    withNamespace(ns) {
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")
+      val view = s"$ns.v2_desc_multi_ns"
+      sql(s"CREATE VIEW $view AS SELECT 1 AS x")
+      val rows = sql(s"DESCRIBE TABLE EXTENDED $view").collect()
+      val byName = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(byName.get("Catalog").contains(catalog))
+      assert(byName.get("Namespace").contains("ns1.ns2"))
+      assert(!byName.contains("Database"),
+        "multi-segment namespace must NOT emit the v1-compat `Database` row")
+      assert(byName.get("View").contains("v2_desc_multi_ns"))
+    }
+  }
 }
