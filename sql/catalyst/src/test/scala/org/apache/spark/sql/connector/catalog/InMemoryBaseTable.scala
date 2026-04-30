@@ -20,8 +20,10 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Locale
 import java.util.Objects
 import java.util.OptionalLong
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -42,7 +44,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
+import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -73,7 +75,15 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  private var tableColumns: Array[Column] = initialColumns
+  // Assign column IDs to columns that don't already have one.
+  // This simulates connectors that support column identity tracking.
+  private var tableColumns: Array[Column] = initialColumns.map { c =>
+    if (c.id() == null) {
+      c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
+    } else {
+      c
+    }
+  }
 
   override def columns(): Array[Column] = tableColumns
 
@@ -698,8 +708,13 @@ abstract class InMemoryBaseTable(
 
       override def toBatch: BatchWrite = {
         val newSchema = info.schema()
-        tableColumns = CatalogV2Util.structTypeToV2Columns(
-          mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema))
+        val mergedSchema = mergeSchema(
+          oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
+          newType = newSchema)
+        val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
+        tableColumns = InMemoryBaseTable.preserveOldIDsAndAssignNewIDs(
+          oldColumns = columns(),
+          newColumns = newColumns)
         writer
       }
 
@@ -817,6 +832,27 @@ abstract class InMemoryBaseTable(
 }
 
 object InMemoryBaseTable {
+  private val columnIdGlobalCounter = new AtomicLong(0)
+  def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
+
+  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+
+  def preserveOldIDsAndAssignNewIDs(
+      oldColumns: Array[Column],
+      newColumns: Array[Column]): Array[Column] = {
+    newColumns.map { newCol =>
+      oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
+        case Some(oldCol) if oldCol.id() != null &&
+            oldCol.dataType() == newCol.dataType() =>
+          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
+        case _ if newCol.id() == null =>
+          newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)
+        case _ =>
+          newCol
+      }
+    }
+  }
+
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
   def extractValue(

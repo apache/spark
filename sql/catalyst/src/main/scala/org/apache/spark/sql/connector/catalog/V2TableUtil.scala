@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
@@ -120,6 +122,57 @@ private[sql] object V2TableUtil extends SQLConfHelper {
     val metaCols = filter(originMetaColNames, metadataColumns(table))
     val metaSchema = CatalogV2Util.toStructType(metaCols)
     SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode)
+  }
+
+  /**
+   * Validates that column IDs have not changed for columns that still exist in the table.
+   *
+   * Only validates columns where the original and current column both have non-null IDs.
+   * If the connector does not support column IDs (returns null), this check is skipped.
+   *
+   * @param table the current table metadata
+   * @param relation the relation with captured columns
+   * @return validation errors, or empty sequence if valid
+   */
+  def validateCapturedColumnIds(
+      table: Table,
+      relation: DataSourceV2Relation): Seq[String] = {
+    validateCapturedColumnIds(
+      table = table,
+      originalCapturedCols = relation.table.columns.toImmutableArraySeq)
+  }
+
+  /**
+   * Validates that column IDs have not changed for columns that still exist in the table.
+   *
+   * Only validates columns where the original and current column both have non-null IDs.
+   *
+   * @param table the current table metadata
+   * @param originalCapturedCols the originally captured columns
+   * @return validation errors, or empty sequence if valid
+   */
+  def validateCapturedColumnIds(
+      table: Table,
+      originalCapturedCols: Seq[Column]): Seq[String] = {
+    val currentColsByNormalizedName = table.columns.toImmutableArraySeq
+      .map(currentCol => normalize(currentCol.name()) -> currentCol).toMap
+    val errors = new mutable.ArrayBuffer[String]()
+    for (originalCapturedCol <- originalCapturedCols) {
+      if (originalCapturedCol.id() != null) {
+        currentColsByNormalizedName.get(normalize(originalCapturedCol.name())) match {
+          case Some(currentCol)
+            if currentCol.id() != null && currentCol.id() != originalCapturedCol.id() =>
+            errors += s"`${originalCapturedCol.name()}` column ID has changed from " +
+              s"${originalCapturedCol.id()} to ${currentCol.id()}"
+          case _ =>
+            // Column exists in the original schema but not in the current table
+            // (dropped columns), or both column IDs match.
+            // Dropped columns are handled separately by
+            // [[columnsMissingOrAddedAfterAnalysis]].
+        }
+      }
+    }
+    errors.toSeq
   }
 
   private def filter(colNames: Seq[String], cols: Seq[MetadataColumn]): Seq[MetadataColumn] = {

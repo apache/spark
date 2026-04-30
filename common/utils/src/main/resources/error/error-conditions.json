@@ -2803,6 +2803,12 @@
           "<errors>"
         ]
       },
+      "COLUMN_ID_MISMATCH" : {
+        "message" : [
+          "Column IDs have changed:",
+          "<errors>"
+        ]
+      },
       "METADATA_COLUMNS_MISMATCH" : {
         "message" : [
           "Metadata columns have changed:",

@@ -53,7 +53,16 @@ public interface Column {
       boolean nullable,
       String comment,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null, null, null, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        /* generationExpression = */ null,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   static Column create(
@@ -63,8 +72,16 @@ public interface Column {
       String comment,
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, defaultValue,
-            null, null, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        defaultValue,
+        /* generationExpression = */ null,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   static Column create(
@@ -74,8 +91,16 @@ public interface Column {
       String comment,
       String generationExpression,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null,
-            generationExpression, null, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        generationExpression,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   static Column create(
@@ -85,8 +110,16 @@ public interface Column {
           String comment,
           IdentityColumnSpec identityColumnSpec,
           String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null,
-            null, identityColumnSpec, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        /* generationExpression = */ null,
+        identityColumnSpec,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   /**
@@ -136,4 +169,17 @@ public interface Column {
    */
   @Nullable
   String metadataInJSON();
+
+  /**
+   * An ID of the column that can be used to reliably track column identity across schema
+   * changes such as renames. If a column is dropped and re-added with the same name, the
+   * new column ID must be different. This method must return null if connectors don't
+   * support the notion of column ID.
+   * <p>
+   * When column IDs are null, Spark skips column identity validation.
+   */
+  @Nullable
+  default String id() {
+    return null;
+  }
 }

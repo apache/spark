@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangePreservesColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTru
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -54,6 +54,18 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat",
+      classOf[NullTableIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullcolidcat",
+      classOf[NullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.preserveidcat",
+      classOf[TypeChangePreservesColIdTableCatalog].getName)
+    .set("spark.sql.catalog.preserveidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.mixedcolidcat",
+      classOf[MixedColumnIdTableCatalog].getName)
+    .set("spark.sql.catalog.mixedcolidcat.copyOnLoad", "true")
 
   after {
     spark.sessionState.catalogManager.reset()
@@ -1286,13 +1298,15 @@ class DataSourceV2DataFrameSuite
       // remove nested field from struct column
       sql(s"ALTER TABLE $t DROP COLUMN person.age")
 
-      // execution should fail with column mismatch
+      // The standard InMemoryTableCatalog assigns new column IDs when a
+      // column's type changes. Dropping a nested field changes the parent
+      // struct type, so the parent column gets a new ID. The column ID
+      // check fires before schema validation.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
-        parameters = Map(
-          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "errors" -> "- `person`.`age` INT has been removed"))
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
@@ -1503,6 +1517,823 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         spark.table(t),
         Seq(Row(1, 20, "A"), Row(3, 60, "A")))
+    }
+  }
+
+  // Column ID tests: Mismatch detection
+  //
+  // Core behavior: when a DataFrame captures column IDs at analysis time,
+  // and those IDs change before execution, the query is rejected with
+  // COLUMN_ID_MISMATCH.
+
+  test("drop+re-add column with same name and type rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add column with different type rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add column with different case rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN SALARY INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add multiple columns reports all mismatches") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT, bonus INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100, 10)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t DROP COLUMN bonus")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*",
+          "errors" -> "(?s).*salary.*bonus.*"))
+    }
+  }
+
+  // With case-sensitive analysis, "salary" and "SALARY" are different columns.
+  // The column ID check skips (original "salary" not found in current table),
+  // and the schema check fires instead (column missing).
+  test("case-sensitive mode: different case column name triggers schema mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+        sql(s"INSERT INTO $t VALUES (1, 100)")
+        val df = spark.table(t)
+
+        sql(s"ALTER TABLE $t DROP COLUMN salary")
+        sql(s"ALTER TABLE $t ADD COLUMN SALARY INT")
+
+        checkError(
+          exception = intercept[AnalysisException] { df.collect() },
+          condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+          matchPVals = true,
+          parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+      }
+    }
+  }
+
+  test("drop+re-add column with mixed case type rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary InT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("column addition does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, 50)")
+
+      checkAnswer(df, Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Column ID tests: Complex types
+
+  test("drop+re-add array column rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array('a', 'b'))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN tags")
+      sql(s"ALTER TABLE $t ADD COLUMN tags ARRAY<STRING>")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add map column rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('x', 1))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props")
+      sql(s"ALTER TABLE $t ADD COLUMN props MAP<STRING, INT>")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add nested struct field rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN person.age")
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // When a connector preserves column IDs across type changes, adding a
+  // nested field keeps the same column ID but changes the struct type.
+  // Column ID check passes, and since the query uses ALLOW_NEW_FIELDS mode
+  // (reads allow new fields), adding a nested struct field is permitted.
+  test("same column ID but expanded struct type: read tolerates nested field addition") {
+    val t = "preserveidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice'))")
+      val df = spark.table(t)
+
+      // add nested field; TypeChangePreservesColIdTableCatalog preserves
+      // the person column ID despite the type change
+      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
+
+      // Read queries use ALLOW_NEW_FIELDS mode, so adding nested fields is
+      // permitted. The stale DataFrame reads the original columns successfully.
+      checkAnswer(df, Seq(Row(1, Row("Alice"))))
+    }
+  }
+
+  test("add field to array element struct rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, items ARRAY<STRUCT<name: STRING>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array(named_struct('name', 'x')))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN items.element.price INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("add field to map value struct rejects stale DataFrame") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<v: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('a', named_struct('v', 1)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN props.value.label STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("inserting new data into array column does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, tags ARRAY<STRING>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, array('a', 'b'))")
+      val df = spark.table(t)
+
+      sql(s"INSERT INTO $t VALUES (2, array('c', 'd', 'e'))")
+
+      checkAnswer(df, Seq(
+        Row(1, Seq("a", "b")),
+        Row(2, Seq("c", "d", "e"))))
+    }
+  }
+
+  test("inserting new data into map column does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('x', 1))")
+      val df = spark.table(t)
+
+      sql(s"INSERT INTO $t VALUES (2, map('y', 2, 'z', 3))")
+
+      checkAnswer(df, Seq(
+        Row(1, Map("x" -> 1)),
+        Row(2, Map("y" -> 2, "z" -> 3))))
+    }
+  }
+
+  test("inserting new data into struct column does not trigger column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
+      val df = spark.table(t)
+
+      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25))")
+
+      checkAnswer(df, Seq(
+        Row(1, Row("Alice", 30)),
+        Row(2, Row("Bob", 25))))
+    }
+  }
+
+  // When a connector preserves column IDs across type widening (e.g.,
+  // INT -> LONG), the column ID check passes but schema validation
+  // catches the type mismatch.
+  test("same column ID but widened type caught by schema validation") {
+    val t = "preserveidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Join detection
+
+  test("join rejects stale DataFrame after drop+re-add column") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      sql(s"INSERT INTO $t VALUES (1, 999)")
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: DataFrame operation types
+  //
+  // The refresh logic validates column IDs for every DataSourceV2Relation
+  // in the plan, regardless of the operation applied on top (filter,
+  // aggregation, sort, projection).
+
+  test("filter on stale DataFrame after drop+re-add column rejects") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (2, 200)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.filter("salary > 50").collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("aggregate on stale DataFrame after drop+re-add column rejects") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (2, 200)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.groupBy("id").agg(sum("salary")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("sort on stale DataFrame after drop+re-add column rejects") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (2, 200)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.orderBy("salary").collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("select specific column from stale DataFrame after drop+re-add rejects") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.select("salary").collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Subquery
+  //
+  // The refresh logic uses transformWithSubqueries, so column IDs in
+  // subquery plans are also validated.
+
+  test("subquery referencing stale table detects column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (2, 200)")
+
+      val df = spark.sql(s"SELECT * FROM $t WHERE id IN (SELECT id FROM $t)")
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Rename column interaction
+  //
+  // When a column is renamed, the old column name no longer exists in
+  // the current table. The column ID check skips it (not found by name),
+  // and the schema validation catches it as a missing column.
+
+  test("rename column triggers schema mismatch not column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t RENAME COLUMN salary TO wage")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Sequential schema changes
+  //
+  // Multiple schema changes between analysis and execution should still
+  // be correctly detected by the column ID validation.
+
+  test("double drop+re-add detects column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      // first drop+re-add
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      // second drop+re-add
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("drop+re-add one column while adding another does not affect unchanged columns") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+
+      // stale DataFrame detects salary ID mismatch
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*salary.*"))
+
+      // a fresh DataFrame succeeds (all current column IDs are consistent)
+      sql(s"INSERT INTO $t VALUES (2, 200, 50)")
+      checkAnswer(spark.table(t), Seq(Row(1, 100, null), Row(2, 200, 50)))
+    }
+  }
+
+  // Column ID tests: Type change in standard catalog
+  //
+  // The standard InMemoryTableCatalog assigns new column IDs when the
+  // data type changes (preserveOldIDsAndAssignNewIDs matches by name
+  // AND type). This is different from TypeChangePreservesColIdTableCatalog.
+
+  test("type widening in standard catalog triggers column ID mismatch") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
+
+      // standard catalog assigns a new ID for the widened column
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Assignment verification
+  //
+  // Verifies that the InMemoryTableCatalog assigns unique, incrementing
+  // column IDs across schema changes.
+
+  test("column IDs are unique and incrementing across schema changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      val cat = catalog("testcat")
+      val initialCols = cat.loadTable(ident).columns()
+      val idColId = initialCols.find(_.name() == "id").get.id()
+      val salaryColId = initialCols.find(_.name() == "salary").get.id()
+      assert(idColId != null && salaryColId != null, "initial columns should have IDs")
+      assert(idColId != salaryColId, "initial column IDs should be unique")
+
+      // add a column: new ID should be different from existing ones
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+      val afterAddCols = cat.loadTable(ident).columns()
+      val bonusColId = afterAddCols.find(_.name() == "bonus").get.id()
+      assert(bonusColId != null, "added column should have an ID")
+      assert(bonusColId != idColId && bonusColId != salaryColId,
+        "added column ID should differ from existing IDs")
+      // existing column IDs should be preserved
+      assert(afterAddCols.find(_.name() == "id").get.id() == idColId)
+      assert(afterAddCols.find(_.name() == "salary").get.id() == salaryColId)
+
+      // drop+re-add: new ID should differ from all previous IDs
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      val afterReaddCols = cat.loadTable(ident).columns()
+      val newSalaryColId = afterReaddCols.find(_.name() == "salary").get.id()
+      assert(newSalaryColId != salaryColId,
+        "re-added column should have a different ID than original")
+      assert(newSalaryColId != idColId && newSalaryColId != bonusColId,
+        "re-added column ID should be unique")
+      // unchanged column IDs should still be preserved
+      assert(afterReaddCols.find(_.name() == "id").get.id() == idColId)
+      assert(afterReaddCols.find(_.name() == "bonus").get.id() == bonusColId)
+    }
+  }
+
+  // Column ID tests: Temp view behavior
+  //
+  // SQL views do not capture column IDs. They resolve columns by name
+  // on each access, so column ID changes are invisible to them.
+
+  test("temp view tolerates drop+re-add column with same type") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      spark.table(t).createOrReplaceTempView("tmp_view")
+      checkAnswer(spark.sql("SELECT * FROM tmp_view"), Seq(Row(1, 100)))
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+
+      checkAnswer(
+        spark.sql("SELECT * FROM tmp_view"),
+        Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  test("temp view rejects drop+re-add column with different type") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      spark.table(t).createOrReplaceTempView("tmp")
+      checkAnswer(sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM tmp").collect()
+        },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        matchPVals = true,
+        parameters = Map(
+          "viewName" -> ".*", "tableName" -> ".*",
+          "colType" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Column ID tests: Write operations
+  //
+  // [[writeTo().append()]] eagerly executes the command during the
+  // [[commandExecuted]] phase, before the refresh phase runs. As a result,
+  // column ID validation does not apply to the source DataFrame in a
+  // [[writeTo]] path. The append succeeds without throwing a
+  // COLUMN_ID_MISMATCH error.
+  test("writeTo().append() does not throw column ID mismatch after drop+re-add column") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      val source = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // Command is eagerly executed before the refresh phase validates
+      // column IDs. No COLUMN_ID_MISMATCH exception is thrown.
+      source.writeTo(t).append()
+    }
+  }
+
+  test("insertInto rejects stale source after drop+re-add column") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+      val source = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          source.write.format(v2Format).insertInto(t)
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
+    }
+  }
+
+  // Column ID tests: Null table ID connector
+
+  // When a connector does not support table IDs but does support column IDs,
+  // column ID validation still catches drop+recreate.
+  test("null table ID: column IDs still detect drop+recreate") {
+    val t = "nullidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val cat = catalog("nullidcat")
+      assert(cat.loadTable(ident).id == null,
+        "NullTableIdInMemoryTableCatalog should produce null table IDs")
+
+      val df = spark.table(t)
+
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
+    }
+  }
+
+  // Column ID tests: Null column ID connector
+
+  // When a connector does not support column IDs, validation is skipped.
+  test("connector with null column IDs: drop+re-add column not detected") {
+    val t = "nullcolidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      assert(catalog("nullcolidcat").loadTable(ident).columns().forall(_.id() == null),
+        "NullColumnIdInMemoryTableCatalog should produce null column IDs")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // succeeds because column ID validation is skipped when IDs are null
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  test("connector with null column IDs: stale DataFrame reads after column addition " +
+      "without ID mismatch") {
+    val t = "nullcolidcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
+
+      // The stale DataFrame has only [id, salary] while the table now has
+      // [id, salary, bonus]. Since column IDs are null, no COLUMN_ID_MISMATCH
+      // error is thrown; new columns are tolerated for read queries.
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  // Column ID tests: Mixed null/non-null column IDs
+
+  test("mixed column IDs: original non-null ID, current null ID after drop+re-add not detected") {
+    val t = "mixedcolidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      MixedColumnIdTableCatalog.reset()
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // salary has a non-null column ID at analysis time
+      val salaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(salaryCol.id() != null, "salary should have a non-null ID initially")
+
+      val df = spark.table(t)
+
+      // make salary return null ID from now on
+      MixedColumnIdTableCatalog.nullIdColumnNames.add("salary")
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      val newSalaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
+
+      // succeeds because current column ID is null, so validation is skipped
+      checkAnswer(df, Seq(Row(1, 100)))
+    }
+  }
+
+  test("mixed column IDs: original null ID, current non-null ID after drop+re-add not detected") {
+    val t = "mixedcolidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      MixedColumnIdTableCatalog.reset()
+      MixedColumnIdTableCatalog.nullIdColumnNames.add("salary")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      // salary has a null column ID at analysis time
+      val salaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(salaryCol.id() == null, "salary should have a null ID initially")
+
+      val df = spark.table(t)
+
+      // make salary return non-null ID from now on
+      MixedColumnIdTableCatalog.nullIdColumnNames.remove("salary")
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      val newSalaryCol = catalog("mixedcolidcat").loadTable(ident).columns()
+        .find(_.name() == "salary").get
+      assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
+
+      // succeeds because original column ID is null, so validation is skipped
+      checkAnswer(df, Seq(Row(1, 100)))
     }
   }
 
