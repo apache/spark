@@ -159,6 +159,36 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
+  test("self merge fails when column is dropped and re-added after analysis") {
+    withTable(tableNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = spark.table(tableNameAsString).where("salary == 100").as("source")
+      sourceDF.queryExecution.assertAnalyzed()
+
+      sql(s"ALTER TABLE $tableNameAsString DROP COLUMN salary")
+      sql(s"ALTER TABLE $tableNameAsString ADD COLUMN salary INT")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sourceDF
+            .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+            .whenMatched()
+            .update(Map("salary" -> targetTableCol("salary").plus(1)))
+            .merge()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+
+      assert(catalog.lastTransaction.currentState == Aborted)
+      assert(catalog.lastTransaction.isClosed)
+    }
+  }
+
   test("merge into empty table with NOT MATCHED clause") {
     withTempView("source") {
       createTable("pk INT NOT NULL, salary INT, dep STRING")

@@ -70,9 +70,13 @@ class InMemoryRowLevelOperationTableCatalog
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTable = new InMemoryRowLevelOperationTable(
+    val columnsWithIds = InMemoryBaseTable.assignMissingIds(
+      oldColumns = table.columns(),
+      newColumns = CatalogV2Util.structTypeToV2Columns(schema))
+
+    val newTable = InMemoryRowLevelOperationTable.withColumns(
       name = table.name,
-      schema = schema,
+      columns = columnsWithIds,
       partitioning = partitioning,
       properties = properties,
       constraints = constraints,

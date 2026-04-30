@@ -33,21 +33,37 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class InMemoryRowLevelOperationTable(
+class InMemoryRowLevelOperationTable private (
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty,
-    tableId: String = java.util.UUID.randomUUID().toString)
+    constraints: Array[Constraint],
+    tableId: String)
   extends InMemoryTable(
     name,
-    CatalogV2Util.structTypeToV2Columns(schema),
+    columns,
     partitioning,
     properties,
     constraints,
     id = tableId)
   with SupportsRowLevelOperations {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString) = {
+    this(
+      name = name,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = tableId)
+  }
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
@@ -265,4 +281,17 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
   }
 
   override def commit(): WriterCommitMessage = buffer
+}
+
+object InMemoryRowLevelOperationTable {
+  def withColumns(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
+    new InMemoryRowLevelOperationTable(
+      name, columns, partitioning, properties, constraints, tableId)
+  }
 }

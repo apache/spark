@@ -133,6 +133,15 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     // Make sure the table was not dropped and recreated.
     ref.info.tableId.foreach(V2TableUtil.validateTableId(ref.name, _, table))
 
+    // Detect columns that were dropped and re-added with the same name but a different
+    // column ID. This catches replacements that preserve the schema but change identity.
+    val colIdErrors = V2TableUtil.validateColumnIds(
+      table = table,
+      originalCapturedCols = ref.info.columns)
+    if (colIdErrors.nonEmpty) {
+      throw QueryCompilationErrors.columnIdMismatchAfterAnalysis(ref.name, colIdErrors)
+    }
+
     // Do not allow schema evolution to pre-analysed dataframes that are later used in
     // transactional writes. This is because the entire plans was built based on the original schema
     // and any schema change would make the plan structurally invalid. This is inline with the
@@ -142,7 +151,7 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
       originCols = ref.info.columns,
       mode = PROHIBIT_CHANGES)
     if (dataErrors.nonEmpty) {
-      throw QueryCompilationErrors.columnsChangedAfterAnalysis(ref.name, dataErrors)
+      throw QueryCompilationErrors.columnsMissingOrAddedAfterAnalysis(ref.name, dataErrors)
     }
 
     val metaErrors = V2TableUtil.validateCapturedMetadataColumns(table, ref.info.metadataColumns)

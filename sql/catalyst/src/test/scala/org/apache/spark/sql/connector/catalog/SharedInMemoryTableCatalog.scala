@@ -30,8 +30,7 @@ import java.util.concurrent.ConcurrentHashMap
  * than table IDs.
  */
 class SharedInMemoryTableCatalog extends NullTableIdInMemoryTableCatalog {
-  override protected val tables: util.Map[Identifier, Table] =
-    SharedInMemoryTableCatalog.sharedTables
+  tables = SharedInMemoryTableCatalog.sharedTables
   override protected val namespaces: util.Map[List[String], Map[String, String]] =
     SharedInMemoryTableCatalog.sharedNamespaces
 }

@@ -86,6 +86,14 @@ class TxnTable(
   // don't false-positive on the TxnTable wrapper having a different UUID.
   override val id: String = delegate.id
 
+  // Preserve column IDs from the delegate so that column ID validation can correctly detect
+  // drop-and-re-add scenarios (different IDs) and pass when columns are unchanged (same IDs).
+  // Uses assignMissingIds to keep the delegate's IDs for existing columns while assigning
+  // fresh IDs for any new columns added by schema evolution.
+  updateColumns(InMemoryBaseTable.assignMissingIds(
+    oldColumns = delegate.columns(),
+    newColumns = columns()))
+
   alterTableWithData(delegate.data, schema)
 
   // A tracker of filters used in each scan.
