@@ -112,7 +112,7 @@ private[sql] object V1Table {
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      t: MetadataOnlyTable): CatalogTable = t.getTableInfo match {
+      t: MetadataTable): CatalogTable = t.getTableInfo match {
     case viewInfo: ViewInfo => toCatalogTable(catalog, ident, viewInfo)
     case tableInfo => toCatalogTable(catalog, ident, tableInfo)
   }

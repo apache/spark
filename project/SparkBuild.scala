@@ -242,19 +242,18 @@ object SparkBuild extends PomBuild {
     Set(file)
   }
 
+  // Defines the standalone `scalaStyleOnCompile` / `scalaStyleOnTest` tasks
+  // invoked by `dev/lint-scala`. Style is intentionally NOT attached to
+  // `(Compile / compile)` -- a violation in one module would otherwise abort
+  // compile for that module and every transitive dependent, cascading style
+  // failures into every job that recompiles those sources (Build modules,
+  // Documentation generation, Java 17/25 Maven build, sparkr, ...). Each
+  // cascaded job then surfaces only a generic "exit code 1" with no file/line.
+  // After decoupling, the dedicated lint job is the single place style
+  // violations surface, with file/line annotations from `dev/scalastyle`.
   def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
     scalaStyleOnCompile := cachedScalaStyle(Compile).value,
-    scalaStyleOnTest := cachedScalaStyle(Test).value,
-    (scalaStyleOnCompile / logLevel) := Level.Warn,
-    (scalaStyleOnTest / logLevel) := Level.Warn,
-    (Compile / compile) := {
-      scalaStyleOnCompile.value
-      (Compile / compile).value
-    },
-    (Test / compile) := {
-      scalaStyleOnTest.value
-      (Test / compile).value
-    }
+    scalaStyleOnTest := cachedScalaStyle(Test).value
   )
 
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
@@ -290,12 +289,10 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
-      !sys.env.get("NOLINT_ON_COMPILE").contains("false")
   lazy val sharedSettings = checkJavaVersionSettings ++
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
-      (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
+                            enableScalaStyle ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -401,7 +398,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ (if (noLintOnCompile) Nil else Checkstyle.settings) ++
+      ExcludedDependencies.settings ++ Checkstyle.settings ++
       ExcludeShims.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
@@ -1699,7 +1696,10 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        "--ignore-source-errors", "-notree"
+        "--ignore-source-errors", "-notree",
+        "-Xmaxerrs", "0",
+        "-verbose",
+        "-Xdoclint:all", "-Xdoclint:-missing"
       )
     },
 

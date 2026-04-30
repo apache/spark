@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
@@ -33,8 +34,8 @@ import org.apache.spark.util.ArrayImplicits._
  *
  * When the table is absent, falls back to `viewExists` for catalogs that also implement
  * [[ViewCatalog]] -- distinguishes "wrong type" from "missing" so a `DROP TABLE someView`
- * on a mixed catalog surfaces the dedicated `EXPECT_TABLE_NOT_VIEW` error rather than a
- * generic "table not found", matching the v1 `DropTableCommand(isView = false)` behavior.
+ * on a mixed catalog surfaces `WRONG_COMMAND_FOR_OBJECT_TYPE` ("Use DROP VIEW instead")
+ * rather than a generic "table not found", matching v1 `DropTableCommand(isView = false)`.
  */
 case class DropTableExec(
     catalog: TableCatalog,
@@ -52,8 +53,12 @@ case class DropTableExec(
         (catalog.name() +: ident.namespace() :+ ident.name()).toImmutableArraySeq
       catalog match {
         case vc: ViewCatalog if vc.viewExists(ident) =>
-          throw QueryCompilationErrors.expectTableNotViewError(
-            nameParts, cmd = "DROP TABLE", suggestAlternative = false, t = this)
+          throw QueryCompilationErrors.wrongCommandForObjectTypeError(
+            operation = "DROP TABLE",
+            requiredType = "TABLE",
+            objectName = nameParts.map(quoteIfNeeded).mkString("."),
+            foundType = "VIEW",
+            alternative = "DROP VIEW")
         case _ if !ifExists =>
           throw QueryCompilationErrors.noSuchTableError(nameParts)
         case _ =>

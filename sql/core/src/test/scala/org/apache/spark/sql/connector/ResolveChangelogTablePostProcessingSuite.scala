@@ -588,45 +588,6 @@ class ResolveChangelogTablePostProcessingSuite
   }
 
   // ===========================================================================
-  // Net changes deduplication: not yet supported
-  // ===========================================================================
-  //
-  // `deduplicationMode = netChanges` collapses multiple changes per row identity into the
-  // net effect. It is not yet implemented in [[ResolveChangelogTable]].
-
-  test("deduplicationMode=netChanges is rejected when connector emits intermediate changes") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsIntermediateChanges = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    checkError(
-      intercept[AnalysisException] {
-        sql(s"SELECT * FROM $catalogName.$testTableName " +
-          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
-          s"WITH (deduplicationMode = 'netChanges')")
-      },
-      condition = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
-  }
-
-  test("deduplicationMode=netChanges is rejected even when connector has no intermediate changes") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsIntermediateChanges = false,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    checkError(
-      intercept[AnalysisException] {
-        sql(s"SELECT * FROM $catalogName.$testTableName " +
-          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
-          s"WITH (deduplicationMode = 'netChanges')")
-      },
-      condition = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
-  }
-
-  // ===========================================================================
   // Range edge cases
   // ===========================================================================
 

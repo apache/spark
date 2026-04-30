@@ -195,7 +195,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case CommandResultExec(
-          _, OverwriteByExpressionExec(_, _, write, _),
+          _, OverwriteByExpressionExec(_, _, write, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
@@ -228,7 +228,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case OverwritePartitionsDynamicExec(_, _, write, _) =>
+        case OverwritePartitionsDynamicExec(_, _, write, _, _) =>
           val dynOverwrite = write.toBatch.asInstanceOf[InMemoryBaseTable#DynamicOverwrite]
           assert(dynOverwrite.info.options.get("write.split-size") === "10")
       }
@@ -255,7 +255,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       collected = df.queryExecution.executedPlan.collect {
         case CommandResultExec(
-          _, OverwriteByExpressionExec(_, _, write, _),
+          _, OverwriteByExpressionExec(_, _, write, _, _),
           _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
@@ -288,7 +288,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case OverwriteByExpressionExec(_, _, write, _) =>
+        case OverwriteByExpressionExec(_, _, write, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
       }
@@ -318,7 +318,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case OverwriteByExpressionExec(_, _, write, _) =>
+        case OverwriteByExpressionExec(_, _, write, _, _) =>
           val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
       }

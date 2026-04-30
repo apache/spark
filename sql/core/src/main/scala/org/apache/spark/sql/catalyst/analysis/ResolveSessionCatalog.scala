@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -208,11 +208,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output) =>
       DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
 
-    case DescribeColumn(
-        ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
-      // For views, the column will not be resolved by `ResolveReferences` because
-      // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident, column.nameParts, isExtended, output)
+    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
+    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
+    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
+    // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
+    // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
+    // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
+    case DescribeTablePartition(rpv: ResolvedPersistentView, _, _, _) =>
+      val quoted = (rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier)
+        .map(quoteIfNeeded).mkString(".")
+      throw QueryCompilationErrors.descPartitionNotAllowedOnView(quoted)
+
+    case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
+      // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
+      // typically resolves the column to an `Attribute` here. We also accept the legacy
+      // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
+      // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
+      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
+      val nameParts = DescribeColumn.extractColumnNameParts(column)
+      DescribeColumnCommand(ident, nameParts, isExtended, output)
 
     case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
@@ -525,8 +539,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
     // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
     // from HandleSpecialCommand after this rewrite.
-    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _) =>
-      AlterViewAsCommand(ident, originalText, query)
+    case alterViewAs @ AlterViewAs(
+        ResolvedViewIdentifier(ident), originalText, query, _, _) =>
+      // For session-catalog persistent views, pick up the analysis-time collation off the
+      // resolved `ViewInfo` -- `ApplyDefaultCollation` rewrites that property to fill the
+      // namespace default when the existing view had none, and `alterPermanentView` wants
+      // the post-rewrite value so the persisted `CatalogTable.collation` matches the
+      // collated literal types in the analyzed plan. Temp views don't carry a `ViewInfo`,
+      // so they pass through without a collation override.
+      val collation = alterViewAs.child match {
+        case rpv: ResolvedPersistentView =>
+          Option(rpv.info.properties.get(TableCatalog.PROP_COLLATION))
+        case _ => None
+      }
+      AlterViewAsCommand(ident, originalText, query, collation = collation)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
@@ -786,11 +812,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `MetadataOnlyTable`) fall through; `AlterViewAs` is picked up by the v2
-    // strategy, and the remaining view DDL / inspection plans (SET/UNSET TBLPROPERTIES,
-    // ALTER VIEW ... WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW
-    // COLUMNS, DESCRIBE [COLUMN]) are rejected with `UNSUPPORTED_FEATURE.TABLE_OPERATION` by
-    // dedicated v2 strategy cases -- tracked for a follow-up PR (SPARK-52729).
+    // (produced for `MetadataTable`) fall through and are picked up by dedicated v2 strategy
+    // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
+    // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
+    // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`
+    // directly.
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
         Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))

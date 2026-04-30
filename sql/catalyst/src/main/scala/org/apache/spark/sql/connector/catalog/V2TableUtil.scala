@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.sql.util.SchemaValidationMode
@@ -129,6 +130,20 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   private def metadataColumns(table: Table): Seq[MetadataColumn] = table match {
     case hasMeta: SupportsMetadataColumns => hasMeta.metadataColumns.toImmutableArraySeq
     case _ => Seq.empty
+  }
+
+  /**
+   * Validates that the identity of a loaded table matches a previously captured table id.
+   * Throws if the table was dropped and recreated under the same name (which changes the id).
+   * No-op if the connector does not support table ids (capturedId is null).
+   */
+  def validateTableId(name: String, capturedId: String, currentTable: Table): Unit = {
+    if (capturedId != null && capturedId != currentTable.id) {
+      throw QueryCompilationErrors.tableIdChangedAfterAnalysis(
+        name,
+        capturedTableId = capturedId,
+        currentTableId = currentTable.id)
+    }
   }
 
   private def normalize(name: String): String = {

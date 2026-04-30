@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, InMemoryTable, TableChange, TableInfo}
+import org.apache.spark.sql.{sources, AnalysisException, Row}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.internal.SQLConf
@@ -866,5 +866,326 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
           Row(8),
           Row(5)))
     }
+  }
+
+  test("update with analysis failure and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val exception = intercept[AnalysisException] {
+      sql(s"UPDATE $tableNameAsString SET invalid_column = -1")
+    }
+
+    assert(exception.getMessage.contains("invalid_column"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("update with CTE and transactional checks") {
+    // create table
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // create source table
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+    // update using CTE
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""WITH cte AS (
+           |  SELECT pk, salary + 50 AS adjusted_salary, dep
+           |  FROM $sourceNameAsString
+           |  WHERE salary > 100
+           |)
+           |UPDATE $tableNameAsString t
+           |SET salary = -1
+           |WHERE t.dep = 'hr' AND EXISTS (SELECT 1 FROM cte WHERE cte.pk = t.pk)
+           |""".stripMargin)
+    }
+
+    // check txn was properly committed and closed
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    // check target table was scanned correctly
+    val targetTxnTable = txnTables(tableNameAsString)
+    val expectedNumTargetScans = if (deltaUpdate) 1 else 3
+    assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+    // check target table scans for UPDATE condition (dep = 'hr')
+    val numUpdateTargetScans = targetTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    }
+    assert(numUpdateTargetScans == expectedNumTargetScans)
+
+    // check source table was scanned correctly
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    val expectedNumSourceScans = if (deltaUpdate) 1 else 4
+    assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+    // check source table scans in CTE (salary > 100)
+    val numCteSourceScans = sourceTxnTable.scanEvents.flatten.count {
+      case sources.GreaterThan("salary", 100) => true
+      case _ => false
+    }
+    assert(numCteSourceScans == expectedNumSourceScans)
+
+    // check txn state was propagated correctly
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, -1, "hr"), // updated
+        Row(2, 200, "software"), // unchanged
+        Row(3, 300, "hr"))) // unchanged (no matching pk in source)
+  }
+
+  test("update with subquery on source table and transactional checks") {
+    // create target table
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // create source table
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+    // update using an uncorrelated IN subquery that reads from a transactional catalog table
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""UPDATE $tableNameAsString
+           |SET salary = -1
+           |WHERE pk IN (SELECT pk FROM $sourceNameAsString WHERE dep = 'hr')
+           |""".stripMargin)
+    }
+
+    // check txn was properly committed and closed
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    // check source table was scanned correctly (dep = 'hr' filter in the subquery)
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    val expectedNumSourceScans = if (deltaUpdate) 1 else 4
+    assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+    val numSubquerySourceScans = sourceTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    }
+    assert(numSubquerySourceScans == expectedNumSourceScans)
+
+    // check target table was scanned correctly
+    val targetTxnTable = txnTables(tableNameAsString)
+    val expectedNumTargetScans = if (deltaUpdate) 1 else 3
+    assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+    // check txn state was propagated correctly
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, -1, "hr"), // updated (pk 1 is in subquery result)
+        Row(2, 200, "software"), // unchanged
+        Row(3, 300, "hr"))) // unchanged (pk 3 not in subquery result)
+  }
+
+  test("update with uncorrelated scalar subquery on source table and transactional checks") {
+    // create target table
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // create source table
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+    // update using an uncorrelated scalar subquery in the SET clause that reads from a
+    // transactional catalog table; scalar subqueries are executed as SubqueryExec at runtime
+    // and cannot be rewritten as joins
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""UPDATE $tableNameAsString
+           |SET salary = (SELECT max(salary) FROM $sourceNameAsString WHERE dep = 'hr')
+           |WHERE dep = 'hr'
+           |""".stripMargin)
+    }
+
+    // check txn was properly committed and closed
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    // check source table was scanned via the transaction catalog
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    assert(sourceTxnTable.scanEvents.nonEmpty)
+    assert(sourceTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    })
+
+    // check target table was scanned via the transaction catalog
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.nonEmpty)
+
+    // check txn state was propagated correctly
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 150, "hr"), // updated (max salary in source for 'hr' is 150)
+        Row(2, 200, "software"), // unchanged
+        Row(3, 150, "hr"))) // updated
+  }
+
+  test("update with constraint violation and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val exception = intercept[SparkRuntimeException] {
+      executeTransaction {
+        sql(
+          s"""UPDATE $tableNameAsString
+             |SET pk = NULL
+             |WHERE dep = 'hr'
+             |""".stripMargin) // NULL violates NOT NULL constraint
+      }
+    }
+
+    assert(exception.getMessage.contains("NOT_NULL_ASSERT_VIOLATION"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("update using view with transactional checks") {
+    withView("temp_view") {
+      // create target table
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      // create source table
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT)")
+      sql(s"INSERT INTO $sourceNameAsString (pk, salary) VALUES (1, 150), (4, 400)")
+
+      // create view on top of source and target tables
+      sql(
+        s"""CREATE VIEW temp_view AS
+           |SELECT s.pk, s.salary, t.dep
+           |FROM $sourceNameAsString s
+           |LEFT JOIN (
+           | SELECT * FROM $tableNameAsString WHERE pk < 10
+           |) t ON s.pk = t.pk
+           |""".stripMargin)
+
+      // update target table using view
+      val (txn, txnTables) = executeTransaction {
+        sql(
+          s"""UPDATE $tableNameAsString t
+             |SET salary = -1
+             |WHERE t.dep = 'hr' AND EXISTS (SELECT 1 FROM temp_view v WHERE v.pk = t.pk)
+             |""".stripMargin)
+      }
+
+      // check txn covers both tables and was properly committed and closed
+      assert(txn.currentState == Committed)
+      assert(txn.isClosed)
+      assert(txnTables.size == 2)
+      assert(table.version() == "2")
+
+      // check target table was scanned correctly
+      val targetTxnTable = txnTables(tableNameAsString)
+      val expectedNumTargetScans = if (deltaUpdate) 2 else 7
+      assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+      // check target table scans as UPDATE target (dep = 'hr')
+      val numUpdateTargetScans = targetTxnTable.scanEvents.flatten.count {
+        case sources.EqualTo("dep", "hr") => true
+        case _ => false
+      }
+      val expectedNumUpdateTargetScans = if (deltaUpdate) 1 else 3
+      assert(numUpdateTargetScans == expectedNumUpdateTargetScans)
+
+      // check target table scans in view as source (pk < 10)
+      val numViewTargetScans = targetTxnTable.scanEvents.flatten.count {
+        case sources.LessThan("pk", 10L) => true
+        case _ => false
+      }
+      val expectedNumViewTargetScans = if (deltaUpdate) 1 else 4
+      assert(numViewTargetScans == expectedNumViewTargetScans)
+
+      // check source table scans in view
+      val sourceTxnTable = txnTables(sourceNameAsString)
+      val expectedNumSourceScans = if (deltaUpdate) 1 else 4
+      assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+      // check txn state was propagated correctly
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, -1, "hr"), // updated from view
+          Row(2, 200, "software"), // unchanged
+          Row(3, 300, "hr"))) // unchanged (no matching pk in source)
+    }
+  }
+
+  test("df.explain() on update with transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    // sql() is lazy, but explain() forces executedPlan.
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'").explain()
+
+    assert(catalog.lastTransaction != null)
+    assert(catalog.lastTransaction.currentState == Committed)
+    assert(catalog.lastTransaction.isClosed)
+    assert(table.version() == "2")
+
+    // The UPDATE was actually executed, not just planned.
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, -1, "hr"), // updated
+        Row(2, 200, "software"))) // unchanged
+  }
+
+  test("EXPLAIN UPDATE SQL with transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    // EXPLAIN UPDATE only plans the command, it does not execute the write.
+    sql(s"EXPLAIN UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
+
+    // A transaction should not have started at all.
+    assert(catalog.transaction === null)
+
+    // The UPDATE was not executed. Data is unchanged.
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr"),
+        Row(2, 200, "software")))
   }
 }

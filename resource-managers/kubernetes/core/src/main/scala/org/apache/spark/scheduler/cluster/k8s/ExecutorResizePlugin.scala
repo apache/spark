@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{EXECUTOR_ID, MEMORY_SIZE}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, EXECUTOR_ID, MEMORY_SIZE}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -53,6 +53,14 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-resize-plugin")
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+    val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
+    if (allocator != "direct") {
+      logWarning(log"ExecutorResizePlugin requires the 'direct' pods allocator; " +
+        log"${MDC(CONFIG, KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key)} is " +
+        log"${MDC(CONFIG2, allocator)}. Plugin will not start.")
+      return Map.empty[String, String].asJava
+    }
+
     val interval = Utils.timeStringAsSeconds(
       sc.conf.get(EXECUTOR_RESIZE_INTERVAL.key, "1m"))
     val threshold = sc.conf.getDouble(EXECUTOR_RESIZE_THRESHOLD.key, 0.9)

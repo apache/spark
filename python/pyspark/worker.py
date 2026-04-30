@@ -652,33 +652,6 @@ def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
     verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
-def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-    def wrapped(key_series, value_series):
-        import pandas as pd
-
-        value_df = pd.concat(value_series, axis=1)
-
-        if len(argspec.args) == 1:
-            result = f(value_df)
-        elif len(argspec.args) == 2:
-            # Extract key from pandas Series, preserving numpy types
-            key = tuple(s.iloc[0] for s in key_series)
-            result = f(key, value_df)
-
-        verify_pandas_result(
-            result, return_type, runner_conf.assign_cols_by_name, truncate_return_schema=False
-        )
-
-        yield result
-
-    def flatten_wrapper(k, v):
-        # Return Iterator[[(df, spark_type)]] directly
-        for df in wrapped(k, v):
-            yield [(df, return_type)]
-
-    return flatten_wrapper
-
-
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
     def wrapped(key_series, value_batches):
         import pandas as pd
@@ -1013,10 +986,13 @@ def _is_iter_based(eval_type: int) -> bool:
 
 
 def wrap_perf_profiler(f, eval_type, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler
+    from pyspark.sql.profiler import ProfileResultsParam, ProfileResultsParamV2, WorkerPerfProfiler
 
     accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+    accumulator_v2 = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
     if _is_iter_based(eval_type):
@@ -1025,7 +1001,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
             iterator = iter(f(*args, **kwargs))
             while True:
                 try:
-                    with WorkerPerfProfiler(accumulator, result_id):
+                    with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
                         item = next(iterator)
                     yield item
                 except StopIteration:
@@ -1034,7 +1010,7 @@ def wrap_perf_profiler(f, eval_type, result_id):
     else:
 
         def profiling_func(*args, **kwargs):
-            with WorkerPerfProfiler(accumulator, result_id):
+            with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
                 ret = f(*args, **kwargs)
             return ret
 
@@ -1042,7 +1018,11 @@ def wrap_perf_profiler(f, eval_type, result_id):
 
 
 def wrap_memory_profiler(f, eval_type, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam, WorkerMemoryProfiler
+    from pyspark.sql.profiler import (
+        ProfileResultsParam,
+        ProfileResultsParamV2,
+        WorkerMemoryProfiler,
+    )
 
     import pyspark.memory_profiler_ext
 
@@ -1050,7 +1030,11 @@ def wrap_memory_profiler(f, eval_type, result_id):
         return f
 
     accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+    )
+
+    accumulator_v2 = _deserialize_accumulator(
+        SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
     )
 
     if _is_iter_based(eval_type):
@@ -1061,7 +1045,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
 
             while True:
                 try:
-                    with WorkerMemoryProfiler(accumulator, result_id, g.gi_code):
+                    with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, g.gi_code):
                         item = next(iterator)
                     yield item
                 except StopIteration:
@@ -1070,7 +1054,7 @@ def wrap_memory_profiler(f, eval_type, result_id):
     else:
 
         def profiling_func(*args, **kwargs):
-            with WorkerMemoryProfiler(accumulator, result_id, f):
+            with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, f):
                 ret = f(*args, **kwargs)
             return ret
 
@@ -1139,8 +1123,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return func, None, None, None
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return args_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec, runner_conf)
+        num_udf_args = len(inspect.getfullargspec(chained_func).args)
+        return func, args_offsets, return_type, num_udf_args
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return args_offsets, wrap_grouped_map_pandas_iter_udf(
@@ -2393,6 +2377,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
     ):
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
         if eval_type in (
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
@@ -2413,10 +2398,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
-        elif (
-            eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-            or eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
-        ):
+        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
             ser = GroupPandasUDFSerializer(
                 timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
@@ -2943,6 +2925,77 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
 
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        import pyarrow as pa
+        import pandas as pd
+
+        assert num_udfs == 1, "One GROUPED_MAP_PANDAS UDF expected here."
+        grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_PANDAS UDF."
+
+        key_offsets = parsed_offsets[0][0]
+        value_offsets = parsed_offsets[0][1]
+        output_schema = StructType([StructField("_0", return_type)])
+
+        def grouped_func(
+            split_index: int,
+            data: Iterator[Iterator[pa.RecordBatch]],
+        ) -> Iterator[pa.RecordBatch]:
+            """Apply groupBy Pandas UDF (non-iterator variant).
+
+            The explicit ``del`` calls below keep peakmem bounded across
+            groups. Without them, generator locals from the previous
+            iteration stay bound on the frame until each statement in
+            the next iteration rebinds its slot, so the input-side
+            DataFrames overlap with the next group's allocations and
+            the working set grows unbounded on wide-column, large-group
+            inputs. ``del result`` runs on resume from yield, before
+            ``data.__next__()`` is asked for the next group.
+            """
+            for group in data:
+                all_batches = list(group)
+                if all_batches:
+                    table = pa.Table.from_batches(all_batches).combine_chunks()
+                else:
+                    table = pa.table({})
+                all_series = ArrowBatchTransformer.to_pandas(
+                    table,
+                    timezone=runner_conf.timezone,
+                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                )
+                value_df = pd.concat([all_series[o] for o in value_offsets], axis=1)
+
+                if num_udf_args == 1:
+                    result = grouped_udf(value_df)
+                else:
+                    key = tuple(all_series[o].iloc[0] for o in key_offsets)
+                    result = grouped_udf(key, value_df)
+
+                del all_batches, table, all_series, value_df
+
+                verify_pandas_result(
+                    result,
+                    return_type,
+                    runner_conf.assign_cols_by_name,
+                    truncate_return_schema=False,
+                )
+
+                yield PandasToArrowConversion.convert(
+                    [result],
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=runner_conf.use_large_var_types,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+                del result
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
         and not runner_conf.use_legacy_pandas_udf_conversion
@@ -3187,39 +3240,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
-    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        import pyarrow as pa
-
-        # We assume there is only one UDF here because grouped map doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
-        # distinguish between grouping attributes and data attributes
-        arg_offsets, f = udfs[0]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-
-        key_offsets = parsed_offsets[0][0]
-        value_offsets = parsed_offsets[0][1]
-
-        def mapper(batch_iter):
-            # Collect all Arrow batches and merge at Arrow level
-            all_batches = list(batch_iter)
-            if all_batches:
-                table = pa.Table.from_batches(all_batches).combine_chunks()
-            else:
-                table = pa.table({})
-            # Convert to pandas once for the entire group
-            all_series = ArrowBatchTransformer.to_pandas(
-                table,
-                timezone=ser._timezone,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-            )
-            key_series = [all_series[o] for o in key_offsets]
-            value_series = [all_series[o] for o in value_offsets]
-            yield from f(key_series, value_series)
-
-    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF:
         import pyarrow as pa
 
         # We assume there is only one UDF here because grouped map doesn't
