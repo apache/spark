@@ -63,6 +63,15 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   /** Optional view sub-kind to stamp on `PROP_TABLE_TYPE`; defaults to `VIEW` when `None`. */
   protected def tableType: Option[String] = None
 
+  /**
+   * Whether `aliasPlan` should preserve any column metadata the analyzer attached to the
+   * source plan when re-aliasing user-specified column names. Plain views default to `false`
+   * (matches v1 `CreateViewCommand`); metric views override to `true` so the analyzer-injected
+   * `metric_view.type` / `metric_view.expr` keys survive a `CREATE VIEW <ident>(c1, c2, ...)`
+   * column rename (matches v1 `ViewHelper.prepareTable(isMetricView = true)`).
+   */
+  protected def retainColumnMetadata: Boolean = false
+
   override def output: Seq[Attribute] = Seq.empty
 
   protected def buildViewInfo(): ViewInfo = {
@@ -85,7 +94,9 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
     SchemaUtils.checkIndeterminateCollationInSchema(query.schema)
 
     val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, query, userSpecifiedColumns).schema, session.sessionState.conf)
+      aliasPlan(session, query, userSpecifiedColumns, retainMetadata = retainColumnMetadata)
+        .schema,
+      session.sessionState.conf)
     SchemaUtils.checkColumnNameDuplication(
       aliasedSchema.fieldNames.toImmutableArraySeq, session.sessionState.conf.resolver)
 

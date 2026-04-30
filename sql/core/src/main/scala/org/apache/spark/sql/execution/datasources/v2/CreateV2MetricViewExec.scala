@@ -60,4 +60,10 @@ case class CreateV2MetricViewExec(
 
   override protected def tableType: Option[String] =
     Some(TableSummary.METRIC_VIEW_TABLE_TYPE)
+
+  // The analyzer attaches `metric_view.type` / `metric_view.expr` keys to each output
+  // attribute's metadata; `aliasPlan`'s default re-projection drops them when the user
+  // supplies a column-rename clause. Mirror v1 `ViewHelper.prepareTable(isMetricView = true)`
+  // by retaining metadata across the rename.
+  override protected def retainColumnMetadata: Boolean = true
 }

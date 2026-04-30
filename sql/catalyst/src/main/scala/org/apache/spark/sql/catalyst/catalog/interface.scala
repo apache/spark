@@ -743,6 +743,15 @@ object CatalogTable {
   val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = VIEW_PREFIX + "catalogAndNamespace.part."
 
   /**
+   * View sub-type marker persisted in `properties` so the metric-view distinction survives a
+   * round-trip through external catalogs whose enum can't carry it (e.g. the Hive Metastore,
+   * which only knows `VIRTUAL_VIEW`). When this property is set, the in-memory `tableType`
+   * upgrades from [[CatalogTableType.VIEW]] back to [[CatalogTableType.METRIC_VIEW]] on read.
+   */
+  val VIEW_SUB_TYPE = VIEW_PREFIX + "subType"
+  val VIEW_SUB_TYPE_METRIC_VIEW = "METRIC_VIEW"
+
+  /**
    * Check if a CatalogTable is a metric view.
    */
   def isMetricView(table: CatalogTable): Boolean = {

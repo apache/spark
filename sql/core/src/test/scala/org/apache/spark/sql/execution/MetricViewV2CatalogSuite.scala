@@ -85,8 +85,17 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
            |USING foo AS SELECT * FROM metric_view_v2_source""".stripMargin)
       body
     } finally {
-      sql(s"DROP VIEW IF EXISTS $fullMetricViewName")
-      sql(s"DROP TABLE IF EXISTS $fullSourceTableName")
+      // The metric-view ident `mv` may have ended up as either a view (most tests) or as a
+      // pre-created table (a few negative tests pre-create a table at the same ident to
+      // exercise cross-type collisions). Sweep both kinds so subsequent tests in the suite
+      // start from a clean catalog state. Wrap each DROP in a Try because:
+      //   - DROP VIEW IF EXISTS on a leftover *table* throws WRONG_COMMAND_FOR_OBJECT_TYPE
+      //     under master's new DropViewExec active-rejection contract.
+      //   - DROP TABLE IF EXISTS on a leftover *view* throws the symmetric error.
+      //   - On a totally clean state both are silent no-ops.
+      scala.util.Try(sql(s"DROP VIEW IF EXISTS $fullMetricViewName"))
+      scala.util.Try(sql(s"DROP TABLE IF EXISTS $fullMetricViewName"))
+      scala.util.Try(sql(s"DROP TABLE IF EXISTS $fullSourceTableName"))
       spark.catalog.dropTempView("metric_view_v2_source")
       MetricViewRecordingCatalog.reset()
     }
@@ -137,7 +146,10 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       // back to `CatalogTableType.METRIC_VIEW`.
       assert(info.properties().get(TableCatalog.PROP_TABLE_TYPE)
         === TableSummary.METRIC_VIEW_TABLE_TYPE)
-      assert(info.queryText() === yaml)
+      // The captured queryText is the raw text between `$$ ... $$` -- including the leading
+      // and trailing newline our SQL fixture inserts -- so trim before comparing to the
+      // pre-substitution YAML body.
+      assert(info.queryText().trim === yaml.trim)
 
       val deps = info.viewDependencies()
       assert(deps != null)
@@ -297,7 +309,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
 
       val finalInfo = capturedViewInfo()
       // Assert on the distinguishing fields of the replacement, not on diff vs. the original.
-      assert(finalInfo.queryText() === replacementYaml)
+      // queryText keeps the surrounding `\n` from the SQL `$$ ... $$` markers; trim first.
+      assert(finalInfo.queryText().trim === replacementYaml.trim)
       assert(finalInfo.properties().get(MetricView.PROP_WHERE) === "count > 100")
       val deps = finalInfo.viewDependencies()
       assert(deps != null && deps.dependencies().length === 1)
@@ -335,7 +348,7 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
            |$replacementYaml
            |$$$$""".stripMargin)
 
-      assert(capturedViewInfo().queryText() === originalYaml,
+      assert(capturedViewInfo().queryText().trim === originalYaml.trim,
         "IF NOT EXISTS over an existing metric view should be a no-op.")
     }
   }
@@ -414,7 +427,9 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
               select = metricViewColumns))}
            |$$$$""".stripMargin)
     }
-    assert(ex.getCondition === "MISSING_CATALOG_ABILITY")
+    // SPARK-56655 added the `.VIEWS` subclass; the bare `MISSING_CATALOG_ABILITY` no longer
+    // surfaces directly for the missing-view-ability case.
+    assert(ex.getCondition === "MISSING_CATALOG_ABILITY.VIEWS")
     assert(ex.getMessage.contains("VIEWS"))
   }
 
@@ -879,7 +894,20 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
   // defaults, which derive from `loadTableOrView` -- a stored `ViewInfo` is wrapped in
   // `MetadataTable` by `loadTableOrView` and the defaults unwrap it correctly.
 
+  // Bypasses `TableViewCatalog.tableExists` (whose default delegates to `loadTableOrView`,
+  // which checks our `views` map first); we want a tables-only check here so the cross-type
+  // collision branches in `createView` / `replaceView` see only "is there a *table* at this
+  // ident?".
+  private def tableExistsTablesOnly(ident: Identifier): Boolean =
+    try { super[InMemoryTableCatalog].loadTable(ident); true }
+    catch { case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => false }
+
   override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    // TableViewCatalog active-rejection contract: createView must throw
+    // ViewAlreadyExistsException when *either* a view *or* a table sits at the ident.
+    if (tableExistsTablesOnly(ident)) {
+      throw new ViewAlreadyExistsException(ident)
+    }
     val key = (ident.namespace().toSeq, ident.name())
     if (views.putIfAbsent(key, info) != null) {
       throw new ViewAlreadyExistsException(ident)
@@ -889,6 +917,9 @@ class MetricViewRecordingCatalog extends InMemoryTableCatalog with TableViewCata
   }
 
   override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+    // Per the TableViewCatalog contract, replaceView must surface NoSuchViewException
+    // when a *table* sits at the ident (not silently succeed and shadow the table).
+    if (tableExistsTablesOnly(ident)) throw new NoSuchViewException(ident)
     val key = (ident.namespace().toSeq, ident.name())
     if (!views.containsKey(key)) throw new NoSuchViewException(ident)
     views.put(key, info)

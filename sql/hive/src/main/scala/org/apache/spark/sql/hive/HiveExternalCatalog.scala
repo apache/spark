@@ -452,6 +452,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val properties = new mutable.HashMap[String, String]
 
     properties.put(CREATED_SPARK_VERSION, table.createVersion)
+
+    // Hive's `HiveTableType` enum has no metric-view variant -- it stores both regular views
+    // and metric views as `VIRTUAL_VIEW`. Persist a property marker so `restoreTableMetadata`
+    // can lift the round-tripped `CatalogTableType.VIEW` back to `CatalogTableType.METRIC_VIEW`.
+    if (table.tableType == CatalogTableType.METRIC_VIEW) {
+      properties.put(CatalogTable.VIEW_SUB_TYPE, CatalogTable.VIEW_SUB_TYPE_METRIC_VIEW)
+    }
     // This is for backward compatibility to Spark 2 to read tables with char/varchar created by
     // Spark 3.1. At read side, we will restore a table schema from its properties. So, we need to
     // clear the `varchar(n)` and `char(n)` and replace them with `string` as Spark 2 does not have
@@ -835,6 +842,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     var table = inputTable
+
+    // HMS round-trips both regular views and metric views as `HiveTableType.VIRTUAL_VIEW`,
+    // which `HiveClientImpl.getTableOption` always maps back to `CatalogTableType.VIEW`. Lift
+    // it back to `CatalogTableType.METRIC_VIEW` when the persisted sub-type marker is present.
+    if (table.tableType == VIEW &&
+        table.properties.get(CatalogTable.VIEW_SUB_TYPE)
+          .contains(CatalogTable.VIEW_SUB_TYPE_METRIC_VIEW)) {
+      table = table.copy(tableType = METRIC_VIEW)
+    }
 
     table.properties.get(DATASOURCE_PROVIDER) match {
       case None if table.tableType == VIEW || table.tableType == METRIC_VIEW =>
