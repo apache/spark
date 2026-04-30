@@ -3102,8 +3102,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             [StructField(name, info[2]) for name, info in zip(col_names, udf_infos)]
         )
 
-        def func(split_index: int, batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for input_batch in batches:
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            for input_batch in data:
                 num_rows = input_batch.num_rows
 
                 # --- Input: Arrow -> pandas Series (struct columns become DataFrames) ---
