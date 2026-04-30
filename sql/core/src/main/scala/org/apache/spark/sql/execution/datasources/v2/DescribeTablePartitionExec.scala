@@ -38,11 +38,12 @@ case class DescribeTablePartitionExec(
   override protected def run(): Seq[InternalRow] = {
     val partitionRow = validateAndGetPartition()
 
-    // Delegate schema + partitioning + clustering to DescribeTableExec. We pass
-    // `catalogName` / `tableIdent` for ctor completeness only -- with `isExtended = false`,
-    // only `addBaseDescription` runs, which reads neither field; the structured
-    // `# Detailed Table Information` block (which is what consumes them) is gated on
-    // `isExtended`.
+    // Delegate schema + partitioning + clustering to DescribeTableExec by calling
+    // `addBaseDescription` directly (rather than `run()`). That helper reads only `output`
+    // and `table`, so `catalogName` / `tableIdent` are passed for ctor-completeness only --
+    // `addTableDetails` (the only consumer of those fields) is reached only via `run()` and
+    // never fires here. `isExtended = false` matches the contract of the inner exec but is
+    // not what makes the fields unused; bypassing `run()` is.
     val rows = new ArrayBuffer[InternalRow]()
     DescribeTableExec(output, catalogName, tableIdent, table, isExtended = false)
       .addBaseDescription(rows)
