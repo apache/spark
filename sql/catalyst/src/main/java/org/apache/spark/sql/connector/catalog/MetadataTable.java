@@ -52,8 +52,8 @@ public class MetadataTable implements Table {
    * @param info metadata for the table or view. Pass a {@link ViewInfo} for a view.
    * @param name human-readable name for this table, returned by {@link #name()} and surfaced
    *             in places that read it (e.g. {@code BatchScan} plan-tree labels and
-   *             partition-management error messages). {@code DESCRIBE TABLE EXTENDED} no
-   *             longer reads this field -- it emits the resolved identifier as structured
+   *             partition-management error messages). {@code DESCRIBE TABLE EXTENDED} does
+   *             not read this field; it emits the resolved identifier as structured
    *             {@code Catalog} / {@code Namespace} / {@code Table} rows. Catalogs returning
    *             a {@code MetadataTable} from {@link TableCatalog#loadTable} or
    *             {@link TableViewCatalog#loadTableOrView} should typically pass

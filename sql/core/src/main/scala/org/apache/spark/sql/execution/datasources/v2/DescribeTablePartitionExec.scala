@@ -29,24 +29,19 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 case class DescribeTablePartitionExec(
     output: Seq[Attribute],
-    catalogName: String,
     table: SupportsPartitionManagement,
     tableIdent: Identifier,
     partSpec: ResolvedPartitionSpec,
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean) extends DescribeTableBaseRows {
 
   override protected def run(): Seq[InternalRow] = {
     val partitionRow = validateAndGetPartition()
 
-    // Delegate schema + partitioning + clustering to DescribeTableExec by calling
-    // `addBaseDescription` directly (rather than `run()`). That helper reads only `output`
-    // and `table`, so `catalogName` / `tableIdent` are passed for ctor-completeness only --
-    // `addTableDetails` (the only consumer of those fields) is reached only via `run()` and
-    // never fires here. `isExtended = false` matches the contract of the inner exec but is
-    // not what makes the fields unused; bypassing `run()` is.
+    // Delegate schema + partitioning + clustering rows to the shared `DescribeTableBaseRows`
+    // trait (mixed in by both this exec and `DescribeTableExec`). The pre-PR shape constructed
+    // a `DescribeTableExec` inner instance just to invoke its `addBaseDescription` helper.
     val rows = new ArrayBuffer[InternalRow]()
-    DescribeTableExec(output, catalogName, tableIdent, table, isExtended = false)
-      .addBaseDescription(rows)
+    addBaseDescription(rows)
 
     if (isExtended) {
       addPartitionDetails(rows, partitionRow)

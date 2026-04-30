@@ -32,12 +32,101 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
+/**
+ * Schema + partitioning + clustering row formatting shared by `DescribeTableExec.run()` (which
+ * uses it for the schema-row prefix) and `DescribeTablePartitionExec.run()` (which uses it as
+ * the entire pre-partition section). Pulling these helpers into a trait lets the partition
+ * exec call them directly off `this` -- the prior shape constructed a `DescribeTableExec`
+ * inner instance just to invoke `addBaseDescription`, which forced threading unused
+ * `catalogName` / `identifier` constructor args through the partition exec.
+ */
+private[v2] trait DescribeTableBaseRows extends LeafV2CommandExec {
+  def table: Table
+
+  /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
+  protected def addBaseDescription(rows: ArrayBuffer[InternalRow]): Unit = {
+    addSchema(rows)
+    addPartitioning(rows)
+    addClustering(rows)
+  }
+
+  private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
+    rows ++= table.columns().map{ column =>
+      toCatalystRow(
+        column.name, column.dataType.simpleString, column.comment)
+    }
+  }
+
+  private def addClusteringToRows(
+      clusterBySpec: ClusterBySpec,
+      rows: ArrayBuffer[InternalRow]): Unit = {
+    rows += toCatalystRow("# Clustering Information", "", "")
+    rows += toCatalystRow(s"# ${output.head.name}", output(1).name, output(2).name)
+    rows ++= clusterBySpec.columnNames.map { fieldNames =>
+      val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
+      val nestedField = schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
+      assert(nestedField.isDefined,
+        "The clustering column " +
+          s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
+          s"was not found in the table schema ${schema.catalogString}.")
+      nestedField.get
+    }.map { case (path, field) =>
+      toCatalystRow(
+        (path :+ field.name).map(quoteIfNeeded).mkString("."),
+        field.dataType.simpleString,
+        field.getComment().orNull)
+    }
+  }
+
+  private def addClustering(rows: ArrayBuffer[InternalRow]): Unit = {
+    ClusterBySpec.extractClusterBySpec(table.partitioning.toIndexedSeq).foreach { clusterBySpec =>
+      addClusteringToRows(clusterBySpec, rows)
+    }
+  }
+
+  private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
+    // Clustering columns are handled in addClustering().
+    val partitioning = table.partitioning
+      .filter(t => !t.isInstanceOf[ClusterByTransform])
+    if (partitioning.nonEmpty) {
+      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
+      if (partitionColumnsOnly) {
+        rows += toCatalystRow("# Partition Information", "", "")
+        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
+        val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
+        rows ++= table.partitioning
+          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
+          .map { fieldNames =>
+            val nestedField = schema.findNestedField(fieldNames.toImmutableArraySeq)
+            if (nestedField.isEmpty) {
+              throw QueryExecutionErrors.partitionColumnNotFoundInTheTableSchemaError(
+                fieldNames.toSeq,
+                schema)
+            }
+            nestedField.get
+          }.map { case (path, field) =>
+            toCatalystRow(
+              (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
+              field.dataType.simpleString,
+              field.getComment().orNull)
+          }
+      } else {
+        rows += toCatalystRow("", "", "")
+        rows += toCatalystRow("# Partitioning", "", "")
+        rows ++= table.partitioning.zipWithIndex.map {
+          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
+        }
+      }
+    }
+  }
+}
+
 case class DescribeTableExec(
     output: Seq[Attribute],
     catalogName: String,
     identifier: Identifier,
     table: Table,
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean) extends DescribeTableBaseRows {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addBaseDescription(rows)
@@ -49,13 +138,6 @@ case class DescribeTableExec(
       addTableConstraints(rows)
     }
     rows.toSeq
-  }
-
-  /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
-  private[v2] def addBaseDescription(rows: ArrayBuffer[InternalRow]): Unit = {
-    addSchema(rows)
-    addPartitioning(rows)
-    addClustering(rows)
   }
 
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -107,13 +189,6 @@ case class DescribeTableExec(
     }
   }
 
-  private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows ++= table.columns().map{ column =>
-      toCatalystRow(
-        column.name, column.dataType.simpleString, column.comment)
-    }
-  }
-
   private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
     if (table.constraints.nonEmpty) {
       rows += emptyRow()
@@ -137,33 +212,6 @@ case class DescribeTableExec(
     case _ =>
   }
 
-  private def addClusteringToRows(
-      clusterBySpec: ClusterBySpec,
-      rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += toCatalystRow("# Clustering Information", "", "")
-    rows += toCatalystRow(s"# ${output.head.name}", output(1).name, output(2).name)
-    rows ++= clusterBySpec.columnNames.map { fieldNames =>
-      val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
-      val nestedField = schema.findNestedField(fieldNames.fieldNames.toIndexedSeq)
-      assert(nestedField.isDefined,
-        "The clustering column " +
-          s"${fieldNames.fieldNames.map(quoteIfNeeded).mkString(".")} " +
-          s"was not found in the table schema ${schema.catalogString}.")
-      nestedField.get
-    }.map { case (path, field) =>
-      toCatalystRow(
-        (path :+ field.name).map(quoteIfNeeded).mkString("."),
-        field.dataType.simpleString,
-        field.getComment().orNull)
-    }
-  }
-
-  private def addClustering(rows: ArrayBuffer[InternalRow]): Unit = {
-    ClusterBySpec.extractClusterBySpec(table.partitioning.toIndexedSeq).foreach { clusterBySpec =>
-      addClusteringToRows(clusterBySpec, rows)
-    }
-  }
-
   private def addTableStats(rows: ArrayBuffer[InternalRow]): Unit = table match {
     case read: SupportsRead =>
       read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
@@ -179,42 +227,6 @@ case class DescribeTableExec(
         case _ =>
       }
     case _ =>
-  }
-
-  private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
-    // Clustering columns are handled in addClustering().
-    val partitioning = table.partitioning
-      .filter(t => !t.isInstanceOf[ClusterByTransform])
-    if (partitioning.nonEmpty) {
-      val partitionColumnsOnly = table.partitioning.forall(t => t.isInstanceOf[IdentityTransform])
-      if (partitionColumnsOnly) {
-        rows += toCatalystRow("# Partition Information", "", "")
-        rows += toCatalystRow(s"# ${output(0).name}", output(1).name, output(2).name)
-        val schema = CatalogV2Util.v2ColumnsToStructType(table.columns())
-        rows ++= table.partitioning
-          .map(_.asInstanceOf[IdentityTransform].ref.fieldNames())
-          .map { fieldNames =>
-            val nestedField = schema.findNestedField(fieldNames.toImmutableArraySeq)
-            if (nestedField.isEmpty) {
-              throw QueryExecutionErrors.partitionColumnNotFoundInTheTableSchemaError(
-                fieldNames.toSeq,
-                schema)
-            }
-            nestedField.get
-          }.map { case (path, field) =>
-            toCatalystRow(
-              (path :+ field.name).map(quoteIfNeeded(_)).mkString("."),
-              field.dataType.simpleString,
-              field.getComment().orNull)
-          }
-      } else {
-        rows += emptyRow()
-        rows += toCatalystRow("# Partitioning", "", "")
-        rows ++= table.partitioning.zipWithIndex.map {
-          case (transform, index) => toCatalystRow(s"Part $index", transform.describe(), "")
-        }
-      }
-    }
   }
 
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")

@@ -550,7 +550,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DescribeTableExec(output, r.catalog.name(), r.identifier, r.table, isExtended) :: Nil
 
     case DescribeTablePartition(r: ResolvedTable, part, isExtended, output) =>
-      DescribeTablePartitionExec(output, r.catalog.name(), r.table.asPartitionable, r.identifier,
+      DescribeTablePartitionExec(output, r.table.asPartitionable, r.identifier,
         Seq(part).asResolvedPartitionSpecs.head, isExtended) :: Nil
 
     case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>

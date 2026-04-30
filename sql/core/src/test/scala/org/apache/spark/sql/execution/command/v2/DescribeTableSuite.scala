@@ -222,10 +222,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
   test("DESCRIBE TABLE EXTENDED emits structured Catalog/Namespace/Table rows") {
     // Pin that DescribeTableExec emits the resolved-identifier components as separate
-    // rows under the `# Detailed Table Information` block, so consumers don't have to
-    // parse a single concatenated `Name` row to recover them. Also pin that for a
-    // single-segment namespace, an additional `Database` row is emitted alongside
-    // `Namespace` for v1 compatibility (mirroring v1 `CatalogTable` output).
+    // rows under the `# Detailed Table Information` block, so consumers can read each
+    // part programmatically rather than splitting a concatenated identifier string. Also
+    // pin that for a single-segment namespace, an additional `Database` row is emitted
+    // alongside `Namespace` for v1 compatibility (mirroring v1 `CatalogTable` output).
     withNamespaceAndTable("ns", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing")
       val rows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
