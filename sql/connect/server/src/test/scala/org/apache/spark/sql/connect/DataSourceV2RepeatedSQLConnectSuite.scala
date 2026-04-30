@@ -298,6 +298,10 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // Caching connector returns stale table: external write invisible
       assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
+      // REFRESH TABLE invalidates the connector cache, external write becomes visible
+      session.sql(s"REFRESH TABLE $CT").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100), Row(2, 200)))
+
       session.sql(s"DROP TABLE IF EXISTS $CT").collect()
       CachingInMemoryTableCatalog.clearCache()
     }
@@ -325,6 +329,12 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       // Caching connector returns stale table: external changes invisible
       assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
+      // REFRESH TABLE invalidates the connector cache, schema change + data visible
+      session.sql(s"REFRESH TABLE $CT").collect()
+      assertRows(
+        session.sql(s"SELECT * FROM $CT").collect(),
+        Seq(Row(1, 100, null), Row(2, 200, -1)))
+
       session.sql(s"DROP TABLE IF EXISTS $CT").collect()
       CachingInMemoryTableCatalog.clearCache()
     }
@@ -348,6 +358,10 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
 
       // Caching connector returns stale table: drop/recreate invisible
       assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, new empty table visible
+      session.sql(s"REFRESH TABLE $CT").collect()
+      assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq.empty)
 
       session.sql(s"DROP TABLE IF EXISTS $CT").collect()
       CachingInMemoryTableCatalog.clearCache()

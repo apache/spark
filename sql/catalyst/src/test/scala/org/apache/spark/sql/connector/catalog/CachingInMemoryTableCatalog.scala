@@ -41,6 +41,11 @@ class CachingInMemoryTableCatalog extends InMemoryTableCatalog {
     })
   }
 
+  override def invalidateTable(ident: Identifier): Unit = {
+    super.invalidateTable(ident)
+    cachedTables.remove(cacheKey(name, ident))
+  }
+
   private def cacheKey(
       catalog: String, ident: Identifier): String = {
     s"$catalog.${ident.toString}"
