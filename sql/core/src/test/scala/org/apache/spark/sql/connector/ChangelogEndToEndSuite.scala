@@ -732,9 +732,10 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       .start()
     try {
       q.processAllAvailable()
-      // End-of-input flushes the watermark, so all groups including the highest
-      // commit get emitted. v1 inserts + Alice's real delete survive; Bob's
-      // carry-over pair at v2 is dropped.
+      // The next micro-batch advances the input watermark to the max _commit_timestamp
+      // seen in the previous batch; append-mode aggregate eviction (eventTime <= watermark)
+      // then emits all groups including the highest commit. v1 inserts + Alice's real
+      // delete survive; Bob's carry-over pair at v2 is dropped.
       checkAnswer(
         spark.sql("SELECT * FROM cdc_stream_carryover"),
         Seq(

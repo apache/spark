@@ -39,7 +39,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *       belonging to a single {@code _commit_version} must share the same
  *       {@code _commit_timestamp}; streaming post-processing uses it as event time and
  *       expects the connector to emit {@code _commit_timestamp} in non-decreasing order
- *       across micro-batches</li>
+ *       across micro-batches. Behavior is undefined if {@code _commit_timestamp} is
+ *       {@code NULL} on any row of a streaming read engaging post-processing -- a NULL
+ *       group key never advances the watermark, which can stall emission of that group
+ *       indefinitely</li>
  * </ul>
  * <p>
  * Streaming reads support carry-over removal and update detection but not net change

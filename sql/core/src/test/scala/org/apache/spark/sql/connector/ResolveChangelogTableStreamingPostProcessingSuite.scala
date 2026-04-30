@@ -21,7 +21,7 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Inline
 import org.apache.spark.sql.catalyst.plans.logical.{
   Aggregate, EventTimeWatermark, Filter, Generate, LogicalPlan, Project}
@@ -225,5 +225,22 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     val analyzed = streamingDf(
       "computeUpdates" -> "true").queryExecution.analyzed
     assertNoStreamingPostProcessing(analyzed)
+  }
+
+  // ===========================================================================
+  // Net change computation rejection
+  // ===========================================================================
+
+  test("deduplicationMode=netChanges is rejected on streaming") {
+    catalog.setChangelogProperties(identifier, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val e = intercept[AnalysisException] {
+      streamingDf("deduplicationMode" -> "netChanges").queryExecution.analyzed
+    }
+    assert(e.getCondition == "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
+      s"Unexpected error: ${e.getMessage}")
   }
 }

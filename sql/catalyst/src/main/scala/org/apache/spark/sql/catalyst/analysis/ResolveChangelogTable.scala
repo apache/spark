@@ -225,7 +225,12 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *  1. [[EventTimeWatermark]] on `_commit_timestamp` (zero delay) -- required so the
    *     downstream stateful aggregate can emit groups in append output mode. By CDC
    *     contract every row in a single commit shares `_commit_timestamp`, so taking it
-   *     as event time is safe.
+   *     as event time is safe. Note: this is currently the only analyzer rule that
+   *     auto-injects an [[EventTimeWatermark]] (others resolve user-supplied watermarks).
+   *     The watermark metadata is preserved on the user-visible `_commit_timestamp`
+   *     output (since [[Generate]]'s `generatorOutput` copies attribute metadata), so a
+   *     downstream user-supplied `withWatermark` on a different column will interact
+   *     with this internal watermark under the global multi-watermark policy.
    *  2. [[Aggregate]] keyed by `(rowId..., _commit_version, _commit_timestamp)`. Computes
    *     the same `_del_cnt` / `_ins_cnt` / (`_min_rv` / `_max_rv` / `_rv_cnt`) helpers as
    *     the batch path, plus an `__spark_cdc_events` array-of-struct buffering every
@@ -286,8 +291,9 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     } else Seq.empty
 
     // Buffer every input row as a struct so Inline can re-emit them after the aggregate.
-    // `_commit_version` and `_commit_timestamp` appear inside the struct as well as in the
-    // grouping keys; the duplicates are dropped via `unrequiredChildIndex` below.
+    // The grouping-key columns (rowId..., `_commit_version`, `_commit_timestamp`) appear
+    // both inside the struct and as top-level grouping outputs; the top-level duplicates
+    // are dropped via `unrequiredChildIndex` below.
     val structOfAllCols = CreateStruct(watermarked.output)
     val eventsAlias = Alias(
       new CollectList(structOfAllCols).toAggregateExpression(), HelperColumn.Events)()
