@@ -657,6 +657,29 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
+          // Reject streaming inputs early. The optimizer rewrite introduces
+          // `MonotonicallyIncreasingID()`, which is per-batch only and would silently produce
+          // incorrect results across micro-batches; failing at analysis time is clearer than
+          // letting the streaming check fire on an incidental MID node.
+          case j: NearestByJoin if j.isStreaming =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+              messageParameters = Map.empty)
+
+          case j @ NearestByJoin(_, _, _, _, _, rankingExpression, _)
+              if !RowOrdering.isOrderable(rankingExpression.dataType) =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.NON_ORDERABLE_RANKING_EXPRESSION",
+              messageParameters = Map(
+                "expression" -> toSQLExpr(rankingExpression),
+                "type" -> toSQLType(rankingExpression.dataType)))
+
+          case j @ NearestByJoin(_, _, _, false, _, rankingExpression, _)
+              if !rankingExpression.deterministic =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
+              messageParameters = Map("expression" -> toSQLExpr(rankingExpression)))
+
           case a: Aggregate =>
             a.groupingExpressions.foreach(
               expression =>
@@ -939,6 +962,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
+
+          case j: NearestByJoin if !j.duplicateResolved =>
             val conflictingAttributes =
               j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
             throw SparkException.internalError(

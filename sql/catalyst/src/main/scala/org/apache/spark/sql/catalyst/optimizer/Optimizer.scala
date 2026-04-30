@@ -339,6 +339,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
       RewriteAsOfJoin,
+      RewriteNearestByJoin,
       EvalInlineTables,
       ReplaceTranspose,
       RewriteCollationJoin
@@ -2545,8 +2546,11 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
     if (conf.crossJoinEnabled) {
       plan
     } else plan.transformWithPruning(_.containsAnyPattern(INNER_LIKE_JOIN, OUTER_JOIN))  {
+      // Skip joins that were synthesized by `RewriteNearestByJoin`: the cross product is an
+      // intentional, bounded part of that rewrite (see `NearestByJoin.SYNTHETIC_JOIN_TAG`).
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)
-        if isCartesianProduct(j) =>
+        if isCartesianProduct(j) &&
+          j.getTagValue(NearestByJoin.SYNTHETIC_JOIN_TAG).isEmpty =>
           throw QueryCompilationErrors.joinConditionMissingOrTrivialError(j, left, right)
     }
 }

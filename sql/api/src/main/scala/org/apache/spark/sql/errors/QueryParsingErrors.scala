@@ -203,6 +203,31 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def nearestByJoinWithLateralUnsupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_NEAREST_BY",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def unsupportedNearestByJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
+    new ParseException(
+      errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      messageParameters =
+        Map("joinType" -> toSQLStmt(joinType), "supported" -> "'INNER', 'LEFT OUTER'"),
+      ctx)
+  }
+
+  def nearestByJoinNumResultsOutOfRangeError(
+      ctx: ParserRuleContext,
+      numResults: String,
+      max: Int): Throwable = {
+    new ParseException(
+      errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      messageParameters = Map("numResults" -> numResults, "min" -> "1", "max" -> max.toString),
+      ctx)
+  }
+
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
