@@ -368,9 +368,9 @@ class ResolveChangelogTablePostProcessingSuite
       s"Expected ChangelogTable to be marked resolved by the rule. Plan:\n$plan")
   }
 
-  test("streaming with post-processing options is rejected") {
+  test("streaming with deduplicationMode=netChanges is rejected") {
     catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsCarryoverRows = true,
+      containsIntermediateChanges = true,
       rowIdNames = Seq("id"),
       rowVersionName = Some("row_commit_version")))
 
@@ -378,10 +378,11 @@ class ResolveChangelogTablePostProcessingSuite
       exception = intercept[AnalysisException] {
         spark.readStream
           .option("startingVersion", "1")
+          .option("deduplicationMode", "netChanges")
           .changes(s"$catalogName.$testTableName")
           .queryExecution.analyzed
       },
-      condition = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
+      condition = "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
       parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
   }
 

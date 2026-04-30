@@ -131,6 +131,12 @@ abstract class DataStreamReader {
    *     .changes("my_table")
    * }}}
    *
+   * Streaming reads support the same `computeUpdates` and `deduplicationMode = dropCarryovers`
+   * post-processing as batch reads. `deduplicationMode = netChanges` is currently
+   * batch-only -- it requires reasoning over the entire requested range, which is not
+   * incrementalized yet. Requesting it on a streaming read raises an explicit
+   * `INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED` error.
+   *
    * @param tableName
    *   a qualified or unqualified name that designates a table.
    * @since 4.2.0

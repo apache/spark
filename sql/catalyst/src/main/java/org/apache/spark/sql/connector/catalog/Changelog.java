@@ -35,8 +35,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *       {@code update_preimage}, or {@code update_postimage}</li>
  *   <li>{@code _commit_version} (connector-defined type, e.g. LONG) — the version containing
  *       this change</li>
- *   <li>{@code _commit_timestamp} (TIMESTAMP) — the timestamp of the commit</li>
+ *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
+ *       belonging to a single {@code _commit_version} must share the same
+ *       {@code _commit_timestamp}; streaming post-processing uses it as event time and
+ *       expects the connector to emit {@code _commit_timestamp} in non-decreasing order
+ *       across micro-batches</li>
  * </ul>
+ * <p>
+ * Streaming reads support carry-over removal and update detection but not net change
+ * computation. The latter requires reasoning over the entire requested range and is
+ * batch-only.
  *
  * @since 4.2.0
  */
@@ -81,6 +89,12 @@ public interface Changelog {
    * Spark will collapse multiple changes per row identity into the net effect.
    * If {@code false}, the connector guarantees at most one change per row identity across
    * the entire changelog range, and Spark will skip net change computation.
+   * <p>
+   * Note this flag is range-scoped (across all commits in the request), not
+   * micro-batch-scoped. Streaming CDC reads currently reject
+   * {@code deduplicationMode = netChanges} because the per-row-identity collapse cannot
+   * be incrementalized: a row's full history may span an unbounded number of
+   * micro-batches.
    */
   boolean containsIntermediateChanges();
 
