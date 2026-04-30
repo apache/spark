@@ -36,7 +36,8 @@ import org.apache.spark.sql.connector.expressions.Transform;
  * {@link ViewInfo.Builder} (for views). A {@code MetadataTable} wrapping a
  * {@link TableInfo} can be returned from {@link TableCatalog#loadTable(Identifier)} for a
  * data-source table; a {@code MetadataTable} wrapping a {@link ViewInfo} can be returned
- * from {@link TableViewCatalog#loadTableOrView(Identifier)} as the single-RPC perf opt-in for a view.
+ * from {@link TableViewCatalog#loadTableOrView(Identifier)} as the single-RPC perf opt-in
+ * for a view.
  * Downstream consumers distinguish the two by checking
  * {@code getTableInfo() instanceof ViewInfo}.
  *
