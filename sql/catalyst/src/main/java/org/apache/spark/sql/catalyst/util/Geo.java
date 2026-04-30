@@ -58,7 +58,7 @@ interface Geo {
   /** Binary converters. */
 
   // Returns the Well-Known Binary (WKB) representation of the geo object.
-  byte[] toWkb();
+  byte[] toWkb(String endianness);
   byte[] toWkb(ByteOrder endianness);
 
   // Returns the Extended Well-Known Binary (EWKB) representation of the geo object.

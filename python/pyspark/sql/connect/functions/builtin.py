@@ -5390,8 +5390,15 @@ bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
 # Geospatial ST Functions
 
 
-def st_asbinary(geo: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("st_asbinary", geo)
+def st_asbinary(
+    geo: "ColumnOrName",
+    endianness: Optional["ColumnOrName"] = None
+) -> "Column":
+    if endianness is None:
+        _invoke_function_over_columns("st_asbinary", geo)
+    else:
+        _endianness = lit(endianness) if isinstance(endianness, str) else endianness
+        _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__

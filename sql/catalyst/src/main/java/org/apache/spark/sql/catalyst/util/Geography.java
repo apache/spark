@@ -130,8 +130,14 @@ public final class Geography implements Geo {
   /** Geography binary standard format converters: WKB and EWKB. */
 
   @Override
-  public byte[] toWkb() {
-    return toWkbInternal(DEFAULT_ENDIANNESS);
+  public byte[] toWkb(String endianness) {
+    // Check the endianness value.
+    if (!endianness.equalsIgnoreCase("NDR") && !endianness.equalsIgnoreCase("XDR")) {
+      throw QueryExecutionErrors.stInvalidArgumentErrorInvalidEndiannessValue(
+          "st_asbinary", endianness);
+    }
+    return toWkb(endianness.equalsIgnoreCase("NDR") ?
+        ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
   }
 
   @Override

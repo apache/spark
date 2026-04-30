@@ -45,6 +45,8 @@ class GeometryExecutionSuite {
     0x40
   };
 
+  private final String ENDIANNESS_NDR = "NDR";
+
   // The same Geometry as before, representing a POINT(1 2), but with SRID 0 (i.e. undefined SRID).
   private final byte[] testGeometryValNoSrid = new byte[] {
     0x00, 0x00, 0x00, 0x00,
@@ -113,7 +115,7 @@ class GeometryExecutionSuite {
     byte[] wkb = getTestWKBPoint();
     Geometry geometry = Geometry.fromWkb(wkb, 4326);
     assertNotNull(geometry);
-    assertArrayEquals(wkb, geometry.toWkb());
+    assertArrayEquals(wkb, geometry.toWkb(ENDIANNESS_NDR));
     assertEquals(4326, geometry.srid());
   }
 
@@ -124,7 +126,7 @@ class GeometryExecutionSuite {
     // Once we implement the appropriate parsing logic, this test should be updated accordingly.
     Geometry geometry = Geometry.fromWkb(wkb);
     assertNotNull(geometry);
-    assertArrayEquals(wkb, geometry.toWkb());
+    assertArrayEquals(wkb, geometry.toWkb(ENDIANNESS_NDR));
     assertEquals(0, geometry.srid());
   }
 
@@ -192,7 +194,7 @@ class GeometryExecutionSuite {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
     // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
     byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
-    assertArrayEquals(wkb, geometry.toWkb());
+    assertArrayEquals(wkb, geometry.toWkb(ENDIANNESS_NDR));
   }
 
   @Test
