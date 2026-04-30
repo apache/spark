@@ -169,22 +169,37 @@ def main():
     parser = argparse.ArgumentParser(
         description="Benchmark pipelined vs synchronous Python UDF data transfer"
     )
-    parser.add_argument("--rows", type=int, default=1_000_000,
-                        help="Rows for standard benchmarks (default: 1000000)")
-    parser.add_argument("--large-rows", type=int, default=5_000_000,
-                        help="Rows for large data benchmark (default: 5000000)")
-    parser.add_argument("--iterations", type=int, default=5,
-                        help="Timed iterations per scenario (default: 5)")
-    parser.add_argument("--warmup", type=int, default=2,
-                        help="Warmup iterations (default: 2)")
-    parser.add_argument("--partitions", type=int, default=1,
-                        help="Number of partitions (default: 1)")
-    parser.add_argument("--sleep-ms", type=float, default=10.0,
-                        help="Sleep time in ms per batch for heavy UDF (default: 10.0)")
-    parser.add_argument("--queue-depth", type=int, default=2,
-                        help="Pipelined queue depth (default: 2)")
-    parser.add_argument("--master", type=str, default="local[1]",
-                        help="Spark master URL (default: local[1])")
+    parser.add_argument(
+        "--rows",
+        type=int,
+        default=1_000_000,
+        help="Rows for standard benchmarks (default: 1000000)",
+    )
+    parser.add_argument(
+        "--large-rows",
+        type=int,
+        default=5_000_000,
+        help="Rows for large data benchmark (default: 5000000)",
+    )
+    parser.add_argument(
+        "--iterations", type=int, default=5, help="Timed iterations per scenario (default: 5)"
+    )
+    parser.add_argument("--warmup", type=int, default=2, help="Warmup iterations (default: 2)")
+    parser.add_argument(
+        "--partitions", type=int, default=1, help="Number of partitions (default: 1)"
+    )
+    parser.add_argument(
+        "--sleep-ms",
+        type=float,
+        default=10.0,
+        help="Sleep time in ms per batch for heavy UDF (default: 10.0)",
+    )
+    parser.add_argument(
+        "--queue-depth", type=int, default=2, help="Pipelined queue depth (default: 2)"
+    )
+    parser.add_argument(
+        "--master", type=str, default="local[1]", help="Spark master URL (default: local[1])"
+    )
     args = parser.parse_args()
 
     nparts = args.partitions
@@ -192,10 +207,14 @@ def main():
     print("=" * 78)
     print("  Pipelined vs Synchronous Python UDF Data Transfer Benchmark")
     print("=" * 78)
-    print(f"  master={args.master}  rows={args.rows}  large_rows={args.large_rows}  "
-          f"partitions={nparts}")
-    print(f"  iterations={args.iterations}  warmup={args.warmup}  "
-          f"sleep_ms={args.sleep_ms}  queue_depth={args.queue_depth}")
+    print(
+        f"  master={args.master}  rows={args.rows}  large_rows={args.large_rows}  "
+        f"partitions={nparts}"
+    )
+    print(
+        f"  iterations={args.iterations}  warmup={args.warmup}  "
+        f"sleep_ms={args.sleep_ms}  queue_depth={args.queue_depth}"
+    )
     print()
 
     # --- Benchmark 1: Light UDF ---
@@ -206,8 +225,8 @@ def main():
 def bench_udf(x: pd.Series) -> pd.Series:
     return x + 1
 """,
-        make_df_code=f'spark.range({args.rows}, numPartitions={nparts})'
-                     f'.select(col("id"), bench_udf(col("id")).alias("result"))',
+        make_df_code=f"spark.range({args.rows}, numPartitions={nparts})"
+        f'.select(col("id"), bench_udf(col("id")).alias("result"))',
         args=args,
     )
 
@@ -222,8 +241,8 @@ def bench_udf(x: pd.Series) -> pd.Series:
         result = result + (x % 7) - 3
     return result
 """,
-        make_df_code=f'spark.range({args.rows}, numPartitions={nparts})'
-                     f'.select(col("id"), bench_udf(col("id")).alias("result"))',
+        make_df_code=f"spark.range({args.rows}, numPartitions={nparts})"
+        f'.select(col("id"), bench_udf(col("id")).alias("result"))',
         args=args,
     )
 
@@ -237,8 +256,8 @@ def bench_udf(x: pd.Series) -> pd.Series:
     _time.sleep({args.sleep_ms / 1000.0})
     return x + 1
 """,
-        make_df_code=f'spark.range({args.rows}, numPartitions={nparts})'
-                     f'.select(col("id"), bench_udf(col("id")).alias("result"))',
+        make_df_code=f"spark.range({args.rows}, numPartitions={nparts})"
+        f'.select(col("id"), bench_udf(col("id")).alias("result"))',
         args=args,
     )
 
@@ -250,8 +269,8 @@ def bench_udf(x: pd.Series) -> pd.Series:
 def bench_udf(x: pd.Series) -> pd.Series:
     return x + 1
 """,
-        make_df_code=f'spark.range({args.large_rows}, numPartitions={nparts})'
-                     f'.select(col("id"), bench_udf(col("id")).alias("result"))',
+        make_df_code=f"spark.range({args.large_rows}, numPartitions={nparts})"
+        f'.select(col("id"), bench_udf(col("id")).alias("result"))',
         args=args,
     )
 
@@ -271,9 +290,9 @@ def udf_b(x: pd.Series) -> pd.Series:
 def udf_c(x: pd.Series) -> pd.Series:
     return x - 1
 """,
-        make_df_code=f'spark.range({args.rows}, numPartitions={nparts})'
-                     f'.select(col("id"), udf_a(col("id")).alias("a"), '
-                     f'udf_b(col("id")).alias("b"), udf_c(col("id")).alias("c"))',
+        make_df_code=f"spark.range({args.rows}, numPartitions={nparts})"
+        f'.select(col("id"), udf_a(col("id")).alias("a"), '
+        f'udf_b(col("id")).alias("b"), udf_c(col("id")).alias("c"))',
         args=args,
     )
 

@@ -153,11 +153,11 @@ class LargeDataUDFTimeBench(_PipelinedUDFBenchBase):
         self._teardown_spark()
 
     def time_large_data(self, pipelined):
-        self.spark.range(5000000).select(
-            self._add_one(col("id")).alias("result")
-        ).write.format("noop").mode("overwrite").save()
+        self.spark.range(5000000).select(self._add_one(col("id")).alias("result")).write.format(
+            "noop"
+        ).mode("overwrite").save()
 
     def peakmem_large_data(self, pipelined):
-        self.spark.range(5000000).select(
-            self._add_one(col("id")).alias("result")
-        ).write.format("noop").mode("overwrite").save()
+        self.spark.range(5000000).select(self._add_one(col("id")).alias("result")).write.format(
+            "noop"
+        ).mode("overwrite").save()

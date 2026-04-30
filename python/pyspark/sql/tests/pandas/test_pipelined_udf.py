@@ -79,9 +79,9 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def add_one(x: pd.Series) -> pd.Series:
             return x + 1
 
-        result = self.spark.range(100).select(
-            col("id"), add_one(col("id")).alias("result")
-        ).collect()
+        result = (
+            self.spark.range(100).select(col("id"), add_one(col("id")).alias("result")).collect()
+        )
         for row in result:
             self.assertEqual(row.result, row.id + 1)
 
@@ -92,9 +92,7 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def to_str(x: pd.Series) -> pd.Series:
             return x.astype(str) + "_val"
 
-        result = self.spark.range(50).select(
-            col("id"), to_str(col("id")).alias("s")
-        ).collect()
+        result = self.spark.range(50).select(col("id"), to_str(col("id")).alias("s")).collect()
         for row in result:
             self.assertEqual(row.s, f"{row.id}_val")
 
@@ -113,12 +111,16 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def udf_c(x: pd.Series) -> pd.Series:
             return x - 1
 
-        result = self.spark.range(100).select(
-            col("id"),
-            udf_a(col("id")).alias("a"),
-            udf_b(col("id")).alias("b"),
-            udf_c(col("id")).alias("c"),
-        ).collect()
+        result = (
+            self.spark.range(100)
+            .select(
+                col("id"),
+                udf_a(col("id")).alias("a"),
+                udf_b(col("id")).alias("b"),
+                udf_c(col("id")).alias("c"),
+            )
+            .collect()
+        )
         for row in result:
             self.assertEqual(row.a, row.id + 1)
             self.assertEqual(row.b, row.id * 2)
@@ -131,9 +133,11 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         def add_one(x: pd.Series) -> pd.Series:
             return x + 1
 
-        result = self.spark.range(1000, numPartitions=4).select(
-            col("id"), add_one(col("id")).alias("result")
-        ).collect()
+        result = (
+            self.spark.range(1000, numPartitions=4)
+            .select(col("id"), add_one(col("id")).alias("result"))
+            .collect()
+        )
         self.assertEqual(len(result), 1000)
         for row in result:
             self.assertEqual(row.result, row.id + 1)
