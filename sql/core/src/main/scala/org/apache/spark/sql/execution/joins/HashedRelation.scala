@@ -125,6 +125,16 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
 
 private[execution] object HashedRelation {
 
+  def createTaskMemoryManager(): TaskMemoryManager = {
+    new TaskMemoryManager(
+      new UnifiedMemoryManager(
+        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
+        Runtime.getRuntime.maxMemory,
+        Runtime.getRuntime.maxMemory / 2,
+        1),
+      0)
+  }
+
   /**
    * Create a HashedRelation from an Iterator of InternalRow.
    *
@@ -142,13 +152,7 @@ private[execution] object HashedRelation {
       allowsNullKey: Boolean = false,
       ignoresDuplicatedKey: Boolean = false): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
-      new TaskMemoryManager(
-        new UnifiedMemoryManager(
-          new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-          Runtime.getRuntime.maxMemory,
-          Runtime.getRuntime.maxMemory / 2,
-          1),
-        0)
+      createTaskMemoryManager()
     }
 
     if (!input.hasNext && !allowsNullKey) {
@@ -400,13 +404,7 @@ private[joins] class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Runtime.getRuntime.maxMemory,
-        Runtime.getRuntime.maxMemory / 2,
-        1),
-      0)
+    val taskMemoryManager = HashedRelation.createTaskMemoryManager()
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -574,15 +572,7 @@ private[execution] final class LongToUnsafeRowMap(
 
   // needed by serializer
   def this() = {
-    this(
-      new TaskMemoryManager(
-        new UnifiedMemoryManager(
-          new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-          Runtime.getRuntime.maxMemory,
-          Runtime.getRuntime.maxMemory / 2,
-          1),
-        0),
-      0)
+    this(HashedRelation.createTaskMemoryManager(), 0)
   }
 
   private def init(): Unit = {
