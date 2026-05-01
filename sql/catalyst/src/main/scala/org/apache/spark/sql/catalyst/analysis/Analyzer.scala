@@ -141,18 +141,15 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                  expressions in a subquery.
  * @param resolutionPathEntries When resolving a view or SQL function body, the ordered frozen
  *                              path for unqualified relation/function names (if persisted in
- *                              metadata). Outside views/functions, compute from session
- *                              [[CatalogManager.sqlResolutionPathEntries]].
- *                              Lifecycle: set only by [[withAnalysisContext(viewDesc)]] /
- *                              [[withAnalysisContext(function)]]; preserved by
- *                              [[withOuterPlan]]; cleared by [[reset]] /
- *                              [[withNewAnalysisContext]]; never mutated after
- *                              [[AnalysisContext]] construction. The single-pass resolver
- *                              project intentionally avoids new threadlocal state -- when the
- *                              single-pass `Resolver` grows view / SQL-function body support,
- *                              the frozen path should flow via the resolver's
- *                              `OperatorResolutionContextStack` instead of being read from this
- *                              field. See SPARK-56681 #3.
+ *                              metadata). Outside views/functions, compute from
+ *                              [[CatalogManager.sqlResolutionPathEntries]]. Set only by
+ *                              [[withAnalysisContext(viewDesc)]] /
+ *                              [[withAnalysisContext(function)]], preserved by
+ *                              [[withOuterPlan]], cleared by [[reset]] /
+ *                              [[withNewAnalysisContext]], and never mutated after
+ *                              construction.
+ *                              TODO(SPARK-56681 #3): plumb through the single-pass resolver's
+ *                              `OperatorResolutionContextStack` and remove this field.
  */
 case class AnalysisContext(
     isDefault: Boolean = false,

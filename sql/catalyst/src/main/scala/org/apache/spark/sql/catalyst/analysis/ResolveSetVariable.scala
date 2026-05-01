@@ -64,12 +64,6 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
           ) match {
             case Some(variable) => variable.copy(canFold = false)
             case _ =>
-              // For unqualified names (1 part) the lookup goes through PATH; surface the
-              // *actual* SQL PATH searched (SPARK-56681). For qualified names (2 / 3 parts)
-              // the namespace is fixed at `system.session`, so a single
-              // `[`SYSTEM`.`SESSION`]` entry is reported. Either way the rendering is a list
-              // of path entries to stay consistent with UNRESOLVED_ROUTINE /
-              // TABLE_OR_VIEW_NOT_FOUND.
               throw unresolvedVariableError(
                 u.nameParts,
                 variableResolution.searchPathEntriesForError(u.nameParts),

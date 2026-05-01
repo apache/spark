@@ -3691,10 +3691,6 @@ class SqlScriptingExecutionSuite extends SharedSparkSession {
       sqlState = "42883",
       parameters = Map(
         "variableName" -> toSQLId("LOCALVAR"),
-        // SET VAR on an unqualified name reports the actual SQL PATH searched as a bracketed
-        // list (SPARK-56681). Local-variable lookup falls through to PATH-driven
-        // session-variable lookup; on the default path that's
-        // [builtin, session, spark_catalog.default].
         "searchPath" ->
           "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext("SET LOCALVAR = 5", 50, 65)

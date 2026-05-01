@@ -89,11 +89,9 @@ class FunctionResolution(
    *
    * All other multi-part names are returned as-is for downstream resolution.
    *
-   * Routes through [[CatalogManager.resolutionPathEntriesForAnalysis]] so that view / SQL
-   * function bodies with a persisted frozen path are honored, matching
-   * [[RelationResolution.relationResolutionEntries]] so routine order stays aligned with
-   * relation order. Procedure resolution also goes through this helper -- see
-   * [[resolveProcedure]].
+   * Shares [[CatalogManager.resolutionPathEntriesForAnalysis]] with
+   * [[RelationResolution.relationResolutionEntries]] so routine and relation lookup follow the
+   * same order under PATH (and the same persisted frozen path for view / SQL function bodies).
    */
   private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] =
     catalogManager.resolutionPathEntriesForAnalysis(
@@ -356,10 +354,9 @@ class FunctionResolution(
     if (nameParts.length == 1) {
       // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
       // session order, not only the current namespace (LookupCatalog single-part rule).
-      // Filter out `system.*` candidates: routines under `system.session`, `system.builtin`, and
-      // `system.ai` are already resolved by [[lookupBuiltinOrTempFunction]] /
-      // [[lookupBuiltinOrTempTableFunction]] earlier in this method, so calling
-      // `functionExists` on them is a wasteful catalog round-trip (e.g. UC backends RPC).
+      // `system.*` candidates are handled by [[lookupBuiltinOrTempFunction]] /
+      // [[lookupBuiltinOrTempTableFunction]] above; skip them here to avoid redundant
+      // catalog calls.
       val persistentCandidates = resolutionCandidates(nameParts).filterNot { c =>
         c.length >= 2 &&
           c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
@@ -374,9 +371,8 @@ class FunctionResolution(
             case _ =>
           }
         } catch {
-          // Mirror [[resolveFunctionCandidate]]'s explicit not-found list. Other exceptions
-          // (e.g. PERMISSION_DENIED, transient catalog errors) propagate so the user sees the
-          // real cause instead of a generic UNRESOLVED_ROUTINE.
+          // Only treat explicit "not found" / "forbidden" signals as a miss. Any other failure
+          // (e.g. permission denied, transient catalog error) propagates.
           case _: NoSuchFunctionException
              | _: NoSuchNamespaceException
              | _: CatalogNotFoundException =>
