@@ -231,6 +231,34 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
     }
   }
 
+  // Scenario 3.1 (session column removal)
+  test("[connect] temp view with stored plan detects session column removal") {
+    withSession { session =>
+      session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+      session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+
+      session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+      assertRows(session.table("v").collect(), Seq(Row(1, 100)))
+
+      // session schema change via SQL
+      session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          session.table("v").collect()
+        },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` INT has been removed"))
+
+      session.sql("DROP VIEW IF EXISTS v").collect()
+      session.sql(s"DROP TABLE IF EXISTS $T").collect()
+    }
+  }
+
   // Scenario 3.2 (external column removal)
   test("[connect] temp view with stored plan detects external column removal") {
     withSession { session =>
