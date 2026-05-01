@@ -130,9 +130,7 @@ class ArrowStreamSerializer(Serializer):
         output batch. Default False.
     """
 
-    def __init__(
-        self, write_start_stream: bool = False, flush_per_batch: bool = False
-    ) -> None:
+    def __init__(self, write_start_stream: bool = False, flush_per_batch: bool = False) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
         self._flush_per_batch: bool = flush_per_batch
@@ -143,6 +141,7 @@ class ArrowStreamSerializer(Serializer):
         if self._write_start_stream:
             iterator = self._write_stream_start(iterator, stream)
         import pyarrow as pa
+
         writer = None
         try:
             for batch in iterator:
