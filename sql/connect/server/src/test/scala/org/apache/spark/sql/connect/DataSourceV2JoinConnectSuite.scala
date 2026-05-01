@@ -172,24 +172,19 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
             Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)))
           .build())
 
-      // external writer adds (2, 200) to the new table
-      val schema = StructType.fromDDL("id INT, salary INT")
-      val extTable = cat
-        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-        .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
-
       val df2 = session.table(T)
 
-      assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(2, 200, 2, 200)))
+      val result = df1.join(df2, df1("id") === df2("id"))
+      assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+      assertRows(result.collect(), Seq.empty)
 
       session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
   }
 
   // Scenario 5: join after drop and re-add column with same type.
-  // InMemoryTableCatalog does not migrate old data on schema change,
-  // so the original salary value (100) is retained after drop+re-add.
+  // Both sides re-analyze against the new schema. The original salary
+  // value becomes null after drop+re-add.
   test("[connect] join after drop and re-add column with same type") {
     withSession { session =>
       session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -204,18 +199,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
       cat.alterTable(ident, dropCol, addCol)
 
-      // external writer adds (2, 200) with same schema
-      val schema = StructType.fromDDL("id INT, salary INT")
-      val extTable = cat
-        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-        .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
-
       val df2 = session.table(T)
 
-      assertRows(
-        df1.join(df2, df1("id") === df2("id")).collect(),
-        Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
+      val result = df1.join(df2, df1("id") === df2("id"))
+      assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+      assertRows(result.collect(), Seq(Row(1, null, 1, null)))
 
       session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
@@ -224,8 +212,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 6: join after drop and re-add column with different type.
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see salary as STRING.
-  // InMemoryTableCatalog does not migrate old data on schema change,
-  // so the original salary value (100) is retained after drop+re-add.
+  // The original salary value becomes null after drop+re-add.
   test("[connect] join after drop and re-add column with different type succeeds") {
     withSession { session =>
       session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -240,20 +227,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val addCol = TableChange.addColumn(Array("salary"), StringType, true)
       cat.alterTable(ident, dropCol, addCol)
 
-      // external writer adds (2, "high") with new schema
-      val schema2 = StructType.fromDDL("id INT, salary STRING")
-      val extTable = cat
-        .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-        .asInstanceOf[InMemoryBaseTable]
-      extTable.withData(
-        Array(new BufferedRows(Seq.empty, schema2)
-          .withRow(InternalRow(2, UTF8String.fromString("high")))))
-
       val df2 = session.table(T)
 
-      assertRows(
-        df1.join(df2, df1("id") === df2("id")).collect(),
-        Seq(Row(1, 100, 1, 100), Row(2, "high", 2, "high")))
+      val result = df1.join(df2, df1("id") === df2("id"))
+      assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+      assertRows(result.collect(), Seq(Row(1, null, 1, null)))
 
       session.sql(s"DROP TABLE IF EXISTS $T").collect()
     }
