@@ -90,7 +90,8 @@ class ExecutorPVCResizePluginSuite
       executorId: Long,
       claimName: String,
       mountPath: String,
-      containerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME): Pod = {
+      containerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME,
+      volumeName: String = "spark-local-dir-1"): Pod = {
     new PodBuilder()
       .withNewMetadata()
         .withName(s"spark-executor-$executorId")
@@ -100,7 +101,7 @@ class ExecutorPVCResizePluginSuite
       .endMetadata()
       .withNewSpec()
         .addNewVolume()
-          .withName("data")
+          .withName(volumeName)
           .withNewPersistentVolumeClaim()
             .withClaimName(claimName)
           .endPersistentVolumeClaim()
@@ -108,7 +109,7 @@ class ExecutorPVCResizePluginSuite
         .addNewContainer()
           .withName(containerName)
           .addNewVolumeMount()
-            .withName("data")
+            .withName(volumeName)
             .withMountPath(mountPath)
           .endVolumeMount()
         .endContainer()
@@ -255,6 +256,12 @@ class ExecutorPVCResizePluginSuite
     val plugin = createPlugin()
     val pod = createPodWithPVC(1, "pvc-1", "/data", containerName = "custom")
     assert(plugin.pvcsOf(pod) === Set("pvc-1"))
+  }
+
+  test("pvcsOf filters out non spark-local-dir-* PVC volumes") {
+    val plugin = createPlugin()
+    val pod = createPodWithPVC(1, "pvc-1", "/data", volumeName = "checkpointpvc")
+    assert(plugin.pvcsOf(pod) === Set.empty)
   }
 
   test("receive ignores non-report messages") {

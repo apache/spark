@@ -144,6 +144,7 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
   private[k8s] def pvcsOf(pod: Pod): Set[String] = {
     val volNameToPvc = pod.getSpec.getVolumes.asScala
       .filter(_.getPersistentVolumeClaim != null)
+      .filter(_.getName.startsWith("spark-local-dir-"))
       .map(v => v.getName -> v.getPersistentVolumeClaim.getClaimName)
       .toMap
     pod.getSpec.getContainers.asScala
