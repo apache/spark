@@ -38,13 +38,23 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
  *       belonging to a single {@code _commit_version} must share the same
  *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
- *       all rows of a single commit must additionally appear in the same micro-batch
- *       (i.e. micro-batch boundaries align with commit boundaries) -- streaming
- *       post-processing uses {@code _commit_timestamp} as event time with a zero-delay
- *       watermark, so a commit's group is finalized as soon as the watermark catches
- *       up to that timestamp; any rows of the same commit arriving in a later
- *       micro-batch would be treated as late and dropped. Atomic-commit CDC connectors
- *       (e.g. Delta versions, Iceberg snapshots) naturally satisfy this requirement.
+ *       two additional requirements apply:
+ *       <ol>
+ *         <li>All rows of a single commit must appear in the same micro-batch (i.e.
+ *             micro-batch boundaries align with commit boundaries).</li>
+ *         <li>Distinct {@code _commit_version} values must have distinct
+ *             {@code _commit_timestamp} values.</li>
+ *       </ol>
+ *       Streaming post-processing uses {@code _commit_timestamp} as event time with a
+ *       zero-delay watermark, so once a micro-batch observes max event time T the
+ *       global watermark advances to T. Both Spark's late-event filter and its
+ *       state-eviction predicate then use {@code eventTime <= T} -- so any later row
+ *       at exactly {@code _commit_timestamp = T} (whether from the same commit split
+ *       across batches, or from a different commit that happens to share T) is
+ *       silently dropped as late. Requirement 1 rules out the same-commit case;
+ *       requirement 2 rules out the different-commit case. Atomic-commit CDC connectors
+ *       (e.g. Delta versions, Iceberg snapshots) that derive {@code _commit_timestamp}
+ *       from wall-clock time at commit time naturally satisfy both requirements.
  *       Behavior is undefined if {@code _commit_timestamp} is {@code NULL} on any row
  *       of a streaming read engaging post-processing -- a NULL group key never advances
  *       the watermark, which can stall emission of that group indefinitely</li>
