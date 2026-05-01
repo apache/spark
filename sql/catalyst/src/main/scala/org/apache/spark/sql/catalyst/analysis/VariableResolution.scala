@@ -47,20 +47,21 @@ class VariableResolution(
   }
 
   /**
-   * Search-path entries to report in `UNRESOLVED_VARIABLE`. For unqualified names this is the
-   * full SQL path the resolver would consult, mirroring how `TABLE_OR_VIEW_NOT_FOUND` reports
-   * its full path (entries like `system.builtin` are kept even though they can never hold
-   * the kind of object being looked up). Qualified names target `system.session` directly,
-   * so only that single entry is reported.
+   * Search-path entries to report in `UNRESOLVED_VARIABLE` for DML lookups (`SET VAR`,
+   * `FETCH ... INTO`). The full SQL path is reported regardless of how the name was
+   * qualified, matching the convention used by `TABLE_OR_VIEW_NOT_FOUND` and
+   * `UNRESOLVED_ROUTINE`. Keeping the rendering qualification-independent also avoids
+   * re-shaping the error if Spark ever grows struct-field assignment, where 2-part forms
+   * become genuinely ambiguous.
+   *
+   * DDL paths (`DECLARE` / `DROP` name validation in
+   * [[org.apache.spark.sql.catalyst.analysis.ResolveCatalogs]]) do not consult the SQL path
+   * and report `[system.session]` directly at their throw site.
    */
-  def searchPathEntriesForError(nameParts: Seq[String]): Seq[Seq[String]] = {
-    if (nameParts.length != 1) {
-      Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-    } else {
-      catalogManager.resolutionPathEntriesForAnalysis(
-        AnalysisContext.get.resolutionPathEntries,
-        AnalysisContext.get.catalogAndNamespace)
-    }
+  def searchPathEntriesForError: Seq[Seq[String]] = {
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
   }
 
   /**

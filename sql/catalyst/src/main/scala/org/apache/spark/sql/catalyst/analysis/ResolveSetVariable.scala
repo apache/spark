@@ -65,7 +65,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
             case _ =>
               throw unresolvedVariableError(
                 u.nameParts,
-                variableResolution.searchPathEntriesForError(u.nameParts),
+                variableResolution.searchPathEntriesForError,
                 u.origin)
           }
 
