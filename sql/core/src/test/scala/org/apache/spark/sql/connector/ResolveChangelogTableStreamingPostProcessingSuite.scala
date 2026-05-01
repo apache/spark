@@ -117,6 +117,14 @@ class ResolveChangelogTableStreamingPostProcessingSuite
         outputNames.mkString(", "))
   }
 
+  private def assertNoWatermarkMetadataOnOutput(plan: LogicalPlan): Unit = {
+    import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+    val leaks = plan.output.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    assert(leaks.isEmpty,
+      s"User-visible output must not carry EventTimeWatermark.delayKey metadata; " +
+        s"found on: ${leaks.map(_.name).mkString(",")}. Plan:\n$plan")
+  }
+
   private def assertInlineGenerate(plan: LogicalPlan): Unit = {
     val gens = plan.collect { case g: Generate => g }
     assert(gens.size == 1,
@@ -151,6 +159,7 @@ class ResolveChangelogTableStreamingPostProcessingSuite
 
     assertInlineGenerate(analyzed)
     assertHelperColumnsRemoved(analyzed)
+    assertNoWatermarkMetadataOnOutput(analyzed)
   }
 
   // ===========================================================================
@@ -182,6 +191,7 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     }, s"Expected a Project that emits `update_preimage`. Plan:\n$analyzed")
 
     assertHelperColumnsRemoved(analyzed)
+    assertNoWatermarkMetadataOnOutput(analyzed)
   }
 
   // ===========================================================================
@@ -208,6 +218,7 @@ class ResolveChangelogTableStreamingPostProcessingSuite
 
     assertInlineGenerate(analyzed)
     assertHelperColumnsRemoved(analyzed)
+    assertNoWatermarkMetadataOnOutput(analyzed)
   }
 
   // ===========================================================================
@@ -242,5 +253,28 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     }
     assert(e.getCondition == "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
       s"Unexpected error: ${e.getMessage}")
+  }
+
+  // ===========================================================================
+  // Watermark metadata is internal-only and stripped from user-visible output
+  // ===========================================================================
+
+  test("watermark metadata is stripped from user-visible _commit_timestamp") {
+    import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+    catalog.setChangelogProperties(identifier, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val analyzed = streamingDf().queryExecution.analyzed
+    // Internally, the EventTimeWatermark must still be present.
+    assertWatermarkOnCommitTimestamp(analyzed)
+    // But none of the user-visible output attributes should leak the watermark
+    // metadata; downstream user-supplied watermarks must not interact with our
+    // auto-injected internal watermark via the global multi-watermark policy.
+    val ts = analyzed.output.find(_.name == "_commit_timestamp")
+    assert(ts.isDefined, s"Expected `_commit_timestamp` in output. Plan:\n$analyzed")
+    assert(!ts.get.metadata.contains(EventTimeWatermark.delayKey),
+      s"Watermark metadata leaked to user-visible `_commit_timestamp`. Plan:\n$analyzed")
   }
 }

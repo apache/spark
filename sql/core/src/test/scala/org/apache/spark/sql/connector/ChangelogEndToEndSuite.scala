@@ -802,4 +802,59 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     assert(e.getCondition == "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
       s"Unexpected error: ${e.getMessage}")
   }
+
+  // The streaming row-level rewrite injects a streaming Aggregate, which is only
+  // semantically valid with Append output mode (Update / Complete would re-emit
+  // per-batch updates or the entire result table per batch, neither of which matches
+  // batch CDC semantics). UnsupportedOperationChecker now rejects those modes.
+
+  test("streaming row-level post-processing with update output mode is rejected") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L)))
+
+    val e = intercept[AnalysisException] {
+      spark.readStream
+        .option("startingVersion", "1")
+        .changes(fullTableName)
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_update_rejected")
+        .outputMode("update")
+        .start()
+    }
+    assert(e.getCondition == "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      s"Unexpected error: ${e.getMessage}")
+    assert(e.getMessage.contains("Change Data Capture"),
+      s"Error should mention CDC: ${e.getMessage}")
+  }
+
+  test("streaming row-level post-processing with complete output mode is rejected") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L)))
+
+    val e = intercept[AnalysisException] {
+      spark.readStream
+        .option("startingVersion", "1")
+        .changes(fullTableName)
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_complete_rejected")
+        .outputMode("complete")
+        .start()
+    }
+    assert(e.getCondition == "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      s"Unexpected error: ${e.getMessage}")
+    assert(e.getMessage.contains("Change Data Capture"),
+      s"Error should mention CDC: ${e.getMessage}")
+  }
 }

@@ -37,12 +37,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *       this change</li>
  *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
  *       belonging to a single {@code _commit_version} must share the same
- *       {@code _commit_timestamp}; streaming post-processing uses it as event time and
- *       expects the connector to emit {@code _commit_timestamp} in non-decreasing order
- *       across micro-batches. Behavior is undefined if {@code _commit_timestamp} is
- *       {@code NULL} on any row of a streaming read engaging post-processing -- a NULL
- *       group key never advances the watermark, which can stall emission of that group
- *       indefinitely</li>
+ *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
+ *       all rows of a single commit must additionally appear in the same micro-batch
+ *       (i.e. micro-batch boundaries align with commit boundaries) -- streaming
+ *       post-processing uses {@code _commit_timestamp} as event time with a zero-delay
+ *       watermark, so a commit's group is finalized as soon as the watermark catches
+ *       up to that timestamp; any rows of the same commit arriving in a later
+ *       micro-batch would be treated as late and dropped. Atomic-commit CDC connectors
+ *       (e.g. Delta versions, Iceberg snapshots) naturally satisfy this requirement.
+ *       Behavior is undefined if {@code _commit_timestamp} is {@code NULL} on any row
+ *       of a streaming read engaging post-processing -- a NULL group key never advances
+ *       the watermark, which can stall emission of that group indefinitely</li>
  * </ul>
  * <p>
  * Streaming reads support carry-over removal and update detection but not net change

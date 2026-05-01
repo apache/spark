@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -395,7 +395,36 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       addUpdateRelabelProjection(generated)
     } else generated
 
-    removeHelperColumns(withRelabel)
+    // Strip the auto-injected EventTimeWatermark metadata from the user-visible
+    // `_commit_timestamp` so it does not interact with downstream user-supplied
+    // watermarks via the global multi-watermark policy. The metadata flows through
+    // Generate(Inline) (which copies attribute metadata) and the relabel Project, so
+    // it must be cleared here at the boundary of the rewrite.
+    val cleaned = stripCommitTimestampWatermarkMetadata(withRelabel)
+    removeHelperColumns(cleaned)
+  }
+
+  /**
+   * Final boundary for the streaming row-level rewrite: rebuilds the user-visible
+   * `_commit_timestamp` attribute with empty watermark-related metadata. Other
+   * attributes flow through unchanged.
+   */
+  private def stripCommitTimestampWatermarkMetadata(input: LogicalPlan): LogicalPlan = {
+    val projectList: Seq[NamedExpression] = input.output.map { attr =>
+      if (attr.name == "_commit_timestamp" &&
+          attr.metadata.contains(EventTimeWatermark.delayKey)) {
+        val cleanedMetadata = new MetadataBuilder()
+          .withMetadata(attr.metadata)
+          .remove(EventTimeWatermark.delayKey)
+          .build()
+        Alias(attr.withMetadata(cleanedMetadata), attr.name)(
+          exprId = attr.exprId,
+          qualifier = attr.qualifier)
+      } else {
+        attr
+      }
+    }
+    Project(projectList, input)
   }
 
   /**
