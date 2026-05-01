@@ -1816,6 +1816,36 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>4.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
+  <td><code>0min</code></td>
+  <td>
+    Interval between executor PVC resize operations. To disable, set 0 (default).
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeThreshold</code></td>
+  <td><code>0.5</code></td>
+  <td>
+    The PVC usage ratio (used / capacity) above which the driver triggers a resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeFactor</code></td>
+  <td><code>1.0</code></td>
+  <td>
+    The factor to grow PVC storage by, relative to the current request.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
 </table>
 
 #### Pod template properties
