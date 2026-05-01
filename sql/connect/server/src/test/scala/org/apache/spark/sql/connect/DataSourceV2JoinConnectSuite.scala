@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, TableChange, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * DSv2 join tests for Spark Connect mirroring the classic DataSourceV2DataFrameSuite join
