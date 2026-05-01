@@ -377,8 +377,6 @@ class SetPathSuite extends SharedSparkSession {
       sql("DECLARE VARIABLE system.session.path_var_gate = 7")
       try {
         sql("SET PATH = spark_catalog.default")
-        // PATH excludes system.session, so the lookup did not actually consult any namespace
-        // and the reported search path is empty.
         checkError(
           exception = intercept[AnalysisException] {
             sql("SET VAR path_var_gate = 8")
@@ -387,7 +385,7 @@ class SetPathSuite extends SharedSparkSession {
           sqlState = "42883",
           parameters = Map(
             "variableName" -> "`path_var_gate`",
-            "searchPath" -> "[]"),
+            "searchPath" -> "[`spark_catalog`.`default`]"),
           context = ExpectedContext("SET VAR path_var_gate = 8", 0, 24))
 
         sql("SET VAR system.session.path_var_gate = 9")

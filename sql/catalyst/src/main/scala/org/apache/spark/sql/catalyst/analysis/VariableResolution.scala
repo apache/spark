@@ -48,16 +48,19 @@ class VariableResolution(
   }
 
   /**
-   * Search-path entries to report in `UNRESOLVED_VARIABLE`: variables can only ever be in
-   * `system.session`, so we report exactly the namespaces we actually searched -- either
-   * `[system.session]` when it is on the SQL path, or `[]` when it is not (and so the lookup
-   * never consulted any namespace).
+   * Search-path entries to report in `UNRESOLVED_VARIABLE`. For unqualified names this is the
+   * full SQL path the resolver would consult, mirroring how `TABLE_OR_VIEW_NOT_FOUND` reports
+   * its full path (entries like `system.builtin` are kept even though they can never hold
+   * the kind of object being looked up). Qualified names target `system.session` directly,
+   * so only that single entry is reported.
    */
-  def searchPathEntriesForError: Seq[Seq[String]] = {
-    if (catalogManager.isSystemSessionOnPath) {
+  def searchPathEntriesForError(nameParts: Seq[String]): Seq[Seq[String]] = {
+    if (nameParts.length != 1) {
       Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
     } else {
-      Seq.empty
+      catalogManager.resolutionPathEntriesForAnalysis(
+        AnalysisContext.get.resolutionPathEntries,
+        AnalysisContext.get.catalogAndNamespace)
     }
   }
 

@@ -3691,7 +3691,8 @@ class SqlScriptingExecutionSuite extends SharedSparkSession {
       sqlState = "42883",
       parameters = Map(
         "variableName" -> toSQLId("LOCALVAR"),
-        "searchPath" -> "[`system`.`session`]"),
+        "searchPath" ->
+          "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
       context = ExpectedContext("SET LOCALVAR = 5", 50, 65)
     )
   }
