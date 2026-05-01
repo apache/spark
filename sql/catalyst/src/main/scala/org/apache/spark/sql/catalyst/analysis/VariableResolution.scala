@@ -49,10 +49,17 @@ class VariableResolution(
 
   /**
    * Search-path entries to report in `UNRESOLVED_VARIABLE`: variables can only ever be in
-   * `system.session`, so that is the only entry we ever search.
+   * `system.session`, so we report exactly the namespaces we actually searched -- either
+   * `[system.session]` when it is on the SQL path, or `[]` when it is not (and so the lookup
+   * never consulted any namespace).
    */
-  def searchPathEntriesForError: Seq[Seq[String]] =
-    Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+  def searchPathEntriesForError: Seq[Seq[String]] = {
+    if (catalogManager.isSystemSessionOnPath) {
+      Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+    } else {
+      Seq.empty
+    }
+  }
 
   /**
    * Resolves a `multipartName` to an [[Expression]] tree, supporting nested field access.
