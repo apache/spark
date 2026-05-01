@@ -26292,10 +26292,10 @@ def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None
     [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
     """
     if endianness is None:
-        _invoke_function_over_columns("st_asbinary", geo)
+        return _invoke_function_over_columns("st_asbinary", geo)
     else:
         _endianness = lit(endianness) if isinstance(endianness, str) else endianness
-        _invoke_function_over_columns("st_asbinary", geo, _endianness)
+        return _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 @_try_remote_functions
