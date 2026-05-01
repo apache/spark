@@ -39,10 +39,11 @@ import org.apache.spark.util.ThreadUtils
  * when the usage exceeds a configurable threshold.
  *
  * Executors measure their own local-directory usage (via DiskBlockManager) and report
- * it to the driver through the plugin RPC channel. The driver maps each reported
- * mount path back to the executor pod's PVC and patches the PVC's
- * `spec.resources.requests.storage` to grow it. The underlying StorageClass must
- * have `allowVolumeExpansion: true`.
+ * the maximum filesystem usage ratio to the driver through the plugin RPC channel.
+ * When the ratio exceeds the threshold, the driver patches every `spark-local-dir-*`
+ * PVC mounted by the reporting executor's pod to grow its
+ * `spec.resources.requests.storage`. The underlying StorageClass must have
+ * `allowVolumeExpansion: true`.
  */
 class ExecutorPVCResizePlugin extends SparkPlugin {
   override def driverPlugin(): DriverPlugin = new ExecutorPVCResizeDriverPlugin()

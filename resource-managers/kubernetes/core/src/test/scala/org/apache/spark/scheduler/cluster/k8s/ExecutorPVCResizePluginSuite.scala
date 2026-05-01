@@ -21,6 +21,7 @@ import java.util.Collections
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.Resource
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
@@ -170,7 +171,7 @@ class ExecutorPVCResizePluginSuite
   }
 
   test("Usage above threshold triggers patch with grown size") {
-    val plugin = createPlugin()
+    val plugin = createPlugin(threshold = 0.9, factor = 0.1)
     val pod = createPodWithPVC(1, "pvc-1", "/data")
     when(podList.getItems).thenReturn(Collections.singletonList(pod))
     val resource = mockPvcResource("pvc-1", "1000000000") // 1GB
@@ -178,7 +179,12 @@ class ExecutorPVCResizePluginSuite
 
     plugin.checkAndResizePVCs()
 
-    verify(resource, times(1)).patch(any(), any(classOf[PersistentVolumeClaim]))
+    val captor = ArgumentCaptor.forClass(classOf[PersistentVolumeClaim])
+    verify(resource, times(1)).patch(any(), captor.capture())
+    val patched = Quantity.getAmountInBytes(
+      captor.getValue.getSpec.getResources.getRequests.get("storage")).longValue()
+    // current 1GB * (1 + factor 0.1) = 1.1GB
+    assert(patched === 1100000000L)
   }
 
   test("PVC with pending or failed resize is skipped") {
