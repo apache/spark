@@ -133,6 +133,15 @@ class ResolveChangelogTableStreamingPostProcessingSuite
       s"Generate must use Inline. Plan:\n$plan")
   }
 
+  private def assertContainsNullCommitTimestampGuard(plan: LogicalPlan): Unit = {
+    val nullGuards = plan.collect {
+      case f: Filter
+        if f.condition.toString.contains("NULL_COMMIT_TIMESTAMP") => f
+    }
+    assert(nullGuards.size == 1,
+      s"Expected exactly one NULL_COMMIT_TIMESTAMP guard Filter. Plan:\n$plan")
+  }
+
   // ===========================================================================
   // Carry-over removal only
   // ===========================================================================
@@ -154,8 +163,11 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     assert(groupingNames.toSet == Set("id", "_commit_version", "_commit_timestamp"),
       s"Expected grouping by (id, _commit_version, _commit_timestamp); got $groupingNames")
 
+    // Two Filters: the NULL `_commit_timestamp` guard + the carry-over predicate.
     val filters = analyzed.collect { case f: Filter => f }
-    assert(filters.size == 1, s"Expected one Filter for carry-over removal. Plan:\n$analyzed")
+    assert(filters.size == 2,
+      s"Expected NULL guard + carry-over Filter. Plan:\n$analyzed")
+    assertContainsNullCommitTimestampGuard(analyzed)
 
     assertInlineGenerate(analyzed)
     assertHelperColumnsRemoved(analyzed)
@@ -177,10 +189,13 @@ class ResolveChangelogTableStreamingPostProcessingSuite
       "deduplicationMode" -> "none").queryExecution.analyzed
     assertWatermarkOnCommitTimestamp(analyzed)
 
-    // No carry-over Filter when only update detection runs.
+    // No carry-over Filter when only update detection runs -- but the NULL
+    // `_commit_timestamp` guard Filter is always present.
     val filters = analyzed.collect { case f: Filter => f }
-    assert(filters.isEmpty,
-      s"No Filter expected for update-detection-only path. Plan:\n$analyzed")
+    assert(filters.size == 1,
+      s"Only the NULL guard Filter is expected for update-detection-only path. " +
+        s"Plan:\n$analyzed")
+    assertContainsNullCommitTimestampGuard(analyzed)
 
     assertInlineGenerate(analyzed)
 
@@ -211,10 +226,11 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     val aggs = analyzed.collect { case a: Aggregate => a }
     assert(aggs.size == 1, s"Should fuse both passes into a single Aggregate. Plan:\n$analyzed")
 
-    // Filter for carry-over removal AND a Project for relabeling.
+    // Two Filters: NULL guard + carry-over removal.
     val filters = analyzed.collect { case f: Filter => f }
-    assert(filters.size == 1,
-      s"Exactly one Filter expected for combined path. Plan:\n$analyzed")
+    assert(filters.size == 2,
+      s"Expected NULL guard + carry-over Filter for combined path. Plan:\n$analyzed")
+    assertContainsNullCommitTimestampGuard(analyzed)
 
     assertInlineGenerate(analyzed)
     assertHelperColumnsRemoved(analyzed)
@@ -276,5 +292,37 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     assert(ts.isDefined, s"Expected `_commit_timestamp` in output. Plan:\n$analyzed")
     assert(!ts.get.metadata.contains(EventTimeWatermark.delayKey),
       s"Watermark metadata leaked to user-visible `_commit_timestamp`. Plan:\n$analyzed")
+  }
+
+  // ===========================================================================
+  // NULL _commit_timestamp guard
+  // ===========================================================================
+
+  test("NULL _commit_timestamp guard Filter is the first operator after the source") {
+    catalog.setChangelogProperties(identifier, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val analyzed = streamingDf().queryExecution.analyzed
+    // The guard must sit BELOW the EventTimeWatermark (we don't want a NULL row to
+    // be considered for watermark advancement at all). Verify by walking the plan
+    // top-down and finding the guard before any Aggregate.
+    val guards = analyzed.collect {
+      case f: Filter if f.condition.toString.contains("NULL_COMMIT_TIMESTAMP") => f
+    }
+    assert(guards.size == 1, s"Expected exactly one guard. Plan:\n$analyzed")
+    val guard = guards.head
+    val guardChild = guard.child
+    // The guard's child should be the bare relation (or a SubqueryAlias wrapping it),
+    // not the EventTimeWatermark.
+    val isSourceBelowGuard = guardChild match {
+      case _: org.apache.spark.sql.catalyst.streaming.StreamingRelationV2 => true
+      case org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias(_,
+            _: org.apache.spark.sql.catalyst.streaming.StreamingRelationV2) => true
+      case _ => false
+    }
+    assert(isSourceBelowGuard,
+      s"NULL guard Filter should sit directly above the streaming relation. Plan:\n$analyzed")
   }
 }

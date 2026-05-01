@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, MetadataBuilder, StringType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -244,6 +244,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    * the aggregate so no rows are lost.
    * {{{
    *   DataSourceV2Relation
+   *     -> Filter (RaiseError on NULL _commit_timestamp)
    *     -> EventTimeWatermark(_commit_timestamp, 0s)
    *     -> Aggregate
    *          group by (rowId..., _commit_version, _commit_timestamp)
@@ -255,6 +256,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *     -> Generate(Inline(__spark_cdc_events))   // re-emit one row per buffered input
    *     -> [Project (update relabel)]
    *     -> Project (drop helper columns)
+   *     -> Project (strip internal EventTimeWatermark metadata)
    * }}}
    *
    * ==Runtime walkthrough==
@@ -278,15 +280,16 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *
    * ==Per-operator detail==
    *
+   *  0. [[Filter]] guarding against NULL `_commit_timestamp` -- raises
+   *     `CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP` for any row that
+   *     violates the contract. A NULL would never satisfy the downstream Aggregate's
+   *     `eventTime <= watermark` eviction predicate (NULL is silent in MAX, never
+   *     compares less-than-or-equal), so its group would be held in state forever.
+   *     Failing fast surfaces the connector bug instead of producing no output.
    *  1. [[EventTimeWatermark]] on `_commit_timestamp` (zero delay) -- required so the
    *     downstream stateful aggregate can emit groups in append output mode. By CDC
    *     contract every row in a single commit shares `_commit_timestamp`, so taking it
-   *     as event time is safe. Note: this is currently the only analyzer rule that
-   *     auto-injects an [[EventTimeWatermark]] (others resolve user-supplied watermarks).
-   *     The watermark metadata is preserved on the user-visible `_commit_timestamp`
-   *     output (since [[Generate]]'s `generatorOutput` copies attribute metadata), so a
-   *     downstream user-supplied `withWatermark` on a different column will interact
-   *     with this internal watermark under the global multi-watermark policy.
+   *     as event time is safe.
    *  2. [[Aggregate]] keyed by `(rowId..., _commit_version, _commit_timestamp)`. Computes
    *     the same `_del_cnt` / `_ins_cnt` / (`_min_rv` / `_max_rv` / `_rv_cnt`) helpers as
    *     the batch path, plus an `__spark_cdc_events` array-of-struct buffering every
@@ -304,17 +307,29 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *  5. [[Project]] (only when update detection is requested) applying the same
    *     `CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION`
    *     guard and `_change_type` relabel as the batch path.
-   *  6. Final [[Project]] (via [[removeHelperColumns]]) drops `__spark_cdc_*` helpers so
+   *  6. [[Project]] (via [[removeHelperColumns]]) drops `__spark_cdc_*` helpers so
    *     the output schema matches the connector's declared schema.
+   *  7. Final [[Project]] (via [[stripCommitTimestampWatermarkMetadata]]) clears the
+   *     `EventTimeWatermark.delayKey` from the user-visible `_commit_timestamp`
+   *     attribute so a downstream user-supplied `withWatermark` on a different column
+   *     does not interact with our internal watermark via the global multi-watermark
+   *     policy.
    */
   private def addStreamingRowLevelPostProcessing(
       plan: LogicalPlan,
       cl: Changelog,
       requiresCarryOverRemoval: Boolean,
       requiresUpdateDetection: Boolean): LogicalPlan = {
-    val rawCommitTsAttr = getAttribute(plan, "_commit_timestamp")
+    // Fail fast on a NULL `_commit_timestamp`. The downstream Aggregate uses it as
+    // both an event-time watermark column and a grouping key; a NULL group-key value
+    // would never satisfy the `eventTime <= watermark` eviction predicate, so the
+    // group would silently stall (held in state until end of stream). Mirrors the
+    // runtime check in [[CdcNetChangesStatefulProcessor]] -- fail fast at the
+    // contract violation rather than producing no output.
+    val plan1 = addNullCommitTimestampGuard(plan)
+    val rawCommitTsAttr = getAttribute(plan1, "_commit_timestamp")
     val watermarked = EventTimeWatermark(
-      UUID.randomUUID(), rawCommitTsAttr, new CalendarInterval(0, 0, 0L), plan)
+      UUID.randomUUID(), rawCommitTsAttr, new CalendarInterval(0, 0, 0L), plan1)
 
     val rowIdExprs = V2ExpressionUtils.resolveRefs[NamedExpression](
       cl.rowId().toSeq, watermarked)
@@ -402,6 +417,26 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // it must be cleared here at the boundary of the rewrite.
     val cleaned = stripCommitTimestampWatermarkMetadata(withRelabel)
     removeHelperColumns(cleaned)
+  }
+
+  /**
+   * Adds a `Filter` that raises
+   * `CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP` for any input row whose
+   * `_commit_timestamp` is `NULL`. Used as the first step of the streaming row-level
+   * rewrite so a contract-violating connector fails fast instead of silently stalling
+   * the downstream stateful aggregate's group.
+   */
+  private def addNullCommitTimestampGuard(input: LogicalPlan): LogicalPlan = {
+    val commitTsAttr = getAttribute(input, "_commit_timestamp")
+    val raise = RaiseError(
+      Literal("CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP"),
+      CreateMap(Nil),
+      BooleanType)
+    // CaseWhen returns the default branch (true) for non-null timestamps and
+    // evaluates the side-effecting RaiseError for nulls; the row never passes the
+    // filter on a contract violation.
+    val checkExpr = CaseWhen(Seq(IsNull(commitTsAttr) -> raise), Literal(true))
+    Filter(checkExpr, input)
   }
 
   /**

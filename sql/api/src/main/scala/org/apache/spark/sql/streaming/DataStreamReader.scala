@@ -145,12 +145,11 @@ abstract class DataStreamReader {
    *     to the max `_commit_timestamp` observed in the previous batch). A stream that reads its
    *     last commit and stops will keep that commit's events in state until a subsequent
    *     (no-data) micro-batch fires.
-   *   - The query is constrained to `Append` output mode; `Update` and `Complete` are
-   *     rejected at writer-start time with
-   *     `STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION`. The internal watermark metadata is
-   *     stripped from the user-visible `_commit_timestamp` output, so downstream
-   *     user-supplied watermarks on other columns do not interact with it via the global
-   *     multi-watermark policy.
+   *   - The query is constrained to `Append` output mode; `Update` and `Complete` are rejected at
+   *     writer-start time with `STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION`. The internal
+   *     watermark metadata is stripped from the user-visible `_commit_timestamp` output, so
+   *     downstream user-supplied watermarks on other columns do not interact with it via the
+   *     global multi-watermark policy.
    *
    * @param tableName
    *   a qualified or unqualified name that designates a table.

@@ -857,4 +857,39 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     assert(e.getMessage.contains("Change Data Capture"),
       s"Error should mention CDC: ${e.getMessage}")
   }
+
+  test("streaming row-level rewrite raises on NULL _commit_timestamp") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    // Insert a row with NULL _commit_timestamp (last column).
+    val row = InternalRow(
+      1L, UTF8String.fromString("Alice"), 1L,
+      UTF8String.fromString(CHANGE_TYPE_INSERT), 1L, null)
+    catalog.addChangeRows(id, Seq(row))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_null_ts")
+      .outputMode("append")
+      .start()
+    try {
+      val e = intercept[org.apache.spark.sql.streaming.StreamingQueryException] {
+        q.processAllAvailable()
+      }
+      // The CHANGELOG_CONTRACT_VIOLATION runtime error wraps the message; it should
+      // mention NULL_COMMIT_TIMESTAMP somewhere in the chain.
+      assert(e.getMessage.contains("NULL_COMMIT_TIMESTAMP") ||
+        Option(e.getCause).map(_.getMessage).getOrElse("").contains("NULL_COMMIT_TIMESTAMP"),
+        s"Expected NULL_COMMIT_TIMESTAMP in the error chain. Got: ${e.getMessage}")
+    } finally {
+      q.stop()
+    }
+  }
 }
