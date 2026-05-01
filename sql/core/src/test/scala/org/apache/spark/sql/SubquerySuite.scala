@@ -31,8 +31,7 @@ import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SubquerySuite extends QueryTest
-  with SharedSparkSession
+class SubquerySuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

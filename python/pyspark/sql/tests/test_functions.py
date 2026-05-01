@@ -3981,7 +3981,7 @@ class FunctionsTestsMixin:
         self.assertEqual(result[1][1], ["Frank", "Dave"])  # Sales
 
 
-class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
+class FunctionsTests(FunctionsTestsMixin, ReusedSQLTestCase):
     pass
 
 

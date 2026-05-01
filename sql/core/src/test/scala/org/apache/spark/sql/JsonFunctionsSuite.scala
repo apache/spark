@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
-class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
+class JsonFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("function get_json_object") {

@@ -33,7 +33,8 @@ import org.apache.spark.sql.types.IntegerType
  */
 class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
   with ColumnResolutionHelper {
-  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+  private val variableResolution =
+    new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
   /**
    * Checks for duplicate variable names and throws an exception if found.

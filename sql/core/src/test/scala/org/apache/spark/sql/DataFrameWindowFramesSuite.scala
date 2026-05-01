@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.CalendarIntervalType
 /**
  * Window frame testing for DataFrame API.
  */
-class DataFrameWindowFramesSuite extends QueryTest with SharedSparkSession {
+class DataFrameWindowFramesSuite extends SharedSparkSession {
   import testImplicits._
 
   test("reuse window partitionBy") {

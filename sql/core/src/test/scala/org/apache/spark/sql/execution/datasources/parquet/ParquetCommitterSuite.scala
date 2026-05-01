@@ -23,7 +23,7 @@ import org.apache.hadoop.mapreduce.{JobContext, OutputCommitter, TaskAttemptCont
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.{ParquetOutputCommitter, ParquetOutputFormat}
 
-import org.apache.spark.{LocalSparkContext, SparkFunSuite}
+import org.apache.spark.LocalSparkContext
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.SQLConf
@@ -33,8 +33,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Test logic related to choice of output committers.
  */
 @ExtendedSQLTest
-class ParquetCommitterSuite extends SparkFunSuite with QueryTest
-  with LocalSparkContext {
+class ParquetCommitterSuite extends QueryTest with LocalSparkContext {
 
   private val PARQUET_COMMITTER = classOf[ParquetOutputCommitter].getCanonicalName
 

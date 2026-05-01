@@ -533,6 +533,27 @@ private[sql] object CatalogV2Util {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
+  /**
+   * Construct a [[ViewInfo.Builder]] seeded from an existing view's metadata. Used by ALTER
+   * VIEW execs (SET / UNSET TBLPROPERTIES, ALTER VIEW ... WITH SCHEMA BINDING) and by
+   * `ApplyDefaultCollation` -- override the one field that changes, then `build` to produce
+   * the replacement payload for [[ViewCatalog#replaceView]]. Every other field flows through
+   * unchanged so a metadata-only mutation does not perturb the view body.
+   */
+  def viewInfoBuilderFrom(existing: ViewInfo): ViewInfo.Builder = {
+    val builder = new ViewInfo.Builder()
+    builder
+      .withSchema(existing.schema)
+      .withProperties(existing.properties)
+      .withQueryText(existing.queryText)
+      .withSqlConfigs(existing.sqlConfigs)
+      .withCurrentNamespace(existing.currentNamespace)
+      .withQueryColumnNames(existing.queryColumnNames)
+    Option(existing.currentCatalog).foreach(builder.withCurrentCatalog)
+    Option(existing.schemaMode).foreach(builder.withSchemaMode)
+    builder
+  }
+
   def convertTableProperties(t: TableSpec): Map[String, String] = {
     val props = convertTableProperties(
       t.properties, t.options, t.serde, t.location, t.comment,

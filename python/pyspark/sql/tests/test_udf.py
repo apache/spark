@@ -58,7 +58,7 @@ from pyspark.testing.utils import assertDataFrameEqual, timeout
 from pyspark.util import is_remote_only
 
 
-class BaseUDFTestsMixin(object):
+class BaseUDFTestsMixin:
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 

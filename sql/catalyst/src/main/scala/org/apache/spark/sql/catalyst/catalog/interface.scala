@@ -83,6 +83,7 @@ trait MetadataMapSupport {
           case JLong(value) => Some(new Date(value).toString)
           case _ => Some(jValue.values.toString)
         }
+      case "SQL Path" => SqlPathFormat.formatForDisplay(jValue)
       case _ => None
     }
     reformattedValue.map(value => key -> value)
@@ -444,10 +445,21 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None)
+    viewOriginalText: Option[String] = None,
+    // Multi-part identifier [catalog, namespace..., name] for tables synthesized from a v2
+    // `MetadataTable` whose namespace has more than one part -- the v1 `identifier:
+    // TableIdentifier` (single-string database) cannot carry that losslessly. `None` for
+    // v1-native tables; callers should use `fullIdent` which falls back to `identifier.nameParts`.
+    multipartIdentifier: Option[Seq[String]] = None)
   extends MetadataMapSupport {
 
   import CatalogTable._
+
+  /**
+   * The fully-qualified multi-part identifier. Prefers `multipartIdentifier` when set (v2-sourced
+   * tables with multi-level namespaces); otherwise reconstructs from `identifier.nameParts`.
+   */
+  def fullIdent: Seq[String] = multipartIdentifier.getOrElse(identifier.nameParts)
 
   /**
    * schema of this table's partition columns
@@ -543,20 +555,7 @@ case class CatalogTable(
    * Return the schema binding mode. Defaults to SchemaBinding if not a view or an older
    * version, unless the viewSchemaBindingMode config is set to false
    */
-  def viewSchemaMode: ViewSchemaMode = {
-    if (!SQLConf.get.viewSchemaBindingEnabled) {
-      SchemaUnsupported
-    } else {
-      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaBinding.toString)
-      schemaMode match {
-        case SchemaBinding.toString => SchemaBinding
-        case SchemaEvolution.toString => SchemaEvolution
-        case SchemaTypeEvolution.toString => SchemaTypeEvolution
-        case SchemaCompensation.toString => SchemaCompensation
-        case other => throw SparkException.internalError("Unexpected ViewSchemaMode")
-      }
-    }
-  }
+  def viewSchemaMode: ViewSchemaMode = CatalogTable.viewSchemaModeFromProperties(properties)
 
   /**
    * Return temporary view names the current view was referred. should be empty if the
@@ -609,6 +608,15 @@ case class CatalogTable(
           cause = Some(e))
     }
   }
+
+  /**
+   * Frozen SQL PATH stored when the view was created with [[SQLConf.PATH_ENABLED]].
+   * Serialized as a JSON array of path entries (each entry an array of identifier parts);
+   * virtual markers (e.g. `system.current_schema`) are materialized and, for persisted
+   * views, `system.session` is omitted.
+   */
+  def viewStoredResolutionPath: Option[String] =
+    properties.get(CatalogTable.VIEW_RESOLUTION_PATH)
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -674,6 +682,13 @@ case class CatalogTable(
       if (viewCatalogAndNamespaceInfos.nonEmpty) {
         import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
         map += "View Catalog and Namespace" -> JString(viewCatalogAndNamespaceInfos.quoted)
+      }
+      if (SQLConf.get.pathEnabled) {
+        viewStoredResolutionPath.foreach { pathStr =>
+          SqlPathFormat.toDescribeJson(pathStr).foreach { json =>
+            map += "SQL Path" -> json
+          }
+        }
       }
       val viewQueryOutputColumns: JValue = Try {
         if (viewSchemaMode == SchemaEvolution) {
@@ -765,9 +780,32 @@ object CatalogTable {
 
   val VIEW_SCHEMA_MODE = VIEW_PREFIX + "schemaMode"
 
+  /** Frozen expanded PATH at view creation (PATH feature); not a SQL config property. */
+  val VIEW_RESOLUTION_PATH = VIEW_PREFIX + "resolutionPath"
+
   val VIEW_STORING_ANALYZED_PLAN = VIEW_PREFIX + "storingAnalyzedPlan"
 
   val PROP_CLUSTERING_COLUMNS: String = "clusteringColumns"
+
+  /**
+   * Decode the view schema binding mode from a properties map. Shared between
+   * [[CatalogTable.viewSchemaMode]] and the v2 ALTER VIEW path which reads the mode directly
+   * from the existing view's [[TableInfo]] properties without materializing a full CatalogTable.
+   */
+  def viewSchemaModeFromProperties(properties: Map[String, String]): ViewSchemaMode = {
+    if (!SQLConf.get.viewSchemaBindingEnabled) {
+      SchemaUnsupported
+    } else {
+      val schemaMode = properties.getOrElse(VIEW_SCHEMA_MODE, SchemaBinding.toString)
+      schemaMode match {
+        case SchemaBinding.toString => SchemaBinding
+        case SchemaEvolution.toString => SchemaEvolution
+        case SchemaTypeEvolution.toString => SchemaTypeEvolution
+        case SchemaCompensation.toString => SchemaCompensation
+        case _ => throw SparkException.internalError("Unexpected ViewSchemaMode")
+      }
+    }
+  }
 
   def splitLargeTableProp(
       key: String,

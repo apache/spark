@@ -19,7 +19,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.{SparkArithmeticException, SparkConf}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * End-to-end tests for SQL Cursors.
  * Complete transcription of cursors.sql - all 87 tests with inline expected results.
  */
-class SqlScriptingCursorE2eSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingCursorE2eSuite extends SharedSparkSession {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

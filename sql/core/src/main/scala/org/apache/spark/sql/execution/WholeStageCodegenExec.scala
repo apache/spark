@@ -237,11 +237,11 @@ trait CodegenSupport extends SparkPlan {
    * Returns arguments for calling method and method definition parameters of the consume function.
    * And also returns the list of `ExprCode` for the parameters.
    */
-  private def constructConsumeParameters(
+  protected def constructConsumeParameters(
       ctx: CodegenContext,
       attributes: Seq[Attribute],
       variables: Seq[ExprCode],
-      row: String): (Seq[String], Seq[String], Seq[ExprCode]) = {
+      row: String = null): (Seq[String], Seq[String], Seq[ExprCode]) = {
     val arguments = mutable.ArrayBuffer[String]()
     val parameters = mutable.ArrayBuffer[String]()
     val paramVars = mutable.ArrayBuffer[ExprCode]()

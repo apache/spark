@@ -43,6 +43,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 @Evolving
 public interface Changelog {
 
+  /** Constant for the {@code _change_type} value of a row inserted into the table. */
+  String CHANGE_TYPE_INSERT = "insert";
+  /** Constant for the {@code _change_type} value of a row deleted from the table. */
+  String CHANGE_TYPE_DELETE = "delete";
+  /** Constant for the {@code _change_type} value of an update's pre-image row. */
+  String CHANGE_TYPE_UPDATE_PREIMAGE = "update_preimage";
+  /** Constant for the {@code _change_type} value of an update's post-image row. */
+  String CHANGE_TYPE_UPDATE_POSTIMAGE = "update_postimage";
+
   /** A name to identify this changelog. */
   String name();
 
@@ -95,22 +104,41 @@ public interface Changelog {
   ScanBuilder newScanBuilder(CaseInsensitiveStringMap options);
 
   /**
-   * Returns the columns that uniquely identify a row, used for update detection and
-   * net change computation.
+   * Returns the columns that uniquely identify a row, used for carry-over removal, update
+   * detection, and net change computation.
    * <p>
-   * The default implementation throws {@link UnsupportedOperationException}. Connectors
-   * that support update detection or net change computation must override this method.
+   * The default implementation throws {@link UnsupportedOperationException}. Connectors must
+   * override this method when any of {@link #containsCarryoverRows()},
+   * {@link #representsUpdateAsDeleteAndInsert()}, or {@link #containsIntermediateChanges()}
+   * returns {@code true}. Each referenced column must be non-nullable.
    */
   default NamedReference[] rowId() {
     throw new UnsupportedOperationException("rowId is not supported.");
   }
 
   /**
-   * Returns the column used for ordering changes within the same row identity, used for
-   * update detection.
+   * Returns the column that holds the row version — the commit version at which the row's
+   * content was last modified. The row version has these properties:
+   * <ul>
+   *   <li>Assigned the current commit version when the row is initially inserted.</li>
+   *   <li>Bumped to the current commit version when the row's content is updated.</li>
+   *   <li><b>Preserved</b> when the row is rewritten by a copy-on-write operation without a
+   *       content change — it is NOT bumped to the current commit version.</li>
+   * </ul>
+   * The row version is distinct from {@code _commit_version}. {@code _commit_version}
+   * identifies the commit that emitted this change row; the row version identifies the commit
+   * that last wrote the row's content. For a delete+insert pair produced within a single
+   * commit, both halves share the same row version if the pair is a copy-on-write
+   * carry-over, and have different row versions (old on the delete, new on the insert) if
+   * the pair is a true update.
    * <p>
-   * The default implementation throws {@link UnsupportedOperationException}. Connectors
-   * that support update detection must override this method.
+   * Spark uses the row version to distinguish copy-on-write carry-over from update without
+   * scanning data columns, for both carry-over removal and update detection.
+   * <p>
+   * The default implementation throws {@link UnsupportedOperationException}. Connectors must
+   * override this method when {@link #containsCarryoverRows()} or
+   * {@link #representsUpdateAsDeleteAndInsert()} returns {@code true}. The referenced
+   * column must be non-nullable.
    */
   default NamedReference rowVersion() {
     throw new UnsupportedOperationException("rowVersion is not supported.");

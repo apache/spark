@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{Expression, In, PredicateHelper, ScalaUDF}
 import org.apache.spark.sql.connector.catalog.BufferedRows
 import org.apache.spark.sql.connector.catalog.InMemoryEnhancedPartitionFilterTable
@@ -51,7 +51,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 8. Untranslatable, Partition Filter, 2nd Pass Accepted -> Pushed Down
  */
 class DataSourceV2EnhancedPartitionFilterSuite
-  extends QueryTest with SharedSparkSession with BeforeAndAfter with PredicateHelper {
+  extends SharedSparkSession with BeforeAndAfter with PredicateHelper {
 
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
   protected val partFilterTableName = "testpartfilter.t"

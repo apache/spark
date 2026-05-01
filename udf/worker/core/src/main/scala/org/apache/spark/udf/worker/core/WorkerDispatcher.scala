@@ -17,11 +17,11 @@
 package org.apache.spark.udf.worker.core
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.WorkerSpecification
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 
 /**
  * :: Experimental ::
- * Manages workers for a single [[WorkerSpecification]] and hides worker details from Spark.
+ * Manages workers for a single [[UDFWorkerSpecification]] and hides worker details from Spark.
  *
  * A [[WorkerDispatcher]] is created from a worker specification (plus context such
  * as security scope). It owns the underlying worker processes and connections,
@@ -31,7 +31,7 @@ import org.apache.spark.udf.worker.WorkerSpecification
 @Experimental
 trait WorkerDispatcher extends AutoCloseable {
 
-  def workerSpec: WorkerSpecification
+  def workerSpec: UDFWorkerSpecification
 
   /**
    * Creates a [[WorkerSession]] that maps to one single UDF execution.

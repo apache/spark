@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -112,6 +113,17 @@ object HiveResult extends SQLConfHelper {
       formatters: TimeFormatters,
       binaryFormatter: BinaryFormatter): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
+    case (value, dt) =>
+      TypeApiOps(dt).flatMap(_.formatExternal(value, nested)).getOrElse {
+        toHiveStringDefault(a, nested, formatters, binaryFormatter)
+      }
+  }
+
+  private def toHiveStringDefault(
+      a: (Any, DataType),
+      nested: Boolean,
+      formatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): String = a match {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)

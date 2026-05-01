@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test suite for SQL user-defined functions (UDFs).
  */
-class SQLFunctionSuite extends QueryTest with SharedSparkSession {
+class SQLFunctionSuite extends SharedSparkSession {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {

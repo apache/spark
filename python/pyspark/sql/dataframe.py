@@ -147,7 +147,7 @@ class DataFrame:
     ) -> "DataFrame":
         from pyspark.sql.classic.dataframe import DataFrame
 
-        return DataFrame.__new__(DataFrame, jdf, sql_ctx)
+        return DataFrame(jdf, sql_ctx)
 
     @property
     def sparkSession(self) -> "SparkSession":

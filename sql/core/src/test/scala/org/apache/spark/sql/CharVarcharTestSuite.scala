@@ -834,7 +834,7 @@ trait CharVarcharTestSuite extends QueryTest {
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
-class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
+class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
   test("user-specified schema in cast") {

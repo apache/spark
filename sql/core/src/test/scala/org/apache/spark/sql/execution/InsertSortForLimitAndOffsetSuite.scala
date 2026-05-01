@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{Dataset, QueryTest}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.IntegratedUDFTestUtils._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.rand
@@ -25,8 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class InsertSortForLimitAndOffsetSuite extends QueryTest
-  with SharedSparkSession
+class InsertSortForLimitAndOffsetSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

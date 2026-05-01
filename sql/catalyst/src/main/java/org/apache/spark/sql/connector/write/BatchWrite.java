@@ -85,6 +85,12 @@ public interface BatchWrite {
    * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
    * tasks may have committed successfully and one successful commit message per task will be
    * passed to this commit method. The remaining commit messages are ignored by Spark.
+   * <p>
+   * Note: this method signals that all data for this write operation has been successfully written.
+   * It is NOT a transactional commit. When this write is part of a
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction}, the transaction is
+   * committed separately via
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#commit()}.
    */
   void commit(WriterCommitMessage[] messages);
 

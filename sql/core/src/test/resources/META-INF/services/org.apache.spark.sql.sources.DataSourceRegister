@@ -18,6 +18,8 @@
 org.apache.spark.sql.sources.FakeSourceOne
 org.apache.spark.sql.sources.FakeSourceTwo
 org.apache.spark.sql.sources.FakeSourceThree
+org.apache.spark.sql.connector.FakePathBasedSource
+org.apache.spark.sql.connector.FakePathBasedSourceWithSessionConfig
 org.apache.spark.sql.sources.FakeSourceFour
 org.apache.fakesource.FakeExternalSourceOne
 org.apache.fakesource.FakeExternalSourceTwo

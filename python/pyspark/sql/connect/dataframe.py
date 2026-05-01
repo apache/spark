@@ -112,12 +112,12 @@ if TYPE_CHECKING:
 class DataFrame(ParentDataFrame):
     def __new__(
         cls,
-        plan: plan.LogicalPlan,
-        session: "SparkSession",
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__(plan, session)  # type: ignore[misc]
-        return self
+        # ParentDataFrame by default creates classic DataFrame for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid that.
+        return object.__new__(cls)
 
     def __init__(
         self,

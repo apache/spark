@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
@@ -114,7 +114,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
-      SparkPlanTest.executePlan(plan, hiveContext)
+      QueryTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -151,7 +151,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
-      SparkPlanTest.executePlan(plan, hiveContext)
+      QueryTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)
@@ -389,7 +389,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("b", CalendarIntervalType)()),
           child = df.select($"a", $"b").queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
-        SparkPlanTest.executePlan(plan, hiveContext)
+        QueryTest.executePlan(plan, hiveContext)
       }.getMessage
       assert(e1.contains("\"INTERVAL\" cannot be converted to Hive TypeInfo"))
 
@@ -401,7 +401,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
             AttributeReference("c", new TestUDT.MyDenseVectorUDT)()),
           child = df.select($"a", $"c").queryExecution.sparkPlan,
           ioschema = hiveIOSchema)
-        SparkPlanTest.executePlan(plan, hiveContext)
+        QueryTest.executePlan(plan, hiveContext)
       }.getMessage
       assert(e2.contains("UDT(\"ARRAY<DOUBLE>\") cannot be converted to Hive TypeInfo"))
     }

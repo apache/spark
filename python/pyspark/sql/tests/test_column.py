@@ -522,6 +522,89 @@ class ColumnTestsMixin:
         self.assertEqual(result[1][0], 40)
         self.assertEqual(result[2][0], 60)
 
+    def test_self_join(self):
+        df1 = self.spark.range(10).withColumn("a", sf.lit(0))
+        df2 = df1.withColumnRenamed("a", "b")
+        df = df1.join(df2, df1["a"] == df2["b"])
+        self.assertTrue(df.count() == 100)
+        df = df2.join(df1, df2["b"] == df1["a"])
+        self.assertTrue(df.count() == 100)
+
+    def test_self_join_II(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
+        df2 = df.select(df.a.alias("aa"), df.b)
+        df3 = df2.join(df, df2.b == df.b)
+        self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
+        self.assertTrue(df3.count() == 2)
+
+    def test_self_join_III(self):
+        df1 = self.spark.range(10).withColumn("value", sf.lit(1))
+        df2 = df1.union(df1)
+        df3 = df1.join(df2, df1.id == df2.id, "left")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_self_join_IV(self):
+        df1 = self.spark.range(10).withColumn("value", sf.lit(1))
+        df2 = df1.withColumn("value", sf.lit(2)).union(df1.withColumn("value", sf.lit(3)))
+        df3 = df1.join(df2, df1.id == df2.id, "right")
+        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
+        self.assertTrue(df3.count() == 20)
+
+    def test_select_join_keys(self):
+        df1 = self.spark.range(10).withColumn("v1", sf.lit(1))
+        df2 = self.spark.range(10).withColumn("v2", sf.lit(2))
+        for how in ["inner", "left", "right", "full", "cross"]:
+            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
+            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
+
+    def test_select_regular_column_with_reused_dataframe_hidden_in_natural_join(self):
+        # A DataFrame appears both as a direct join side and inside a natural/USING
+        # join that hides one of its columns into `metadataOutput`. When resolving
+        # `df2["id"]`, two candidates match the plan id: one from `p.output` (the
+        # direct join side) and one only visible via `p.metadataOutput` (the reused
+        # `df2` nested under the USING-join wrapper). We should prefer the regular
+        # candidate and not throw AMBIGUOUS_COLUMN_REFERENCE.
+        df1 = self.spark.createDataFrame([(10, "T1"), (20, "T2")], ["key", "val"])
+        df2 = self.spark.createDataFrame([(10,), (20,), (30,)], ["id"])
+        # The second row's id (99) does not match any df2 row, so the USING
+        # left-join in `enriched` produces NULL on the df2 side for val "T2".
+        # If `df2["id"]` were resolved to the hidden (USING-wrapper) candidate,
+        # the second row would yield NULL instead of 20, and the assertion below
+        # would fail. This pins resolution to the direct-side `id`.
+        df3 = self.spark.createDataFrame([(10, "T1"), (99, "T2")], ["id", "val"])
+        enriched = df3.join(df2, "id", "left")
+        result = (
+            df1.join(df2, df1["key"] == df2["id"], "left")
+            .join(enriched, "val", "full_outer")
+            .sort("val")
+            .select(df2["id"])
+        )
+        self.assertEqual(
+            [r["id"] for r in result.collect()],
+            [10, 20],
+        )
+
+    def test_drop_notexistent_col(self):
+        df1 = self.spark.createDataFrame(
+            [("a", "b", "c")],
+            schema="colA string, colB string, colC string",
+        )
+        df2 = self.spark.createDataFrame(
+            [("c", "d", "e")],
+            schema="colC string, colD string, colE string",
+        )
+        df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
+            "colB",
+            sf.when(
+                df1["colB"] == "b", sf.concat(df1["colB"].cast("string"), sf.lit("x"))
+            ).otherwise(df1["colB"]),
+        )
+        df4 = df3.drop(df1["colB"])
+
+        self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
+        self.assertEqual(df4.count(), 1)
+
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
     pass

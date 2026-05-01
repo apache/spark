@@ -27,7 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -60,8 +60,7 @@ import org.apache.spark.util.Utils
 
 @SlowSQLTest
 class AdaptiveQueryExecSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with AdaptiveSparkPlanHelper
   with PrivateMethodTester {
 

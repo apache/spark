@@ -19,16 +19,23 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.connector.catalog.SupportsDeleteV2
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 
 case class DeleteFromTableExec(
     table: SupportsDeleteV2,
     condition: Array[Predicate],
-    refreshCache: () => Unit) extends LeafV2CommandExec {
+    refreshCache: () => Unit,
+    transaction: Option[Transaction] = None) extends LeafV2CommandExec with TransactionalExec {
+
+  override def withTransaction(txn: Option[Transaction]): DeleteFromTableExec =
+    copy(transaction = txn)
 
   override protected def run(): Seq[InternalRow] = {
     table.deleteWhere(condition)
+    transaction.foreach(TransactionUtils.commit)
     refreshCache()
     Seq.empty
   }

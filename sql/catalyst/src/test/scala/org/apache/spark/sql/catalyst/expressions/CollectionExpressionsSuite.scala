@@ -3279,4 +3279,22 @@ class CollectionExpressionsSuite
       a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
     )
   }
+
+  test("SPARK-56567: Array insert with pos = Int.MinValue") {
+    val a = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayInsert(a, Literal(Int.MinValue), Literal(3), legacyNegativeIndex = false),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> (-BigInt(Int.MinValue)).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> "`array_insert`"))
+    checkErrorInExpression[SparkRuntimeException](
+      ArrayInsert(a, Literal(Int.MinValue), Literal(3), legacyNegativeIndex = true),
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.FUNCTION",
+      parameters = Map(
+        "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
+        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
+        "functionName" -> "`array_insert`"))
+  }
 }

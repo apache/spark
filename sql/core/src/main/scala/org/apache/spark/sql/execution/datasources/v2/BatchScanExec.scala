@@ -61,17 +61,10 @@ case class BatchScanExec(
 
   // Visible for testing
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] = {
-    val dataSourceFilters = runtimeFilters.flatMap {
-      case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
-      case f => DataSourceV2Strategy.translateScalarSubqueryFilterV2(f)
-    }
-
     val originalPartitioning = outputPartitioning
-    if (dataSourceFilters.nonEmpty) {
-      // the cast is safe as runtime filters are only assigned if the scan can be filtered
-      val filterableScan = scan.asInstanceOf[SupportsRuntimeV2Filtering]
-      filterableScan.filter(dataSourceFilters.toArray)
 
+    val filtered = PushDownUtils.pushRuntimeFilters(scan, runtimeFilters, table, output)
+    if (filtered) {
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
 

@@ -57,6 +57,9 @@ JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", "")
 # Go to https://issues.apache.org/jira/secure/ViewProfile.jspa -> Personal Access Tokens for
 # your own token management.
 JIRA_ACCESS_TOKEN = os.environ.get("JIRA_ACCESS_TOKEN")
+# Connection timeout (in seconds) for the JIRA client. Raise this if the default is too
+# short for your network, e.g. when the TLS handshake goes through a slow proxy.
+JIRA_CONNECT_TIMEOUT = float(os.environ.get("JIRA_CONNECT_TIMEOUT", "3.05"))
 # OAuth key used for issuing requests against the GitHub API. If this is not defined, then requests
 # will be unauthenticated. You should only need to configure this if you find yourself regularly
 # exceeding your IP's unauthenticated request rate limit. You can create an OAuth key at
@@ -562,7 +565,9 @@ def initialize_jira():
         print_error("ERROR finding jira library. Run 'pip3 install jira' to install.")
         continue_maybe("Continue without jira?")
     elif JIRA_ACCESS_TOKEN:
-        client = jira.client.JIRA(jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(3.05, 30))
+        client = jira.client.JIRA(
+            jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(JIRA_CONNECT_TIMEOUT, 30)
+        )
         try:
             # Eagerly check if the token is valid to align with the behavior of username/password
             # authn
@@ -582,7 +587,9 @@ def initialize_jira():
         print("Visit https://issues.apache.org/jira/secure/ViewProfile.jspa ")
         print("and click 'Personal Access Tokens' menu to manage your own tokens.")
         asf_jira = jira.client.JIRA(
-            jira_server, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD), timeout=(3.05, 30)
+            jira_server,
+            basic_auth=(JIRA_USERNAME, JIRA_PASSWORD),
+            timeout=(JIRA_CONNECT_TIMEOUT, 30),
         )
     else:
         print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")

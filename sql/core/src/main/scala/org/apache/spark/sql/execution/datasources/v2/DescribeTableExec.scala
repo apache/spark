@@ -37,9 +37,7 @@ case class DescribeTableExec(
     isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    addSchema(rows)
-    addPartitioning(rows)
-    addClustering(rows)
+    addBaseDescription(rows)
 
     if (isExtended) {
       addMetadataColumns(rows)
@@ -48,6 +46,13 @@ case class DescribeTableExec(
       addTableConstraints(rows)
     }
     rows.toSeq
+  }
+
+  /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
+  private[v2] def addBaseDescription(rows: ArrayBuffer[InternalRow]): Unit = {
+    addSchema(rows)
+    addPartitioning(rows)
+    addClustering(rows)
   }
 
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {

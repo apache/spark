@@ -119,12 +119,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {
-    if (relation.table.id != null && relation.table.id != currentTable.id) {
-      throw QueryCompilationErrors.tableIdChangedAfterAnalysis(
-        relation.name,
-        capturedTableId = relation.table.id,
-        currentTableId = currentTable.id)
-    }
+    V2TableUtil.validateTableId(relation.name, relation.table.id, currentTable)
   }
 
   private def validateDataColumns(

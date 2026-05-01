@@ -50,13 +50,18 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * @param distributePartitions When true, splits for a key are distributed across the expected
  *                             partitions (padding with empty partitions). When false, all splits
  *                             are replicated to every expected partition for that key.
+ * @param enableSortedMerge When true, uses [[SortedMergeCoalescedRDD]] to perform a k-way merge
+ *                          of the coalesced partitions, preserving the child's output ordering
+ *                          end-to-end. Set by [[EnsureRequirements]] when a parent operator
+ *                          requires the ordering that this node can satisfy via sorted merge.
  */
 case class GroupPartitionsExec(
     child: SparkPlan,
     @transient joinKeyPositions: Option[Seq[Int]] = None,
     @transient expectedPartitionKeys: Option[Seq[(InternalRowComparableWrapper, Int)]] = None,
     @transient reducers: Option[Seq[Option[Reducer[_, _]]]] = None,
-    @transient distributePartitions: Boolean = false
+    @transient distributePartitions: Boolean = false,
+    @transient enableSortedMerge: Boolean = false
   ) extends UnaryExecNode {
 
   override def outputPartitioning: Partitioning = {
@@ -160,6 +165,8 @@ case class GroupPartitionsExec(
 
   @transient lazy val isGrouped: Boolean = groupedPartitionsTuple._2
 
+  @transient private lazy val hasCoalescing: Boolean = groupedPartitions.exists(_._2.size > 1)
+
   // Whether the child subtree is safe to use with SortedMergeCoalescedRDD (k-way merge).
   //
   // --- The general problem ---
@@ -223,10 +230,23 @@ case class GroupPartitionsExec(
       child.outputOrdering.nonEmpty &&
       childIsSafeForKWayMerge
 
+  /**
+   * Returns a copy of this node with k-way merge enabled if it is feasible: the config is on,
+   * the child has an ordering, the child subtree is `SafeForKWayMerge`, and this node actually
+   * coalesces partitions.
+   */
+  def tryEnableSortedMerge(): Option[GroupPartitionsExec] = {
+    Option.when(hasCoalescing && canUseSortedMerge) {
+      val newGroupPartitions = copy(enableSortedMerge = true)
+      newGroupPartitions.copyTagsFrom(this)
+      newGroupPartitions
+    }
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     if (groupedPartitions.isEmpty) {
       sparkContext.emptyRDD
-    } else if (canUseSortedMerge && groupedPartitions.exists(_._2.size > 1)) {
+    } else if (hasCoalescing && enableSortedMerge && canUseSortedMerge) {
       val partitionCoalescer = new GroupedPartitionCoalescer(groupedPartitions.map(_._2))
       val rowOrdering = new LazyCodeGenOrdering(child.outputOrdering, child.output)
       new SortedMergeCoalescedRDD[InternalRow](
@@ -241,7 +261,7 @@ case class GroupPartitionsExec(
   }
 
   override def supportsColumnar: Boolean =
-    child.supportsColumnar && !(canUseSortedMerge && groupedPartitions.exists(_._2.size > 1))
+    child.supportsColumnar && !(hasCoalescing && enableSortedMerge && canUseSortedMerge)
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     if (groupedPartitions.isEmpty) {
@@ -258,12 +278,12 @@ case class GroupPartitionsExec(
     copy(child = newChild)
 
   override def outputOrdering: Seq[SortOrder] = {
-    if (groupedPartitions.forall(_._2.size <= 1)) {
+    if (!hasCoalescing) {
       // No coalescing: each output partition is exactly one input partition. The child's
       // within-partition ordering is fully preserved (including any key-derived ordering that
       // `DataSourceV2ScanExecBase` already prepended).
       child.outputOrdering
-    } else if (canUseSortedMerge) {
+    } else if (enableSortedMerge && canUseSortedMerge) {
       // Coalescing with sorted merge: SortedMergeCoalescedRDD performs a k-way merge using the
       // child's ordering, so the full within-partition ordering is preserved end-to-end.
       child.outputOrdering

@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.{V1Table, V1ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
@@ -71,10 +71,19 @@ case class DescribeRelationJsonCommand(
         if (partitionSpec.nonEmpty) {
           throw QueryCompilationErrors.descPartitionNotAllowedOnView(v.identifier.name())
         }
+        // Resolve `v.info` to a `CatalogTable` so the JSON renderer below can read v1-shaped
+        // fields uniformly. Session-catalog views carry the original `CatalogTable` inside
+        // `V1ViewInfo`; non-session v2 views carry a plain `ViewInfo` and are projected to a
+        // `CatalogTable` via `V1Table.toCatalogTable`, the same conversion the
+        // `CreateTableLike` strategy case in `DataSourceV2Strategy` uses.
+        val metadata = v.info match {
+          case v1Info: V1ViewInfo => v1Info.v1Table
+          case info => V1Table.toCatalogTable(v.catalog, v.identifier, info)
+        }
         describeIdentifier(v.identifier.toQualifiedNameParts(v.catalog), jsonMap)
-        describeColsJson(v.metadata.schema, jsonMap)
-        describeFormattedTableInfoJson(v.metadata, jsonMap)
-        describeViewSqlConfsJson(v.metadata, jsonMap)
+        describeColsJson(metadata.schema, jsonMap)
+        describeFormattedTableInfoJson(metadata, jsonMap)
+        describeViewSqlConfsJson(metadata, jsonMap)
 
       case ResolvedTable(catalog, identifier, V1Table(metadata), _) =>
         describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)

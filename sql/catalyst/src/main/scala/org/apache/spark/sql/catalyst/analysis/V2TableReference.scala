@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.Context
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TemporaryViewContext
+import org.apache.spark.sql.catalyst.analysis.V2TableReference.TransactionContext
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -37,7 +38,7 @@ import org.apache.spark.sql.connector.catalog.V2TableUtil
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_TOP_LEVEL_FIELDS
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -79,14 +80,24 @@ private[sql] case class V2TableReference private(
 private[sql] object V2TableReference {
 
   case class TableInfo(
+      tableId: Option[String],
       columns: Seq[Column],
       metadataColumns: Seq[MetadataColumn])
 
   sealed trait Context
+  /** Context for relations that are re-resolved on access of a dataframe temp view. */
   case class TemporaryViewContext(viewName: Seq[String]) extends Context
+  /** Context for relations that are re-resolved through a transaction catalog. */
+  case object TransactionContext extends Context
 
   def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {
     create(relation, TemporaryViewContext(viewName))
+  }
+
+  // V2TableReference nodes in the transaction context are produced by
+  // UnresolveRelationsInTransaction which unresolves already resolved relations.
+  def createForTransaction(relation: DataSourceV2Relation): V2TableReference = {
+    create(relation, TransactionContext)
   }
 
   private def create(relation: DataSourceV2Relation, context: Context): V2TableReference = {
@@ -95,6 +106,7 @@ private[sql] object V2TableReference {
       relation.identifier.get,
       relation.options,
       TableInfo(
+        tableId = Option(relation.table.id()),
         columns = relation.table.columns.toImmutableArraySeq,
         metadataColumns = V2TableUtil.extractMetadataColumns(relation)),
       relation.output,
@@ -110,8 +122,32 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     ref.context match {
       case ctx: TemporaryViewContext =>
         validateLoadedTableInTempView(table, ref, ctx)
+      case TransactionContext =>
+        validateLoadedTableInTransaction(table, ref)
       case ctx =>
         throw SparkException.internalError(s"Unknown table ref context: ${ctx.getClass.getName}")
+    }
+  }
+
+  private def validateLoadedTableInTransaction(table: Table, ref: V2TableReference): Unit = {
+    // Make sure the table was not dropped and recreated.
+    ref.info.tableId.foreach(V2TableUtil.validateTableId(ref.name, _, table))
+
+    // Do not allow schema evolution to pre-analysed dataframes that are later used in
+    // transactional writes. This is because the entire plans was built based on the original schema
+    // and any schema change would make the plan structurally invalid. This is inline with the
+    // semantics of SPARK-54444.
+    val dataErrors = V2TableUtil.validateCapturedColumns(
+      table = table,
+      originCols = ref.info.columns,
+      mode = PROHIBIT_CHANGES)
+    if (dataErrors.nonEmpty) {
+      throw QueryCompilationErrors.columnsChangedAfterAnalysis(ref.name, dataErrors)
+    }
+
+    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(table, ref.info.metadataColumns)
+    if (metaErrors.nonEmpty) {
+      throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(ref.name, metaErrors)
     }
   }
 
