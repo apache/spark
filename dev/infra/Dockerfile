@@ -36,7 +36,7 @@ RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update
 RUN PKGS="python3.8 python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS)
 RUN ls /bin/python*
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
 
 RUN curl -sS https://bootstrap.pypa.io/pip/3.8/get-pip.py | python3.8
 
