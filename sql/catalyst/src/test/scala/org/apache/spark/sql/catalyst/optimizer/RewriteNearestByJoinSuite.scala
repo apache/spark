@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateStruct, Inline, Literal, MonotonicallyIncreasingID}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, MaxMinByK}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateStruct, Inline, Literal, MonotonicallyIncreasingID, Rand}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, First, MaxMinByK}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, JoinHint, LocalRelation, NearestByJoin, Project}
 
@@ -111,5 +111,146 @@ class RewriteNearestByJoinSuite extends PlanTest {
       reverse = false, outer = true)
 
     comparePlans(rewritten, expected, checkAnalysis = false)
+  }
+
+  test("distance, left outer, k=2") {
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val query = NearestByJoin(
+      left, right, LeftOuter, approx = true, numResults = 2,
+      rankingExpression = left.output(0) - right.output(0),
+      direction = NearestByDistance)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+    val expected = expectedRewrite(
+      left, right, 2,
+      ranking = left.output(0) - right.output(0),
+      reverse = true, outer = true)
+
+    comparePlans(rewritten, expected, checkAnalysis = false)
+  }
+
+  test("EXACT (approx = false) produces the same rewrite as APPROX") {
+    // Locks in the current invariant that APPROX and EXACT lower through the same
+    // brute-force rewrite. If a future change diverges them (e.g. an APPROX-only
+    // indexed-ANN strategy lands), this test fails and forces an intentional update.
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val query = NearestByJoin(
+      left, right, Inner, approx = false, numResults = 5,
+      rankingExpression = left.output(0) + right.output(0),
+      direction = NearestBySimilarity)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+    val expected = expectedRewrite(
+      left, right, 5,
+      ranking = left.output(0) + right.output(0),
+      reverse = false, outer = false)
+
+    comparePlans(rewritten, expected, checkAnalysis = false)
+  }
+
+  test("k = 1 (lower boundary)") {
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = left.output(0) + right.output(0),
+      direction = NearestBySimilarity)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+    val expected = expectedRewrite(
+      left, right, 1,
+      ranking = left.output(0) + right.output(0),
+      reverse = false, outer = false)
+
+    comparePlans(rewritten, expected, checkAnalysis = false)
+  }
+
+  test("k = NearestByJoin.MaxNumResults (upper boundary)") {
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = NearestByJoin.MaxNumResults,
+      rankingExpression = left.output(0) + right.output(0),
+      direction = NearestBySimilarity)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+    val expected = expectedRewrite(
+      left, right, NearestByJoin.MaxNumResults,
+      ranking = left.output(0) + right.output(0),
+      reverse = false, outer = false)
+
+    comparePlans(rewritten, expected, checkAnalysis = false)
+  }
+
+  test("self-join: rewrite resolves duplicate ExprIds via DeduplicateRelations") {
+    // Exercises the NearestByJoin arm in DeduplicateRelations. Without it, `.analyze` on
+    // a self-join would leave the right side sharing ExprIds with the left and the
+    // CheckAnalysis arm would throw an internal error.
+    val t = LocalRelation($"a".int, $"b".int)
+    val query = NearestByJoin(
+      t, t, Inner, approx = true, numResults = 1,
+      rankingExpression = t.output(0) + t.output(0),
+      direction = NearestBySimilarity)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+    val tDup = LocalRelation($"a".int, $"b".int)
+    val expected = expectedRewrite(
+      t, tDup, 1,
+      ranking = t.output(0) + tDup.output(0),
+      reverse = false, outer = false)
+
+    comparePlans(rewritten, expected, checkAnalysis = false)
+  }
+
+  test("APPROX with nondeterministic ranking pre-materializes via Project") {
+    // Locks in the Project-injection shape: when the ranking expression is nondeterministic
+    // (legal only under APPROX), the rewrite inserts a Project above the Join that aliases
+    // the ranking value as `__ranking__`. MaxMinByK then sees a plain AttributeReference as
+    // its ordering input. This relies on Projection's standard partition-aware initialization
+    // to call `Rand.initialize` once per partition before any value is evaluated; otherwise
+    // MaxMinByK would call `eval` on an uninitialized Rand and throw at runtime. If a future
+    // optimizer change folds this Project away, this test fails and forces an intentional
+    // update.
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val ranking = Rand(Literal(0L)) + right.output(0)
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = ranking,
+      direction = NearestBySimilarity)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+
+    val agg = rewritten.collect { case a: Aggregate => a }.head
+    assert(agg.child.isInstanceOf[Project],
+      s"expected materializing Project above the Join when ranking is nondeterministic, " +
+        s"got ${agg.child.getClass.getSimpleName}")
+    val maxMinByK = agg.aggregateExpressions.collectFirst {
+      case Alias(AggregateExpression(m: MaxMinByK, _, _, _, _), "__nearest_matches__") => m
+    }.getOrElse(fail("expected MaxMinByK aggregate in the rewritten plan"))
+    assert(maxMinByK.orderingExpr.isInstanceOf[AttributeReference],
+      "ranking expression should be materialized as an attribute, not evaluated inside MaxMinByK")
+    assert(maxMinByK.orderingExpr.asInstanceOf[AttributeReference].name == "__ranking__")
+    assert(rewritten.exists(_.expressions.exists(_.exists(_.isInstanceOf[Rand]))),
+      "Rand should still appear in the plan -- inside the materializing Project, not lost")
+  }
+
+  test("APPROX with deterministic ranking does NOT inject the materializing Project") {
+    // Counterpart to the test above: confirms the Project-injection is gated on
+    // `!rankingExpression.deterministic` so the deterministic path's plan shape is unchanged.
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = left.output(0) + right.output(0),
+      direction = NearestBySimilarity)
+
+    val rewritten = RewriteNearestByJoin(query.analyze)
+    val agg = rewritten.collect { case a: Aggregate => a }.head
+    assert(agg.child.isInstanceOf[Join],
+      s"expected Aggregate's child to be the Join directly when ranking is deterministic, " +
+        s"got ${agg.child.getClass.getSimpleName}")
   }
 }

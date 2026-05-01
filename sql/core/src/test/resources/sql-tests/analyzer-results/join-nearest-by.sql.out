@@ -111,6 +111,28 @@ Project [user_id#x, product#x]
 
 
 -- !query
+SELECT a.user_id AS a_id, b.user_id AS b_id
+FROM users a JOIN users b
+  APPROX NEAREST 1 BY DISTANCE abs(a.score - b.score)
+ORDER BY a.user_id, b.user_id
+-- !query analysis
+Project [a_id#x, b_id#x]
++- Sort [user_id#x ASC NULLS FIRST, user_id#x ASC NULLS FIRST], true
+   +- Project [user_id#x AS a_id#x, user_id#x AS b_id#x, user_id#x, user_id#x]
+      +- NearestByJoin Inner, true, 1, abs((score#x - score#x)), NearestByDistance
+         :- SubqueryAlias a
+         :  +- SubqueryAlias spark_catalog.default.users
+         :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+         :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+         :           +- LocalRelation [col1#x, col2#x]
+         +- SubqueryAlias b
+            +- SubqueryAlias spark_catalog.default.users
+               +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+                  +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+                     +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 SELECT u.user_id, p.product
 FROM users u RIGHT OUTER JOIN products p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
@@ -224,6 +246,185 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "JOIN products p\n  EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore"
   } ]
 }
+
+
+-- !query
+SELECT COUNT(*) AS num_rows
+FROM (
+  SELECT u.user_id, p.product
+  FROM users u JOIN products p
+    APPROX NEAREST 1 BY SIMILARITY rand() + p.pscore
+)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT COUNT(*) AS num_rows
+FROM (
+  SELECT u.user_id, p.product
+  FROM users u JOIN products p
+    APPROX NEAREST 2 BY DISTANCE rand() + p.pscore
+)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+EXPLAIN
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY rand(0) + p.pscore
+-- !query analysis
+ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
+
+
+-- !query
+SET spark.sql.crossJoin.enabled = false
+-- !query analysis
+SetCommand (spark.sql.crossJoin.enabled,Some(false))
+
+
+-- !query
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query analysis
+Project [user_id#x, product#x]
++- NearestByJoin Inner, true, 1, -abs((score#x - pscore#x)), NearestBySimilarity
+   :- SubqueryAlias u
+   :  +- SubqueryAlias spark_catalog.default.users
+   :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+   :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+   :           +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias p
+      +- SubqueryAlias spark_catalog.default.products
+         +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
+            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+WHERE p.product != 'C'
+-- !query analysis
+Project [user_id#x, product#x]
++- Filter NOT (product#x = C)
+   +- NearestByJoin Inner, true, 2, abs((score#x - pscore#x)), NearestByDistance
+      :- SubqueryAlias u
+      :  +- SubqueryAlias spark_catalog.default.users
+      :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+      :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+      :           +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias p
+         +- SubqueryAlias spark_catalog.default.products
+            +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
+               +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+WHERE u.user_id > 1
+-- !query analysis
+Project [user_id#x, product#x]
++- Filter (user_id#x > 1)
+   +- NearestByJoin Inner, true, 2, abs((score#x - pscore#x)), NearestByDistance
+      :- SubqueryAlias u
+      :  +- SubqueryAlias spark_catalog.default.users
+      :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+      :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+      :           +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias p
+         +- SubqueryAlias spark_catalog.default.products
+            +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
+               +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT u.user_id, p.product
+FROM users u LEFT OUTER JOIN products p
+  EXACT NEAREST 1 BY DISTANCE abs(u.score - p.pscore)
+-- !query analysis
+Project [user_id#x, product#x]
++- NearestByJoin LeftOuter, false, 1, abs((score#x - pscore#x)), NearestByDistance
+   :- SubqueryAlias u
+   :  +- SubqueryAlias spark_catalog.default.users
+   :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+   :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+   :           +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias p
+      +- SubqueryAlias spark_catalog.default.products
+         +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
+            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+EXPLAIN
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+WHERE u.user_id > 1
+-- !query analysis
+ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
+
+
+-- !query
+EXPLAIN
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+WHERE p.product != 'C'
+-- !query analysis
+ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
+
+
+-- !query
+SET spark.sql.crossJoin.enabled = true
+-- !query analysis
+SetCommand (spark.sql.crossJoin.enabled,Some(true))
+
+
+-- !query
+CREATE OR REPLACE TEMP VIEW tied_products(product, pscore)
+  AS VALUES ('A', 10.0), ('B', 10.0), ('C', 10.0)
+-- !query analysis
+CreateViewCommand `tied_products`, [(product,None), (pscore,None)], VALUES ('A', 10.0), ('B', 10.0), ('C', 10.0), false, true, LocalTempView, UNSUPPORTED, true
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT u.user_id, COUNT(*) AS num_matches
+FROM users u JOIN tied_products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+GROUP BY u.user_id
+ORDER BY u.user_id
+-- !query analysis
+Sort [user_id#x ASC NULLS FIRST], true
++- Aggregate [user_id#x], [user_id#x, count(1) AS num_matches#xL]
+   +- NearestByJoin Inner, true, 2, abs((score#x - pscore#x)), NearestByDistance
+      :- SubqueryAlias u
+      :  +- SubqueryAlias spark_catalog.default.users
+      :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+      :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+      :           +- LocalRelation [col1#x, col2#x]
+      +- SubqueryAlias p
+         +- SubqueryAlias tied_products
+            +- View (`tied_products`, [product#x, pscore#x])
+               +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP VIEW tied_products
+-- !query analysis
+DropTempViewCommand tied_products, false
 
 
 -- !query

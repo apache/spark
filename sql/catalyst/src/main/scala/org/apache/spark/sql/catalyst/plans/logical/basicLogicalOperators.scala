@@ -2424,26 +2424,18 @@ object AsOfJoin {
 object NearestByJoin {
   /** Upper bound on `numResults`. Mirrors the K-overload limit of `MaxMinByK`. */
   val MaxNumResults: Int = 100000
-
-  /**
-   * Tag set by `RewriteNearestByJoin` on the synthetic `Join` it produces. The synthetic join
-   * has no condition by construction (it is the cross-join step in the rewrite, bounded by the
-   * subsequent `MaxMinByK` aggregate). `CheckCartesianProducts` skips any join carrying this
-   * tag so that user queries written as `NEAREST BY` are not rejected when
-   * `spark.sql.crossJoin.enabled` is set to `false`.
-   */
-  val SYNTHETIC_JOIN_TAG: TreeNodeTag[Unit] = TreeNodeTag("nearestBySyntheticJoin")
 }
 
 /**
- * A logical plan for nearest-by top-K ranking join. For each row on the left side it returns up to
- * `numResults` rows from the right side ordered by `rankingExpression`:
+ * A logical plan for a nearest-by top-K ranking join. For each row on the left side it returns
+ * up to `numResults` rows from the right side ordered by `rankingExpression`:
  *   - `NearestByDistance`: smallest values of `rankingExpression` first.
  *   - `NearestBySimilarity`: largest values of `rankingExpression` first.
  *
- * When `approx` is true, the optimizer is allowed to use approximate strategies such as indexed
- * nearest-neighbor search. When `approx` is false (EXACT), brute-force evaluation is used and the
- * ranking expression must be deterministic.
+ * The `approx` field records the user's APPROX/EXACT choice from the SPIP. Today both modes
+ * use the same brute-force rewrite. The flag is preserved on the logical plan so future
+ * indexed approximate-nearest-neighbor strategies can fire only when `approx = true`,
+ * leaving EXACT queries unaffected. See the SPIP linked from SPARK-56395.
  */
 case class NearestByJoin(
     left: LogicalPlan,
@@ -2452,10 +2444,14 @@ case class NearestByJoin(
     approx: Boolean,
     numResults: Int,
     rankingExpression: Expression,
-    direction: NearestByDirection) extends BinaryNode {
+    direction: NearestByDirection)
+  extends BinaryNode with SupportsNonDeterministicExpression {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
     s"Unsupported nearest-by join type $joinType")
+
+  // APPROX permits a nondeterministic ranking expression (per the SPIP); the rewrite
+  override def allowNonDeterministicExpression: Boolean = approx
 
   // Right-side attributes are always declared nullable because the rewrite materializes them
   // through `Inline` over `MaxMinByK`'s `ArrayType(.., containsNull = true)`, which widens

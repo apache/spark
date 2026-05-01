@@ -2367,7 +2367,8 @@ class AstBuilder extends DataTypeAstBuilder
           throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
         }
         if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
-          throw QueryParsingErrors.unsupportedNearestByJoinTypeError(ctx, baseJoinType.sql)
+          throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
+            ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
         }
         val clause = ctx.nearestByClause
         val approx = clause.APPROX != null

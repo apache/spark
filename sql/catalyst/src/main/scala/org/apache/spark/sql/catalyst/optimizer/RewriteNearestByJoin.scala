@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.rules._
  *      +- Aggregate [__qid],
  *           [first(left.col0) AS left.col0, ..., first(left.colN-1) AS left.colN-1,
  *            max_by(struct(right.*), expr, k) AS _matches]
- *          +- Join Inner
+ *          +- Join LeftOuter
  *             :- Project [left.*, monotonically_increasing_id() AS __qid]
  *             :  +- left
  *             +- right
@@ -50,8 +50,17 @@ import org.apache.spark.sql.catalyst.rules._
  * constructed with `outer = true` so left rows with no matches (empty/null `_matches`) are
  * preserved with `NULL` right-side columns.
  *
- * In this initial implementation both `APPROX` and `EXACT` take the same brute-force rewrite
- * path. `APPROX` establishes the contract for future indexed-ANN strategies.
+ * If `rankingExpression` is nondeterministic (legal only under `APPROX`), an extra
+ * `Project` is inserted above the `Join` to materialize the value as `__ranking__`. The
+ * standard projection machinery runs `Nondeterministic.initialize(partitionIndex)` on every
+ * nondeterministic descendant before any value is evaluated, so `MaxMinByK` only ever sees a
+ * plain `AttributeReference` and never evaluates a nondeterministic expression directly.
+ *
+ * Unlike [[RewriteAsOfJoin]], which uses a correlated scalar subquery, this rule materializes
+ * the cross product directly. A scalar subquery returns a single value per left row, so it
+ * cannot carry K matches without an array-valued subquery + `Generate(Inline(...))` -- which
+ * collapses back to the same cross product after decorrelation. The aggregate-then-inline form
+ * makes the intended shape explicit and avoids round-tripping through subquery decorrelation.
  */
 object RewriteNearestByJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
@@ -68,14 +77,20 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //    columns after the aggregate + inline below. When `right` is non-empty every left
       //    row already has right-row pairings, so LEFT OUTER and INNER are equivalent.
       //
-      //    Tag the join so `CheckCartesianProducts` skips it: the rewrite intentionally
-      //    materializes a cross product bounded by the downstream `MaxMinByK` aggregate, so
-      //    `spark.sql.crossJoin.enabled = false` should not reject user queries written as
-      //    `NEAREST BY`.
+      //    `CheckCartesianProducts` recognizes this synthetic join structurally (by its
+      //    parent `Aggregate` containing a `MaxMinByK`) and skips it, so user queries
+      //    written as `NEAREST BY` are not rejected when `spark.sql.crossJoin.enabled` is
+      //    false.
       val join = Join(taggedLeft, right, LeftOuter, None, JoinHint.NONE)
-      join.setTagValue(NearestByJoin.SYNTHETIC_JOIN_TAG, ())
 
-      // 3. Aggregate grouped by `__qid`:
+      val (aggInput, rankingForAgg) = if (!rankingExpression.deterministic) {
+        val rankingAlias = Alias(rankingExpression, "__ranking__")()
+        Project(join.output :+ rankingAlias, join) -> rankingAlias.toAttribute
+      } else {
+        join -> rankingExpression
+      }
+
+      // 4. Aggregate grouped by `__qid`:
       //      - first(col) for every left column so it flows to the output.
       //      - max_by/min_by(struct(right.*), ranking, k) as `_matches`.
       //    The ranking expression references left and right columns directly; no outer
@@ -89,7 +104,7 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       }
       val topK = MaxMinByK(
         rightStruct,
-        rankingExpression,
+        rankingForAgg,
         Literal(numResults),
         reverse = reverse).toAggregateExpression()
       val matchesAlias = Alias(topK, "__nearest_matches__")()
@@ -103,13 +118,14 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
           First(attr, ignoreNulls = false).toAggregateExpression(),
           attr.name)(exprId = attr.exprId, qualifier = attr.qualifier)
       }
-      val aggregate = Aggregate(Seq(qidAttr), firstLeftAggs :+ matchesAlias, join)
+      val aggregate = Aggregate(Seq(qidAttr), firstLeftAggs :+ matchesAlias, aggInput)
 
       // 4. Generate inline(_matches) expands the K-element array into K rows, exposing each
       //    struct field as a top-level column. `outer = true` for LEFT OUTER preserves the
       //    left row with NULL right columns when there are no matches.
       val generatorOutput = right.output.map { a =>
-        AttributeReference(a.name, a.dataType, nullable = true)(qualifier = a.qualifier)
+        AttributeReference(a.name, a.dataType, nullable = true, a.metadata)(
+          qualifier = a.qualifier)
       }
       val generate = Generate(
         Inline(matchesAlias.toAttribute),

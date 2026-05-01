@@ -210,11 +210,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def unsupportedNearestByJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
+  def unsupportedNearestByJoinTypeError(
+      ctx: ParserRuleContext,
+      joinType: String,
+      supported: String): Throwable = {
     new ParseException(
       errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
-      messageParameters =
-        Map("joinType" -> toSQLStmt(joinType), "supported" -> "'INNER', 'LEFT OUTER'"),
+      messageParameters = Map("joinType" -> toSQLStmt(joinType), "supported" -> supported),
       ctx)
   }
 

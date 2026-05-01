@@ -5335,7 +5335,7 @@
       },
       "STREAMING_NOT_SUPPORTED" : {
         "message" : [
-          "NEAREST BY join is not supported with streaming DataFrames/Datasets."
+          "nearest-by join is not supported with streaming DataFrames/Datasets."
         ]
       },
       "UNSUPPORTED_DIRECTION" : {
