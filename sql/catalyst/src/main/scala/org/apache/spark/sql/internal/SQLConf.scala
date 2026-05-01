@@ -6609,13 +6609,12 @@ object SQLConf {
     .createWithDefault(false)
 
   val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
-    buildConf(
-      "spark.sql.optimizer.mergeSubplans.filterPropagation.filterPropagationThroughJoin.enabled")
+    buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
       .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +
         "merging, allowing subplans that differ only in their filter conditions and share a " +
         "common join to be merged into a single scan. A filter attribute is only propagated " +
         "through a join when it originates from the non-nullable (preserved) side: the left side " +
-        "of LeftOuter/LeftSemi/LeftAnti, the right side of RightOuter, or either  side of " +
+        "of LeftOuter/LeftSemi/LeftAnti, the right side of RightOuter, or either side of " +
         "Inner/Cross. FullOuter joins are never eligible. " +
         s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
       .version("4.2.0")

@@ -86,17 +86,24 @@ object PlanMerger {
  * When `filterPropagationEnabled` is true, non-grouping [[Aggregate]]s over the same base plan
  * with different [[Filter]] conditions can also be merged. The filter conditions are exposed as
  * boolean [[Project]] attributes and consumed at the [[Aggregate]] as FILTER clauses.
- * When both sides carry a [[Filter]] (the symmetric case), merging broadens the scan to
- * OR(f1, f2), which may reduce IO pruning. This path is separately gated by
+ * When both sides carry a [[Filter]] (the symmetric case), merging broadens the scan to OR(f1, f2),
+ * which may reduce IO pruning. This path is separately gated by
  * `symmetricFilterPropagationEnabled`.
  * When plans also differ in intermediate [[Project]] expressions, those are wrapped with
- * `If(filterAttr, expr, null)` to avoid computing the expression for rows that do not
- * match that side's filter condition.
- * Filter propagation also works through [[Join]] nodes: a filter on one child of the join
- * produces a boolean attribute that flows through the join output to the enclosing
- * [[Aggregate]]. Propagation is skipped when both the left and right children simultaneously
- * produce filter attributes, as combining them would require an additional AND alias above
- * the join (not yet supported).
+ * `If(filterAttr, expr, null)` to avoid computing the expression for rows that do not match that
+ * side's filter condition.
+ * Filter propagation also works through [[Join]] nodes: a filter on one child of the join produces
+ * a boolean attribute that flows through the join output to the enclosing [[Aggregate]].
+ * Propagation is only safe when the filter originates from the non-nullable side of the join, as
+ * enforced by `filterSafeForJoin`. When the filter is on the nullable side, the merged base plan
+ * restores rows that were filtered out of the nullable child, turning what were unmatched
+ * NULL-padded rows in the original plan into matched rows with real column values. This changes the
+ * result of expressions like `coalesce(col, default)` in the aggregate: an originally unmatched row
+ * would have contributed `default` via `coalesce(NULL, default)`, but in the merged plan it is
+ * matched, its real column value fails the filter, and `FILTER (WHERE false)` discards it entirely.
+ * Propagation is also skipped when both the left and right children simultaneously produce filter
+ * attributes, as combining them would require an additional AND alias above the join (not yet
+ * supported).
  *
  * {{{
  *   // Input plans
@@ -443,7 +450,7 @@ class PlanMerger(
                        // rows are NULL-padded so f=NULL, causing FILTER (WHERE f) to incorrectly
                        // exclude rows that should contribute to the aggregate. Right-side
                        // attributes are also absent from semi/anti join output.
-                       (leftNPFilter.isEmpty  && leftCPFilter.isEmpty  ||
+                       (leftNPFilter.isEmpty && leftCPFilter.isEmpty  ||
                            filterSafeForJoin(fromLeft = true, cp.joinType)) &&
                        (rightNPFilter.isEmpty && rightCPFilter.isEmpty ||
                            filterSafeForJoin(fromLeft = false, cp.joinType)) =>
@@ -474,11 +481,15 @@ class PlanMerger(
   //
   // Two conditions must both hold:
   //   1. The attribute is in the join's output (rules out the right side of LeftSemi/LeftAnti).
-  //   2. The attribute is never NULL in the join's output, i.e. it comes from the "preserved"
-  //      side that is never NULL-padded. For an outer join, unmatched rows from the nullable
-  //      side are padded with NULLs, so a filter attribute from that side would be NULL for
-  //      those rows. FILTER (WHERE NULL) would then incorrectly exclude those rows from the
-  //      aggregate, even though they appear in the original join result and should contribute.
+  //   2. The filter must originate from the non-nullable ("preserved") side of the join.
+  //      When a filter is on the nullable side, the merged base plan no longer applies it to the
+  //      nullable child's scan, so rows that were previously absent from that child reappear as
+  //      matched join rows instead of unmatched NULL-padded rows. This changes aggregate
+  //      expressions that use the NULL-padded column: e.g. for `sum(coalesce(col, default))`, an
+  //      originally unmatched row would have contributed `default` via `coalesce(NULL, default)`,
+  //      but in the merged plan the row is now matched with its real column value, fails the
+  //      filter, and FILTER (WHERE false) discards it -- losing the `default` contribution
+  //      entirely.
   private def filterSafeForJoin(fromLeft: Boolean, joinType: JoinType): Boolean =
     if (fromLeft) {
       // Left side is never NULL-padded in: Inner, LeftOuter, LeftSemi, LeftAnti, Cross.

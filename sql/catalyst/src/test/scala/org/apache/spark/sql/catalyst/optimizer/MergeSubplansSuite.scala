@@ -1618,6 +1618,40 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  test("SPARK-56677: Merge non-grouping subqueries with filter on left child of a Cross join") {
+    // Cross join never NULL-pads either side, so filter propagation is safe from both sides.
+    val subquery1 = ScalarSubquery(
+      testRelation.join(testRelation2, Cross, Some($"a" === $"d"))
+        .groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"a" > 1).join(testRelation2, Cross, Some($"a" === $"d"))
+        .groupBy()(max($"a").as("max_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    val f0Alias = Alias($"a" > 1, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val mergedSubquery = testRelation
+      .select(testRelation.output ++ Seq(f0Alias): _*)
+      .join(testRelation2, Cross, Some($"a" === $"d"))
+      .groupBy()(
+        sum($"a").as("sum_a"),
+        max($"a", Some(f0)).as("max_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("max_a"), $"max_a"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    }
+  }
+
   test("SPARK-56677: Do not merge subqueries when both join children have independent filters") {
     // np has filters on BOTH left and right join children simultaneously. The guard in the
     // Join case prevents this merge because combining two independent filter attributes would
@@ -1697,6 +1731,23 @@ class MergeSubplansSuite extends PlanTest {
         .groupBy()(sum($"a").as("sum_a")))
     val subquery2 = ScalarSubquery(
       testRelation.where($"a" > 1).join(testRelation2, RightOuter, Some($"a" === $"d"))
+        .groupBy()(max($"a").as("max_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2)
+
+    withSQLConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+    }
+  }
+
+  test("SPARK-56677: Do not merge subqueries when filter is on either side of a FullOuter join") {
+    // For a FullOuter join both sides are nullable: unmatched rows from either side produce NULL
+    // for the other side's columns. A filter attribute from either side would be NULL for those
+    // unmatched rows, making propagation unsafe from both sides.
+    val subquery1 = ScalarSubquery(
+      testRelation.join(testRelation2, FullOuter, Some($"a" === $"d"))
+        .groupBy()(sum($"a").as("sum_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation.where($"a" > 1).join(testRelation2, FullOuter, Some($"a" === $"d"))
         .groupBy()(max($"a").as("max_a")))
     val originalQuery = testRelation.select(subquery1, subquery2)
 
