@@ -33,17 +33,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Catalog / Namespace / [Database] / <entity> row formatting shared by
+ * Catalog / Namespace / Database / <entity> row formatting shared by
  * `DescribeTableExec.addTableDetails` and `DescribeV2ViewExec.run`. Hosting it in one place
- * keeps the v1-compat rule (single-segment namespaces additionally surface a `Database` row,
- * mirroring v1 `CatalogTable.toJsonLinkedHashMap`) as a single source of truth so the table
- * and view paths can't drift.
+ * keeps the row layout (including the v1-compat `Database` row) as a single source of truth
+ * so the table and view paths can't drift.
  */
 private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
   /**
-   * Append the structured identifier rows (`Catalog`, `Namespace`, optional v1-compat
-   * `Database`, `<entityLabel>`) to `rows`. `entityLabel` is `"Table"` for a v2 table and
-   * `"View"` for a v2 view -- the only divergence between the two paths.
+   * Append the structured identifier rows (`Catalog`, `Namespace`, `Database`,
+   * `<entityLabel>`) to `rows`. `entityLabel` is `"Table"` for a v2 table and `"View"` for a
+   * v2 view -- the only divergence between the two paths.
    *
    * Row shapes:
    *  - `Catalog` carries the catalog plugin name (always present for v2).
@@ -51,10 +50,11 @@ private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
    *    `quoteIfNeeded` applied per segment (so segments containing dots round-trip). Always
    *    emitted; for an empty namespace (root-level entity) the value is the empty string,
    *    so the row's presence stays uniform across v2 outputs.
-   *  - `Database` is emitted only when the namespace is exactly one segment, matching v1's
-   *    `identifier.database.get` (raw segment, no quoting). Multi-segment and empty
-   *    namespaces can't be rendered as a single-string `database` losslessly, so the row is
-   *    omitted in those cases; consumers needing a quoting-safe form should read `Namespace`.
+   *  - `Database` is always emitted for v1 compatibility. Its value is the trailing
+   *    namespace segment (so multi-segment namespaces still surface their leaf segment),
+   *    or the empty string when the namespace is the catalog root. Consumers that need
+   *    the full namespace should read `Namespace`; `Database` alone is not round-trip-safe
+   *    for multi-segment cases.
    *  - `<entityLabel>` is the unqualified entity name from `Identifier.name()`.
    */
   protected def addIdentifierRows(
@@ -64,9 +64,7 @@ private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
       entityLabel: String): Unit = {
     rows += toCatalystRow("Catalog", catalogName, "")
     rows += toCatalystRow("Namespace", identifier.namespace().quoted, "")
-    if (identifier.namespace().length == 1) {
-      rows += toCatalystRow("Database", identifier.namespace().head, "")
-    }
+    rows += toCatalystRow("Database", identifier.namespace().lastOption.getOrElse(""), "")
     rows += toCatalystRow(entityLabel, identifier.name(), "")
   }
 }

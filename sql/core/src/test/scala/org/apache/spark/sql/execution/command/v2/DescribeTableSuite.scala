@@ -241,20 +241,20 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
     }
   }
 
-  test("DESCRIBE TABLE EXTENDED with a multi-segment namespace omits Database " +
-      "and joins Namespace with dots") {
-    // Multi-segment v2 namespaces can't be rendered as a single-string `database`
-    // losslessly, so the v1-compat `Database` row is omitted; only `Namespace` is
-    // emitted, with segments joined by `.` (and `quoteIfNeeded` applied per segment --
-    // not exercised here because both segments are valid bare identifiers).
+  test("DESCRIBE TABLE EXTENDED with a multi-segment namespace surfaces the leaf " +
+      "segment in `Database` and joins `Namespace` with dots") {
+    // Multi-segment v2 namespaces still emit a `Database` row for v1 compatibility,
+    // carrying the trailing namespace segment. `Namespace` carries the full dot-joined
+    // form for consumers that need the complete path (with `quoteIfNeeded` applied per
+    // segment -- not exercised here because both segments are valid bare identifiers).
     withNamespaceAndTable("ns1.ns2", "table") { tbl =>
       sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing")
       val rows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
       val byName = rows.map(r => r.getString(0) -> r.getString(1)).toMap
       assert(byName.get("Catalog").contains(catalog))
       assert(byName.get("Namespace").contains("ns1.ns2"))
-      assert(!byName.contains("Database"),
-        "multi-segment namespace must NOT emit the v1-compat `Database` row")
+      assert(byName.get("Database").contains("ns2"),
+        "multi-segment namespace must surface the trailing segment as `Database`")
       assert(byName.get("Table").contains("table"))
     }
   }
