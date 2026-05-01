@@ -68,7 +68,7 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
     // Scheduler is not created yet at init time; resolve it lazily in the periodic task.
     sparkContext = sc
 
-    periodicService.scheduleAtFixedRate(() => {
+    periodicService.scheduleAtFixedRate(() => if (!sparkContext.isStopped) {
       try {
         sparkContext.schedulerBackend match {
           case backend: KubernetesClusterSchedulerBackend =>
