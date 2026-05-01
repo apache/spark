@@ -39,40 +39,20 @@ class VariableResolution(
     extends SQLConfHelper {
 
   /**
-   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path.
-   *
-   * When PATH is not explicitly set (PATH disabled, or PATH enabled with no SET PATH),
-   * the answer is fully determined by the default path, which always includes system.session
-   * ([[CatalogManager.sqlResolutionPathEntries]] falls back to
-   * [[org.apache.spark.sql.internal.SQLConf.defaultPathOrder]]). Short-circuit before reading
-   * `catalogManager.currentCatalog.name()`, which loads the configured default catalog and
-   * would otherwise raise CATALOG_NOT_FOUND on every column-resolution pass when the
-   * default catalog is misconfigured.
+   * Variables only live in `system.session` (there is no persistent variable catalog), so
+   * unqualified lookups are gated solely on whether the SQL path includes that namespace.
+   * Qualified names target `system.session` directly and bypass the gate.
    */
   private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
-    if (nameParts.length != 1) return true
-    val pathExplicitlySet = conf.pathEnabled && catalogManager.sessionPathEntries.isDefined
-    if (!pathExplicitlySet) return true
-    catalogManager.sessionScopeUnqualifiedAllowed(
-      catalogManager.currentCatalog.name(),
-      catalogManager.currentNamespace.toSeq)
+    nameParts.length != 1 || catalogManager.isSystemSessionOnPath
   }
 
   /**
-   * Returns the path entries that should be reported in `UNRESOLVED_VARIABLE` for `nameParts`.
-   * For unqualified lookups (1 part) the lookup goes through the SQL PATH, so the full resolved
-   * path entries are reported. For qualified lookups (2 / 3 parts) the namespace is fixed at
-   * `system.session`, so a single `[SYSTEM.SESSION]` entry is reported.
+   * Search-path entries to report in `UNRESOLVED_VARIABLE`: variables can only ever be in
+   * `system.session`, so that is the only entry we ever search.
    */
-  def searchPathEntriesForError(nameParts: Seq[String]): Seq[Seq[String]] = {
-    if (nameParts.length != 1) {
-      Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-    } else {
-      catalogManager.sqlResolutionPathEntries(
-        catalogManager.currentCatalog.name(),
-        catalogManager.currentNamespace.toSeq)
-    }
-  }
+  def searchPathEntriesForError: Seq[Seq[String]] =
+    Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
 
   /**
    * Resolves a `multipartName` to an [[Expression]] tree, supporting nested field access.

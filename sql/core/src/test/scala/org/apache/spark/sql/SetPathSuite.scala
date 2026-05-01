@@ -385,7 +385,7 @@ class SetPathSuite extends SharedSparkSession {
           sqlState = "42883",
           parameters = Map(
             "variableName" -> "`path_var_gate`",
-            "searchPath" -> "[`spark_catalog`.`default`]"),
+            "searchPath" -> "[`system`.`session`]"),
           context = ExpectedContext("SET VAR path_var_gate = 8", 0, 24))
 
         sql("SET VAR system.session.path_var_gate = 9")

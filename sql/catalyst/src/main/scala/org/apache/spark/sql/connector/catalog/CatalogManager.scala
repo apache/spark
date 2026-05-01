@@ -202,12 +202,24 @@ class CatalogManager(
       currentCatalog, currentNamespace,
       currentCatalog, currentNamespace)
 
-  /** True if [[sqlResolutionPathEntries]] includes `system.session`. */
-  def sessionScopeUnqualifiedAllowed(
-      currentCatalog: String,
-      currentNamespace: Seq[String]): Boolean =
-    sqlResolutionPathEntries(currentCatalog, currentNamespace)
-      .exists(CatalogManager.isSystemSessionPathEntry)
+  /**
+   * True if `system.session` is on the SQL path. Only literal path entries can be
+   * `system.session`; the [[CurrentSchemaEntry]] marker resolves to the current schema, which
+   * never matches. Inspecting the stored entries directly avoids loading the configured default
+   * catalog (which [[currentCatalog]] would force).
+   */
+  def isSystemSessionOnPath: Boolean = synchronized {
+    if (!conf.pathEnabled) return true
+    _sessionPath match {
+      case None => true
+      case Some(entries) =>
+        entries.exists {
+          case CatalogManager.LiteralPathEntry(parts) =>
+            CatalogManager.isSystemSessionPathEntry(parts)
+          case _ => false
+        }
+    }
+  }
 
   /**
    * Single source of truth for analysis-time resolution path entries used by relation, routine,
