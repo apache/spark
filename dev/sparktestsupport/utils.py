@@ -127,8 +127,11 @@ def check_upgraded_pom_dependencies(
         run_cmd(["git", "fetch", "origin", str(target_branch + ":" + target_branch)])
     else:
         diff_target = target_ref
+    # The correct grammar is git diff <old> <new>, but identify_changed_files_from_git_commits
+    # uses it differently. It doesn't matter for that function because it only needs the file
+    # name, but we need to know which change is "new" to locate the new version.
     raw_output = subprocess.check_output(
-        ["git", "diff", patch_sha, diff_target, ":(top)pom.xml"], universal_newlines=True
+        ["git", "diff", diff_target, patch_sha, ":(top)pom.xml"], universal_newlines=True
     )
 
     changed_versions = []
