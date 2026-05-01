@@ -311,7 +311,7 @@ object DataType {
         messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
-  private[sql] def parseStructField(json: JValue): StructField = json match {
+  private def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
           ("metadata", JObject(metadataFields)),
           ("name", JString(name)),

@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.json4s.{JObject, JString}
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, parse, pretty, render}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
@@ -75,20 +74,6 @@ case class StructField(
       ("nullable" -> nullable) ~
       ("metadata" -> metadataJson)
   }
-
-  /**
-   * The compact JSON representation of this StructField, including name, type, nullable, and
-   * metadata. Inverse of [[StructField.fromJson]].
-   *
-   * @since 4.2.0
-   */
-  def json: String = compact(render(jsonValue))
-
-  /** The pretty (i.e. indented) JSON representation of this StructField.
-   *
-   * @since 4.2.0
-   */
-  def prettyJson: String = pretty(render(jsonValue))
 
   private[sql] def dataTypeJsonValue: JValue = {
     if (collationMetadata.isEmpty) return dataType.jsonValue
@@ -287,19 +272,4 @@ case class StructField(
     s"${QuotingUtils.quoteIfNeeded(name)} ${dataType.sql}$nullDDL" +
       s"$getDDLDefault$getDDLComment"
   }
-}
-
-/**
- * @since 4.2.0
- */
-@Stable
-object StructField {
-
-  /**
-   * Parses a JSON string produced by [[StructField.json]] back into a `StructField`. The JSON
-   * must encode a single field with `name`, `type`, `nullable`, and `metadata`.
-   *
-   * @since 4.2.0
-   */
-  def fromJson(json: String): StructField = DataType.parseStructField(parse(json))
 }

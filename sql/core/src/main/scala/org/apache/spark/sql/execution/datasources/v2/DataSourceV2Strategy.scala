@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -338,9 +338,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Parse + analyze the YAML body here (during planning). This mirrors the v1 path's
       // late analysis in `CreateMetricViewCommand.run` -- the metric-view source plan is not
       // a SQL string, so it can't ride along as a regular `query` `LogicalPlan` field on the
-      // logical command the way `CreateView` does.
+      // logical command the way `CreateView` does. Pass the full multi-part name so v2 metric
+      // views with multi-level-namespace targets analyze correctly (`asTableIdentifier` would
+      // throw `requiresSinglePartNamespaceError` for namespace arity > 1).
+      val nameParts = (catalog.name() +: ident.namespace().toIndexedSeq) :+ ident.name()
       val analyzed = MetricViewHelper.analyzeMetricViewText(
-        session, ident.asTableIdentifier, originalText)
+        session, nameParts, originalText)
       val metricView = MetricViewFactory.fromYAML(originalText)
       val mergedProps = properties ++ metricView.getProperties
       val depParts = MetricViewHelper.collectTableDependencies(analyzed)
@@ -381,6 +384,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       RenameV2ViewExec(
         catalog.asInstanceOf[ViewCatalog], ident, newName.asIdentifier) :: Nil
+
+    case ShowCreateTable(rpv @ ResolvedPersistentView(catalog, ident, _), _, _)
+        if rpv.info.properties.get(TableCatalog.PROP_TABLE_TYPE) ==
+          TableSummary.METRIC_VIEW_TABLE_TYPE =>
+      // SHOW CREATE TABLE on a metric view is explicitly unsupported: `ShowCreateV2ViewExec`
+      // would emit a plain `CREATE VIEW <ident> AS <yaml>`, which is not a round-trippable
+      // metric-view DDL form (the right form is `CREATE VIEW <ident> WITH METRICS LANGUAGE
+      // YAML AS $$ <yaml> $$`). Reject up front rather than emit lossy DDL.
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "SHOW CREATE TABLE")
 
     case ShowCreateTable(rpv @ ResolvedPersistentView(catalog, ident, _), _, output) =>
       val quoted = (catalog.name() +: ident.asMultipartIdentifier).map(quoteIfNeeded).mkString(".")

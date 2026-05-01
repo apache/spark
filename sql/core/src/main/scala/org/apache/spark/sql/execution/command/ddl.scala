@@ -1089,11 +1089,11 @@ object DDLUtils extends Logging {
       isView: Boolean): Unit = {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
-        case CatalogTableType.VIEW if !isView =>
+        case t if (t == CatalogTableType.VIEW || t == CatalogTableType.METRIC_VIEW) && !isView =>
           throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
             viewName = tableMetadata.identifier.table
           )
-        case o if o != CatalogTableType.VIEW && isView =>
+        case o if o != CatalogTableType.VIEW && o != CatalogTableType.METRIC_VIEW && isView =>
           throw QueryCompilationErrors.cannotAlterTableWithAlterViewError(
             tableName = tableMetadata.identifier.table
           )

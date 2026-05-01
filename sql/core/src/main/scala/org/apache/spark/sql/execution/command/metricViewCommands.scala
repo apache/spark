@@ -68,7 +68,8 @@ case class CreateMetricViewCommand(
       resolved: ResolvedIdentifier): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val name = resolved.identifier.asTableIdentifier
-    val analyzed = MetricViewHelper.analyzeMetricViewText(sparkSession, name, originalText)
+    val analyzed = MetricViewHelper.analyzeMetricViewText(
+      sparkSession, name.nameParts, originalText)
     validateUserColumns(name, analyzed)
     catalog.createTable(
       ViewHelper.prepareTable(
@@ -122,15 +123,41 @@ object MetricViewHelper {
     tables.distinct.toSeq
   }
 
+  /**
+   * Analyzes a metric-view YAML body so the create / alter path can capture the source plan
+   * and its dependencies.
+   *
+   * `nameParts` is the multi-part target identifier (catalog + namespace + table). The synthetic
+   * [[CatalogTable]] used as analysis context still carries a [[TableIdentifier]] (capped at
+   * 3 parts: catalog + database + table); for multi-level v2 namespaces we collapse the
+   * intermediate namespace components into the synthetic `database` slot. The synthetic identifier
+   * is not used to resolve the view body itself, so this collapse is observationally invisible to
+   * the analyzed plan; `verifyTemporaryObjectsNotExists` continues to receive the full
+   * `nameParts` so error messages still render the multi-part form.
+   */
   def analyzeMetricViewText(
       session: SparkSession,
-      name: TableIdentifier,
+      nameParts: Seq[String],
       viewText: String): LogicalPlan = {
     val analyzer = session.sessionState.analyzer
+    val syntheticIdent = nameParts match {
+      case Seq(table) =>
+        TableIdentifier(table)
+      case Seq(db, table) =>
+        TableIdentifier(table, Some(db))
+      case parts =>
+        // 3+ parts: catalog is the head, table is the last, the middle (1..n-1) collapses
+        // into the synthetic `database` slot. We dot-join the intermediate components so a
+        // human inspecting the synthetic identifier can still see them.
+        TableIdentifier(
+          parts.last,
+          Some(parts.slice(1, parts.length - 1).mkString(".")),
+          Some(parts.head))
+    }
     // this metadata is used for analysis check, it'll be replaced during create/update with
     // more accurate information
     val tableMeta = CatalogTable(
-      identifier = name,
+      identifier = syntheticIdent,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = new StructType(),
@@ -140,7 +167,7 @@ object MetricViewHelper {
       tableMeta, viewText, session.sessionState.sqlParser)
     val analyzed = analyzer.executeAndCheck(metricViewNode, new QueryPlanningTracker)
     ViewHelper.verifyTemporaryObjectsNotExists(
-      isTemporary = false, name.nameParts, analyzed, Seq.empty)
+      isTemporary = false, nameParts, analyzed, Seq.empty)
     analyzed
   }
 }

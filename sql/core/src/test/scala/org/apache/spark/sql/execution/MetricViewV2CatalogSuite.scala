@@ -378,11 +378,14 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
              |$yaml
              |$$$$""".stripMargin)
       }
-      // CreateV2ViewExec / CreateV2MetricViewExec route this through
-      // `unsupportedCreateOrReplaceViewOnTableError` which maps to
-      // `EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE`.
-      assert(ex.getCondition === "EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE",
-        s"Expected EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE, got ${ex.getCondition}: ${ex.getMessage}")
+      // SPARK-56655 added an analyzer-time pre-check for "ident already occupied by a table"
+      // before the v2 view-create exec runs, so the more specific
+      // `EXPECT_VIEW_NOT_TABLE.NO_ALTERNATIVE` decoded by `CreateV2MetricViewExec.run`'s catch
+      // block is no longer reachable when a *plain* table sits at the ident -- the analyzer
+      // raises `TABLE_OR_VIEW_ALREADY_EXISTS` first. Both errors carry the same actionable
+      // signal ("can't create a view here because something else already lives at this ident").
+      assert(ex.getCondition === "TABLE_OR_VIEW_ALREADY_EXISTS",
+        s"Expected TABLE_OR_VIEW_ALREADY_EXISTS, got ${ex.getCondition}: ${ex.getMessage}")
     }
   }
 
@@ -431,6 +434,49 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     // surfaces directly for the missing-view-ability case.
     assert(ex.getCondition === "MISSING_CATALOG_ABILITY.VIEWS")
     assert(ex.getMessage.contains("VIEWS"))
+  }
+
+  test("CREATE VIEW ... WITH METRICS at a multi-level-namespace v2 target succeeds") {
+    val deepNamespace = Array("ns_a", "ns_b")
+    val deepMetricViewName = "mv_deep"
+    val fullDeepName =
+      s"$testCatalogName.${deepNamespace.mkString(".")}.$deepMetricViewName"
+    withTestCatalogTables {
+      // Pre-create the multi-level namespace + a source table inside it. The metric view
+      // *target* lives in the same multi-level namespace -- that's what exercises the
+      // `MetricViewHelper.analyzeMetricViewText` lift to multi-part nameParts. The pre-lift
+      // code path failed at `ident.asTableIdentifier` with `requiresSinglePartNamespaceError`.
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $testCatalogName.${deepNamespace.head}")
+      sql(s"CREATE NAMESPACE IF NOT EXISTS " +
+        s"$testCatalogName.${deepNamespace.mkString(".")}")
+      try {
+        val mv = MetricView(
+          "0.1",
+          AssetSource(fullSourceTableName),
+          where = None,
+          select = metricViewColumns)
+        val yaml = MetricViewFactory.toYAML(mv)
+        sql(
+          s"""CREATE VIEW $fullDeepName
+             |WITH METRICS
+             |LANGUAGE YAML
+             |AS
+             |$$$$
+             |$yaml
+             |$$$$""".stripMargin)
+
+        val deepIdent = Identifier.of(deepNamespace, deepMetricViewName)
+        val info = MetricViewRecordingCatalog.capturedViews.get(deepIdent)
+        assert(info != null, s"Expected ViewInfo for $deepIdent to be captured")
+        assert(info.properties().get(TableCatalog.PROP_TABLE_TYPE)
+          === TableSummary.METRIC_VIEW_TABLE_TYPE)
+      } finally {
+        scala.util.Try(sql(s"DROP VIEW IF EXISTS $fullDeepName"))
+        sql(s"DROP NAMESPACE IF EXISTS " +
+          s"$testCatalogName.${deepNamespace.mkString(".")} CASCADE")
+        sql(s"DROP NAMESPACE IF EXISTS $testCatalogName.${deepNamespace.head} CASCADE")
+      }
+    }
   }
 
   // ============================================================
@@ -697,18 +743,23 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
 
       // DESCRIBE TABLE EXTENDED resolves the ident through `Analyzer.lookupTableOrView`,
       // which calls `TableViewCatalog.loadTableOrView` once and gets back a
-      // `MetadataTable(ViewInfo)`. `V1Table.toCatalogTable(ViewInfo)` reconstructs the
-      // V1 representation; the resulting `CatalogTable.toJsonLinkedHashMap` (interface.scala)
-      // then emits view-context rows because `tableType == METRIC_VIEW` was added to the
-      // VIEW gate. Without that gate fix, "View Text" / "View Original Text" disappear.
+      // `MetadataTable(ViewInfo)`. The analyzer wraps it as a `ResolvedPersistentView` and
+      // `DataSourceV2Strategy` routes through SPARK-56655's `DescribeV2ViewExec`, which
+      // reads the typed `ViewInfo` directly and emits the standard "Type" / "View Text" /
+      // "View Current Catalog" / "View Schema Mode" / etc. rows. The "Type" row was added
+      // alongside this metric-view PR so `DescribeV2ViewExec` matches v1 parity for the
+      // v1 `CatalogTable.toJsonLinkedHashMap` `Type` row, and so users see whether they're
+      // looking at a plain VIEW or a sub-kind like METRIC_VIEW.
       val rows = sql(s"DESCRIBE TABLE EXTENDED $fullMetricViewName").collect()
       val rowMap = rows.map(r => r.getString(0) -> r.getString(1)).toMap
 
       assert(rowMap.contains("View Text"),
         s"Expected 'View Text' row in DESCRIBE EXTENDED output, got keys: ${rowMap.keys}")
-      assert(rowMap("View Text") === yaml,
+      // `DescribeV2ViewExec` writes `viewInfo.queryText` directly, so trim handles the
+      // leading/trailing newline the SQL `$$ ... $$` fixture inserts vs. the bare yaml body.
+      assert(rowMap("View Text").trim === yaml.trim,
         s"View Text should round-trip the YAML body, got: ${rowMap("View Text")}")
-      assert(rowMap.get("Type").exists(_.contains("METRIC_VIEW")),
+      assert(rowMap.get("Type").contains(TableSummary.METRIC_VIEW_TABLE_TYPE),
         s"Type row should reflect METRIC_VIEW, got: ${rowMap.get("Type")}")
     }
   }
@@ -750,7 +801,7 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("DROP TABLE on a v2 metric view throws EXPECT_TABLE_NOT_VIEW") {
+  test("DROP TABLE on a v2 metric view throws WRONG_COMMAND_FOR_OBJECT_TYPE") {
     withTestCatalogTables {
       val mv = MetricView(
         "0.1",
@@ -759,15 +810,16 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         select = metricViewColumns)
       createMetricView(fullMetricViewName, mv)
 
-      // `DropTableExec` first probes `tableExists` (false for a view per the TableViewCatalog
-      // passive-filtering contract), then falls back to `viewExists` and -- when the entity
-      // exists as a view but a table was requested -- throws `EXPECT_TABLE_NOT_VIEW` to
-      // distinguish "wrong type" from "missing".
+      // SPARK-56655's `DropTableExec` actively rejects with `WRONG_COMMAND_FOR_OBJECT_TYPE`
+      // ("Use DROP VIEW instead") when a view sits at the ident, replacing the prior
+      // `EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE` decoding. Same actionable signal for users.
       val ex = intercept[AnalysisException] {
         sql(s"DROP TABLE $fullMetricViewName")
       }
-      assert(ex.getCondition === "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        s"Expected EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE, got ${ex.getCondition}: ${ex.getMessage}")
+      assert(ex.getCondition === "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        s"Expected WRONG_COMMAND_FOR_OBJECT_TYPE, got ${ex.getCondition}: ${ex.getMessage}")
+      assert(ex.getMessage.contains("DROP VIEW"),
+        s"Error message should mention 'DROP VIEW', got: ${ex.getMessage}")
 
       // The metric view is still present after the failed DROP TABLE.
       val ident = Identifier.of(Array(testNamespace), metricViewName)
@@ -776,7 +828,7 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("DROP TABLE IF EXISTS on a v2 metric view also throws EXPECT_TABLE_NOT_VIEW") {
+  test("DROP TABLE IF EXISTS on a v2 metric view also throws WRONG_COMMAND_FOR_OBJECT_TYPE") {
     withTestCatalogTables {
       val mv = MetricView(
         "0.1",
@@ -786,13 +838,13 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       createMetricView(fullMetricViewName, mv)
 
       // IF EXISTS does not silence the wrong-type error: the entity exists, just not as a
-      // table. (This mirrors the v1 `DropTableCommand` behavior, where `IF EXISTS` only
-      // short-circuits the not-found branch.)
+      // table. (Mirrors the v1 `DropTableCommand` behavior; `IF EXISTS` only short-circuits
+      // the not-found branch.)
       val ex = intercept[AnalysisException] {
         sql(s"DROP TABLE IF EXISTS $fullMetricViewName")
       }
-      assert(ex.getCondition === "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
-        s"Expected EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE, got ${ex.getCondition}: ${ex.getMessage}")
+      assert(ex.getCondition === "WRONG_COMMAND_FOR_OBJECT_TYPE",
+        s"Expected WRONG_COMMAND_FOR_OBJECT_TYPE, got ${ex.getCondition}: ${ex.getMessage}")
     }
   }
 
@@ -826,7 +878,7 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SHOW TABLES does not list v2 metric views") {
+  test("SHOW TABLES on a v2 TableViewCatalog lists both tables and metric views") {
     withTestCatalogTables {
       val mv = MetricView(
         "0.1",
@@ -836,13 +888,13 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       createMetricView(fullMetricViewName, mv)
       val tables = sql(s"SHOW TABLES IN $testCatalogName.$testNamespace")
         .collect().map(_.getString(1)).toSet
-      // The fixture's `events` source table is a regular table, so SHOW TABLES sees it.
+      // SPARK-56655 routes SHOW TABLES on a `TableViewCatalog` through `listRelationSummaries`
+      // so views appear alongside tables in the output (matching v1 SHOW TABLES on a session
+      // catalog). Pure `TableCatalog` catalogs continue to return tables only.
       assert(tables.contains(sourceTableName),
         s"SHOW TABLES should list the source table, got: $tables")
-      // Per the TableViewCatalog contract, SHOW TABLES returns tables only -- metric views
-      // belong on SHOW VIEWS instead.
-      assert(!tables.contains(metricViewName),
-        s"SHOW TABLES should not list metric views, got: $tables")
+      assert(tables.contains(metricViewName),
+        s"SHOW TABLES on a TableViewCatalog should also list metric views, got: $tables")
     }
   }
 
