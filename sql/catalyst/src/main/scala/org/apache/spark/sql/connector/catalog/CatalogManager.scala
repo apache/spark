@@ -43,7 +43,9 @@ import org.apache.spark.sql.internal.SQLConf
 private[sql]
 class CatalogManager(
     val defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
+    val v1SessionCatalog: SessionCatalog,
+    val dataSourceCatalogResolver: DataSourceCatalogResolver =
+      DataSourceCatalogResolver.NoOp) extends SQLConfHelper with Logging {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
@@ -73,10 +75,11 @@ class CatalogManager(
 
   /**
    * Returns the catalog name that owns path-based tables for the given data source format name,
-   * or None if the format is unknown or does not implement SupportsCatalogOptions.
-   * Overridden in sql/core via [[BaseSessionStateBuilder]] to use the real DataSource API.
+   * or None if the format is unknown or does not implement [[SupportsCatalogOptions]]. Delegates
+   * to [[dataSourceCatalogResolver]], which is supplied by sql/core's session-state builder.
    */
-  def catalogForDataSource(formatName: String): Option[String] = None
+  def catalogForDataSource(formatName: String): Option[String] =
+    dataSourceCatalogResolver.catalogFor(formatName)
 
   def isCatalogRegistered(name: String): Boolean = {
     try {

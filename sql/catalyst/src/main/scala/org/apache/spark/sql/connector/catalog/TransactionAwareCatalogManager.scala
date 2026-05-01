@@ -33,7 +33,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 private[sql] class TransactionAwareCatalogManager(
     delegate: CatalogManager,
     txn: Transaction)
-  extends CatalogManager(delegate.defaultSessionCatalog, delegate.v1SessionCatalog) {
+  extends CatalogManager(
+    delegate.defaultSessionCatalog,
+    delegate.v1SessionCatalog,
+    delegate.dataSourceCatalogResolver) {
 
   override val tempVariableManager: TempVariableManager = delegate.tempVariableManager
 
@@ -57,9 +60,6 @@ private[sql] class TransactionAwareCatalogManager(
         txn.catalog.name(), catalog.name())
     }
   }
-
-  override def catalogForDataSource(formatName: String): Option[String] =
-    delegate.catalogForDataSource(formatName)
 
   override def currentCatalog: CatalogPlugin = {
     val c = delegate.currentCatalog
