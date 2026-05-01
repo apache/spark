@@ -21,7 +21,6 @@ import os
 import re
 import sys
 import subprocess
-import time
 from sparktestsupport import modules
 from sparktestsupport.shellutils import run_cmd
 from sparktestsupport.toposort import toposort_flatten
@@ -95,27 +94,27 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
     return [f for f in raw_output.split("\n") if f]
 
 
-def check_upgraded_pom_dependencies(patch_sha, target_branch=None, target_ref=None, buffer_days=7):
+def check_upgraded_pom_dependencies(
+    patch_sha, target_branch=None, target_ref=None, buffer_days=7, verbose=True
+):
     """
     Check whether the pom.xml dependency upgrade has been released at least `buffer_days` days ago.
+
+    Raise ValueError if the dependency is released within the last `buffer_days` days.
     """
 
     def get_release_timestamp(group_id, artifact_id, version):
-        import json
         import urllib.request
+        from email.utils import parsedate_to_datetime
 
-        query = (
-            f"g:{group_id}+AND+a:{artifact_id}+AND+v:{version}"
-            if version
-            else f"g:{group_id}+AND+a:{artifact_id}"
+        host = os.environ.get(
+            "MAVEN_MIRROR_URL", "https://maven-central.storage-download.googleapis.com/maven2/"
         )
-
-        url = f"https://search.maven.org/solrsearch/select?q={query}&rows=1&wt=json"
+        url = f"{host}/{group_id.replace('.', '/')}/{artifact_id}/{version}/{artifact_id}-{version}.pom"
+        req = urllib.request.Request(url, method="HEAD")
         try:
-            with urllib.request.urlopen(url) as response:
-                data = json.loads(response.read())
-                # The timestamp is in milliseconds
-                return int(data["response"]["docs"][0]["timestamp"]) / 1000
+            with urllib.request.urlopen(req) as response:
+                return parsedate_to_datetime(response.headers.get("Last-Modified")).timestamp()
         except Exception:
             return None
 
@@ -142,7 +141,13 @@ def check_upgraded_pom_dependencies(patch_sha, target_branch=None, target_ref=No
 
     if changed_versions:
         # Okay now we parse the pom.xml to find the real dependency name
+        import datetime
         import xml.etree.ElementTree as ET
+
+        if verbose:
+            print("Changed version in pom.xml detected:")
+            for dep, ver in changed_versions:
+                print(f"  {dep}: {ver}")
 
         root_dir = os.path.join(os.path.dirname(__file__), "..", "..")
         pom_path = os.path.join(root_dir, "pom.xml")
@@ -167,12 +172,20 @@ def check_upgraded_pom_dependencies(patch_sha, target_branch=None, target_ref=No
                     # If we can't find the related upgrade version, just skip
                     continue
                 release_timestamp = get_release_timestamp(group_id, artifact_id, version)
-                if (
-                    release_timestamp is None
-                    or release_timestamp > time.time() - buffer_days * 24 * 60 * 60
+                if release_timestamp is None:
+                    raise ValueError(
+                        f"Could not find release date for {group_id}:{artifact_id}:{version}"
+                    )
+
+                release_date = datetime.datetime.fromtimestamp(release_timestamp).date()
+                if verbose:
+                    print(f"  {group_id}:{artifact_id}:{version} released on {release_date}")
+                if release_date > datetime.datetime.now().date() - datetime.timedelta(
+                    days=buffer_days
                 ):
-                    return False
-    return True
+                    raise ValueError(
+                        f"Dependency {group_id}:{artifact_id}:{version} is released within the last {buffer_days} days"
+                    )
 
 
 def determine_modules_to_test(changed_modules, deduplicated=True):
