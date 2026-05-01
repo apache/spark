@@ -319,6 +319,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       assert(originalTableId != newTableId)
 
       // view resolves to the new empty table
+      assert(session.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v").collect(), Seq.empty)
 
       // insert new data and verify the view picks it up
@@ -356,6 +357,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       assert(originalTableId != newTableId)
 
       // view resolves to the new empty table
+      assert(session.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v").collect(), Seq.empty)
 
       // insert new data and verify the view picks it up
@@ -391,6 +393,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
 
       // REFRESH TABLE invalidates the connector cache, view resolves to new empty table
       session.sql(s"REFRESH TABLE $CT").collect()
+      assert(session.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v").collect(), Seq.empty)
 
       session.sql("DROP VIEW IF EXISTS v").collect()
@@ -410,6 +413,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       session.table(T).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
       assertRows(session.table("v").collect(), Seq(Row(1, 100)))
       assertRows(session.table("v_no_filter").collect(), Seq(Row(1, 100), Row(10, 1000)))
+      assert(session.table("v_filter_is_null").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v_filter_is_null").collect(), Seq.empty)
 
       // drop and re-add column with same name and type
@@ -417,6 +421,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       session.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
 
       // salary values are now null, so the filtered view returns nothing
+      assert(session.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v").collect(), Seq.empty)
       // unfiltered view returns rows with null salary
       assertRows(session.table("v_no_filter").collect(), Seq(Row(1, null), Row(10, null)))
@@ -442,6 +447,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       val serverSession = getServerSession(session)
       assertRows(session.table("v").collect(), Seq(Row(1, 100)))
       assertRows(session.table("v_no_filter").collect(), Seq(Row(1, 100), Row(10, 1000)))
+      assert(session.table("v_filter_is_null").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v_filter_is_null").collect(), Seq.empty)
 
       // external drop and re-add column via catalog API
@@ -451,6 +457,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       cat.alterTable(ident, dropCol, addCol)
 
       // salary values are now null, so the filtered view returns nothing
+      assert(session.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v").collect(), Seq.empty)
       // unfiltered view returns rows with null salary
       assertRows(session.table("v_no_filter").collect(), Seq(Row(1, null), Row(10, null)))
@@ -484,6 +491,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
 
       // REFRESH TABLE invalidates the connector cache, salary values are null
       session.sql(s"REFRESH TABLE $CT").collect()
+      assert(session.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       assertRows(session.table("v").collect(), Seq.empty)
 
       session.sql("DROP VIEW IF EXISTS v").collect()
