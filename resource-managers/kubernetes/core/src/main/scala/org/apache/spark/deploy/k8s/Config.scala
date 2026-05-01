@@ -262,6 +262,30 @@ private[spark] object Config extends Logging {
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
       .createWithDefault(0.1)
 
+  val PVC_RESIZE_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeInterval")
+      .doc("Interval between executor PVC resize operations. To disable, set 0 (default)")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(_ >= 0, "Interval should be non-negative")
+      .createWithDefault(0)
+
+  val PVC_RESIZE_THRESHOLD =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeThreshold")
+      .doc("The PVC usage ratio (used / capacity) above which the driver triggers a resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
+      .createWithDefault(0.5)
+
+  val PVC_RESIZE_FACTOR =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeFactor")
+      .doc("The factor to grow PVC storage by, relative to the current request.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
+      .createWithDefault(1.0)
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"

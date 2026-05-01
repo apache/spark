@@ -918,7 +918,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     // check target table was scanned correctly
     val targetTxnTable = txnTables(tableNameAsString)
-    val expectedNumTargetScans = if (deltaUpdate) 1 else 3
+    val expectedNumTargetScans = if (deltaUpdate) 2 else 3
     assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
 
     // check target table scans for UPDATE condition (dep = 'hr')
@@ -930,7 +930,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     // check source table was scanned correctly
     val sourceTxnTable = txnTables(sourceNameAsString)
-    val expectedNumSourceScans = if (deltaUpdate) 1 else 4
+    val expectedNumSourceScans = if (deltaUpdate) 2 else 4
     assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
 
     // check source table scans in CTE (salary > 100)
@@ -978,7 +978,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     // check source table was scanned correctly (dep = 'hr' filter in the subquery)
     val sourceTxnTable = txnTables(sourceNameAsString)
-    val expectedNumSourceScans = if (deltaUpdate) 1 else 4
+    val expectedNumSourceScans = if (deltaUpdate) 2 else 4
     assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
 
     val numSubquerySourceScans = sourceTxnTable.scanEvents.flatten.count {
@@ -989,7 +989,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     // check target table was scanned correctly
     val targetTxnTable = txnTables(tableNameAsString)
-    val expectedNumTargetScans = if (deltaUpdate) 1 else 3
+    val expectedNumTargetScans = if (deltaUpdate) 2 else 3
     assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
 
     // check txn state was propagated correctly
@@ -1113,7 +1113,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
       // check target table was scanned correctly
       val targetTxnTable = txnTables(tableNameAsString)
-      val expectedNumTargetScans = if (deltaUpdate) 2 else 7
+      val expectedNumTargetScans = if (deltaUpdate) 4 else 7
       assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
 
       // check target table scans as UPDATE target (dep = 'hr')
@@ -1121,7 +1121,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         case sources.EqualTo("dep", "hr") => true
         case _ => false
       }
-      val expectedNumUpdateTargetScans = if (deltaUpdate) 1 else 3
+      val expectedNumUpdateTargetScans = if (deltaUpdate) 2 else 3
       assert(numUpdateTargetScans == expectedNumUpdateTargetScans)
 
       // check target table scans in view as source (pk < 10)
@@ -1129,12 +1129,12 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         case sources.LessThan("pk", 10L) => true
         case _ => false
       }
-      val expectedNumViewTargetScans = if (deltaUpdate) 1 else 4
+      val expectedNumViewTargetScans = if (deltaUpdate) 2 else 4
       assert(numViewTargetScans == expectedNumViewTargetScans)
 
       // check source table scans in view
       val sourceTxnTable = txnTables(sourceNameAsString)
-      val expectedNumSourceScans = if (deltaUpdate) 1 else 4
+      val expectedNumSourceScans = if (deltaUpdate) 2 else 4
       assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
 
       // check txn state was propagated correctly

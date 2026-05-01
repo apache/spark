@@ -431,6 +431,7 @@ case class ReplaceData(
  * @param query a query with a delta of records that should written
  * @param originalTable a plan for the original table for which the row-level command was triggered
  * @param projections projections for row ID, row, metadata attributes
+ * @param groupFilterCondition a condition that can be used to filter groups at runtime
  * @param write a logical write, if already constructed
  */
 case class WriteDelta(
@@ -439,6 +440,7 @@ case class WriteDelta(
     query: LogicalPlan,
     originalTable: NamedRelation,
     projections: WriteDeltaProjections,
+    groupFilterCondition: Option[Expression] = None,
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false

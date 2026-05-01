@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -1404,6 +1405,84 @@ abstract class SQLViewSuite extends QueryTest {
 
               checkAnswer(spark.sql(s"SELECT * FROM $viewName"), expectedResults)
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56639: permanent view uses frozen SQL path") {
+    withSQLConf(PATH_ENABLED.key -> "true") {
+      withDatabase("path_view_db_a", "path_view_db_b") {
+        withTable("path_view_db_a.frozen_t", "path_view_db_b.frozen_t") {
+          withView("default.v_path_frozen") {
+            sql("USE default")
+            sql("CREATE DATABASE path_view_db_a")
+            sql("CREATE DATABASE path_view_db_b")
+            sql("CREATE TABLE path_view_db_a.frozen_t USING parquet AS SELECT 1 AS id")
+            sql("CREATE TABLE path_view_db_b.frozen_t USING parquet AS SELECT 2 AS id")
+            try {
+              sql("SET PATH = spark_catalog.path_view_db_a, system.builtin")
+              sql("CREATE VIEW default.v_path_frozen AS SELECT id FROM frozen_t")
+              sql("SET PATH = spark_catalog.path_view_db_b, system.builtin")
+
+              checkAnswer(sql("SELECT id FROM frozen_t"), Row(2))
+              checkAnswer(sql("SELECT id FROM default.v_path_frozen"), Row(1))
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56639: malformed persisted view path fails analysis") {
+    withView("default.v_bad_path_metadata") {
+      sql("CREATE VIEW default.v_bad_path_metadata AS SELECT 1 AS id")
+      val ident = TableIdentifier("v_bad_path_metadata", Some("default"))
+      val metadata = spark.sessionState.catalog.getTableMetadata(ident)
+      val corrupted = metadata.copy(
+        properties = metadata.properties + (CatalogTable.VIEW_RESOLUTION_PATH -> "{bad-json"))
+      spark.sessionState.catalog.alterTable(corrupted)
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT * FROM default.v_bad_path_metadata").collect()
+      }
+      assert(e.getMessage.contains("Invalid stored SQL path metadata for view"), e.getMessage)
+    }
+  }
+
+  // Regression guard: frozen resolution path must not leak into CURRENT_SCHEMA/CURRENT_PATH.
+  test("SPARK-56639: current_schema/current_path in persisted view use invoker context") {
+    withSQLConf(PATH_ENABLED.key -> "true") {
+      withDatabase("path_ctx_view_a", "path_ctx_view_b") {
+        withView("path_ctx_view_a.v_ctx") {
+          sql("CREATE DATABASE path_ctx_view_a")
+          sql("CREATE DATABASE path_ctx_view_b")
+          try {
+            sql("USE path_ctx_view_a")
+            sql(
+              """
+                |CREATE VIEW path_ctx_view_a.v_ctx AS
+                |SELECT current_schema() AS cs, current_path() AS cp
+                |""".stripMargin)
+
+            sql("USE path_ctx_view_b")
+            sql("SET PATH = DEFAULT_PATH")
+            val row = sql("SELECT cs, cp FROM path_ctx_view_a.v_ctx").head()
+            val currentSchema = row.getString(0)
+            val currentPath = row.getString(1)
+
+            assert(currentSchema == "path_ctx_view_b",
+              s"Expected invoker current_schema, got: $currentSchema")
+            assert(currentPath.contains("path_ctx_view_b"),
+              s"Expected invoker current_path to include path_ctx_view_b, got: $currentPath")
+            assert(!currentPath.contains("path_ctx_view_a"),
+              s"Did not expect creator schema in current_path, got: $currentPath")
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+            sql("USE default")
           }
         }
       }

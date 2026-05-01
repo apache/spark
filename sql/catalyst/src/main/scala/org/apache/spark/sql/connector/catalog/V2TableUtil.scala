@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
@@ -120,6 +122,66 @@ private[sql] object V2TableUtil extends SQLConfHelper {
     val metaCols = filter(originMetaColNames, metadataColumns(table))
     val metaSchema = CatalogV2Util.toStructType(metaCols)
     SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode)
+  }
+
+  /**
+   * Validates that column IDs have not changed for columns that still exist in the table.
+   *
+   * Only validates columns where the original and current column both have non-null IDs.
+   * If the connector does not support column IDs (returns null), the validation is skipped.
+   *
+   * @param table the current table metadata
+   * @param relation the relation with captured columns
+   * @return validation errors, or empty sequence if valid
+   */
+  def validateColumnIds(
+      table: Table,
+      relation: DataSourceV2Relation): Seq[String] = {
+    validateColumnIds(
+      table = table,
+      originalCapturedCols = relation.table.columns.toImmutableArraySeq)
+  }
+
+  /**
+   * Validates that column IDs have not changed for columns that still exist in the table.
+   *
+   * Only validates columns where the original and current column both have non-null IDs.
+   * If the connector does not support column IDs (returns null), the validation is skipped.
+   *
+   * ID transition handling:
+   *  - null to null: skipped (no ID to validate)
+   *  - null to ID: skipped (connector enabled ID tracking after analysis)
+   *  - ID to null: skipped (connector disabled ID tracking)
+   *  - ID to ID (same): no error
+   *  - ID to ID (different): error, same column name was replaced
+   *
+   * @param table the current table metadata
+   * @param originalCapturedCols the originally captured columns
+   * @return validation errors, or empty sequence if valid
+   */
+  def validateColumnIds(
+      table: Table,
+      originalCapturedCols: Seq[Column]): Seq[String] = {
+    val currentColsByNormalizedName = table.columns.toImmutableArraySeq
+      .map(currentCol => normalize(currentCol.name()) -> currentCol).toMap
+    val errors = new mutable.ArrayBuffer[String]()
+    for (originalCol <- originalCapturedCols) {
+      if (originalCol.id() != null) {
+        currentColsByNormalizedName.get(normalize(originalCol.name())) match {
+          case Some(currentCol)
+            if currentCol.id() != null && currentCol.id() != originalCol.id() =>
+            errors += s"`${originalCol.name()}` column ID has changed from " +
+              s"${originalCol.id()} to ${currentCol.id()}"
+          case _ =>
+            // 1. Column exists in the original schema but not in the current table.
+            // 2. Column IDs have not changed.
+            // 3. The current column's ID is null (connector disabled ID tracking).
+            // Note that dropped columns are handled separately by
+            // [[columnsMissingOrAddedAfterAnalysis]].
+        }
+      }
+    }
+    errors.toSeq
   }
 
   private def filter(colNames: Seq[String], cols: Seq[MetadataColumn]): Seq[MetadataColumn] = {

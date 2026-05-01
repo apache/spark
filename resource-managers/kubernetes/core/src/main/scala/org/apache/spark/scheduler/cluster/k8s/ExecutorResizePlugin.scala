@@ -30,9 +30,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext, SparkPlugin}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, EXECUTOR_ID, MEMORY_SIZE}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG, CONFIG2, EXECUTOR_ID, MEMORY_SIZE}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -47,7 +46,6 @@ class ExecutorResizePlugin extends SparkPlugin {
 
 class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
   private var sparkContext: SparkContext = _
-  private var kubernetesClient: KubernetesClient = _
 
   private val periodicService: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("executor-resize-plugin")
@@ -67,40 +65,33 @@ class ExecutorResizeDriverPlugin extends DriverPlugin with Logging {
     val factor = sc.conf.getDouble(EXECUTOR_RESIZE_FACTOR.key, 0.1)
     val namespace = sc.conf.get(KUBERNETES_NAMESPACE)
 
+    // Scheduler is not created yet at init time; resolve it lazily in the periodic task.
     sparkContext = sc
 
-    try {
-      kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
-        sc.conf.get(KUBERNETES_DRIVER_MASTER_URL),
-        Option(namespace),
-        KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        SparkKubernetesClientFactory.ClientType.Driver,
-        sc.conf,
-        None)
-
-      periodicService.scheduleAtFixedRate(() => {
-        try {
-          checkAndIncreaseMemory(namespace, threshold, factor)
-        } catch {
-          case e: Throwable => logError("Error in memory check thread", e)
+    periodicService.scheduleAtFixedRate(() => if (!sparkContext.isStopped) {
+      try {
+        sparkContext.schedulerBackend match {
+          case backend: KubernetesClusterSchedulerBackend =>
+            checkAndIncreaseMemory(namespace, threshold, factor, backend.kubernetesClient)
+          case _ =>
+            logWarning(log"This plugin expects " +
+              log"${MDC(CLASS_NAME, classOf[KubernetesClusterSchedulerBackend].getSimpleName)}.")
         }
-      }, interval, interval, TimeUnit.SECONDS)
-    } catch {
-      case e: Exception =>
-        logError("Failed to initialize", e)
-    }
+      } catch {
+        case e: Throwable => logError("Error in memory check thread", e)
+      }
+    }, interval, interval, TimeUnit.SECONDS)
 
     Map.empty[String, String].asJava
   }
 
-  override def shutdown(): Unit = {
-    periodicService.shutdown()
-    if (kubernetesClient != null) {
-      kubernetesClient.close()
-    }
-  }
+  override def shutdown(): Unit = periodicService.shutdown()
 
-  private def checkAndIncreaseMemory(namespace: String, threshold: Double, factor: Double): Unit = {
+  private def checkAndIncreaseMemory(
+      namespace: String,
+      threshold: Double,
+      factor: Double,
+      kubernetesClient: KubernetesClient): Unit = {
     val appId = sparkContext.applicationId
 
     // Get all running executor pods for this application

@@ -109,8 +109,8 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  *       a regular {@link Table} for a table, or a {@link MetadataTable} wrapping a
  *       {@link ViewInfo} for a view. Saves the {@code loadTable} -> {@code loadView} fallback
  *       on a cold cache.</li>
- *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views with the
- *       kind preserved on each {@link TableSummary}. Default impl performs both
+ *   <li>{@link #listTableAndViewSummaries(String[])} -- a unified listing of tables and views
+ *       with the kind preserved on each {@link TableSummary}. Default impl performs both
  *       {@link TableCatalog#listTableSummaries} and {@link ViewCatalog#listViews}; override to
  *       fetch in one round trip.</li>
  * </ul>
@@ -149,7 +149,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
    * @throws NoSuchTableException if a table listed by the underlying enumeration disappears
    *                              before its summary can be assembled (default impl only)
    */
-  default TableSummary[] listRelationSummaries(String[] namespace)
+  default TableSummary[] listTableAndViewSummaries(String[] namespace)
       throws NoSuchNamespaceException, NoSuchTableException {
     TableSummary[] tableSummaries = listTableSummaries(namespace);
     Identifier[] viewIdentifiers = listViews(namespace);

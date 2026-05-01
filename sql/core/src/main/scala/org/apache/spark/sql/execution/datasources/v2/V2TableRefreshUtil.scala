@@ -36,6 +36,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -62,6 +63,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -95,6 +97,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
           }
         })
         validateTableIdentity(currentTable, r)
+        validateColumnIds(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
         r.copy(table = currentTable)
@@ -122,13 +125,22 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
     V2TableUtil.validateTableId(relation.name, relation.table.id, currentTable)
   }
 
+  private def validateColumnIds(
+      currentTable: Table,
+      relation: DataSourceV2Relation): Unit = {
+    val errors = V2TableUtil.validateColumnIds(currentTable, relation)
+    if (errors.nonEmpty) {
+      throw QueryCompilationErrors.columnIdMismatchAfterAnalysis(relation.name, errors)
+    }
+  }
+
   private def validateDataColumns(
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
     val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode)
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.columnsChangedAfterAnalysis(relation.name, errors)
+      throw QueryCompilationErrors.columnsMissingOrAddedAfterAnalysis(relation.name, errors)
     }
   }
 

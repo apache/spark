@@ -325,6 +325,16 @@ private[spark] class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
+  private def scheduleResubmit(): Unit = {
+    messageScheduler.schedule(
+      new Runnable {
+        override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+      },
+      DAGScheduler.RESUBMIT_TIMEOUT,
+      TimeUnit.MILLISECONDS
+    )
+  }
+
   private[spark] var eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   // Used for test only. Some tests uses the same thread of the event poster to
   // process the events to ensure the deterministic behavior during the test.
@@ -2179,13 +2189,7 @@ private[spark] class DAGScheduler(
       if (noResubmitEnqueued) {
         logInfo(log"Resubmitting ${MDC(FAILED_STAGE, stage)} " +
           log"(${MDC(FAILED_STAGE_NAME, stage.name)}) due to rollback.")
-        messageScheduler.schedule(
-          new Runnable {
-            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-          },
-          DAGScheduler.RESUBMIT_TIMEOUT,
-          TimeUnit.MILLISECONDS
-        )
+        scheduleResubmit()
       }
     }
 
@@ -2510,13 +2514,7 @@ private[spark] class DAGScheduler(
                 log"Resubmitting ${MDC(STAGE, mapStage)} " +
                 log"(${MDC(STAGE_NAME, mapStage.name)}) and ${MDC(FAILED_STAGE, failedStage)} " +
                 log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to fetch failure")
-              messageScheduler.schedule(
-                new Runnable {
-                  override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-                },
-                DAGScheduler.RESUBMIT_TIMEOUT,
-                TimeUnit.MILLISECONDS
-              )
+              scheduleResubmit()
             }
           }
 
@@ -2623,9 +2621,7 @@ private[spark] class DAGScheduler(
             if (noResubmitEnqueued) {
               logInfo(log"Resubmitting ${MDC(FAILED_STAGE, failedStage)} " +
                 log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to barrier stage failure.")
-              messageScheduler.schedule(new Runnable {
-                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-              }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+              scheduleResubmit()
             }
           }
         }

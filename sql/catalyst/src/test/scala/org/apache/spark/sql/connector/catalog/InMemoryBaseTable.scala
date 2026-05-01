@@ -20,8 +20,10 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.Locale
 import java.util.Objects
 import java.util.OptionalLong
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -42,7 +44,7 @@ import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
+import org.apache.spark.sql.internal.connector.{ColumnImpl, SupportsStreamingUpdateAsAppend}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -73,7 +75,15 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  private var tableColumns: Array[Column] = initialColumns
+  // Assign column IDs to columns that do not have one.
+  // This simulates connectors that support column identity tracking.
+  private var tableColumns: Array[Column] = initialColumns.map { c =>
+    if (c.id() == null) {
+      c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
+    } else {
+      c
+    }
+  }
 
   override def columns(): Array[Column] = tableColumns
 
@@ -387,24 +397,52 @@ abstract class InMemoryBaseTable(
   def alterTableWithData(
       data: Array[BufferedRows],
       newSchema: StructType): InMemoryBaseTable = {
+    val newFieldNames = newSchema.fieldNames.toSet
     data.foreach { bufferedRow =>
       val oldSchema = bufferedRow.schema
+
+      // Identify which columns from the old schema still exist in the new schema.
+      // Each entry is (StructField, original index in old row) so we can extract values later.
+      val fieldsRetainedInOldSchema = oldSchema.fields.zipWithIndex.filter {
+        case (oldField, _) => newFieldNames.contains(oldField.name)
+      }
+      val areColumnsDropped = fieldsRetainedInOldSchema.length < oldSchema.length
+
+      // Build a schema that only contains the retained columns.
+      // This becomes the write schema for the migrated rows.
+      val retainedSchemaAfterDroppedColumns = if (areColumnsDropped) {
+        StructType(fieldsRetainedInOldSchema.map(_._1))
+      } else {
+        oldSchema
+      }
+
       bufferedRow.rows.foreach { row =>
+        // Physically remove dropped column values from the row so they do not
+        // survive through ALTER chains (e.g. DROP COLUMN then ADD COLUMN same name).
+        val retainedRowAfterDroppedColumns = if (areColumnsDropped) {
+          new GenericInternalRow(fieldsRetainedInOldSchema.map {
+            case (retainedField, idx) => row.get(idx, retainedField.dataType)
+          })
+        } else {
+          row
+        }
+
         // handle partition evolution by re-keying all data
-        val key = getKey(row, newSchema)
+        val key = getKey(retainedRowAfterDroppedColumns, newSchema)
         dataMap += dataMap.get(key)
           .map { splits =>
             val newSplits = if ((splits.last.rows.size >= numRowsPerSplit) ||
-                (splits.last.schema != oldSchema)) {
-              splits :+ new BufferedRows(key, oldSchema)
+                (splits.last.schema != retainedSchemaAfterDroppedColumns)) {
+              splits :+ new BufferedRows(key, retainedSchemaAfterDroppedColumns)
             } else {
               splits
             }
-            newSplits.last.withRow(row)
+            newSplits.last.withRow(retainedRowAfterDroppedColumns)
             key -> newSplits
           }
           .getOrElse(key -> Seq(
-            new BufferedRows(key, oldSchema).withRow(row)))
+            new BufferedRows(key, retainedSchemaAfterDroppedColumns)
+              .withRow(retainedRowAfterDroppedColumns)))
         addPartitionKey(key)
       }
     }
@@ -698,8 +736,13 @@ abstract class InMemoryBaseTable(
 
       override def toBatch: BatchWrite = {
         val newSchema = info.schema()
-        tableColumns = CatalogV2Util.structTypeToV2Columns(
-          mergeSchema(CatalogV2Util.v2ColumnsToStructType(columns()), newSchema))
+        val mergedSchema = mergeSchema(
+          oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
+          newType = newSchema)
+        val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
+        tableColumns = InMemoryBaseTable.assignMissingIds(
+          oldColumns = columns(),
+          newColumns = newColumns)
         writer
       }
 
@@ -830,6 +873,34 @@ abstract class InMemoryBaseTable(
 }
 
 object InMemoryBaseTable {
+  private val columnIdGlobalCounter = new AtomicLong(0)
+  def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
+
+  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+
+  /**
+   * Preserves column IDs from `oldColumns` when the column name matches,
+   * and assigns new IDs to columns that do not already have one.
+   *
+   * IDs are preserved across type changes, keeping the same column ID through type
+   * widening and nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides
+   * this behavior for testing scenarios where type changes should produce a new ID.
+   */
+  def assignMissingIds(
+      oldColumns: Array[Column],
+      newColumns: Array[Column]): Array[Column] = {
+    newColumns.map { newCol =>
+      oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
+        case Some(oldCol) if oldCol.id() != null =>
+          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
+        case _ if newCol.id() == null =>
+          newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)
+        case _ =>
+          newCol
+      }
+    }
+  }
+
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
 
   def extractValue(

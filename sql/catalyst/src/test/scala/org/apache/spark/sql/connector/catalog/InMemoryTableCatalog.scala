@@ -181,11 +181,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
     table.increaseVersion()
     val currentVersion = table.version()
+    val columnsWithIds = InMemoryBaseTable.assignMissingIds(
+      oldColumns = table.columns(),
+      newColumns = CatalogV2Util.structTypeToV2Columns(schema))
     val newTable = table match {
       case _: InMemoryTable =>
         new InMemoryTable(
           name = table.name,
-          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          columns = columnsWithIds,
           partitioning = finalPartitioning,
           properties = properties,
           constraints = constraints,
@@ -194,7 +197,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _: InMemoryTableWithV2Filter =>
         new InMemoryTableWithV2Filter(
           name = table.name,
-          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          columns = columnsWithIds,
           partitioning = finalPartitioning,
           properties = properties)
           .alterTableWithData(table.data, schema)

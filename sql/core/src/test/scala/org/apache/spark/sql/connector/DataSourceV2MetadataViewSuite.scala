@@ -377,7 +377,7 @@ class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
 
   test("SHOW TABLES on a TableViewCatalog returns both tables and views (v1-parity)") {
     // For a `TableViewCatalog` (a catalog exposing both tables and views in a shared
-    // identifier namespace), SHOW TABLES routes through `listRelationSummaries` so views
+    // identifier namespace), SHOW TABLES routes through `listTableAndViewSummaries` so views
     // appear alongside tables -- matching the v1 SHOW TABLES output. Pure `TableCatalog`
     // catalogs (no view mixin) continue to use `listTables` and return tables only.
     seedV2View("v_in_show_tables")

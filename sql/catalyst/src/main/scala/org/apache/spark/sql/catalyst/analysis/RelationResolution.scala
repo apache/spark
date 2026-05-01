@@ -126,8 +126,8 @@ class RelationResolution(
   /**
    * Path entries for unqualified relation resolution.
    *
-   * Inside a view, [[AnalysisContext.resolutionPathEntries]] will be
-   * populated from the frozen path stored in view metadata (follow-up PR).
+   * Inside a view or SQL function, [[AnalysisContext.resolutionPathEntries]] uses the
+   * persisted frozen path from metadata when available.
    * When PATH is disabled, legacy resolution rules apply.
    */
   private def relationResolutionEntries: Seq[Seq[String]] = {
@@ -135,8 +135,6 @@ class RelationResolution(
     if (pinned.isDefined && conf.pathEnabled) {
       pinned.get
     } else {
-      // Keep expanding CurrentSchemaEntry using the live session catalog/namespace until the
-      // follow-up PR wires frozen resolutionPathEntries for view analysis.
       val expandCatalog = catalogManager.currentCatalog.name
       val expandNamespace = catalogManager.currentNamespace.toSeq
       val (pathCatalog, pathNamespace) =
