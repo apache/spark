@@ -31,6 +31,78 @@ python -m pyspark.sql.mcp
 The server is **read-only by default**. Pass `--no-read-only` to allow DDL/DML
 (use with care; the read-only filter is a guardrail, not a security boundary).
 
+## Configuring an MCP client
+
+The server speaks `stdio` MCP transport, so a client launches it as a
+subprocess. The exact configuration step is client-specific; the moving
+parts are always:
+
+1. The command (`python -m pyspark.sql.mcp`).
+2. The Spark Connect URL, supplied via `--connect-url` or the
+   `SPARK_REMOTE` environment variable.
+3. Optionally, `--no-read-only` to permit DDL/DML.
+
+### Claude Code
+
+```bash
+claude mcp add spark \
+  -e SPARK_REMOTE=sc://localhost:15002 \
+  -- python -m pyspark.sql.mcp
+```
+
+Pass `--scope user` to register the server for all projects, or
+`--scope project` to write a shared `.mcp.json` into the current
+repository. Restart the Claude Code session and the LLM gains
+`mcp__spark__*` tools.
+
+### Claude Desktop
+
+Edit the application's `claude_desktop_config.json` (location is
+documented in the Claude Desktop docs) and add an entry under
+`mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "spark": {
+      "command": "python",
+      "args": ["-m", "pyspark.sql.mcp"],
+      "env": {
+        "SPARK_REMOTE": "sc://localhost:15002"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop.
+
+### Other MCP clients
+
+Any MCP-compliant client that can launch a stdio subprocess can use the
+same shape:
+
+```json
+{
+  "command": "python",
+  "args": ["-m", "pyspark.sql.mcp"],
+  "env": {"SPARK_REMOTE": "sc://localhost:15002"}
+}
+```
+
+### Environment variables
+
+| Variable | Meaning |
+| --- | --- |
+| `SPARK_REMOTE` | Spark Connect URL (`sc://host:port[/;params]`). |
+| `SPARK_MCP_READ_ONLY` | `true` (default) or `false`. |
+| `SPARK_MCP_USER_ID` | Optional Spark Connect session user id. |
+| `SPARK_MCP_TRANSPORT` | Reserved; only `stdio` is implemented. |
+
+To verify the wiring, ask the LLM to list catalogs, or to call
+`get_session_info` — the response should include the Spark version
+reported by the cluster.
+
 ## Tools
 
 Catalog exploration, query execution, and query plans:
