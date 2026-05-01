@@ -141,10 +141,10 @@ abstract class DataStreamReader {
    * detection), the rewrite injects an internal `EventTimeWatermark` on `_commit_timestamp` and a
    * stateful streaming aggregate. Two implications follow:
    *   - A commit's events are emitted in the next micro-batch after the commit is read
-   *     (append-mode aggregate eviction is `eventTime &lt;= watermark`, and the watermark advances
-   *     to the max `_commit_timestamp` observed in the previous batch). A stream that reads its
-   *     last commit and stops will keep that commit's events in state until a subsequent
-   *     (no-data) micro-batch fires.
+   *     (append-mode aggregate eviction is `eventTime &lt;= watermark`, and the watermark
+   *     advances to the max `_commit_timestamp` observed in the previous batch). A stream that
+   *     reads its last commit and stops will keep that commit's events in state until a
+   *     subsequent (no-data) micro-batch fires.
    *   - The query is constrained to `Append` output mode; `Update` and `Complete` are rejected at
    *     writer-start time with `STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION`. The internal
    *     watermark metadata is stripped from the user-visible `_commit_timestamp` output, so
