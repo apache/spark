@@ -74,6 +74,22 @@ private[analysis] class CdcNetChangesStatefulProcessor(
 
   // Hoisted out of `relabel` so we don't pay a linear `fieldIndex` scan per emitted row.
   private val changeTypeIdx: Int = inputSchema.fieldIndex("_change_type")
+  private val commitVersionIdx: Int = inputSchema.fieldIndex("_commit_version")
+
+  // `_commit_version` is connector-defined and may be any atomic orderable type
+  // (LongType, StringType, IntegerType, TimestampType, ...). The
+  // [[org.apache.spark.sql.execution.datasources.v2.ChangelogTable.validateSchema]]
+  // analyzer-time check guarantees the column is `AtomicType`, and the boxed Java
+  // values of every atomic type are `Comparable`, so we use a generic
+  // `Comparable.compareTo` to order rows of a single key here -- mirroring the batch
+  // path which uses Catalyst's generic `SortOrder` on the same attribute.
+  private val versionOrdering: Ordering[Row] = new Ordering[Row] {
+    override def compare(a: Row, b: Row): Int = {
+      val av = a.get(commitVersionIdx).asInstanceOf[Comparable[Any]]
+      val bv = b.get(commitVersionIdx)
+      av.compareTo(bv)
+    }
+  }
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
     val handle = getHandle
@@ -87,10 +103,13 @@ private[analysis] class CdcNetChangesStatefulProcessor(
       inputRows: Iterator[Row],
       timerValues: TimerValues): Iterator[Row] = {
     val handle = getHandle
-    val sorted = inputRows.toSeq.sortBy { row =>
-      val v = row.getAs[Long]("_commit_version")
-      val ct = row.getAs[String]("_change_type")
-      val rank = ct match {
+    // Sort by (_commit_version, change_type rank) -- pre-events (delete /
+    // update_preimage) before post-events (insert / update_postimage) within a single
+    // commit version, matching the batch path's `(_commit_version, change_type_rank)`
+    // ordering. We compose the version ordering (generic Comparable) with the rank
+    // ordering as a tiebreaker.
+    val sorted = inputRows.toSeq.sorted(versionOrdering.orElse(Ordering.by { row =>
+      row.getAs[String](changeTypeIdx) match {
         case Changelog.CHANGE_TYPE_UPDATE_PREIMAGE | Changelog.CHANGE_TYPE_DELETE => 0
         case Changelog.CHANGE_TYPE_INSERT | Changelog.CHANGE_TYPE_UPDATE_POSTIMAGE => 1
         case _ => throw new SparkException(
@@ -98,8 +117,7 @@ private[analysis] class CdcNetChangesStatefulProcessor(
           messageParameters = Map.empty,
           cause = null)
       }
-      (v, rank)
-    }
+    }))
     if (sorted.isEmpty) return Iterator.empty
 
     if (!firstEvent.exists()) {

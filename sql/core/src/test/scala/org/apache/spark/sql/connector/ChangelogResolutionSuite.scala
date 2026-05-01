@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReferenc
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -380,8 +380,20 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       parameters = wrongType("_commit_timestamp", "TIMESTAMP", "BIGINT"))
   }
 
-  test("ChangelogTable - wrong _commit_version data type throws") {
-    Seq(IntegerType -> "INT", StringType -> "STRING").foreach { case (versionType, sql) =>
+  test("ChangelogTable - _commit_version accepts any atomic orderable type") {
+    Seq(LongType, IntegerType, StringType, TimestampType).foreach { versionType =>
+      ChangelogTable(
+        cl("any_cl", validChangeType, "_commit_version" -> versionType, validTimestamp),
+        stubInfo())
+    }
+  }
+
+  test("ChangelogTable - non-atomic _commit_version data type throws") {
+    val structVersion = StructType(Seq(StructField("v", LongType)))
+    Seq[(org.apache.spark.sql.types.DataType, String)](
+      ArrayType(LongType) -> "ARRAY<BIGINT>",
+      MapType(StringType, LongType) -> "MAP<STRING, BIGINT>",
+      structVersion -> structVersion.sql).foreach { case (versionType, sql) =>
       checkError(
         intercept[AnalysisException] {
           ChangelogTable(
@@ -389,7 +401,7 @@ class ChangelogResolutionSuite extends SharedSparkSession {
             stubInfo())
         },
         condition = "INVALID_CHANGELOG_SCHEMA.INVALID_COLUMN_TYPE",
-        parameters = wrongType("_commit_version", "BIGINT", sql))
+        parameters = wrongType("_commit_version", "an atomic orderable type", sql))
     }
   }
 
