@@ -179,6 +179,20 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
+    // Compute the intermediate schema with only column deletions applied.
+    // This is used for data migration so that dropped column values are physically removed,
+    // even when a column with the same name is re-added in the same ALTER call.
+    val deleteOnlyChanges = changes.filter(_.isInstanceOf[TableChange.DeleteColumn])
+    val schemaAfterDrops = if (deleteOnlyChanges.nonEmpty) {
+      CatalogV2Util.applySchemaChanges(
+        table.schema,
+        deleteOnlyChanges,
+        tableProvider = Some("in-memory"),
+        statementType = "ALTER TABLE")
+    } else {
+      schema
+    }
+
     table.increaseVersion()
     val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
@@ -193,14 +207,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
           properties = properties,
           constraints = constraints,
           id = table.id)
-          .alterTableWithData(table.data, schema)
+          .alterTableWithData(table.data, schemaAfterDrops)
       case _: InMemoryTableWithV2Filter =>
         new InMemoryTableWithV2Filter(
           name = table.name,
           columns = columnsWithIds,
           partitioning = finalPartitioning,
           properties = properties)
-          .alterTableWithData(table.data, schema)
+          .alterTableWithData(table.data, schemaAfterDrops)
       case other =>
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
