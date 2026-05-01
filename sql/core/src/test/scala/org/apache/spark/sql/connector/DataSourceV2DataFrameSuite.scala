@@ -2535,6 +2535,7 @@ class DataSourceV2DataFrameSuite
       spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
       spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_null")
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+      assert(spark.table("v_null").schema.fieldNames.toSeq == Seq("id", "salary"))
       checkAnswer(spark.table("v_null"), Seq.empty)
 
       // drop and re-add column with same name and type
@@ -2542,6 +2543,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
       // salary values are now null, so the salary < 999 filter returns nothing
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
       checkAnswer(spark.table("v"), Seq.empty)
       // IS NULL filter now matches all rows
       checkAnswer(spark.table("v_null"), Seq(Row(1, null), Row(10, null)))
@@ -2728,6 +2730,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add top-level column to underlying table
@@ -2735,6 +2738,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
       // view captures original columns
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data to verify view still works correctly
@@ -2750,6 +2754,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add nested column to underlying table
@@ -2774,6 +2779,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "age"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop column from underlying table
@@ -2798,6 +2804,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop nested column from underlying table
@@ -2822,6 +2829,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change nullability constraint using ALTER TABLE
@@ -2863,6 +2871,7 @@ class DataSourceV2DataFrameSuite
       assert(originalTableId != newTableId)
 
       // accessing temp view should work despite table ID change (returns empty data)
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert new data and verify view reflects it
@@ -2878,6 +2887,7 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t (id bigint, data STRING, extra INT) USING foo")
 
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "extra"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // alter table
@@ -2888,6 +2898,7 @@ class DataSourceV2DataFrameSuite
 
       // recreate view with updated schema
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // now it should work with new schema
@@ -2918,6 +2929,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
 
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
     }
   }
@@ -2930,6 +2942,7 @@ class DataSourceV2DataFrameSuite
 
         // create temp view using SQL that should capture plan
         sql(s"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT * FROM $t")
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // verify that view stores analyzed plan
@@ -2940,6 +2953,7 @@ class DataSourceV2DataFrameSuite
         sql(s"ALTER TABLE $t ADD COLUMN age int")
 
         // accessing temp view should succeed as top-level column additions are allowed
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // insert data to verify view still works correctly
@@ -2956,6 +2970,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "name"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change VARCHAR(10) to VARCHAR(20)
@@ -2980,6 +2995,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data into underlying table (no schema change)
@@ -3570,6 +3586,7 @@ class DataSourceV2DataFrameSuite
 
       // verify external changes are reflected correctly when table is queried
       assertNotCached(spark.table(t))
+      assert(spark.table(t).schema.fieldNames.toSeq == Seq("id", "value", "category"))
       checkAnswer(spark.table(t), Seq.empty)
     }
   }
