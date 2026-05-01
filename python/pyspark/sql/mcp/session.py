@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class SessionHolder:
     """Lazily creates and caches a Spark Connect session for the MCP server.
 
-    One MCP client connection maps to one Spark Connect session for v0.1.
+    One MCP client connection maps to one Spark Connect session.
     """
 
     def __init__(self, config: ServerConfig):

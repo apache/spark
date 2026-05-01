@@ -4,8 +4,6 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for Apache
 Spark, implemented as a thin client over [Spark
 Connect](https://spark.apache.org/docs/latest/spark-connect-overview.html).
 
-> Status: **early scaffold (v0.1 PoC)**. Not yet wired into Spark releases.
-
 ## Why
 
 LLM clients can already talk to MCP servers; Spark Connect already separates
@@ -33,7 +31,7 @@ python -m pyspark.sql.mcp
 The server is **read-only by default**. Pass `--no-read-only` to allow DDL/DML
 (use with care; the read-only filter is a guardrail, not a security boundary).
 
-## Tools (planned for v0.1)
+## Tools
 
 Catalog exploration, query execution, and query plans:
 
@@ -43,13 +41,12 @@ Catalog exploration, query execution, and query plans:
 - `execute_sql`, `preview_table`
 - `explain_query`, `analyze_query`
 
-See `dev/design-docs/spark-mcp-server/02-design.md` for the full design.
-
 ## Motivating example: LLM-assisted plan analysis
 
-`explain_query` and `analyze_query` are the highest-leverage tools in the
-v0.1 set: an LLM that can read a structured Spark plan can reason about
-performance the way a Spark engineer would, without running the query.
+`explain_query` and `analyze_query` are the highest-leverage tools the
+server exposes: an LLM that can read a structured Spark plan can reason
+about performance the way a Spark engineer would, without running the
+query.
 
 A user prompts an LLM client (which has the Spark MCP server attached):
 

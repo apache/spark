@@ -45,7 +45,7 @@ class ToolSpec:
 
 
 def all_tools() -> List[ToolSpec]:
-    """Return the v0.1 tool surface."""
+    """Return the full tool surface exposed by the server."""
     # Imports are local to avoid forcing tool-module imports when only the
     # registry shape is needed (e.g. in lightweight tests).
     from pyspark.sql.mcp.tools import catalog, query, session
