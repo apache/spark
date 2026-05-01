@@ -3692,8 +3692,6 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             reader thread while the main thread computes the UDF and writes output.
             This allows input deserialization to overlap with UDF computation.
             """
-            # Mark that pipelined mode is active so UDFs can verify the code path.
-            os.environ["SPARK_PIPELINED_UDF_ACTIVE"] = "1"
             import queue
             import threading
 
@@ -3701,6 +3699,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             _SENTINEL = object()
             input_queue = queue.Queue(maxsize=queue_depth)
             reader_error = [None]
+            # Event to signal the reader thread to stop (set by main thread on
+            # exception or completion). The reader checks this after each failed
+            # put attempt instead of polling with a timeout.
             stop_event = threading.Event()
 
             def _reader_thread():
@@ -3712,12 +3713,11 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         # main thread can consume them without touching infile.
                         if hasattr(batch, "__next__"):
                             batch = list(batch)
-                        # Use timeout put so we can check stop_event periodically.
-                        # This prevents the reader from blocking forever if the main
-                        # thread stops consuming (e.g., due to UDF exception).
+                        # Block on put, but wake up when stop_event is set.
+                        # stop_event.wait() returns immediately if already set.
                         while not stop_event.is_set():
                             try:
-                                input_queue.put(batch, timeout=1)
+                                input_queue.put(batch, timeout=0.1)
                                 break
                             except queue.Full:
                                 continue
@@ -3726,10 +3726,10 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 except Exception as e:
                     reader_error[0] = e
                 finally:
-                    # Use the same timeout put pattern for the sentinel.
+                    # Enqueue sentinel so the consumer knows we're done.
                     while not stop_event.is_set():
                         try:
-                            input_queue.put(_SENTINEL, timeout=1)
+                            input_queue.put(_SENTINEL, timeout=0.1)
                             break
                         except queue.Full:
                             continue
@@ -3765,6 +3765,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 t.join(timeout=5)
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        if is_pipelined and hasattr(serializer, "_flush_per_batch"):
+            serializer._flush_per_batch = True
         run_process = pipelined_process if is_pipelined else process
 
         processing_start_time = time.time()

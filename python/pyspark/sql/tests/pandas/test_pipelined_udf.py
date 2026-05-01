@@ -66,11 +66,12 @@ class PipelinedUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(StringType())
         def check_env(x: pd.Series) -> pd.Series:
-            flag = os.environ.get("SPARK_PIPELINED_UDF_ACTIVE", "not_set")
+            # SPARK_PIPELINED_UDF is set by the JVM when pipelined mode is enabled.
+            flag = os.environ.get("SPARK_PIPELINED_UDF", "not_set")
             return pd.Series([flag] * len(x))
 
         result = self.spark.range(1).select(check_env(col("id"))).first()[0]
-        self.assertEqual(result, "1", "pipelined_process() should set SPARK_PIPELINED_UDF_ACTIVE=1")
+        self.assertEqual(result, "1", "JVM should set SPARK_PIPELINED_UDF=1")
 
     def test_scalar_arrow_udf(self):
         """Basic scalar Arrow UDF with pipelined mode."""

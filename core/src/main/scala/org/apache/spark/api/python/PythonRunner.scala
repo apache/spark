@@ -128,7 +128,11 @@ private[spark] object BasePythonRunner extends Logging {
    * Bounded by executor cores since each task uses at most one writer thread.
    */
   private[python] lazy val pipelinedWriterThreadPool = {
-    val maxThreads = SparkEnv.get.conf.get(EXECUTOR_CORES)
+    // Each concurrent task uses at most one writer thread. Bound the pool by available
+    // processors, which is the natural upper limit for concurrent tasks on this executor.
+    // Using availableProcessors() instead of EXECUTOR_CORES because the latter defaults
+    // to 1 in local[*] mode even though multiple tasks run concurrently.
+    val maxThreads = Runtime.getRuntime.availableProcessors()
     ThreadUtils.newDaemonCachedThreadPool("python-udf-pipelined-writer", maxThreads)
   }
 
@@ -379,108 +383,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     // Return an iterator that read lines from the process's stdout
     val dataIn = if (usePipelined) {
-      // Pipelined mode: true full-duplex I/O. The writer thread serializes input and
-      // writes directly to the socket. The task main thread reads output from the socket.
-      // TCP sockets are full-duplex, so one thread can write() while another reads()
-      // without interference. This achieves genuine pipeline parallelism:
-      //   Writer Thread:  serialize batch N  →  channel.write(batch N)
-      //   Reader Thread:  channel.read(output N-1)  →  deserialize
-      //   Python:         compute batch N-1  →  write output  →  read batch N
-      //
-      // The socket must be in blocking mode for this to work correctly (no Selector).
-      // Deadlock safety: Python alternates read-compute-write, so as long as the reader
-      // thread is consuming output, Python will eventually consume input and free the
-      // send buffer for the writer thread.
-      // Switch the channel to blocking mode for true full-duplex I/O.
-      // Must close the selector first because configureBlocking() fails
-      // if the channel is registered with a selector (IllegalBlockingModeException).
-      if (worker.selectionKey != null) {
-        worker.selectionKey.cancel()
-      }
-      if (worker.selector != null) {
-        worker.selector.close()
-      }
-      worker.channel.configureBlocking(true)
-      worker.refresh() // re-initializes (no selector in blocking mode)
-
-      val writerRunnable = new PipelinedWriterRunnable(worker, writer, bufferSize, context)
-      val writerFuture = BasePythonRunner.pipelinedWriterThreadPool.submit(writerRunnable)
-
-      context.addTaskCompletionListener[Unit] { _ =>
-        writerFuture.cancel(true)
-      }
-
-      // Set socket read timeout for idle timeout detection in pipelined mode.
-      // In sync mode, the NIO Selector's select(timeout) handles this. In pipelined
-      // mode, we use SO_TIMEOUT on the blocking socket instead.
-      // Always set explicitly (including 0 = no timeout) because reused workers may
-      // retain a stale SO_TIMEOUT from a previous task that had a different setting.
-      worker.channel.socket().setSoTimeout(
-        if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
-
-      // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
-      // - Log warning on each timeout
-      // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
-      // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
-      val socketInput = new InputStream {
-        private val inner = worker.channel.socket().getInputStream
-        private var pythonWorkerKilled = false
-        override def read(): Int = doRead(() => inner.read())
-        override def read(b: Array[Byte], off: Int, len: Int): Int =
-          doRead(() => inner.read(b, off, len))
-        private def doRead(op: () => Int): Int = {
-          var result = 0
-          var retry = true
-          while (retry) {
-            try {
-              result = op()
-              retry = false
-            } catch {
-              case _: java.net.SocketTimeoutException =>
-                if (pythonWorkerKilled) {
-                  logWarning(
-                    log"Waiting for Python worker process to terminate after idle timeout: " +
-                    pythonWorkerStatusMessageWithContext(
-                      handle, worker, hasInputs = true))
-                } else {
-                  logWarning(
-                    log"Idle timeout reached for Python worker (timeout: " +
-                    log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-                    log"No data received from the worker process - " +
-                    pythonWorkerStatusMessageWithContext(
-                      handle, worker, hasInputs = true) +
-                    log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
-                  if (killOnIdleTimeout) {
-                    handle.foreach { h =>
-                      if (h.isAlive) {
-                        logWarning(
-                          log"Terminating Python worker process due to idle timeout " +
-                          log"(timeout: " +
-                          log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
-                          log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
-                        pythonWorkerKilled = h.destroy()
-                      }
-                    }
-                    // After killing, retry read to get EOF from the dead process
-                  } else {
-                    // Not killing: retry read, matching sync mode behavior
-                  }
-                }
-            }
-          }
-          // If worker was killed and read returned -1 (EOF), throw the expected error
-          if (result == -1 && pythonWorkerKilled) {
-            val base = "Python worker process terminated due to idle timeout " +
-              s"(timeout: $idleTimeoutSeconds seconds)"
-            val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
-              .map(error => s"$base: $error")
-              .getOrElse(base)
-            throw new PythonWorkerException(msg)
-          }
-          result
-        }
-      }
-      new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
+      createPipelinedDataIn(worker, writer, handle, context)
     } else {
       new DataInputStream(new BufferedInputStream(
         new ReaderInputStream(worker, writer, handle,
@@ -490,6 +393,101 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val stdoutIterator = newReaderIterator(
       dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
     new InterruptibleIterator(context, stdoutIterator)
+  }
+
+  /**
+   * Sets up pipelined mode: switches the socket to blocking mode, starts the writer
+   * thread, configures idle timeout, and returns a DataInputStream for reading output.
+   */
+  private def createPipelinedDataIn(
+      worker: PythonWorker,
+      writer: Writer,
+      handle: Option[ProcessHandle],
+      context: TaskContext): DataInputStream = {
+    // Switch the channel to blocking mode for true full-duplex I/O.
+    // Must close the selector first because configureBlocking() fails
+    // if the channel is registered with a selector (IllegalBlockingModeException).
+    if (worker.selectionKey != null) {
+      worker.selectionKey.cancel()
+    }
+    if (worker.selector != null) {
+      worker.selector.close()
+    }
+    worker.channel.configureBlocking(true)
+    worker.refresh() // re-initializes (no selector in blocking mode)
+
+    val writerRunnable = new PipelinedWriterRunnable(worker, writer, bufferSize, context)
+    val writerFuture = BasePythonRunner.pipelinedWriterThreadPool.submit(writerRunnable)
+
+    context.addTaskCompletionListener[Unit] { _ =>
+      writerFuture.cancel(true)
+    }
+
+    // Set socket read timeout for idle timeout detection in pipelined mode.
+    // Always set explicitly (including 0 = no timeout) because reused workers may
+    // retain a stale SO_TIMEOUT from a previous task that had a different setting.
+    worker.channel.socket().setSoTimeout(
+      if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
+
+    // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
+    // - Log warning on each timeout
+    // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
+    // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
+    val socketInput = new InputStream {
+      private val inner = worker.channel.socket().getInputStream
+      private var pythonWorkerKilled = false
+      override def read(): Int = doRead(() => inner.read())
+      override def read(b: Array[Byte], off: Int, len: Int): Int =
+        doRead(() => inner.read(b, off, len))
+      private def doRead(op: () => Int): Int = {
+        var result = 0
+        var retry = true
+        while (retry) {
+          try {
+            result = op()
+            retry = false
+          } catch {
+            case _: java.net.SocketTimeoutException =>
+              if (pythonWorkerKilled) {
+                logWarning(
+                  log"Waiting for Python worker process to terminate after idle timeout: " +
+                  pythonWorkerStatusMessageWithContext(
+                    handle, worker, hasInputs = true))
+              } else {
+                logWarning(
+                  log"Idle timeout reached for Python worker (timeout: " +
+                  log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+                  log"No data received from the worker process - " +
+                  pythonWorkerStatusMessageWithContext(
+                    handle, worker, hasInputs = true) +
+                  log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                if (killOnIdleTimeout) {
+                  handle.foreach { h =>
+                    if (h.isAlive) {
+                      logWarning(
+                        log"Terminating Python worker process due to idle timeout " +
+                        log"(timeout: " +
+                        log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
+                        log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
+                      pythonWorkerKilled = h.destroy()
+                    }
+                  }
+                }
+              }
+          }
+        }
+        if (result == -1 && pythonWorkerKilled) {
+          val base = "Python worker process terminated due to idle timeout " +
+            s"(timeout: $idleTimeoutSeconds seconds)"
+          val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+            .map(error => s"$base: $error")
+            .getOrElse(base)
+          throw new PythonWorkerException(msg)
+        }
+        result
+      }
+    }
+    new DataInputStream(new BufferedInputStream(socketInput, bufferSize))
   }
 
   protected def newWriter(
