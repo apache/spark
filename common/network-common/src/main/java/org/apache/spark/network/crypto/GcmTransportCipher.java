@@ -339,9 +339,9 @@ public class GcmTransportCipher implements TransportCipher {
                 "expectedLength={}, ciphertextRead={}, segmentCount={}",
                 expectedLength, ciphertextRead, segmentNumber);
             expectedLength = -1;
-            expectedLengthBuffer.clear();
-            headerBuffer.clear();
-            ciphertextBuffer.clear();
+            ((Buffer) expectedLengthBuffer).clear();
+            ((Buffer) headerBuffer).clear();
+            ((Buffer) ciphertextBuffer).clear();
             decrypterInit = false;
             completed = false;
             segmentNumber = 0;
@@ -358,9 +358,9 @@ public class GcmTransportCipher implements TransportCipher {
                         expectedLengthBuffer.remaining());
                 if (toRead > 0) {
                     int savedLimit = expectedLengthBuffer.limit();
-                    expectedLengthBuffer.limit(expectedLengthBuffer.position() + toRead);
+                    ((Buffer) expectedLengthBuffer).limit(expectedLengthBuffer.position() + toRead);
                     ciphertextNettyBuf.readBytes(expectedLengthBuffer);
-                    expectedLengthBuffer.limit(savedLimit);
+                    ((Buffer) expectedLengthBuffer).limit(savedLimit);
                 }
                 if (expectedLengthBuffer.hasRemaining()) {
                     // We did not read enough bytes to initialize the expected length.
@@ -390,9 +390,9 @@ public class GcmTransportCipher implements TransportCipher {
                         headerBuffer.remaining());
                 if (toRead > 0) {
                     int savedLimit = headerBuffer.limit();
-                    headerBuffer.limit(headerBuffer.position() + toRead);
+                    ((Buffer) headerBuffer).limit(headerBuffer.position() + toRead);
                     ciphertextNettyBuf.readBytes(headerBuffer);
-                    headerBuffer.limit(savedLimit);
+                    ((Buffer) headerBuffer).limit(savedLimit);
                 }
                 if (headerBuffer.hasRemaining()) {
                     // We did not read enough bytes to initialize the header.
@@ -451,7 +451,7 @@ public class GcmTransportCipher implements TransportCipher {
                         int expectedRemaining = (int) (expectedLength - ciphertextRead);
                         int bytesToRead = Math.min(readableBytes, expectedRemaining);
                         // The smallest ciphertext size is 16 bytes for the auth tag
-                        ciphertextBuffer.limit(ciphertextBuffer.position() + bytesToRead);
+                        ((Buffer) ciphertextBuffer).limit(ciphertextBuffer.position() + bytesToRead);
                         ciphertextNettyBuf.readBytes(ciphertextBuffer);
                         ciphertextRead += bytesToRead;
                         // Check if this is the last segment
@@ -464,7 +464,7 @@ public class GcmTransportCipher implements TransportCipher {
                         // then decrypt it and fire a read.
                         if (ciphertextBuffer.limit() == ciphertextBuffer.capacity() || completed) {
                             ByteBuffer plaintextBuffer = ByteBuffer.allocate(plaintextSegmentSize);
-                            ciphertextBuffer.flip();
+                            ((Buffer) ciphertextBuffer).flip();
                             decrypter.decryptSegment(
                                     ciphertextBuffer,
                                     segmentNumber,
@@ -472,8 +472,8 @@ public class GcmTransportCipher implements TransportCipher {
                                     plaintextBuffer);
                             segmentNumber++;
                             // Clear the ciphertext buffer because it's been read
-                            ciphertextBuffer.clear();
-                            plaintextBuffer.flip();
+                            ((Buffer) ciphertextBuffer).clear();
+                            ((Buffer) plaintextBuffer).flip();
                             totalPlaintextFired += plaintextBuffer.remaining();
                             if (plaintextAccumulator == null) {
                                 // Integer.MAX_VALUE disables consolidation entirely.
@@ -488,7 +488,7 @@ public class GcmTransportCipher implements TransportCipher {
                                 true, Unpooled.wrappedBuffer(plaintextBuffer));
                         } else {
                             // Set the ciphertext buffer up to read the next chunk
-                            ciphertextBuffer.limit(ciphertextBuffer.capacity());
+                            ((Buffer) ciphertextBuffer).limit(ciphertextBuffer.capacity());
                         }
                         nettyBufReadableBytes = ciphertextNettyBuf.readableBytes();
                     }
