@@ -26,7 +26,8 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.deploy.k8s.Config.PVC_RESIZE_INTERVAL
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -274,5 +275,18 @@ class ExecutorPVCResizePluginSuite
     val plugin = createPlugin()
     assert(plugin.receive("unrelated") == null)
     assert(plugin.receive(42) == null)
+  }
+
+  test("SPARK-56699: PVC_RESIZE_INTERVAL must be 0 or a positive multiple of 5 minutes") {
+    val conf = new SparkConf(false)
+    assert(conf.get(PVC_RESIZE_INTERVAL) === 5)
+    Seq("0", "5", "10", "15", "15min").foreach { v =>
+      conf.set(PVC_RESIZE_INTERVAL.key, v)
+      assert(conf.get(PVC_RESIZE_INTERVAL) >= 0)
+    }
+    Seq("1", "7", "-5").foreach { v =>
+      conf.set(PVC_RESIZE_INTERVAL.key, v)
+      intercept[IllegalArgumentException](conf.get(PVC_RESIZE_INTERVAL))
+    }
   }
 }
