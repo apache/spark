@@ -135,8 +135,8 @@ class ProtoToParsedPlanTestSuite
 
   /**
    * Isolated from [[SharedSparkSession]] so PATH / session path settings do not affect catalog.
-   * Cloned from the test session's conf so all sparkConf overrides (ANSI, alias config, etc.)
-   * are preserved automatically; only the genuine isolation knob is overridden explicitly.
+   * Cloned from the test session's conf so all sparkConf overrides (ANSI, alias config, etc.) are
+   * preserved automatically; only the genuine isolation knob is overridden explicitly.
    */
   private lazy val analyzerIsolationConf: SQLConf = {
     val c = spark.sessionState.conf.clone()
