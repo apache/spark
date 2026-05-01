@@ -800,7 +800,7 @@ private[spark] class AppStatusListener(
       }
 
       // Force an update on both live and history applications when the number of active tasks
-      // reaches 0. This is checked in some tests (e.g. SQLTestUtilsBase) so it needs to be
+      // reaches 0. This is checked in some tests (e.g. QueryTestBase) so it needs to be
       // reliably up to date.
       if (exec.activeTasks == 0) {
         update(exec, now)

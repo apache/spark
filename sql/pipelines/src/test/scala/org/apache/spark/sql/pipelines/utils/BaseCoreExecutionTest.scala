@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, DatasetManager, PipelineUpdateContext}
 
 trait BaseCoreExecutionTest extends ExecutionTest {
+  import testImplicits._
 
   /**
    * Materializes the given graph using the provided context.

@@ -1950,6 +1950,21 @@ package object config {
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
+  private[spark] val UNSAFE_SORTER_SPILL_MERGE_FACTOR =
+    ConfigBuilder("spark.unsafe.sorter.spill.merge.factor")
+      .doc("Maximum number of spill files to merge simultaneously in UnsafeExternalSorter. " +
+        "When the number of spill files exceeds this value, a multi-round merge is performed " +
+        "to limit the number of concurrently open file readers and avoid OOM during sort-merge. " +
+        "A smaller value uses less memory but incurs more intermediate disk I/O. " +
+        "Set to -1 to disable bounded merging (legacy behavior).")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .internal()
+      .version("4.2.0")
+      .intConf
+      .checkValue(v => v == -1 || v >= 2,
+        "The merge factor must be -1 (disabled) or at least 2.")
+      .createWithDefault(-1)
+
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
   private[spark] val PLUGINS =
@@ -2372,6 +2387,22 @@ package object config {
       .version("0.8.0")
       .enumConf(SchedulingMode)
       .createWithDefault(SchedulingMode.FIFO)
+
+  private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED =
+    ConfigBuilder("spark.scheduler.streaming.idAwareLogging.enabled")
+      .doc("When true, scheduler log messages for streaming tasks include " +
+        "the structured streaming query ID and batch ID.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH =
+    ConfigBuilder("spark.scheduler.streaming.idAwareLogging.queryIdLength")
+      .doc("Maximum number of characters of the streaming query ID to include " +
+        "in scheduler log messages. Set to -1 to include the full query ID.")
+      .version("4.2.0")
+      .intConf
+      .createWithDefault(5)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")

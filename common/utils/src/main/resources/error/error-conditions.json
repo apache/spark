@@ -661,6 +661,24 @@
     ],
     "sqlState" : "42P08"
   },
+  "CHANGELOG_CONTRACT_VIOLATION" : {
+    "message" : [
+      "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
+    ],
+    "subClass" : {
+      "UNEXPECTED_CHANGE_TYPE" : {
+        "message" : [
+          "Connector emitted a row with a `_change_type` value that is not one of the four supported types (`insert`, `delete`, `update_preimage`, `update_postimage`). The `Changelog` contract requires every emitted row to carry one of these four values."
+        ]
+      },
+      "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
+        "message" : [
+          "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -2061,6 +2079,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_SQL_PATH_ENTRY" : {
+    "message" : [
+      "Duplicate SQL path entry <pathEntry>. The session SQL path cannot contain the same namespace more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
+    ],
+    "sqlState" : "42732"
+  },
   "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
       "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
@@ -2779,6 +2803,12 @@
           "<errors>"
         ]
       },
+      "COLUMN_ID_MISMATCH" : {
+        "message" : [
+          "Column IDs have changed:",
+          "<errors>"
+        ]
+      },
       "METADATA_COLUMNS_MISMATCH" : {
         "message" : [
           "Metadata columns have changed:",
@@ -3271,6 +3301,39 @@
       "MISSING_STARTING_VERSION" : {
         "message" : [
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
+        ]
+      },
+      "STREAMING_POST_PROCESSING_NOT_SUPPORTED" : {
+        "message" : [
+          "Change Data Capture (CDC) streaming reads on connector `<changelogName>` do not yet support post-processing (carry-over removal, update detection, or net change computation). The requested combination of options would require post-processing, which is currently only available for batch reads. Use a batch read, or set `deduplicationMode = none` and `computeUpdates = false` to receive raw change rows in streaming."
+        ]
+      },
+      "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
+        "message" : [
+          "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
+  "INVALID_CHANGELOG_SCHEMA" : {
+    "message" : [
+      "The Change Data Capture (CDC) schema returned by connector <changelogName> is invalid."
+    ],
+    "subClass" : {
+      "INVALID_COLUMN_TYPE" : {
+        "message" : [
+          "Column `<columnName>` has type <actualType>, expected <expectedType>."
+        ]
+      },
+      "MISSING_COLUMN" : {
+        "message" : [
+          "Required column `<columnName>` is missing."
+        ]
+      },
+      "MISSING_ROW_ID" : {
+        "message" : [
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array."
         ]
       }
     },
@@ -4474,6 +4537,12 @@
       "<plan>"
     ],
     "sqlState" : "XXKD0"
+  },
+  "INVALID_SQL_PATH_SCHEMA_REFERENCE" : {
+    "message" : [
+      "Invalid schema reference in SET PATH: <qualifiedName>. Use at least two name parts (catalog.schema); multi-level namespaces are allowed."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -5874,6 +5943,18 @@
     ],
     "sqlState" : "38000"
   },
+  "QUALIFY_AGGREGATE_NOT_ALLOWED" : {
+    "message" : [
+      "Aggregate functions are not supported in QUALIFY: <aggregateExpr>."
+    ],
+    "sqlState" : "42903"
+  },
+  "QUALIFY_REQUIRES_WINDOW_FUNCTION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function in the current SELECT list or the QUALIFY condition."
+    ],
+    "sqlState" : "42903"
+  },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
       "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
@@ -6869,6 +6950,11 @@
           "Value at index <valueIndex> is null while numValues is <numValues>.",
           "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
           "Enable <configKey> as a workaround to skip null values."
+        ]
+      },
+      "RANGE_SCAN_TIMESTAMP_OUT_OF_RANGE" : {
+        "message" : [
+          "Range scan returned a row with timestamp <timestamp> outside the expected range [<minTimestamp>, <maxTimestamp>]."
         ]
       }
     },
@@ -7884,6 +7970,11 @@
           "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "SET_PATH_WHEN_DISABLED" : {
+        "message" : [
+          "SET PATH is disabled. Set <config> to true to enable it."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
@@ -8132,6 +8223,29 @@
       "NON_EXISTENT_PATH" : {
         "message" : [
           "a non-existent path."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this write."
+    ],
+    "subClass" : {
+      "CREATE_TABLE" : {
+        "message" : [
+          "Creating a new table does not support schema evolution."
+        ]
+      },
+      "REPLACE_TABLE" : {
+        "message" : [
+          "Replacing a table does not support schema evolution."
+        ]
+      },
+      "V1_TABLE" : {
+        "message" : [
+          "Writes to V1 tables or V1 data sources do not support schema evolution."
         ]
       }
     },
@@ -8508,6 +8622,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_FRAME_NOT_ORDERED" : {
+    "message" : [
+      "Window function <wf_name> requires the window to be ordered. You need to add an ORDER BY clause. For example: SELECT <wf_expr> OVER (PARTITION BY window_partition ORDER BY window_ordering) FROM table."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
     "message" : [
       "It is not allowed to use window functions inside <clauseName> clause."
@@ -8779,11 +8899,6 @@
       "Window Frame <wf> must match the required frame <required>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1037" : {
-    "message" : [
-      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1039" : {
     "message" : [
       "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
@@ -8942,11 +9057,6 @@
   "_LEGACY_ERROR_TEMP_1110" : {
     "message" : [
       "Cannot delete from table <table> where <filters>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1111" : {
-    "message" : [
-      "DESCRIBE does not support partition for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1114" : {

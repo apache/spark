@@ -970,7 +970,7 @@ class ClientE2ETestSuite
       // df1("i") is not ambiguous, but it's not valid in the projected df.
       df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
     }
-    assert(e1.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+    assert(e1.getMessage.contains("CANNOT_RESOLVE_DATAFRAME_COLUMN"))
 
     checkSameResult(
       Seq(Row(1, "a")),

@@ -31,7 +31,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -51,14 +51,13 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 @SlowHiveTest
 class HiveDDLSuite
-  extends DDLSuite with SQLTestUtils with TestHiveSingleton {
+  extends DDLSuite with QueryTest with TestHiveSingleton {
   import testImplicits._
   val hiveFormats = Seq("PARQUET", "ORC", "TEXTFILE", "SEQUENCEFILE", "RCFILE", "AVRO")
 

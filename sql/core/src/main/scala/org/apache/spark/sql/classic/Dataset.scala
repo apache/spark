@@ -1306,7 +1306,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  protected[spark] def withColumnsRenamed(
+  override protected[spark] def withColumnsRenamed(
       colNames: Seq[String],
       newColNames: Seq[String]): DataFrame = {
     require(colNames.size == newColNames.size,
@@ -2259,9 +2259,11 @@ class Dataset[T] private[sql](
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
-        qe.executedPlan.resetMetrics()
-        action(qe.executedPlan)
+      qe.withQueryExecutionId(sparkSession) {
+        QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+          qe.executedPlan.resetMetrics()
+          action(qe.executedPlan)
+        }
       }
     }
   }

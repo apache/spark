@@ -249,6 +249,53 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
         with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
             self.connect.read.csv(empty_schema_df).collect()
 
+    def test_xml_with_dataframe_input(self):
+        xml_df = self.connect.createDataFrame(
+            [
+                ("<person><name>Alice</name><age>25</age></person>",),
+                ("<person><name>Bob</name><age>30</age></person>",),
+            ],
+            schema="value STRING",
+        )
+        result = self.connect.read.option("rowTag", "person").xml(xml_df)
+        expected = [Row(age=25, name="Alice"), Row(age=30, name="Bob")]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_xml_with_dataframe_input_and_schema(self):
+        xml_df = self.connect.createDataFrame(
+            [
+                ("<person><name>Alice</name><age>25</age></person>",),
+                ("<person><name>Bob</name><age>30</age></person>",),
+            ],
+            schema="value STRING",
+        )
+        result = self.connect.read.option("rowTag", "person").xml(
+            xml_df, schema="name STRING, age INT"
+        )
+        expected = [Row(name="Alice", age=25), Row(name="Bob", age=30)]
+        self.assertEqual(sorted(result.collect(), key=lambda r: r.name), expected)
+
+    def test_xml_with_dataframe_input_non_string_column(self):
+        int_df = self.connect.createDataFrame([(1,), (2,)], schema="value INT")
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_STRING_TYPE"):
+            self.connect.read.option("rowTag", "person").xml(int_df).collect()
+
+    def test_xml_with_dataframe_input_multiple_columns(self):
+        multi_df = self.connect.createDataFrame(
+            [
+                ("<person><name>Alice</name></person>", "extra"),
+                ("<person><name>Bob</name></person>", "extra"),
+            ],
+            schema="value STRING, other STRING",
+        )
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
+            self.connect.read.option("rowTag", "person").xml(multi_df).collect()
+
+    def test_xml_with_dataframe_input_zero_columns(self):
+        empty_schema_df = self.connect.range(1).select()
+        with self.assertRaisesRegex(Exception, "DATAFRAME_INPUT_NOT_SINGLE_COLUMN"):
+            self.connect.read.option("rowTag", "person").xml(empty_schema_df).collect()
+
     def test_multi_paths(self):
         # SPARK-42041: DataFrameReader should support list of paths
 

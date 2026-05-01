@@ -252,7 +252,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // This batch must run after "Decimal Optimizations", as that one may change the
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
-      RewriteDistinctAggregates),
+      RewriteDistinctAggregates,
+      OptimizeExpand),
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,

@@ -97,7 +97,7 @@ org.apache.spark.sql.AnalysisException
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, spark_catalog.default.char_view
 
 
 -- !query
@@ -189,7 +189,7 @@ AlterViewAsCommand `spark_catalog`.`default`.`char_view`, select * from char_tbl
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, spark_catalog.default.char_view
 
 
 -- !query
@@ -215,7 +215,7 @@ AlterTableSetPropertiesCommand `spark_catalog`.`default`.`char_view`, [yes=no], 
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, spark_catalog.default.char_view
 
 
 -- !query
@@ -241,7 +241,7 @@ AlterTableUnsetPropertiesCommand `spark_catalog`.`default`.`char_view`, [yes], f
 desc formatted char_view
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`char_view`, true, [col_name#x, data_type#x, comment#x]
-+- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, `spark_catalog`.`default`.`char_view`
++- ResolvedPersistentView V2SessionCatalog(spark_catalog), default.char_view, spark_catalog.default.char_view
 
 
 -- !query

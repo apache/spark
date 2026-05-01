@@ -18,6 +18,8 @@ SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read 
 
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
+Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
+
 ## Build and Test
 
 Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
@@ -92,15 +94,32 @@ Each annotation contains the test class, test name, and failure message.
 
 ## Pull Request Workflow
 
-PR title format is `[SPARK-xxxx][Component] Title`. Infer the PR title from the changes. If no ticket ID is given, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
+PR title format is `[SPARK-xxxx][COMPONENT] Title`. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
+
+Infer the PR title from the changes. If no ticket ID is given, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
     python3 dev/create_spark_jira.py "<title>" -c <component> { -t <type> | -p <parent-jira-id> }
 
-- **Component** (`-c`): e.g. "SQL", "Spark Core", "PySpark", "Connect". Run `python3 dev/create_spark_jira.py --list-components` for the full list.
+- **Component** (`-c`): the exact JIRA component name (not the PR title shorthand), e.g. "SQL", "Spark Core", "PySpark", "Connect". Run `python3 dev/create_spark_jira.py --list-components` for the full list.
 - **Issue type** (`-t`): "Bug", "Improvement", "New Feature", "Test", "Documentation", or "Dependency upgrade".
 - **Parent** (`-p`): if the user mentions a parent JIRA ticket (e.g., "this is a subtask of SPARK-12345"), pass it instead of `-t`. The issue type is automatically "Sub-task".
 
-The script sets the latest unreleased version as the default affected version. Ask the user to review and adjust versions and other fields on the JIRA ticket after creation.
+The script sets the latest unreleased version as the default affected version.
+
+After creating a JIRA ticket, print a prominent notice so the user does not miss it:
+
+    ============================================================
+    JIRA ticket created: SPARK-XXXXX
+    https://issues.apache.org/jira/browse/SPARK-XXXXX
+
+    Title:              <title>
+    Component(s):       <component>
+    Issue type:         <type>
+    Affected version(s): <version>
+    Priority:           <priority>
+
+    Please review and adjust these fields if needed.
+    ============================================================
 
 Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 

@@ -118,7 +118,7 @@ jobs:
           mv python/lib lib.back
           mv python/pyspark pyspark.back
 
-          ./python/run-tests --parallelism=1 --python-executables=python3 --testnames "pyspark.resource.tests.test_connect_resources,pyspark.sql.tests.connect.client.test_artifact,pyspark.sql.tests.connect.client.test_artifact_localcluster,pyspark.sql.tests.connect.test_resources"
+          ./python/run-tests --parallelism=1 --python-executables=python3 --testnames "pyspark.resource.tests.test_connect_resources,pyspark.sql.tests.connect.client.test_artifact,pyspark.sql.tests.connect.client.test_artifact_localcluster,pyspark.sql.tests.connect.test_parity_resources"
 
           # Stop Spark Connect server.
           ./sbin/stop-connect-server.sh

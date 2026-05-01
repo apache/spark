@@ -792,6 +792,7 @@ class AstBuilder extends DataTypeAstBuilder
         ctx.aggregationClause,
         ctx.havingClause,
         ctx.windowClause,
+        ctx.qualifyClause,
         plan,
         isPipeOperatorSelect = false
       )
@@ -1575,6 +1576,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx.aggregationClause,
       ctx.havingClause,
       ctx.windowClause,
+      ctx.qualifyClause,
       from,
       isPipeOperatorSelect = false
     )
@@ -1614,6 +1616,18 @@ class AstBuilder extends DataTypeAstBuilder
       case e => Cast(e, BooleanType)
     }
     UnresolvedHaving(predicate, plan)
+  }
+
+  /**
+   * Create a logical plan using a qualify clause.
+   */
+  private def withQualifyClause(
+      ctx: QualifyClauseContext, plan: LogicalPlan): LogicalPlan = {
+    val predicate = expression(ctx.booleanExpression) match {
+      case p: Predicate => p
+      case e => Cast(e, BooleanType)
+    }
+    UnresolvedQualify(predicate, plan)
   }
 
   /**
@@ -1663,6 +1677,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
+      qualifyClause = null,
       isDistinct = false,
       isPipeOperatorSelect = false)
 
@@ -1698,6 +1713,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       relation: LogicalPlan,
       isPipeOperatorSelect: Boolean): LogicalPlan = withOrigin(ctx) {
     val isDistinct = selectClause.setQuantifier() != null &&
@@ -1711,6 +1727,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause,
       havingClause,
       windowClause,
+      qualifyClause,
       isDistinct,
       isPipeOperatorSelect)
 
@@ -1726,6 +1743,7 @@ class AstBuilder extends DataTypeAstBuilder
       aggregationClause: AggregationClauseContext,
       havingClause: HavingClauseContext,
       windowClause: WindowClauseContext,
+      qualifyClause: QualifyClauseContext,
       isDistinct: Boolean,
       isPipeOperatorSelect: Boolean): LogicalPlan = {
     // Add lateral views.
@@ -1786,11 +1804,18 @@ class AstBuilder extends DataTypeAstBuilder
       createProject()
     }
 
-    // Distinct
-    val withDistinct = if (isDistinct) {
-      Distinct(withProject)
+    // Qualify
+    val withQualify = if (qualifyClause != null) {
+      withQualifyClause(qualifyClause, withProject)
     } else {
       withProject
+    }
+
+    // Distinct
+    val withDistinct = if (isDistinct) {
+      Distinct(withQualify)
+    } else {
+      withQualify
     }
 
     // Window
@@ -3434,14 +3459,20 @@ class AstBuilder extends DataTypeAstBuilder
           CurrentTimestamp()
         case SqlBaseParser.CURRENT_TIME =>
           CurrentTime()
+        case SqlBaseParser.CURRENT_PATH =>
+          CurrentPath()
         case SqlBaseParser.CURRENT_USER | SqlBaseParser.USER | SqlBaseParser.SESSION_USER =>
           CurrentUser()
       }
     } else {
-      // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case there
-      // are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`.
-      // ctx.name is a token, not an identifier context.
-      UnresolvedAttribute.quoted(ctx.name.getText)
+      ctx.name.getType match {
+        case SqlBaseParser.CURRENT_PATH =>
+          CurrentPath()
+        case _ =>
+          // If the parser is not in ansi mode, we should return `UnresolvedAttribute`, in case
+          // there are columns named `CURRENT_DATE` or `CURRENT_TIMESTAMP` or `CURRENT_TIME`.
+          UnresolvedAttribute.quoted(ctx.name.getText)
+      }
     }
   }
 
@@ -4255,8 +4286,12 @@ class AstBuilder extends DataTypeAstBuilder
   protected def createUnresolvedTableOrView(
       ctx: IdentifierReferenceContext,
       commandName: String,
-      allowTempView: Boolean = true): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx, UnresolvedTableOrView(_, commandName, allowTempView))
+      allowTempView: Boolean = true,
+      tableNotFoundSearchPathMode: UnresolvedTableOrViewSearchPathMode =
+        UnresolvedTableOrViewSearchPathMode.Ddl): LogicalPlan = withOrigin(ctx) {
+    withIdentClause(
+      ctx,
+      UnresolvedTableOrView(_, commandName, allowTempView, tableNotFoundSearchPathMode))
   }
 
   private def createUnresolvedTableOrView(
@@ -7188,6 +7223,7 @@ class AstBuilder extends DataTypeAstBuilder
         aggregationClause = ctx.aggregationClause,
         havingClause = null,
         windowClause = ctx.windowClause,
+        qualifyClause = null,
         relation = left,
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.EXTEND).map { _ =>
@@ -7355,7 +7391,7 @@ class AstBuilder extends DataTypeAstBuilder
             // and replace it with the corresponding attribute from the child operator.
             case UnresolvedOrdinal(v: Int) =>
               newGroupingExpressions += UnresolvedOrdinal(newAggregateExpressions.length + 1)
-              newAggregateExpressions += UnresolvedAlias(UnresolvedPipeAggregateOrdinal(v), None)
+              newAggregateExpressions += UnresolvedPipeAggregateOrdinal(v)
             case e: Expression =>
               newGroupingExpressions += e
               newAggregateExpressions += UnresolvedAlias(e, None)

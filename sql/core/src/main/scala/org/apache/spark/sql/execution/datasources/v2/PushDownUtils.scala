@@ -21,13 +21,15 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters}
@@ -130,16 +132,80 @@ object PushDownUtils extends Logging {
   }
 
   /**
+   * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]] scan. Translatable filters are
+   * pushed first, followed by [[PartitionPredicate]] if the scan supports iterative filtering.
+   * Only runtime filters whose translated form was not already accepted by the data source in
+   * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
+   * pushdown.
+   *
+   * @return true if any filters were pushed to the data source
+   */
+  def pushRuntimeFilters(
+      scan: Scan,
+      runtimeFilters: Seq[Expression],
+      table: Table,
+      output: Seq[AttributeReference]): Boolean = {
+    scan match {
+      case filterableScan: SupportsRuntimeV2Filtering if runtimeFilters.nonEmpty =>
+        // Push down translatable runtime filters.
+        val filtersToTranslated = runtimeFilters.flatMap { f =>
+          (f match {
+            case DynamicPruningExpression(e) => DataSourceV2Strategy.translateRuntimeFilterV2(e)
+            case o => DataSourceV2Strategy.translateScalarSubqueryFilterV2(o)
+          }).map(f -> _)
+        }.toMap
+
+        val translatedFiltersPushed = filtersToTranslated.nonEmpty
+        if (translatedFiltersPushed) {
+          filterableScan.filter(filtersToTranslated.values.toArray)
+        }
+
+        // If the scan supports iterative filtering, derive PartitionPredicates from runtime
+        // filters whose translation was not already accepted in the first pass.  (See SPARK-55596)
+        // Only candidates whose referenced columns are declared in filterAttributes() are eligible.
+        val partPredicatesPushed = filterableScan.supportsIterativePushdown() && {
+          val filterAttrs = V2ExpressionUtils.resolveAttributeRefs(
+            filterableScan.filterAttributes(), output)
+          val pushed = filterableScan.pushedPredicates().toSet
+          val candidates = runtimeFilters.filter { f =>
+            !filtersToTranslated.get(f).exists(pushed.contains) &&
+              f.references.subsetOf(filterAttrs)
+          }
+          val partPredicates = getPartitionPredicateSchema(table, output)
+            .map(createRuntimePartitionPredicates(candidates, _))
+            .getOrElse(Seq.empty)
+          if (partPredicates.nonEmpty) {
+            filterableScan.filter(partPredicates.toArray)
+          }
+          partPredicates.nonEmpty
+        }
+
+        translatedFiltersPushed || partPredicatesPushed
+      case _ =>
+        false
+    }
+  }
+
+  /**
    * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
    * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
    */
   def getPartitionPredicateSchema(relation: DataSourceV2Relation)
   : Option[Seq[PartitionPredicateField]] = {
-    val transforms = relation.table.partitioning
+    getPartitionPredicateSchema(relation.table, relation.output)
+  }
+
+  /**
+   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
+   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   */
+  def getPartitionPredicateSchema(table: Table, output: Seq[AttributeReference])
+  : Option[Seq[PartitionPredicateField]] = {
+    val transforms = table.partitioning
     if (transforms.isEmpty) {
       None
     } else {
-      val rootStruct = StructType(relation.output.map { a =>
+      val rootStruct = StructType(output.map { a =>
         StructField(a.name, a.dataType, a.nullable)})
       val fields = transforms.flatMap {
         case t: IdentityTransform =>
@@ -221,6 +287,23 @@ object PushDownUtils extends Logging {
     (remaining ++ rejectedPartitionFilters)
       .filter(flattenedToOriginal.contains)
       .map(flattenedToOriginal)
+  }
+
+  /**
+   * Creates [[PartitionPredicateImpl]] instances from runtime filter expressions.
+   * Extracts Catalyst expressions from the runtime filters (unwrapping DPP and literalizing
+   * scalar subqueries), then converts partition-column filters to [[PartitionPredicateImpl]].
+   */
+  private[v2] def createRuntimePartitionPredicates(
+      runtimeFilters: Seq[Expression],
+      partitionFields: Seq[PartitionPredicateField]): Seq[PartitionPredicateImpl] = {
+    val catalystExprs = runtimeFilters.flatMap {
+      case DynamicPruningExpression(e) => Some(e)
+      case _: DynamicPruning => None
+      case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })
+    }
+    val flattened = flattenNestedPartitionFilters(catalystExprs, partitionFields).keys
+    createPartitionPredicates(flattened.toSeq, partitionFields)._1
   }
 
   private def isPushablePartitionFilter(f: Expression) =
