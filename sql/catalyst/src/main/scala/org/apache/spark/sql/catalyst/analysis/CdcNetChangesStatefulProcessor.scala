@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.Changelog
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.StructType
@@ -77,17 +79,22 @@ private[analysis] class CdcNetChangesStatefulProcessor(
   private val commitVersionIdx: Int = inputSchema.fieldIndex("_commit_version")
 
   // `_commit_version` is connector-defined and may be any atomic orderable type
-  // (LongType, StringType, IntegerType, TimestampType, ...). The
-  // [[org.apache.spark.sql.execution.datasources.v2.ChangelogTable.validateSchema]]
-  // analyzer-time check guarantees the column is `AtomicType`, and the boxed Java
-  // values of every atomic type are `Comparable`, so we use a generic
-  // `Comparable.compareTo` to order rows of a single key here -- mirroring the batch
-  // path which uses Catalyst's generic `SortOrder` on the same attribute.
+  // (LongType, StringType, IntegerType, TimestampType, BinaryType, ...). To order
+  // rows generically -- without assuming the boxed external Java value is
+  // `Comparable` (e.g. BinaryType -> Array[Byte], which is not) -- we route the
+  // value through Catalyst: convert the external Row value to its Catalyst-internal
+  // form and compare with the type-aware interpreted ordering. This mirrors the
+  // batch path which uses Catalyst's `SortOrder` on the same attribute.
+  private val versionDataType = inputSchema(commitVersionIdx).dataType
+  private val versionToCatalyst: Any => Any =
+    CatalystTypeConverters.createToCatalystConverter(versionDataType)
+  private val versionInternalOrdering: Ordering[Any] =
+    TypeUtils.getInterpretedOrdering(versionDataType)
   private val versionOrdering: Ordering[Row] = new Ordering[Row] {
     override def compare(a: Row, b: Row): Int = {
-      val av = a.get(commitVersionIdx).asInstanceOf[Comparable[Any]]
-      val bv = b.get(commitVersionIdx)
-      av.compareTo(bv)
+      val av = versionToCatalyst(a.get(commitVersionIdx))
+      val bv = versionToCatalyst(b.get(commitVersionIdx))
+      versionInternalOrdering.compare(av, bv)
     }
   }
 
@@ -106,7 +113,7 @@ private[analysis] class CdcNetChangesStatefulProcessor(
     // Sort by (_commit_version, change_type rank) -- pre-events (delete /
     // update_preimage) before post-events (insert / update_postimage) within a single
     // commit version, matching the batch path's `(_commit_version, change_type_rank)`
-    // ordering. We compose the version ordering (generic Comparable) with the rank
+    // ordering. We compose the type-aware Catalyst version ordering with the rank
     // ordering as a tiebreaker.
     val sorted = inputRows.toSeq.sorted(versionOrdering.orElse(Ordering.by { row =>
       row.getAs[String](changeTypeIdx) match {
