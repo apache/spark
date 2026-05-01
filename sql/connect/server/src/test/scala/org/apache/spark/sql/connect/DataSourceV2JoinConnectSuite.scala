@@ -191,12 +191,12 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
       val df1 = session.table(T)
 
-      // external drop and re-add column via catalog API
+      // external drop and re-add column via catalog API (two separate calls
+      // so data migration runs for each step, nulling the old salary values)
       val serverSession = getServerSession(session)
       val cat = serverCatalog(serverSession)
-      val dropCol = TableChange.deleteColumn(Array("salary"), false)
-      val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
-      cat.alterTable(ident, dropCol, addCol)
+      cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
+      cat.alterTable(ident, TableChange.addColumn(Array("salary"), IntegerType, true))
 
       val df2 = session.table(T)
 
@@ -220,11 +220,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       val df1 = session.table(T)
 
       // external drop and re-add column with different type via catalog API
+      // (two separate calls so data migration runs for each step)
       val serverSession = getServerSession(session)
       val cat = serverCatalog(serverSession)
-      val dropCol = TableChange.deleteColumn(Array("salary"), false)
-      val addCol = TableChange.addColumn(Array("salary"), StringType, true)
-      cat.alterTable(ident, dropCol, addCol)
+      cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
+      cat.alterTable(ident, TableChange.addColumn(Array("salary"), StringType, true))
 
       val df2 = session.table(T)
 
