@@ -54,12 +54,8 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   def catalog(name: String): CatalogPlugin
   private[sql] def v2SessionCatalog: CatalogPlugin
   def listCatalogs(pattern: Option[String]): Seq[String]
-  // ---- Transactions ----
-  def transaction: Option[Transaction] = None
-
-  def withTransaction(transaction: Transaction): CatalogManager =
-    new TransactionAwareCatalogManager(this, transaction)
-
+  def currentCatalog: CatalogPlugin
+  def setCurrentCatalog(catalogName: String): Unit
   def isCatalogRegistered(name: String): Boolean = {
     try {
       catalog(name)
@@ -69,13 +65,17 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
     }
   }
 
-  // ---- Current catalog / namespace ----
-  def currentCatalog: CatalogPlugin
-  def setCurrentCatalog(catalogName: String): Unit
+  // ---- Transactions ----
+  def transaction: Option[Transaction] = None
+
+  def withTransaction(transaction: Transaction): CatalogManager =
+    new TransactionAwareCatalogManager(this, transaction)
+
+  // ---- Namespace ----
   def currentNamespace: Array[String]
   def setCurrentNamespace(namespace: Array[String]): Unit
 
-  // ---- Session path ----
+  // ---- Session/Path ----
   def sessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
   def storedSessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
   def confDefaultPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]

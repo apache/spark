@@ -46,13 +46,11 @@ private[sql] class TransactionAwareCatalogManager(
   override def listCatalogs(pattern: Option[String]): Seq[String] =
     delegate.listCatalogs(pattern)
 
-  // ---- Transactions ----
   override def transaction: Option[Transaction] = Some(txn)
 
   override def withTransaction(newTxn: Transaction): CatalogManager =
     throw SparkException.internalError("Cannot nest transactions: a transaction is already active.")
 
-  // ---- Current catalog / namespace: redirect to txn catalog when names match. ----
   override def currentCatalog: CatalogPlugin = {
     val c = delegate.currentCatalog
     if (txn.catalog.name() == c.name()) txn.catalog else c
@@ -66,7 +64,6 @@ private[sql] class TransactionAwareCatalogManager(
   override def setCurrentNamespace(namespace: Array[String]): Unit =
     delegate.setCurrentNamespace(namespace)
 
-  // ---- Session path: pure delegation. ----
   override def sessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
     delegate.sessionPathEntries
 
