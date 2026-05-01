@@ -108,7 +108,7 @@ def check_upgraded_pom_dependencies(
         from email.utils import parsedate_to_datetime
 
         host = os.environ.get(
-            "MAVEN_MIRROR_URL", "https://maven-central.storage-download.googleapis.com/maven2/"
+            "MAVEN_MIRROR_URL", "https://maven-central.storage-download.googleapis.com/maven2"
         )
         url = f"{host}/{group_id.replace('.', '/')}/{artifact_id}/{version}/{artifact_id}-{version}.pom"
         req = urllib.request.Request(url, method="HEAD")
