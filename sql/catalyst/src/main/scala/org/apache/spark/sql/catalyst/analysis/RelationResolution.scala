@@ -124,32 +124,16 @@ class RelationResolution(
       extends RelationResolutionStep
 
   /**
-   * Path entries for unqualified relation resolution.
-   *
-   * Inside a view or SQL function, [[AnalysisContext.resolutionPathEntries]] uses the
-   * persisted frozen path from metadata when available.
-   * When PATH is disabled, legacy resolution rules apply.
+   * Path entries for unqualified relation resolution. Routes through
+   * [[CatalogManager.resolutionPathEntriesForAnalysis]] so persisted frozen paths from view /
+   * SQL function metadata are honored, and the live session path otherwise. This is the same
+   * helper used by [[FunctionResolution.sqlResolutionPathEntriesForAnalysis]] and procedure
+   * resolution.
    */
   private def relationResolutionEntries: Seq[Seq[String]] = {
-    val pinned = AnalysisContext.get.resolutionPathEntries
-    if (pinned.isDefined && conf.pathEnabled) {
-      pinned.get
-    } else {
-      val expandCatalog = catalogManager.currentCatalog.name
-      val expandNamespace = catalogManager.currentNamespace.toSeq
-      val (pathCatalog, pathNamespace) =
-        if (isResolvingView) {
-          val p = AnalysisContext.get.catalogAndNamespace
-          (p.head, p.tail.toSeq)
-        } else {
-          (expandCatalog, expandNamespace)
-        }
-      catalogManager.sqlResolutionPathEntries(
-        pathCatalog,
-        pathNamespace,
-        expandCatalog,
-        expandNamespace)
-    }
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
   }
 
   /**

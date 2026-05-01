@@ -372,25 +372,64 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("PATH enabled: unqualified session variable lookup follows PATH") {
+  test("PATH enabled: unqualified SET VAR follows PATH; DDL on variables ignores PATH") {
     withPathEnabled {
+      // DECLARE always targets system.session regardless of PATH.
       sql("DECLARE VARIABLE system.session.path_var_gate = 7")
       try {
         sql("SET PATH = spark_catalog.default")
+        // Unqualified DML lookup goes through PATH; system.session is not on it, so SET VAR
+        // (and any other unqualified SQL VARIABLE reference) should fail with
+        // UNRESOLVED_VARIABLE reporting the *actual* PATH that was searched. The path is
+        // rendered as a bracketed list for consistency with UNRESOLVED_ROUTINE /
+        // TABLE_OR_VIEW_NOT_FOUND.
         checkError(
           exception = intercept[AnalysisException] {
-            sql("DROP TEMPORARY VARIABLE path_var_gate")
+            sql("SET VAR path_var_gate = 8")
           },
           condition = "UNRESOLVED_VARIABLE",
           sqlState = "42883",
           parameters = Map(
             "variableName" -> "`path_var_gate`",
-            "searchPath" -> "`SYSTEM`.`SESSION`"))
+            "searchPath" -> "[`spark_catalog`.`default`]"),
+          context = ExpectedContext("SET VAR path_var_gate = 8", 0, 24))
 
+        // Qualified SET VAR works regardless of PATH (no unqualified lookup).
+        sql("SET VAR system.session.path_var_gate = 9")
+        checkAnswer(sql("SELECT system.session.path_var_gate"), Row(9))
+
+        // DROP TEMPORARY VARIABLE is DDL: always targets system.session, no PATH gate.
+        sql("DROP TEMPORARY VARIABLE path_var_gate")
+
+        // Re-declare so we can test PATH-enabled lookup.
+        sql("DECLARE VARIABLE system.session.path_var_gate = 7")
         sql("SET PATH = spark_catalog.default, system.session")
+        sql("SET VAR path_var_gate = 11")
+        checkAnswer(sql("SELECT path_var_gate"), Row(11))
         sql("DROP TEMPORARY VARIABLE path_var_gate")
       } finally {
         sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.path_var_gate")
+      }
+    }
+  }
+
+  test("PATH enabled: DECLARE / SET VAR / DROP cycle under non-default PATH") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_var_cycle")
+      try {
+        sql("SET PATH = spark_catalog.path_var_cycle, system.session")
+        // DECLARE: DDL, ignores PATH; targets system.session directly.
+        sql("DECLARE OR REPLACE VARIABLE cycle_var = 1")
+        // Qualified SET VAR works regardless of PATH.
+        sql("SET VAR system.session.cycle_var = 2")
+        // Unqualified SET VAR works because system.session is on the path.
+        sql("SET VAR cycle_var = 3")
+        checkAnswer(sql("SELECT cycle_var"), Row(3))
+        // DROP: DDL, ignores PATH.
+        sql("DROP TEMPORARY VARIABLE cycle_var")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.cycle_var")
+        sql("DROP SCHEMA IF EXISTS path_var_cycle")
       }
     }
   }

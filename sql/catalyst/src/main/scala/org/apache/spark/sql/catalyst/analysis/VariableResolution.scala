@@ -39,14 +39,39 @@ class VariableResolution(
     extends SQLConfHelper {
 
   /**
-   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path
-   * (PATH enabled and explicitly set).
+   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path.
+   *
+   * When PATH is not explicitly set (PATH disabled, or PATH enabled with no SET PATH),
+   * the answer is fully determined by the default path, which always includes system.session
+   * ([[CatalogManager.sqlResolutionPathEntries]] falls back to
+   * [[org.apache.spark.sql.internal.SQLConf.defaultPathOrder]]). Short-circuit before reading
+   * `catalogManager.currentCatalog.name()`, which loads the configured default catalog and
+   * would otherwise raise CATALOG_NOT_FOUND on every column-resolution pass when the
+   * default catalog is misconfigured.
    */
   private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
     if (nameParts.length != 1) return true
+    val pathExplicitlySet = conf.pathEnabled && catalogManager.sessionPathEntries.isDefined
+    if (!pathExplicitlySet) return true
     catalogManager.sessionScopeUnqualifiedAllowed(
       catalogManager.currentCatalog.name(),
       catalogManager.currentNamespace.toSeq)
+  }
+
+  /**
+   * Returns the path entries that should be reported in `UNRESOLVED_VARIABLE` for `nameParts`.
+   * For unqualified lookups (1 part) the lookup goes through the SQL PATH, so the full resolved
+   * path entries are reported. For qualified lookups (2 / 3 parts) the namespace is fixed at
+   * `system.session`, so a single `[SYSTEM.SESSION]` entry is reported.
+   */
+  def searchPathEntriesForError(nameParts: Seq[String]): Seq[Seq[String]] = {
+    if (nameParts.length != 1) {
+      Seq(Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+    } else {
+      catalogManager.sqlResolutionPathEntries(
+        catalogManager.currentCatalog.name(),
+        catalogManager.currentNamespace.toSeq)
+    }
   }
 
   /**

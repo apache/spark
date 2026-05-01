@@ -143,6 +143,16 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              path for unqualified relation/function names (if persisted in
  *                              metadata). Outside views/functions, compute from session
  *                              [[CatalogManager.sqlResolutionPathEntries]].
+ *                              Lifecycle: set only by [[withAnalysisContext(viewDesc)]] /
+ *                              [[withAnalysisContext(function)]]; preserved by
+ *                              [[withOuterPlan]]; cleared by [[reset]] /
+ *                              [[withNewAnalysisContext]]; never mutated after
+ *                              [[AnalysisContext]] construction. The single-pass resolver
+ *                              project intentionally avoids new threadlocal state -- when the
+ *                              single-pass `Resolver` grows view / SQL-function body support,
+ *                              the frozen path should flow via the resolver's
+ *                              `OperatorResolutionContextStack` instead of being read from this
+ *                              field. See SPARK-56681 #3.
  */
 case class AnalysisContext(
     isDefault: Boolean = false,
@@ -337,10 +347,7 @@ class Analyzer(
         AnalysisContext.reset()
         try {
           AnalysisHelper.markInAnalyzer {
-            sessionConf match {
-              case Some(c) => SQLConf.withExistingConf(c) { runAnalysis() }
-              case None => runAnalysis()
-            }
+            runWithSessionConf(runAnalysis())
           }
         } finally {
           AnalysisContext.reset()
@@ -348,14 +355,27 @@ class Analyzer(
       } else {
         AnalysisContext.withNewAnalysisContext {
           AnalysisHelper.markInAnalyzer {
-            sessionConf match {
-              case Some(c) => SQLConf.withExistingConf(c) { runAnalysis() }
-              case None => runAnalysis()
-            }
+            runWithSessionConf(runAnalysis())
           }
         }
       }
     }
+  }
+
+  /**
+   * Runs `thunk` under the analyzer's [[sessionConf]] for analyzer isolation, but yields to any
+   * outer [[SQLConf.withExistingConf]] scope (e.g. a SQL UDF / view body that pinned the
+   * creation-time configs). Falls through unchanged when [[sessionConf]] is unset, or when the
+   * outer scope already installed a different conf -- otherwise the outer scope's conf would be
+   * silently clobbered.
+   */
+  private def runWithSessionConf[T](thunk: => T): T = sessionConf match {
+    case None => thunk
+    case Some(c) =>
+      SQLConf.getExistingConfIfSet match {
+        case Some(outer) if outer ne c => thunk
+        case _ => SQLConf.withExistingConf(c) { thunk }
+      }
   }
 
   /**
@@ -391,13 +411,8 @@ class Analyzer(
     }
   }
 
-  private def executeSameContext(plan: LogicalPlan): LogicalPlan = sessionConf match {
-    // Respect explicit nested SQLConf overrides (e.g. persisted SQL UDF/view configs).
-    // Otherwise, run analysis with the captured session conf for analyzer isolation.
-    case Some(c) if SQLConf.get ne c => super.execute(plan)
-    case Some(c) => SQLConf.withExistingConf(c) { super.execute(plan) }
-    case None => super.execute(plan)
-  }
+  private def executeSameContext(plan: LogicalPlan): LogicalPlan =
+    runWithSessionConf(super.execute(plan))
 
   def resolver: Resolver = conf.resolver
 

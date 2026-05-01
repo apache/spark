@@ -79,12 +79,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
-      if (nameParts.length == 1 &&
-          !catalogManager.sessionScopeUnqualifiedAllowed(
-            catalogManager.currentCatalog.name(),
-            catalogManager.currentNamespace.toSeq)) {
-        throw QueryCompilationErrors.unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
-      }
+      // DDL on session variables (DECLARE / CREATE / DROP) always targets `system.session`
+      // directly regardless of the SQL path. Only DML (SET VAR / SELECT @x) goes through PATH
+      // and is gated by [[VariableResolution.allowUnqualifiedSessionTempVariableLookup]].
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
@@ -225,9 +222,9 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     if (!validSessionVariableName(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
         nameParts,
-        Seq(
+        Seq(Seq(
           resolvedIdentifier.catalog.name(),
-          resolvedIdentifier.identifier.namespace().head)
+          resolvedIdentifier.identifier.namespace().head))
       )
     }
 

@@ -71,13 +71,6 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
-  /** Returns the current catalog path, preferring the view's context if resolving a view. */
-  private def currentCatalogPath: Seq[String] = {
-    val ctx = AnalysisContext.get.catalogAndNamespace
-    if (ctx.nonEmpty) ctx
-    else (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
-  }
-
   /** True if nameParts is 3-part and the first part is the system catalog name. */
   private def isSystemCatalogQualified(nameParts: Seq[String]): Boolean =
     nameParts.length == 3 &&
@@ -96,23 +89,16 @@ class FunctionResolution(
    *
    * All other multi-part names are returned as-is for downstream resolution.
    *
-   * When [[AnalysisContext.resolutionPathEntries]] is set (view or SQL function / table function
-   * body with a pinned path, with [[SQLConf.PATH_ENABLED]] true), that frozen list is used
-   * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
-   * aligned with relation order.
+   * Routes through [[CatalogManager.resolutionPathEntriesForAnalysis]] so that view / SQL
+   * function bodies with a persisted frozen path are honored, matching
+   * [[RelationResolution.relationResolutionEntries]] so routine order stays aligned with
+   * relation order. Procedure resolution also goes through this helper -- see
+   * [[resolveProcedure]].
    */
-  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
-    AnalysisContext.get.resolutionPathEntries match {
-      case Some(entries) if conf.pathEnabled => entries
-      case _ =>
-        val pathDefault = currentCatalogPath
-        catalogManager.sqlResolutionPathEntries(
-          pathDefault.head,
-          pathDefault.tail.toSeq,
-          catalogManager.currentCatalog.name,
-          catalogManager.currentNamespace.toSeq)
-    }
-  }
+  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] =
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
@@ -370,7 +356,15 @@ class FunctionResolution(
     if (nameParts.length == 1) {
       // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
       // session order, not only the current namespace (LookupCatalog single-part rule).
-      for (candidate <- resolutionCandidates(nameParts)) {
+      // Filter out `system.*` candidates: routines under `system.session`, `system.builtin`, and
+      // `system.ai` are already resolved by [[lookupBuiltinOrTempFunction]] /
+      // [[lookupBuiltinOrTempTableFunction]] earlier in this method, so calling
+      // `functionExists` on them is a wasteful catalog round-trip (e.g. UC backends RPC).
+      val persistentCandidates = resolutionCandidates(nameParts).filterNot { c =>
+        c.length >= 2 &&
+          c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
+      }
+      for (candidate <- persistentCandidates) {
         try {
           candidate match {
             case CatalogAndIdentifier(catalog, ident) =>
@@ -380,7 +374,13 @@ class FunctionResolution(
             case _ =>
           }
         } catch {
-          case NonFatal(_) =>
+          // Mirror [[resolveFunctionCandidate]]'s explicit not-found list. Other exceptions
+          // (e.g. PERMISSION_DENIED, transient catalog errors) propagate so the user sees the
+          // real cause instead of a generic UNRESOLVED_ROUTINE.
+          case _: NoSuchFunctionException
+             | _: NoSuchNamespaceException
+             | _: CatalogNotFoundException =>
+          case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
         }
       }
       return FunctionType.NotFound

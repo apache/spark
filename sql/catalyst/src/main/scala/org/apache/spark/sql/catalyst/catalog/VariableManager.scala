@@ -134,7 +134,7 @@ class TempVariableManager extends VariableManager with DataTypeErrorsBase {
     val name = nameParts.last
     // Sanity check as this is already checked in ResolveSetVariable.
     if (!variables.contains(name)) {
-      throw unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
+      throw unresolvedVariableError(nameParts, Seq(Seq("SYSTEM", "SESSION")))
     }
     variables.put(name, varDef)
   }

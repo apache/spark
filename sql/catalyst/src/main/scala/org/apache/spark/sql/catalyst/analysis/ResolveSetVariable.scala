@@ -22,6 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -62,7 +63,17 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
             nameParts = u.nameParts
           ) match {
             case Some(variable) => variable.copy(canFold = false)
-            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+            case _ =>
+              // For unqualified names (1 part) the lookup goes through PATH; surface the
+              // *actual* SQL PATH searched (SPARK-56681). For qualified names (2 / 3 parts)
+              // the namespace is fixed at `system.session`, so a single
+              // `[`SYSTEM`.`SESSION`]` entry is reported. Either way the rendering is a list
+              // of path entries to stay consistent with UNRESOLVED_ROUTINE /
+              // TABLE_OR_VIEW_NOT_FOUND.
+              throw unresolvedVariableError(
+                u.nameParts,
+                variableResolution.searchPathEntriesForError(u.nameParts),
+                CurrentOrigin.get)
           }
 
         case other => throw SparkException.internalError(

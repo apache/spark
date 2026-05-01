@@ -209,6 +209,43 @@ class CatalogManager(
     sqlResolutionPathEntries(currentCatalog, currentNamespace)
       .exists(CatalogManager.isSystemSessionPathEntry)
 
+  /**
+   * Single source of truth for analysis-time resolution path entries used by relation, routine,
+   * and procedure resolution. When `pinnedEntries` are set (a view or SQL function body's
+   * persisted frozen path) and PATH is enabled, returns them as-is so unqualified lookups follow
+   * the creation-time path. Otherwise falls back to [[sqlResolutionPathEntries]] using the view's
+   * catalog/namespace as the path default (so unqualified names inside a view body see the view's
+   * home schema first), while always expanding markers like CURRENT_SCHEMA against the live
+   * session catalog/namespace.
+   *
+   * @param pinnedEntries persisted frozen path entries from view / SQL function metadata
+   *                      (typically `AnalysisContext.resolutionPathEntries`).
+   * @param viewCatalogAndNamespace the view's catalog and namespace
+   *                               (typically `AnalysisContext.catalogAndNamespace`); empty when
+   *                               not resolving a view body.
+   */
+  def resolutionPathEntriesForAnalysis(
+      pinnedEntries: Option[Seq[Seq[String]]],
+      viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] = {
+    pinnedEntries match {
+      case Some(entries) if conf.pathEnabled => entries
+      case _ =>
+        val expandCatalog = currentCatalog.name()
+        val expandNamespace = currentNamespace.toSeq
+        val (pathCatalog, pathNamespace) =
+          if (viewCatalogAndNamespace.nonEmpty) {
+            (viewCatalogAndNamespace.head, viewCatalogAndNamespace.tail.toSeq)
+          } else {
+            (expandCatalog, expandNamespace)
+          }
+        sqlResolutionPathEntries(
+          pathCatalog,
+          pathNamespace,
+          expandCatalog,
+          expandNamespace)
+    }
+  }
+
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {

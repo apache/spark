@@ -50,10 +50,12 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
   override def set(nameParts: Seq[String], varDef: VariableDefinition): Unit = {
     val scope = findScopeOfVariable(nameParts)
       .getOrElse(
-        throw unresolvedVariableError(nameParts, varDef.identifier.namespace().toIndexedSeq))
+        throw unresolvedVariableError(
+          nameParts, Seq(varDef.identifier.namespace().toIndexedSeq)))
 
     if (!scope.variables.contains(nameParts.last)) {
-      throw unresolvedVariableError(nameParts, varDef.identifier.namespace().toIndexedSeq)
+      throw unresolvedVariableError(
+        nameParts, Seq(varDef.identifier.namespace().toIndexedSeq))
     }
 
     scope.variables.put(nameParts.last, varDef)
