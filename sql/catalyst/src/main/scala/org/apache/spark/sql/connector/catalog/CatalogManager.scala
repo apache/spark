@@ -203,21 +203,19 @@ class CatalogManager(
       currentCatalog, currentNamespace)
 
   /**
-   * True if `system.session` is on the SQL path. Only literal path entries can be
-   * `system.session`; the [[CurrentSchemaEntry]] marker resolves to the current schema, which
-   * never matches. Inspecting the stored entries directly avoids loading the configured default
-   * catalog (which [[currentCatalog]] would force).
+   * True if `system.session` is on the SQL path. Only literal path entries can match; the
+   * [[CurrentSchemaEntry]] marker can never be `system.session`. Inspecting stored entries
+   * directly avoids loading the configured default catalog.
    */
   def isSystemSessionOnPath: Boolean = synchronized {
     if (!conf.pathEnabled) return true
     _sessionPath match {
       case None => true
-      case Some(entries) =>
-        entries.exists {
-          case CatalogManager.LiteralPathEntry(parts) =>
-            CatalogManager.isSystemSessionPathEntry(parts)
-          case _ => false
-        }
+      case Some(entries) => entries.exists {
+        case CatalogManager.LiteralPathEntry(parts) =>
+          CatalogManager.isSystemSessionPathEntry(parts)
+        case _ => false
+      }
     }
   }
 

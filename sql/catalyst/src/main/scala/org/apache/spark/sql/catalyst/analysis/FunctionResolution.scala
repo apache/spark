@@ -89,9 +89,10 @@ class FunctionResolution(
    *
    * All other multi-part names are returned as-is for downstream resolution.
    *
-   * Shares [[CatalogManager.resolutionPathEntriesForAnalysis]] with
-   * [[RelationResolution.relationResolutionEntries]] so routine and relation lookup follow the
-   * same order under PATH (and the same persisted frozen path for view / SQL function bodies).
+   * When [[AnalysisContext.resolutionPathEntries]] is set (view or SQL function / table function
+   * body with a pinned path, with [[SQLConf.PATH_ENABLED]] true), that frozen list is used
+   * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
+   * aligned with relation order.
    */
   private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] =
     catalogManager.resolutionPathEntriesForAnalysis(

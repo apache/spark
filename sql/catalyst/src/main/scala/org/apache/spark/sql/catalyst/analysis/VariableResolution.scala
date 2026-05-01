@@ -39,9 +39,8 @@ class VariableResolution(
     extends SQLConfHelper {
 
   /**
-   * Variables only live in `system.session` (there is no persistent variable catalog), so
-   * unqualified lookups are gated solely on whether the SQL path includes that namespace.
-   * Qualified names target `system.session` directly and bypass the gate.
+   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path
+   * (PATH enabled and explicitly set).
    */
   private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
     nameParts.length != 1 || catalogManager.isSystemSessionOnPath

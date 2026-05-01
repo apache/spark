@@ -916,31 +916,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  /**
-   * Raises `UNRESOLVED_VARIABLE` with a formatted list of search-path entries. The rendering
-   * matches [[unresolvedRoutineError]] and [[tableOrViewNotFoundWithSearchPath]]: each entry is
-   * `toSQLId`-quoted and the entries are joined as `[entry1, entry2, ...]` (with brackets) even
-   * when only one entry is supplied. This keeps `searchPath` self-consistent across error
-   * conditions.
-   *
-   * @param name        unresolved variable name parts.
-   * @param pathEntries the SQL search path actually consulted, expressed as a list of
-   *                    catalog/namespace tuples (e.g. `Seq(Seq("SYSTEM", "SESSION"))` for
-   *                    qualified-namespace lookups, or the full PATH for unqualified ones).
-   * @param origin      origin of the offending node; defaults to [[Origin]] when the caller
-   *                    has no source location handy (existing behaviour for downstream error
-   *                    sites like [[VariableManager]] / [[SetVariableExec]]).
-   */
-  def unresolvedVariableError(
-      name: Seq[String],
-      pathEntries: Seq[Seq[String]],
-      origin: Origin = Origin()): Throwable = {
+  def unresolvedVariableError(name: Seq[String], pathEntries: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_VARIABLE",
       messageParameters = Map(
         "variableName" -> toSQLId(name),
-        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")),
-      origin = origin)
+        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def failedToLoadRoutineError(nameParts: Seq[String], e: Exception): Throwable = {

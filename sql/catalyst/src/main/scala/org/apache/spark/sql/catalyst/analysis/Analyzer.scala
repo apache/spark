@@ -141,15 +141,8 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                  expressions in a subquery.
  * @param resolutionPathEntries When resolving a view or SQL function body, the ordered frozen
  *                              path for unqualified relation/function names (if persisted in
- *                              metadata). Outside views/functions, compute from
- *                              [[CatalogManager.sqlResolutionPathEntries]]. Set only by
- *                              [[withAnalysisContext(viewDesc)]] /
- *                              [[withAnalysisContext(function)]], preserved by
- *                              [[withOuterPlan]], cleared by [[reset]] /
- *                              [[withNewAnalysisContext]], and never mutated after
- *                              construction.
- *                              TODO(SPARK-56681 #3): plumb through the single-pass resolver's
- *                              `OperatorResolutionContextStack` and remove this field.
+ *                              metadata). Outside views/functions, compute from session
+ *                              [[CatalogManager.sqlResolutionPathEntries]].
  */
 case class AnalysisContext(
     isDefault: Boolean = false,
