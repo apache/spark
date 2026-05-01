@@ -22,7 +22,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Limit, LogicalPlan, SetVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -67,7 +66,7 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
               throw unresolvedVariableError(
                 u.nameParts,
                 variableResolution.searchPathEntriesForError(u.nameParts),
-                CurrentOrigin.get)
+                u.origin)
           }
 
         case other => throw SparkException.internalError(

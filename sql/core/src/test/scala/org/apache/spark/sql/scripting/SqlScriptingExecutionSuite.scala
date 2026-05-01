@@ -3693,7 +3693,7 @@ class SqlScriptingExecutionSuite extends SharedSparkSession {
         "variableName" -> toSQLId("LOCALVAR"),
         "searchPath" ->
           "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
-      context = ExpectedContext("SET LOCALVAR = 5", 50, 65)
+      context = ExpectedContext("LOCALVAR", 54, 61)
     )
   }
 

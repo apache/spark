@@ -22,7 +22,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{FetchCursor, LogicalPlan, SingleStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -66,7 +65,7 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
         ) match {
           case Some(variable) => variable.copy(canFold = false)
           case _ => throw unresolvedVariableError(
-            u.nameParts, Seq(Seq("SYSTEM", "SESSION")), CurrentOrigin.get)
+            u.nameParts, Seq(Seq("SYSTEM", "SESSION")), u.origin)
         }
 
       case other => throw SparkException.internalError(

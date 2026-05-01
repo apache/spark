@@ -44,7 +44,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case c @ CreateVariable(identifiers, _, _) =>
       // We resolve only UnresolvedIdentifiers, and pass on the other nodes
       val resolved = identifiers.map {
-        case UnresolvedIdentifier(nameParts, _) =>
+        case u @ UnresolvedIdentifier(nameParts, _) =>
           if (withinLocalVariableScope) {
             if (c.replace) {
               throw new AnalysisException(
@@ -67,14 +67,14 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
             val resolvedIdentifier
             = catalogManager.tempVariableManager.qualify(nameParts.last)
 
-            assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
+            assertValidSessionVariableNameParts(nameParts, resolvedIdentifier, u.origin)
             resolvedIdentifier
           }
         case plan => plan
       }
       c.copy(names = resolved)
 
-    case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
+    case d @ DropVariable(u @ UnresolvedIdentifier(nameParts, _), _) =>
       if (withinLocalVariableScope) {
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
@@ -82,7 +82,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       // DDL on session variables targets `system.session` directly; the SQL path only applies
       // to DML (see [[VariableResolution.allowUnqualifiedSessionTempVariableLookup]]).
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
-      assertValidSessionVariableNameParts(nameParts, resolved)
+      assertValidSessionVariableNameParts(nameParts, resolved, u.origin)
       d.copy(name = resolved)
 
     case CreateFunction(UnresolvedIdentifier(nameParts, _), _, _, _, _)
@@ -217,14 +217,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],
-      resolvedIdentifier: ResolvedIdentifier): Unit = {
+      resolvedIdentifier: ResolvedIdentifier,
+      origin: Origin): Unit = {
     if (!validSessionVariableName(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
         nameParts,
         Seq(Seq(
           resolvedIdentifier.catalog.name(),
           resolvedIdentifier.identifier.namespace().head)),
-        CurrentOrigin.get
+        origin
       )
     }
 
