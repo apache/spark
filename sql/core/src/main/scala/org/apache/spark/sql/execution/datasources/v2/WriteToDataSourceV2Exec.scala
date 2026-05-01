@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, InsertSummaryImpl, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
@@ -565,7 +565,7 @@ trait V2TableWriteExec
   protected lazy val numOutputRowsMetric: SQLMetric =
     SQLMetrics.createMetric(sparkContext, "number of output rows")
 
-  override def sparkMetrics: Map[String, SQLMetric] = Map(
+  override protected def sparkMetrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> numOutputRowsMetric)
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
