@@ -67,6 +67,7 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
 
   private val latestReports = new ConcurrentHashMap[String, PVCDiskUsageReport]()
   private val failedPvcs = ConcurrentHashMap.newKeySet[String]()
+  private val requestedSizes = new ConcurrentHashMap[String, Long]()
 
   private val periodicService: ScheduledExecutorService =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("pvc-resize-plugin")
@@ -167,7 +168,18 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
       if (pvc == null) return
       val current = Quantity.getAmountInBytes(
         pvc.getSpec.getResources.getRequests.get("storage")).longValue()
+      val capacity = Option(pvc.getStatus)
+        .flatMap(s => Option(s.getCapacity))
+        .flatMap(c => Option(c.get("storage")))
+        .map(q => Quantity.getAmountInBytes(q).longValue())
+        .getOrElse(current)
+      if (current > capacity) {
+        logInfo(s"PVC $pvcName resize is in progress or failed " +
+          s"(spec=$current, status=$capacity); skip.")
+        return
+      }
       val newSize = (current * (1.0 + factor)).toLong
+      if (requestedSizes.get(pvcName) == newSize) return
       logInfo(log"Increase PVC ${MDC(PVC_METADATA_NAME, pvcName)} storage " +
         log"from ${MDC(ORIGINAL_DISK_SIZE, current)} to " +
         log"${MDC(CURRENT_DISK_SIZE, newSize)} as usage ratio exceeded threshold.")
@@ -182,6 +194,7 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
         .inNamespace(namespace)
         .withName(pvcName)
         .patch(PatchContext.of(PatchType.STRATEGIC_MERGE), patch)
+      requestedSizes.put(pvcName, newSize)
     } catch {
       case e: Throwable =>
         failedPvcs.add(pvcName)

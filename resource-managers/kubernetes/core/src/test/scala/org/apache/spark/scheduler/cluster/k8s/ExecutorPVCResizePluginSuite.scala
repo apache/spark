@@ -116,21 +116,30 @@ class ExecutorPVCResizePluginSuite
       .build()
   }
 
-  private def createPVC(name: String, storageBytes: String): PersistentVolumeClaim = {
-    new PersistentVolumeClaimBuilder()
+  private def createPVC(
+      name: String,
+      storageBytes: String,
+      statusCapacityBytes: String = null): PersistentVolumeClaim = {
+    val builder = new PersistentVolumeClaimBuilder()
       .withNewMetadata().withName(name).endMetadata()
       .withNewSpec()
         .withNewResources()
           .addToRequests("storage", new Quantity(storageBytes))
         .endResources()
       .endSpec()
+    val cap = Option(statusCapacityBytes).getOrElse(storageBytes)
+    builder
+      .withNewStatus()
+        .addToCapacity("storage", new Quantity(cap))
+      .endStatus()
       .build()
   }
 
   private def mockPvcResource(
       pvcName: String,
-      storageBytes: String): Resource[PersistentVolumeClaim] = {
-    val pvc = createPVC(pvcName, storageBytes)
+      storageBytes: String,
+      statusCapacityBytes: String = null): Resource[PersistentVolumeClaim] = {
+    val pvc = createPVC(pvcName, storageBytes, statusCapacityBytes)
     val resource = mock(classOf[Resource[PersistentVolumeClaim]])
     when(pvcsWithNamespace.withName(pvcName)).thenReturn(resource)
     when(resource.get()).thenReturn(pvc)
@@ -166,6 +175,34 @@ class ExecutorPVCResizePluginSuite
     val resource = mockPvcResource("pvc-1", "1000000000") // 1GB
     plugin.receive(PVCDiskUsageReport("1", 0.95)) // 95%
 
+    plugin.checkAndResizePVCs()
+
+    verify(resource, times(1)).patch(any(), any(classOf[PersistentVolumeClaim]))
+  }
+
+  test("PVC with pending or failed resize is skipped") {
+    val plugin = createPlugin()
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    // spec.requests.storage > status.capacity.storage simulates VolumeResizeFailed
+    // or in-progress resize.
+    val resource = mockPvcResource("pvc-1", "2000000000",
+      statusCapacityBytes = "1000000000")
+    plugin.receive(PVCDiskUsageReport("1", 0.95))
+
+    plugin.checkAndResizePVCs()
+
+    verify(resource, never()).patch(any(), any(classOf[PersistentVolumeClaim]))
+  }
+
+  test("Repeated reports for the same target size do not patch twice") {
+    val plugin = createPlugin()
+    val pod = createPodWithPVC(1, "pvc-1", "/data")
+    when(podList.getItems).thenReturn(Collections.singletonList(pod))
+    val resource = mockPvcResource("pvc-1", "1000000000")
+    plugin.receive(PVCDiskUsageReport("1", 0.95))
+
+    plugin.checkAndResizePVCs()
     plugin.checkAndResizePVCs()
 
     verify(resource, times(1)).patch(any(), any(classOf[PersistentVolumeClaim]))
