@@ -644,10 +644,13 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *  5. Final [[Project]] drops the rowId helper columns so the user-visible schema
    *     matches the connector's declared changelog schema.
    *
-   * Documented limitation: row identities only touched in the latest observed commit do
-   * not emit until a later commit (with strictly greater `_commit_timestamp`) advances
-   * the watermark past them, or the source terminates. For bounded streams this matches
-   * the batch output exactly.
+   * Streaming netChanges is incremental, not range-scoped: per-row-identity state is
+   * cleared on emission, so a later commit on the same identity starts a fresh window
+   * and produces additional output rows. Batch netChanges over the same version range
+   * would have collapsed those changes; streaming cannot retract already-emitted rows
+   * to match that. End-of-stream flushes all pending timers, so a bounded stream's
+   * output matches batch only when no row identity is touched again after its first
+   * emission.
    */
   private def addStreamingNetChangeComputation(
       plan: LogicalPlan,

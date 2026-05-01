@@ -380,11 +380,16 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       parameters = wrongType("_commit_timestamp", "TIMESTAMP", "BIGINT"))
   }
 
-  test("ChangelogTable - _commit_version type is connector-defined (any type accepted)") {
-    Seq(IntegerType, LongType, StringType).foreach { versionType =>
-      ChangelogTable(
-        cl("any_cl", validChangeType, "_commit_version" -> versionType, validTimestamp),
-        stubInfo())
+  test("ChangelogTable - wrong _commit_version data type throws") {
+    Seq(IntegerType -> "INT", StringType -> "STRING").foreach { case (versionType, sql) =>
+      checkError(
+        intercept[AnalysisException] {
+          ChangelogTable(
+            cl("bad_cl", validChangeType, "_commit_version" -> versionType, validTimestamp),
+            stubInfo())
+        },
+        condition = "INVALID_CHANGELOG_SCHEMA.INVALID_COLUMN_TYPE",
+        parameters = wrongType("_commit_version", "BIGINT", sql))
     }
   }
 

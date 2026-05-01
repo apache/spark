@@ -42,10 +42,18 @@ import org.apache.spark.sql.types.StructType
  *
  * Output schema: identical to the connector's changelog schema.
  *
- * Documented limitation: row identities only touched in the latest observed commit do not
- * emit until a later commit (with strictly greater `_commit_timestamp`) advances the
- * watermark past them, or the source terminates. End-of-stream flushes all pending
- * timers, so bounded streams produce the same output as the corresponding batch read.
+ * Streaming netChanges is incremental: per-row-identity state is cleared once its current
+ * net result is emitted (timer fire or end-of-stream flush). Subsequent commits on the same
+ * identity arrive against empty state and produce additional output rows independently. This
+ * differs from batch netChanges, which collapses every change for a row identity across the
+ * entire requested version range; the streaming path cannot retract previously emitted output
+ * to match that range-scoped collapse. For example, with id=1 inserted at v1 and deleted at
+ * v3 and an unrelated commit at v2 in between, batch netChanges over [v1..v3] emits nothing
+ * for id=1, while streaming emits an `insert` (after v2 advances the watermark past v1) and
+ * later a `delete` (after end-of-stream or another commit advances the watermark past v3).
+ *
+ * End-of-stream flushes all pending timers, so a bounded stream's output matches a batch
+ * netChanges only when no row identity is touched again after its first emission.
  *
  * @param inputSchema    schema of the rows fed into this processor; the connector's
  *                       changelog schema (data columns + `_change_type` +

@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column,
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
+import org.apache.spark.sql.types.{DataType, LongType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -39,8 +39,7 @@ case class ChangelogTable(
     resolved: Boolean = false) extends Table with SupportsRead {
 
   // Validate that the connector returned a schema with the required CDC metadata columns
-  // and correct types. `_commit_version` is connector-defined per the Changelog contract,
-  // so its type is not checked.
+  // and correct types.
   ChangelogTable.validateSchema(changelog)
 
   override def name: String = changelog.name
@@ -67,7 +66,7 @@ object ChangelogTable {
       }
     }
     check("_change_type", StringType)
-    check("_commit_version")           // connector-defined, any type accepted
+    check("_commit_version", LongType)
     check("_commit_timestamp", TimestampType)
 
     // Only call `rowId()` / `rowVersion()` when a capability requires them; a connector

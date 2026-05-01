@@ -33,8 +33,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},
  *       {@code update_preimage}, or {@code update_postimage}</li>
- *   <li>{@code _commit_version} (LONG) — the version containing this change. Spark
- *       post-processing compares versions as primitive longs</li>
+ *   <li>{@code _commit_version} (LONG, required type) — the version containing this
+ *       change. Spark post-processing compares versions as primitive longs and the
+ *       streaming netChanges path reads this column as a primitive long; connectors
+ *       must declare this column with {@code LongType}</li>
  *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
  *       belonging to a single {@code _commit_version} must share the same
  *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
