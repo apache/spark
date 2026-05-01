@@ -27,7 +27,8 @@ import org.mockito.Mockito.{mock, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
-import org.apache.spark.deploy.k8s.Config.PVC_RESIZE_INTERVAL
+import org.apache.spark.api.plugin.PluginContext
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_ALLOCATION_PODS_ALLOCATOR, PVC_RESIZE_INTERVAL}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
@@ -287,6 +288,20 @@ class ExecutorPVCResizePluginSuite
     Seq("1", "7", "-5").foreach { v =>
       conf.set(PVC_RESIZE_INTERVAL.key, v)
       intercept[IllegalArgumentException](conf.get(PVC_RESIZE_INTERVAL))
+    }
+  }
+
+  Seq("statefulset", "deployment").foreach { allocator =>
+    test(s"init returns early when pods allocator is '$allocator'") {
+      val plugin = new ExecutorPVCResizeDriverPlugin()
+      val sparkConf = new SparkConf().set(KUBERNETES_ALLOCATION_PODS_ALLOCATOR, allocator)
+      val sc = mock(classOf[SparkContext])
+      when(sc.conf).thenReturn(sparkConf)
+      val pluginCtx = mock(classOf[PluginContext])
+
+      val result = plugin.init(sc, pluginCtx)
+
+      assert(result.isEmpty)
     }
   }
 }
