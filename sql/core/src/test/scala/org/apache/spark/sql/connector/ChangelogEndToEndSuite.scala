@@ -785,22 +785,94 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     }
   }
 
-  test("streaming with deduplicationMode=netChanges throws") {
+  // TransformWithState requires the RocksDB state store backend.
+  private val rocksDbProviderConf = SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+    "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider"
+
+  test("streaming netChanges collapses INSERT then DELETE to no output") {
     val id = recreateWithRowVersion()
     catalog.setChangelogProperties(id, ChangelogProperties(
       containsIntermediateChanges = true,
       rowIdNames = Seq("id"),
       rowVersionName = Some("row_commit_version")))
 
-    val e = intercept[AnalysisException] {
-      spark.readStream
+    catalog.addChangeRows(id, Seq(
+      // v1: insert Alice (rcv=1)
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2: delete Alice -- net cancels out
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      // v3: insert Bob -- emits at end-of-input flush
+      ppRow(2L, "Bob", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
+
+    withSQLConf(rocksDbProviderConf) {
+      val q = spark.readStream
         .option("startingVersion", "1")
         .option("deduplicationMode", "netChanges")
         .changes(fullTableName)
-        .queryExecution.analyzed
+        .select("id", "data", "_change_type", "_commit_version")
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_netchanges_cancel")
+        .outputMode("append")
+        .start()
+      try {
+        q.processAllAvailable()
+        // End-of-input flushes all timers so Bob's insert emits.
+        // Alice's INSERT then DELETE cancels out (no row), and the final "Bob" stays.
+        checkAnswer(
+          spark.sql("SELECT * FROM cdc_stream_netchanges_cancel"),
+          Seq(Row(2L, "Bob", CHANGE_TYPE_INSERT, 3L)))
+      } finally {
+        q.stop()
+      }
     }
-    assert(e.getCondition == "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
-      s"Unexpected error: ${e.getMessage}")
+  }
+
+  test("streaming netChanges with computeUpdates labels persisting rows as updates") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsIntermediateChanges = true,
+      representsUpdateAsDeleteAndInsert = false, // updates already materialized
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    // Row identity 1 already exists before the stream window, so the first event we
+    // observe is its update_preimage -> existedBefore = true. The last event is the
+    // update_postimage in v2 -> existsAfter = true. With computeUpdates = true the
+    // (true, true) cell of the SPIP matrix emits a relabeled
+    // update_preimage + update_postimage pair (rather than delete + insert).
+    catalog.addChangeRows(id, Seq(
+      // v1: pre-existing Alice updated to Bob
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE,  1L, 1000000L),
+      ppRow(1L, "Bob",   1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
+      // v2: Bob updated to Robert -- the v1 preimage and the v2 postimage are the
+      // first and last events for row identity 1 across the entire range.
+      ppRow(1L, "Bob",    1L, CHANGE_TYPE_UPDATE_PREIMAGE,  2L, 2000000L),
+      ppRow(1L, "Robert", 2L, CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, 2000000L)))
+
+    withSQLConf(rocksDbProviderConf) {
+      val q = spark.readStream
+        .option("startingVersion", "1")
+        .option("deduplicationMode", "netChanges")
+        .option("computeUpdates", "true")
+        .changes(fullTableName)
+        .select("id", "data", "_change_type")
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_netchanges_update")
+        .outputMode("append")
+        .start()
+      try {
+        q.processAllAvailable()
+        checkAnswer(
+          spark.sql("SELECT * FROM cdc_stream_netchanges_update"),
+          Seq(
+            Row(1L, "Alice",  CHANGE_TYPE_UPDATE_PREIMAGE),
+            Row(1L, "Robert", CHANGE_TYPE_UPDATE_POSTIMAGE)))
+      } finally {
+        q.stop()
+      }
+    }
   }
 
   // The streaming row-level rewrite injects a streaming Aggregate, which is only
@@ -890,6 +962,151 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
         s"Expected NULL_COMMIT_TIMESTAMP in the error chain. Got: ${e.getMessage}")
     } finally {
       q.stop()
+    }
+  }
+
+  test("streaming netChanges emits DELETE for pre-existing row deleted in range") {
+    // Exercises the SPIP `(true, false)` cell: existedBefore = true (first event is a
+    // delete or update_preimage), existsAfter = false (last event is a delete).
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      // v1: pre-existing Alice gets updated to Bob.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE,  1L, 1000000L),
+      ppRow(1L, "Bob",   1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
+      // v2: Bob deleted -- the v1 preimage is the first event and the v2 delete is
+      // the last event for row identity 1 across the entire range.
+      ppRow(1L, "Bob",   1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      // v3: insert Carol -- gives the watermark something to advance past, so row
+      // identity 1's timer fires before end-of-input.
+      ppRow(2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
+
+    withSQLConf(rocksDbProviderConf) {
+      val q = spark.readStream
+        .option("startingVersion", "1")
+        .option("deduplicationMode", "netChanges")
+        .changes(fullTableName)
+        .select("id", "data", "_change_type")
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_netchanges_delete")
+        .outputMode("append")
+        .start()
+      try {
+        q.processAllAvailable()
+        checkAnswer(
+          spark.sql("SELECT * FROM cdc_stream_netchanges_delete"),
+          Seq(
+            // (true, false): emit a single DELETE carrying the *first* event's data
+            // (the preimage), per the batch contract.
+            Row(1L, "Alice", CHANGE_TYPE_DELETE),
+            Row(2L, "Carol", CHANGE_TYPE_INSERT)))
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  test("streaming netChanges without computeUpdates keeps persisting rows as DELETE+INSERT") {
+    // Exercises the SPIP `(true, true)` cell with computeUpdates = false: the pair is
+    // emitted as DELETE + INSERT rather than relabeled as
+    // update_preimage + update_postimage.
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      // v1: pre-existing Alice updated to Bob.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE,  1L, 1000000L),
+      ppRow(1L, "Bob",   1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
+      // v2: Bob updated to Robert -- row identity 1 spans (preimage Alice) ..
+      // (postimage Robert).
+      ppRow(1L, "Bob",    1L, CHANGE_TYPE_UPDATE_PREIMAGE,  2L, 2000000L),
+      ppRow(1L, "Robert", 2L, CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, 2000000L)))
+
+    withSQLConf(rocksDbProviderConf) {
+      val q = spark.readStream
+        .option("startingVersion", "1")
+        .option("deduplicationMode", "netChanges")
+        // computeUpdates defaults to false.
+        .changes(fullTableName)
+        .select("id", "data", "_change_type")
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_netchanges_no_compute_updates")
+        .outputMode("append")
+        .start()
+      try {
+        q.processAllAvailable()
+        checkAnswer(
+          spark.sql("SELECT * FROM cdc_stream_netchanges_no_compute_updates"),
+          Seq(
+            Row(1L, "Alice",  CHANGE_TYPE_DELETE),
+            Row(1L, "Robert", CHANGE_TYPE_INSERT)))
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
+  test("streaming netChanges + carry-over removal: combined post-processing") {
+    // Validates the design point that the row-level rewrite and the netChanges rewrite
+    // share a single EventTimeWatermark on `_commit_timestamp` and produce the
+    // expected combined result. Carry-over CoW pairs are dropped before the netChanges
+    // collapse runs, so the final emission only reflects real content changes.
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      // v1: insert Alice, Bob (rcv=1).
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob",   1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2: real delete Alice + carry-over for Bob (rcv unchanged means CoW rewrite,
+      // no content change).
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob",   1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob",   1L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      // v3: insert Carol -- advances the watermark past v2 so timers for row
+      // identities 1 and 2 fire and the netChanges output is emitted.
+      ppRow(3L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
+
+    withSQLConf(rocksDbProviderConf) {
+      val q = spark.readStream
+        .option("startingVersion", "1")
+        .option("deduplicationMode", "netChanges")
+        .changes(fullTableName)
+        .select("id", "data", "_change_type")
+        .writeStream
+        .format("memory")
+        .queryName("cdc_stream_netchanges_with_carryover")
+        .outputMode("append")
+        .start()
+      try {
+        q.processAllAvailable()
+        // After carry-over removal: Alice has v1 INSERT + v2 DELETE; Bob has only
+        // v1 INSERT (the v2 CoW pair was dropped); Carol has v3 INSERT.
+        // After netChanges:
+        //   Alice -- (false, false) -> no output
+        //   Bob   -- (false, true)  -> emit INSERT
+        //   Carol -- (false, true)  -> emit INSERT
+        checkAnswer(
+          spark.sql("SELECT * FROM cdc_stream_netchanges_with_carryover"),
+          Seq(
+            Row(2L, "Bob",   CHANGE_TYPE_INSERT),
+            Row(3L, "Carol", CHANGE_TYPE_INSERT)))
+      } finally {
+        q.stop()
+      }
     }
   }
 }

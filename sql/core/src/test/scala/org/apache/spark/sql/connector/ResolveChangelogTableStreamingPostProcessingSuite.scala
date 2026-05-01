@@ -21,10 +21,10 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Inline
 import org.apache.spark.sql.catalyst.plans.logical.{
-  Aggregate, EventTimeWatermark, Filter, Generate, LogicalPlan, Project}
+  Aggregate, EventTimeWatermark, Filter, Generate, LogicalPlan, Project, TransformWithState}
 import org.apache.spark.sql.connector.catalog.{
   ChangelogProperties, Column, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -240,6 +240,87 @@ class ResolveChangelogTableStreamingPostProcessingSuite
   }
 
   // ===========================================================================
+  // Net changes
+  // ===========================================================================
+
+  test("netChanges alone injects watermark + TransformWithState") {
+    catalog.setChangelogProperties(identifier, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val analyzed = streamingDf(
+      "deduplicationMode" -> "netChanges").queryExecution.analyzed
+    assertWatermarkOnCommitTimestamp(analyzed)
+    val tws = analyzed.collect { case t: TransformWithState => t }
+    assert(tws.size == 1,
+      s"Expected exactly one TransformWithState; found ${tws.size}. Plan:\n$analyzed")
+    // Guard against a regression that grouped by the wrong attributes (e.g. omitting a
+    // rowId column or grouping by `_commit_version`) -- the size check alone would still
+    // pass.
+    val groupingNames = tws.head.groupingAttributes.map(_.name)
+    assert(groupingNames == Seq("__spark_cdc_rowid_0"),
+      s"Expected TransformWithState grouping by [__spark_cdc_rowid_0]; got $groupingNames. " +
+        s"Plan:\n$analyzed")
+    assertHelperColumnsRemoved(analyzed)
+  }
+
+  test("netChanges with composite rowId groups by all helper columns") {
+    // Recreate with a two-column rowId so we exercise the rowIdColumn(idx) helper
+    // for idx > 0. The single-rowId test asserts the size-1 case; this guards
+    // against a regression that hard-codes a single helper attribute.
+    val cat = catalog
+    val ident = identifier
+    cat.dropTable(ident)
+    cat.createTable(
+      ident,
+      Array(
+        Column.create("ns", LongType, false),
+        Column.create("id", LongType, false),
+        Column.create("row_commit_version", LongType, false)),
+      Array.empty[Transform],
+      Collections.emptyMap[String, String]())
+    cat.setChangelogProperties(ident, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("ns", "id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val analyzed = streamingDf(
+      "deduplicationMode" -> "netChanges").queryExecution.analyzed
+    assertWatermarkOnCommitTimestamp(analyzed)
+    val tws = analyzed.collect { case t: TransformWithState => t }
+    assert(tws.size == 1, s"Expected one TransformWithState. Plan:\n$analyzed")
+    val groupingNames = tws.head.groupingAttributes.map(_.name)
+    assert(groupingNames == Seq("__spark_cdc_rowid_0", "__spark_cdc_rowid_1"),
+      s"Expected grouping by [__spark_cdc_rowid_0, __spark_cdc_rowid_1]; got $groupingNames. " +
+        s"Plan:\n$analyzed")
+    assertHelperColumnsRemoved(analyzed)
+  }
+
+  test("netChanges + carry-over removal share a single watermark") {
+    catalog.setChangelogProperties(identifier, ChangelogProperties(
+      containsCarryoverRows = true,
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val analyzed = streamingDf(
+      "deduplicationMode" -> "netChanges").queryExecution.analyzed
+    val watermarks = analyzed.collect { case w: EventTimeWatermark => w }
+    assert(watermarks.size == 1,
+      s"Combined row-level + netChanges path should share one EventTimeWatermark. " +
+        s"Plan:\n$analyzed")
+    val aggs = analyzed.collect { case a: Aggregate => a }
+    assert(aggs.size == 1,
+      s"Row-level Aggregate should still be present. Plan:\n$analyzed")
+    val tws = analyzed.collect { case t: TransformWithState => t }
+    assert(tws.size == 1,
+      s"netChanges TransformWithState should be on top of the row-level rewrite. " +
+        s"Plan:\n$analyzed")
+    assertHelperColumnsRemoved(analyzed)
+  }
+
+  // ===========================================================================
   // No post-processing -> no rewrite
   // ===========================================================================
 
@@ -254,23 +335,6 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     val analyzed = streamingDf(
       "computeUpdates" -> "true").queryExecution.analyzed
     assertNoStreamingPostProcessing(analyzed)
-  }
-
-  // ===========================================================================
-  // Net change computation rejection
-  // ===========================================================================
-
-  test("deduplicationMode=netChanges is rejected on streaming") {
-    catalog.setChangelogProperties(identifier, ChangelogProperties(
-      containsIntermediateChanges = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    val e = intercept[AnalysisException] {
-      streamingDf("deduplicationMode" -> "netChanges").queryExecution.analyzed
-    }
-    assert(e.getCondition == "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
-      s"Unexpected error: ${e.getMessage}")
   }
 
   // ===========================================================================

@@ -33,8 +33,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},
  *       {@code update_preimage}, or {@code update_postimage}</li>
- *   <li>{@code _commit_version} (connector-defined type, e.g. LONG) — the version containing
- *       this change</li>
+ *   <li>{@code _commit_version} (LONG) — the version containing this change. Spark
+ *       post-processing compares versions as primitive longs</li>
  *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
  *       belonging to a single {@code _commit_version} must share the same
  *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
@@ -61,15 +61,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *       snapshots) that derive {@code _commit_timestamp} from wall-clock time at
  *       commit time naturally satisfy both requirements.
  *       {@code _commit_timestamp} must be non-{@code NULL} on every row of a streaming
- *       read engaging post-processing. The row-level rewrite raises
- *       {@code CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP} on any row that
- *       violates this; without the guard a NULL group key would never satisfy the
- *       watermark eviction predicate and the row would sit in state indefinitely</li>
+ *       read engaging post-processing; both the row-level Aggregate path and the
+ *       netChanges {@code transformWithState} path raise
+ *       {@code CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP} on a violation</li>
  * </ul>
  * <p>
- * Streaming reads support carry-over removal and update detection but not net change
- * computation. The latter requires reasoning over the entire requested range and is
- * batch-only.
+ * Streaming reads support carry-over removal, update detection, and net change
+ * computation. Net change collapses are kept in the state store keyed by row identity;
+ * row identities only touched in the latest observed commit are held back until either a
+ * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
+ * past them, or the source terminates.
  *
  * @since 4.2.0
  */
@@ -116,10 +117,7 @@ public interface Changelog {
    * the entire changelog range, and Spark will skip net change computation.
    * <p>
    * Note this flag is range-scoped (across all commits in the request), not
-   * micro-batch-scoped. Streaming CDC reads currently reject
-   * {@code deduplicationMode = netChanges} because the per-row-identity collapse cannot
-   * be incrementalized: a row's full history may span an unbounded number of
-   * micro-batches.
+   * micro-batch-scoped.
    */
   boolean containsIntermediateChanges();
 

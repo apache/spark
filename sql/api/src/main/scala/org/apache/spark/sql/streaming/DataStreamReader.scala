@@ -131,15 +131,19 @@ abstract class DataStreamReader {
    *     .changes("my_table")
    * }}}
    *
-   * Streaming reads support the same `computeUpdates` and `deduplicationMode = dropCarryovers`
-   * post-processing as batch reads. `deduplicationMode = netChanges` is currently batch-only --
-   * it requires reasoning over the entire requested range, which is not incrementalized yet.
-   * Requesting it on a streaming read raises an explicit
-   * `INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED` error.
+   * Streaming reads support all of the same post-processing as batch reads -- `computeUpdates`,
+   * `deduplicationMode = dropCarryovers`, and `deduplicationMode = netChanges`. The streaming
+   * netChanges path holds per-row-identity state in the state store and emits the SPIP collapse
+   * output once the global watermark advances past the last `_commit_timestamp` observed for that
+   * row identity. Row identities only touched in the latest observed commit are therefore not
+   * emitted until a later commit (with strictly greater `_commit_timestamp`) advances the
+   * watermark past them, or the source terminates -- bounded streams produce the same output as
+   * the corresponding batch read.
    *
-   * When the requested options engage row-level post-processing (carry-over removal or update
-   * detection), the rewrite injects an internal `EventTimeWatermark` on `_commit_timestamp` and a
-   * stateful streaming aggregate. Two implications follow:
+   * When the requested options engage post-processing (carry-over removal, update detection, or
+   * netChanges), the rewrite injects an internal `EventTimeWatermark` on `_commit_timestamp` and
+   * a stateful streaming operator (an aggregate for the row-level passes, a `transformWithState`
+   * for netChanges). Two implications follow:
    *   - A commit's events are emitted in the next micro-batch after the commit is read
    *     (append-mode aggregate eviction is `eventTime &lt;= watermark`, and the watermark
    *     advances to the max `_commit_timestamp` observed in the previous batch). A stream that

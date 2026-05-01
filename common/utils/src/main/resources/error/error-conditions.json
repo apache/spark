@@ -3308,11 +3308,6 @@
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
         ]
       },
-      "STREAMING_NET_CHANGES_NOT_SUPPORTED" : {
-        "message" : [
-          "Change Data Capture (CDC) streaming reads on connector `<changelogName>` do not yet support net change computation (`deduplicationMode = netChanges`). Net change computation reasons over the entire requested version range and is currently only available for batch reads. Use a batch read, or set `deduplicationMode` to `none` or `dropCarryovers` for streaming."
-        ]
-      },
       "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
         "message" : [
           "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."

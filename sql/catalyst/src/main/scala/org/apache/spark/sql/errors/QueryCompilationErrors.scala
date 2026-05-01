@@ -3897,12 +3897,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("changelogName" -> changelogName))
   }
 
-  def cdcStreamingNetChangesNotSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
   def changelogMissingColumnError(
       changelogName: String, columnName: String): AnalysisException = {
     new AnalysisException(

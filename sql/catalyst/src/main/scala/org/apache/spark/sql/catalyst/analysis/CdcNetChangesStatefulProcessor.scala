@@ -1,0 +1,168 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis
+
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.connector.catalog.Changelog
+import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types.StructType
+
+/**
+ * StatefulProcessor that incrementalises CDC net-change computation for streaming reads.
+ *
+ * The batch path (`ResolveChangelogTable.injectNetChangeComputation`) uses a Catalyst
+ * `Window` partitioned by `rowId` and ordered by `(_commit_version, change_type_rank)` to
+ * extract the first and last events per row identity, then applies the SPIP collapse
+ * matrix on `(existedBefore, existsAfter)`. That `Window` is rejected on streaming
+ * queries (`NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING`).
+ *
+ * This processor reproduces the same semantics with `transformWithState`. Per-row-identity
+ * state stores the first event ever observed and the most-recent event observed; an event
+ * time timer keyed on `_commit_timestamp` advances with each batch and fires once the
+ * global watermark passes the latest event time observed for the key, at which point the
+ * SPIP matrix is evaluated and the net result is emitted.
+ *
+ * Output schema: identical to the connector's changelog schema.
+ *
+ * Documented limitation: row identities only touched in the latest observed commit do not
+ * emit until a later commit (with strictly greater `_commit_timestamp`) advances the
+ * watermark past them, or the source terminates. End-of-stream flushes all pending
+ * timers, so bounded streams produce the same output as the corresponding batch read.
+ *
+ * @param inputSchema    schema of the rows fed into this processor; the connector's
+ *                       changelog schema (data columns + `_change_type` +
+ *                       `_commit_version` + `_commit_timestamp`) optionally extended with
+ *                       rowId helper columns added by
+ *                       [[org.apache.spark.sql.catalyst.analysis.ResolveChangelogTable]].
+ * @param computeUpdates whether `(existedBefore, existsAfter) = (true, true)` should be
+ *                       relabeled as `update_preimage` / `update_postimage` (true) or kept
+ *                       as `delete` / `insert` (false), matching the batch contract.
+ */
+private[analysis] class CdcNetChangesStatefulProcessor(
+    inputSchema: StructType,
+    computeUpdates: Boolean)
+  extends StatefulProcessor[Row, Row, Row] {
+
+  @transient private var firstEvent: ValueState[Row] = _
+  @transient private var lastEvent: ValueState[Row] = _
+
+  // Hoisted out of `relabel` so we don't pay a linear `fieldIndex` scan per emitted row.
+  private val changeTypeIdx: Int = inputSchema.fieldIndex("_change_type")
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    val handle = getHandle
+    val rowEncoder: Encoder[Row] = ExpressionEncoder(inputSchema)
+    firstEvent = handle.getValueState[Row]("firstEvent", rowEncoder, TTLConfig.NONE)
+    lastEvent = handle.getValueState[Row]("lastEvent", rowEncoder, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: Row,
+      inputRows: Iterator[Row],
+      timerValues: TimerValues): Iterator[Row] = {
+    val handle = getHandle
+    val sorted = inputRows.toSeq.sortBy { row =>
+      val v = row.getAs[Long]("_commit_version")
+      val ct = row.getAs[String]("_change_type")
+      val rank = ct match {
+        case Changelog.CHANGE_TYPE_UPDATE_PREIMAGE | Changelog.CHANGE_TYPE_DELETE => 0
+        case Changelog.CHANGE_TYPE_INSERT | Changelog.CHANGE_TYPE_UPDATE_POSTIMAGE => 1
+        case _ => throw new SparkException(
+          errorClass = "CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_CHANGE_TYPE",
+          messageParameters = Map.empty,
+          cause = null)
+      }
+      (v, rank)
+    }
+    if (sorted.isEmpty) return Iterator.empty
+
+    if (!firstEvent.exists()) {
+      firstEvent.update(sorted.head)
+    }
+    lastEvent.update(sorted.last)
+
+    // Re-arm the per-key event-time timer to the latest observed `_commit_timestamp`.
+    // Without dropping any existing timers we'd risk an earlier timer firing first and
+    // emitting state that later events would then re-populate, producing duplicate
+    // output for the same row identity.
+    //
+    // A NULL `_commit_timestamp` cannot be turned into a timer epoch and would NPE on
+    // `getTime()`. The `Changelog` Javadoc requires non-NULL `_commit_timestamp` on
+    // streaming reads engaging post-processing, so we surface the contract violation
+    // with a clear error class rather than failing the micro-batch with an opaque NPE.
+    val ts = sorted.last.getAs[java.sql.Timestamp]("_commit_timestamp")
+    if (ts == null) {
+      throw new SparkException(
+        errorClass = "CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP",
+        messageParameters = Map.empty,
+        cause = null)
+    }
+    val newTimerMs = ts.getTime
+    val existing = handle.listTimers().toList
+    existing.foreach(handle.deleteTimer)
+    handle.registerTimer(newTimerMs)
+
+    Iterator.empty
+  }
+
+  override def handleExpiredTimer(
+      key: Row,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[Row] = {
+    if (!firstEvent.exists()) return Iterator.empty
+
+    val first = firstEvent.get()
+    val last = lastEvent.get()
+    val firstChangeType = first.getAs[String]("_change_type")
+    val lastChangeType = last.getAs[String]("_change_type")
+
+    val existedBefore =
+      firstChangeType == Changelog.CHANGE_TYPE_DELETE ||
+        firstChangeType == Changelog.CHANGE_TYPE_UPDATE_PREIMAGE
+    val existsAfter =
+      lastChangeType == Changelog.CHANGE_TYPE_INSERT ||
+        lastChangeType == Changelog.CHANGE_TYPE_UPDATE_POSTIMAGE
+
+    val (preLabel, postLabel) =
+      if (computeUpdates) {
+        (Changelog.CHANGE_TYPE_UPDATE_PREIMAGE, Changelog.CHANGE_TYPE_UPDATE_POSTIMAGE)
+      } else {
+        (Changelog.CHANGE_TYPE_DELETE, Changelog.CHANGE_TYPE_INSERT)
+      }
+
+    val out: Iterator[Row] = (existedBefore, existsAfter) match {
+      case (false, false) => Iterator.empty
+      case (false, true) => Iterator(relabel(last, Changelog.CHANGE_TYPE_INSERT))
+      case (true, false) => Iterator(relabel(first, Changelog.CHANGE_TYPE_DELETE))
+      case (true, true) => Iterator(relabel(first, preLabel), relabel(last, postLabel))
+    }
+
+    firstEvent.clear()
+    lastEvent.clear()
+    out
+  }
+
+  private def relabel(row: Row, newChangeType: String): Row = {
+    val values = row.toSeq.toArray
+    values(changeTypeIdx) = newChangeType
+    new GenericRowWithSchema(values, inputSchema)
+  }
+}

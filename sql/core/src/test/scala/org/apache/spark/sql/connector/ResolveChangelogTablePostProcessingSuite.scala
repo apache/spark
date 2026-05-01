@@ -368,7 +368,7 @@ class ResolveChangelogTablePostProcessingSuite
       s"Expected ChangelogTable to be marked resolved by the rule. Plan:\n$plan")
   }
 
-  // The streaming netChanges rejection is covered by
+  // The streaming netChanges path is covered by
   // ResolveChangelogTableStreamingPostProcessingSuite -- not duplicated here, since
   // this suite focuses on the batch path.
 

@@ -282,7 +282,8 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     assertStreamingRowLevelRewrite(analyzed)
   }
 
-  test("DataStreamReader - changes() with deduplicationMode=netChanges throws") {
+  test("DataStreamReader - changes() with deduplicationMode=netChanges rewrites plan") {
+    import org.apache.spark.sql.catalyst.plans.logical.TransformWithState
     val ident = recreatePostProcessingTable()
     val cat = spark.sessionState.catalogManager
       .catalog(cdcCatalogName)
@@ -292,15 +293,13 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       rowIdNames = Seq("id"),
       rowVersionName = Some("row_commit_version")))
 
-    checkError(
-      intercept[AnalysisException] {
-        spark.readStream
-          .option("deduplicationMode", "netChanges")
-          .changes(s"$cdcCatalogName.test_table")
-          .queryExecution.analyzed
-      },
-      condition = "INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED",
-      parameters = Map("changelogName" -> s"$cdcCatalogName.test_table_changelog"))
+    val analyzed = spark.readStream
+      .option("deduplicationMode", "netChanges")
+      .changes(s"$cdcCatalogName.test_table")
+      .queryExecution.analyzed
+    val tws = analyzed.collect { case t: TransformWithState => t }
+    assert(tws.size == 1,
+      s"Expected exactly one TransformWithState; found ${tws.size}. Plan:\n$analyzed")
   }
 
   // ===========================================================================
