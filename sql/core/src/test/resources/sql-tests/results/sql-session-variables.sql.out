@@ -581,7 +581,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "searchPath" : "[`system`.`session`]",
     "variableName" : "`builtin`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 44,
+    "fragment" : "DECLARE OR REPLACE VARIABLE builtin.var1 INT"
+  } ]
 }
 
 
@@ -597,7 +604,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "searchPath" : "[`system`.`session`]",
     "variableName" : "`system`.`sesion`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 50,
+    "fragment" : "DECLARE OR REPLACE VARIABLE system.sesion.var1 INT"
+  } ]
 }
 
 
@@ -613,7 +627,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "searchPath" : "[`system`.`session`]",
     "variableName" : "`sys`.`session`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 48,
+    "fragment" : "DECLARE OR REPLACE VARIABLE sys.session.var1 INT"
+  } ]
 }
 
 
@@ -725,7 +746,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "searchPath" : "[`system`.`session`]",
     "variableName" : "`ses`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 25,
+    "fragment" : "SET VARIABLE ses.var1 = 1"
+  } ]
 }
 
 
@@ -741,7 +769,14 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "searchPath" : "[`system`.`session`]",
     "variableName" : "`builtn`.`session`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 36,
+    "fragment" : "SET VARIABLE builtn.session.var1 = 1"
+  } ]
 }
 
 

@@ -916,12 +916,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def unresolvedVariableError(name: Seq[String], pathEntries: Seq[Seq[String]]): Throwable = {
+  def unresolvedVariableError(
+      name: Seq[String],
+      pathEntries: Seq[Seq[String]],
+      origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_VARIABLE",
       messageParameters = Map(
         "variableName" -> toSQLId(name),
-        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")))
+        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")),
+      origin = origin)
   }
 
   def failedToLoadRoutineError(nameParts: Seq[String], e: Exception): Throwable = {

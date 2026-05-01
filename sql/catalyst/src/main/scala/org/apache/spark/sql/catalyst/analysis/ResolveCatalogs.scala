@@ -223,7 +223,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         nameParts,
         Seq(Seq(
           resolvedIdentifier.catalog.name(),
-          resolvedIdentifier.identifier.namespace().head))
+          resolvedIdentifier.identifier.namespace().head)),
+        CurrentOrigin.get
       )
     }
 
