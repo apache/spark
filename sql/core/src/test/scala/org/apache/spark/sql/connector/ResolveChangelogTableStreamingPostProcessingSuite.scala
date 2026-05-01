@@ -134,12 +134,13 @@ class ResolveChangelogTableStreamingPostProcessingSuite
   }
 
   private def assertContainsNullCommitTimestampGuard(plan: LogicalPlan): Unit = {
+    import org.apache.spark.sql.catalyst.analysis.CdcAssertCommitTimestampNotNull
     val nullGuards = plan.collect {
       case f: Filter
-        if f.condition.toString.contains("NULL_COMMIT_TIMESTAMP") => f
+        if f.condition.isInstanceOf[CdcAssertCommitTimestampNotNull] => f
     }
     assert(nullGuards.size == 1,
-      s"Expected exactly one NULL_COMMIT_TIMESTAMP guard Filter. Plan:\n$plan")
+      s"Expected exactly one CdcAssertCommitTimestampNotNull guard Filter. Plan:\n$plan")
   }
 
   // ===========================================================================
@@ -202,7 +203,8 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     // The relabel Project must reference _change_type (CaseWhen rewrites it).
     val projects = analyzed.collect { case p: Project => p }
     assert(projects.exists { p =>
-      p.projectList.exists(_.toString.toLowerCase.contains("update_preimage"))
+      p.projectList.exists(
+        _.toString.toLowerCase(java.util.Locale.ROOT).contains("update_preimage"))
     }, s"Expected a Project that emits `update_preimage`. Plan:\n$analyzed")
 
     assertHelperColumnsRemoved(analyzed)
@@ -305,11 +307,12 @@ class ResolveChangelogTableStreamingPostProcessingSuite
       rowVersionName = Some("row_commit_version")))
 
     val analyzed = streamingDf().queryExecution.analyzed
+    import org.apache.spark.sql.catalyst.analysis.CdcAssertCommitTimestampNotNull
     // The guard must sit BELOW the EventTimeWatermark (we don't want a NULL row to
     // be considered for watermark advancement at all). Verify by walking the plan
     // top-down and finding the guard before any Aggregate.
     val guards = analyzed.collect {
-      case f: Filter if f.condition.toString.contains("NULL_COMMIT_TIMESTAMP") => f
+      case f: Filter if f.condition.isInstanceOf[CdcAssertCommitTimestampNotNull] => f
     }
     assert(guards.size == 1, s"Expected exactly one guard. Plan:\n$analyzed")
     val guard = guards.head
@@ -324,5 +327,53 @@ class ResolveChangelogTableStreamingPostProcessingSuite
     }
     assert(isSourceBelowGuard,
       s"NULL guard Filter should sit directly above the streaming relation. Plan:\n$analyzed")
+  }
+
+  test("NULL guard predicate is not foldable when _commit_timestamp is non-nullable") {
+    import org.apache.spark.sql.catalyst.analysis.CdcAssertCommitTimestampNotNull
+    import org.apache.spark.sql.catalyst.expressions.{IsNull, Literal}
+    import org.apache.spark.sql.catalyst.optimizer.NullPropagation
+    // Streaming plans can't be sent through the batch optimizer (UnsupportedOperationChecker
+    // rejects streaming sources in that path), so we directly exercise the rule that the
+    // reviewer flagged: NullPropagation must not eliminate our predicate even when the
+    // child column is non-nullable. Spark's NullPropagation simplifies `IsNull(c)` and
+    // `AssertNotNull(c)` to constants for non-nullable `c`, but it has no rule for
+    // `CdcAssertCommitTimestampNotNull`, so the predicate stays in place.
+    catalog.setChangelogProperties(identifier, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version"),
+      commitTimestampNullable = false))
+
+    val analyzed = streamingDf().queryExecution.analyzed
+    val tsAttrAnalyzed = analyzed.collect {
+      case rel: org.apache.spark.sql.catalyst.streaming.StreamingRelationV2 =>
+        rel.output.find(_.name == "_commit_timestamp").get
+    }.head
+    assert(!tsAttrAnalyzed.nullable,
+      s"Test setup expected non-nullable `_commit_timestamp` on the source. Plan:\n$analyzed")
+
+    val guardsBefore = analyzed.collect {
+      case f: Filter if f.condition.isInstanceOf[CdcAssertCommitTimestampNotNull] => f
+    }
+    assert(guardsBefore.size == 1,
+      s"NULL guard must be present in the analyzed plan. Plan:\n$analyzed")
+
+    // Run NullPropagation on the predicate. It should be a no-op because the rule does
+    // not recognize `CdcAssertCommitTimestampNotNull`. (As a sanity check: the same rule
+    // would simplify a plain `IsNull(non-nullable)` to a Boolean literal.)
+    val tsAttr = guardsBefore.head.condition.asInstanceOf[CdcAssertCommitTimestampNotNull].child
+    val analyzedPredicate = guardsBefore.head.condition
+    val tsIsNullPlan = Filter(IsNull(tsAttr), analyzed)
+    val optimizedTsIsNull = NullPropagation(tsIsNullPlan).asInstanceOf[Filter].condition
+    assert(optimizedTsIsNull.isInstanceOf[Literal],
+      s"Sanity check: NullPropagation should fold IsNull(non-nullable) to a literal. " +
+        s"Got: $optimizedTsIsNull")
+
+    val cdcGuardPlan = Filter(analyzedPredicate, analyzed)
+    val optimizedGuard = NullPropagation(cdcGuardPlan).asInstanceOf[Filter].condition
+    assert(optimizedGuard.isInstanceOf[CdcAssertCommitTimestampNotNull],
+      s"NullPropagation must NOT simplify CdcAssertCommitTimestampNotNull. " +
+        s"Got: $optimizedGuard")
   }
 }

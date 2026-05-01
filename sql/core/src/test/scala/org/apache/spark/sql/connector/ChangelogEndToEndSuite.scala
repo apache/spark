@@ -715,11 +715,11 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     catalog.addChangeRows(id, Seq(
       // v1: insert Alice (rcv=1), Bob (rcv=1)
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
-      ppRow(2L, "Bob",   1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
       // v2: real delete Alice + carry-over for Bob (rcv unchanged)
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
-      ppRow(2L, "Bob",   1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
-      ppRow(2L, "Bob",   1L, CHANGE_TYPE_INSERT, 2L, 2000000L)))
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 2L, 2000000L)))
 
     val q = spark.readStream
       .option("startingVersion", "1")
@@ -740,7 +740,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
         spark.sql("SELECT * FROM cdc_stream_carryover"),
         Seq(
           Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
-          Row(2L, "Bob",   CHANGE_TYPE_INSERT, 1L),
+          Row(2L, "Bob", CHANGE_TYPE_INSERT, 1L),
           Row(1L, "Alice", CHANGE_TYPE_DELETE, 2L)))
     } finally {
       q.stop()
@@ -758,7 +758,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       // v1: insert Alice (rcv=1)
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
       // v2: real update Alice -> Robert (delete old, insert new)
-      ppRow(1L, "Alice",  1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
       ppRow(1L, "Robert", 2L, CHANGE_TYPE_INSERT, 2L, 2000000L)))
 
     val q = spark.readStream
@@ -777,8 +777,8 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       checkAnswer(
         spark.sql("SELECT * FROM cdc_stream_updates"),
         Seq(
-          Row(1L, "Alice",  CHANGE_TYPE_INSERT, 1L),
-          Row(1L, "Alice",  CHANGE_TYPE_UPDATE_PREIMAGE, 2L),
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(1L, "Alice", CHANGE_TYPE_UPDATE_PREIMAGE, 2L),
           Row(1L, "Robert", CHANGE_TYPE_UPDATE_POSTIMAGE, 2L)))
     } finally {
       q.stop()

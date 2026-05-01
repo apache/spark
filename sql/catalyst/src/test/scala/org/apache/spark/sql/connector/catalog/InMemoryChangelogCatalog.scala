@@ -142,6 +142,10 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
  *                       real updates. Do NOT pass the commit version, which is constant
  *                       within a partition and would cause every delete+insert pair to
  *                       look like a carry-over
+ * @param commitTimestampNullable whether the connector declares `_commit_timestamp` as
+ *                                nullable. Defaults to `true`. Tests that need to
+ *                                exercise NullPropagation behaviour on a non-nullable
+ *                                schema can set this to `false`.
  */
 case class ChangelogProperties(
     containsCarryoverRows: Boolean = false,
@@ -149,7 +153,8 @@ case class ChangelogProperties(
     representsUpdateAsDeleteAndInsert: Boolean = false,
     rowIdNames: Seq[String] = Seq.empty,
     rowIdPaths: Seq[Seq[String]] = Seq.empty,
-    rowVersionName: Option[String] = None)
+    rowVersionName: Option[String] = None,
+    commitTimestampNullable: Boolean = true)
 
 /**
  * A test [[Changelog]] that returns pre-populated change rows.
@@ -167,7 +172,7 @@ class InMemoryChangelog(
   private val cdcColumns: Array[Column] = dataColumns ++ Array(
     Column.create("_change_type", StringType),
     Column.create("_commit_version", LongType),
-    Column.create("_commit_timestamp", TimestampType))
+    Column.create("_commit_timestamp", TimestampType, properties.commitTimestampNullable))
 
   override def name(): String = tableName
 

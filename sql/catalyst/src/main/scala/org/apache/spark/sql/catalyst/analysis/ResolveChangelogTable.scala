@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.UUID
 
+import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{
   CollectList,
@@ -28,13 +30,14 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{
   Max,
   Min
 }
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
-import org.apache.spark.sql.types.{BooleanType, IntegerType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MetadataBuilder, StringType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -428,15 +431,18 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    */
   private def addNullCommitTimestampGuard(input: LogicalPlan): LogicalPlan = {
     val commitTsAttr = getAttribute(input, "_commit_timestamp")
-    val raise = RaiseError(
-      Literal("CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP"),
-      CreateMap(Nil),
-      BooleanType)
-    // CaseWhen returns the default branch (true) for non-null timestamps and
-    // evaluates the side-effecting RaiseError for nulls; the row never passes the
-    // filter on a contract violation.
-    val checkExpr = CaseWhen(Seq(IsNull(commitTsAttr) -> raise), Literal(true))
-    Filter(checkExpr, input)
+    // Use a dedicated, side-effecting catalyst expression rather than a
+    // `CaseWhen(IsNull(c) -> RaiseError, true)` predicate. Spark's
+    // `NullPropagation` rule rewrites `IsNull(c)` to `false` whenever `c.nullable`
+    // is `false` and similarly eliminates `AssertNotNull(c)` for non-nullable `c`
+    // (`expressions.scala:920-926`). A connector can reasonably declare
+    // `_commit_timestamp` as non-nullable in its schema while still emitting NULL
+    // at runtime in violation of the contract -- under those rules the guard
+    // would be optimized away and the runtime NULL would silently stall the
+    // group. `CdcAssertCommitTimestampNotNull` is unrecognised by
+    // `NullPropagation` and stays in the plan regardless of the column's
+    // declared nullability, surfacing the violation immediately.
+    Filter(CdcAssertCommitTimestampNotNull(commitTsAttr), input)
   }
 
   /**
@@ -773,4 +779,40 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
       throw new IllegalStateException(
         s"Required column '$name' not found in plan output: " +
           plan.output.map(_.name).mkString(", ")))
+}
+
+/**
+ * Side-effecting Boolean expression: returns `true` if the child is non-NULL and throws
+ * `CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP` if the child is NULL. Used as the
+ * predicate of the streaming row-level rewrite's NULL guard `Filter`.
+ *
+ * The point of this dedicated expression is to remain in the plan no matter what the
+ * connector declares for `_commit_timestamp.nullable`: Spark's `NullPropagation` rules
+ * (`Optimizer.scala`'s `expressions.scala:920-926`) rewrite `IsNull(c) -> false` and
+ * eliminate `AssertNotNull(c)` whenever `c.nullable` is `false`. A connector that
+ * declares `_commit_timestamp` non-nullable but emits NULL at runtime would slip past
+ * those simpler shapes; this class is unrecognised by `NullPropagation` so the runtime
+ * check stays put.
+ */
+case class CdcAssertCommitTimestampNotNull(child: Expression)
+    extends UnaryExpression
+    with CodegenFallback
+    with NonSQLExpression {
+
+  override def dataType: DataType = BooleanType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {
+    if (child.eval(input) == null) {
+      throw new SparkRuntimeException(
+        errorClass = "CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP",
+        messageParameters = Map.empty)
+    }
+    true
+  }
+
+  override protected def withNewChildInternal(
+      newChild: Expression): CdcAssertCommitTimestampNotNull =
+    copy(child = newChild)
 }
