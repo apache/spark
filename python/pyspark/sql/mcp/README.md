@@ -45,6 +45,66 @@ Catalog exploration, query execution, and query plans:
 
 See `dev/design-docs/spark-mcp-server/02-design.md` for the full design.
 
+## Motivating example: LLM-assisted plan analysis
+
+`explain_query` and `analyze_query` are the highest-leverage tools in the
+v0.1 set: an LLM that can read a structured Spark plan can reason about
+performance the way a Spark engineer would, without running the query.
+
+A user prompts an LLM client (which has the Spark MCP server attached):
+
+> "I want to understand the execution plan for
+> `SELECT count(*) FROM range(1000000) WHERE id % 7 = 0 GROUP BY id % 3` —
+> but **don't actually execute it**. From the plan, where is the predicate
+> handled?"
+
+The LLM calls `analyze_query`, receives the optimized logical and physical
+plans, and produces an answer like:
+
+```
+Optimized Logical Plan
+Aggregate [_groupingexpression#50L], [count(1) AS count(1)]
++- Project [(id % 3) AS _groupingexpression]
+   +- Filter ((id % 7) = 0)
+      +- Range (0, 1000000, step=1)
+
+Physical Plan
+AdaptiveSparkPlan isFinalPlan=false
++- HashAggregate(keys=[_groupingexpression], functions=[count(1)])
+   +- Exchange hashpartitioning(_groupingexpression, 200)
+      +- HashAggregate(keys=[_groupingexpression], functions=[partial_count(1)])
+         +- Project [(id % 3) AS _groupingexpression]
+            +- Filter ((id % 7) = 0)
+               +- Range (0, 1000000, step=1, splits=16)
+```
+
+> 1. **Range (splits=16)** generates 0..999999 across 16 partitions — no I/O.
+> 2. **Filter `(id % 7) = 0`** sits directly above the Range, so only ~1/7 of
+>    the rows survive; everything above it sees the smaller stream.
+> 3. **Project `id % 3`** materializes the group key once so it isn't
+>    recomputed on either side of the aggregate.
+> 4. **HashAggregate (partial_count)** does map-side combine inside each
+>    partition, emitting `(group_key, partial_count)`.
+> 5. **Exchange hashpartitioning(200)** shuffles by group key. Since the key
+>    only has 3 distinct values, only 3 reducers actually receive data.
+> 6. **HashAggregate (final count)** sums the partial counts into the final
+>    3-row result.
+> 7. **AdaptiveSparkPlan `isFinalPlan=false`** means AQE can still adjust at
+>    runtime (coalesce empty partitions, change join strategies, etc.).
+>
+> **Where is `id % 7 = 0` handled?** In the `Filter` operator immediately
+> above the source — the lowest, earliest point in the plan. The
+> `PushDownPredicates` optimizer rule moves filters as close to the source
+> as possible. `Range` isn't a file source, so there is no storage-level
+> pushdown, but the effect is identical: `id % 3`, the partial aggregate,
+> and the shuffle all see only the post-filter rows. For a Parquet source
+> the same filter would also be pushed down as a data-source filter and
+> drive partition pruning.
+
+This kind of explanation is what makes the plan tools valuable: the LLM
+turns Spark's verbose plan output into a step-by-step narrative grounded in
+operator semantics, without any of the query's data leaving the cluster.
+
 ## Dependencies
 
 - `pyspark` with the Spark Connect client extras.
