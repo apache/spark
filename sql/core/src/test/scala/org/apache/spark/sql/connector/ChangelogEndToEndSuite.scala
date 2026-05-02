@@ -1173,4 +1173,345 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       }
     }
   }
+
+  // ---------- Streaming: extended row-level post-processing coverage ----------
+
+  test("streaming carry-over removal with composite rowId removes pairs per (id, name)") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id", "data"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      // v1: insert two rows that share id=1 but different `data`. The composite rowId
+      // (id, data) means each is its own row identity.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2: CoW carry-over for (1, "Alice"); real delete for (1, "Bob").
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type", "_commit_version")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_composite_carryover")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      // (1, "Alice") carry-over is dropped; (1, "Bob") delete survives. With broken
+      // single-column rowId partitioning the four v2 rows would collapse into one
+      // partition with del_cnt=2 / ins_cnt=1 and no rows would qualify as carry-over.
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_composite_carryover"),
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(1L, "Bob", CHANGE_TYPE_INSERT, 1L),
+          Row(1L, "Bob", CHANGE_TYPE_DELETE, 2L)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming update detection with composite rowId keeps different tuples raw") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id", "data"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      // v1: insert pre-existing Alice and Bob (so v2 has rows to fall through).
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2: delete (1, "Alice") and insert (1, "Bob"). These are DIFFERENT composite
+      // rowIds; they MUST NOT be relabeled as update.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(1L, "Carol", 2L, CHANGE_TYPE_INSERT, 2L, 2000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .option("computeUpdates", "true")
+      .option("deduplicationMode", "none")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_composite_updates")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_composite_updates"),
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT),
+          Row(1L, "Bob", CHANGE_TYPE_INSERT),
+          Row(1L, "Alice", CHANGE_TYPE_DELETE),
+          Row(1L, "Carol", CHANGE_TYPE_INSERT)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming carry-over removal and update detection across multiple commits") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      // v1: insert 3 rows.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(3L, "Charlie", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2: real delete Alice; CoW carry-overs for Bob/Charlie.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      ppRow(3L, "Charlie", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(3L, "Charlie", 1L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      // v3: real update Bob -> Robert (rcv bumps); CoW for Charlie.
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_DELETE, 3L, 3000000L),
+      ppRow(2L, "Robert", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L),
+      ppRow(3L, "Charlie", 1L, CHANGE_TYPE_DELETE, 3L, 3000000L),
+      ppRow(3L, "Charlie", 1L, CHANGE_TYPE_INSERT, 3L, 3000000L),
+      // v4: insert Diana.
+      ppRow(4L, "Diana", 4L, CHANGE_TYPE_INSERT, 4L, 4000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .option("computeUpdates", "true")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type", "_commit_version")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_multi_commit")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      val result = spark.sql(
+        "SELECT * FROM cdc_stream_multi_commit ORDER BY _commit_version, id, _change_type")
+      checkAnswer(
+        result,
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(2L, "Bob", CHANGE_TYPE_INSERT, 1L),
+          Row(3L, "Charlie", CHANGE_TYPE_INSERT, 1L),
+          // v2: only Alice's real delete survives (Bob and Charlie carry-over dropped).
+          Row(1L, "Alice", CHANGE_TYPE_DELETE, 2L),
+          // v3: Bob -> Robert relabeled as update_pre/postimage; Charlie carry-over
+          // dropped. The ORDER BY breaks ties on `_change_type` ascending where
+          // `update_postimage` < `update_preimage` alphabetically.
+          Row(2L, "Robert", CHANGE_TYPE_UPDATE_POSTIMAGE, 3L),
+          Row(2L, "Bob", CHANGE_TYPE_UPDATE_PREIMAGE, 3L),
+          // v4
+          Row(4L, "Diana", CHANGE_TYPE_INSERT, 4L)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming DELETE-all-rows: only deletes survive at the deleting commit") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type", "_commit_version")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_delete_all")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_delete_all"),
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(2L, "Bob", CHANGE_TYPE_INSERT, 1L),
+          Row(1L, "Alice", CHANGE_TYPE_DELETE, 2L),
+          Row(2L, "Bob", CHANGE_TYPE_DELETE, 2L)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming UPDATE-all-rows: every row gets update_pre/postimage") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2: every row is a real update (different rcv on pre vs post).
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(1L, "AliceUpdated", 2L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "BobUpdated", 2L, CHANGE_TYPE_INSERT, 2L, 2000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .option("computeUpdates", "true")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type", "_commit_version")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_update_all")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_update_all"),
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(2L, "Bob", CHANGE_TYPE_INSERT, 1L),
+          Row(1L, "Alice", CHANGE_TYPE_UPDATE_PREIMAGE, 2L),
+          Row(1L, "AliceUpdated", CHANGE_TYPE_UPDATE_POSTIMAGE, 2L),
+          Row(2L, "Bob", CHANGE_TYPE_UPDATE_PREIMAGE, 2L),
+          Row(2L, "BobUpdated", CHANGE_TYPE_UPDATE_POSTIMAGE, 2L)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming append-only workload: all inserts pass through") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      // Append-only connectors typically declare no special CDC capabilities.
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob", 2L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      ppRow(3L, "Charlie", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type", "_commit_version")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_append_only")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_append_only"),
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(2L, "Bob", CHANGE_TYPE_INSERT, 2L),
+          Row(3L, "Charlie", CHANGE_TYPE_INSERT, 3L)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming no-op UPDATE is labeled as update (rcv differs on pre/post)") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      representsUpdateAsDeleteAndInsert = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      // v2 no-op update: identical data, but rcv differs (Delta bumps it on every UPDATE).
+      // Carry-over filter requires _min_rv = _max_rv, which is false here, so this is
+      // correctly treated as a real update -- not a carry-over.
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(1L, "Alice", 2L, CHANGE_TYPE_INSERT, 2L, 2000000L)))
+
+    val q = spark.readStream
+      .option("startingVersion", "1")
+      .option("computeUpdates", "true")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type", "_commit_version")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_noop_update")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_noop_update"),
+        Seq(
+          Row(1L, "Alice", CHANGE_TYPE_INSERT, 1L),
+          Row(1L, "Alice", CHANGE_TYPE_UPDATE_PREIMAGE, 2L),
+          Row(1L, "Alice", CHANGE_TYPE_UPDATE_POSTIMAGE, 2L)))
+    } finally {
+      q.stop()
+    }
+  }
+
+  test("streaming carry-over removal at scale: many CoW pairs, one real change") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsCarryoverRows = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+
+    val v1Inserts = (1 to 10).map { i =>
+      ppRow(i.toLong, ('A' + i - 1).toChar.toString, 1L,
+        CHANGE_TYPE_INSERT, 1L, 1000000L)
+    }
+    // At v2: row 5 is really deleted; the other 9 rows are CoW carry-over pairs
+    // (rcv unchanged on both sides means content unchanged).
+    val v2CarryOvers = (1 to 10).filter(_ != 5).flatMap { i =>
+      val name = ('A' + i - 1).toChar.toString
+      Seq(
+        ppRow(i.toLong, name, 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+        ppRow(i.toLong, name, 1L, CHANGE_TYPE_INSERT, 2L, 2000000L))
+    }
+    val v2RealDelete = Seq(ppRow(5L, "E", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L))
+    catalog.addChangeRows(id, v1Inserts ++ v2CarryOvers ++ v2RealDelete)
+
+    val q = spark.readStream
+      .option("startingVersion", "2")
+      .option("endingVersion", "2")
+      .changes(fullTableName)
+      .select("id", "data", "_change_type")
+      .writeStream
+      .format("memory")
+      .queryName("cdc_stream_many_carryovers")
+      .outputMode("append")
+      .start()
+    try {
+      q.processAllAvailable()
+      // 9 carry-over pairs dropped; only the real delete of row 5 survives.
+      checkAnswer(
+        spark.sql("SELECT * FROM cdc_stream_many_carryovers"),
+        Seq(Row(5L, "E", CHANGE_TYPE_DELETE)))
+    } finally {
+      q.stop()
+    }
+  }
 }
