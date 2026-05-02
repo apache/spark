@@ -853,6 +853,42 @@ class MergeSubplansSuite extends PlanTest {
     }
   }
 
+  test("SPARK-56703: Merge three non-grouping subqueries where the third has the same filter " +
+      "condition as the second") {
+    // subquery1 has no filter (cached as cp), subquery2 has filter a > 1 (np, propagates f0
+    // via the one-sided (np: Filter, cp) path), subquery3 has the identical filter a > 1.
+    // After subquery1+2 are merged, f0 = (a > 1) is already aliased in the merged child Project.
+    // When subquery3 is merged it should reuse f0 rather than creating a redundant f1.
+    val subquery1 = ScalarSubquery(testRelation.groupBy()(max($"a").as("max_a")))
+    val subquery2 = ScalarSubquery(testRelation.where($"a" > 1).groupBy()(min($"a").as("min_a")))
+    val subquery3 = ScalarSubquery(
+      testRelation.where($"a" > 1).groupBy()(count($"a").as("count_a")))
+    val originalQuery = testRelation.select(subquery1, subquery2, subquery3)
+
+    val f0Alias = Alias($"a" > 1, "propagatedFilter_0")()
+    val f0 = f0Alias.toAttribute
+    val mergedSubquery = testRelation
+      .select(testRelation.output ++ Seq(f0Alias): _*)
+      .groupBy()(
+        max($"a").as("max_a"),
+        min($"a", Some(f0)).as("min_a"),
+        count($"a", Some(f0)).as("count_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("max_a"), $"max_a",
+        Literal("min_a"), $"min_a",
+        Literal("count_a"), $"count_a"
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
   test("SPARK-40193: Do not merge non-grouping subqueries with different filter conditions when " +
     "disabled") {
     withSQLConf(SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "false") {
