@@ -202,8 +202,7 @@ abstract class InsertIntoTests(
 }
 
 trait InsertIntoSQLOnlyTests
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with BeforeAndAfter {
 
   import testImplicits._

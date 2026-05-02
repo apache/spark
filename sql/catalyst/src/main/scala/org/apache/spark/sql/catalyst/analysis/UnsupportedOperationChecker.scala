@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -278,6 +278,26 @@ object UnsupportedOperationChecker extends Logging {
           outputMode, "no streaming aggregations")
 
       case _ =>
+    }
+
+    // The streaming Change Data Capture (CDC) row-level post-processing rewrite in
+    // [[ResolveChangelogTable.addStreamingRowLevelPostProcessing]] injects a streaming
+    // Aggregate buffering input rows into the helper column
+    // `ResolveChangelogTable.HelperColumn.Events` ("__spark_cdc_events") before
+    // re-emitting them via `Generate(Inline(...))`. The rewrite is designed and
+    // validated only for Append output mode -- under Update or Complete the Aggregate
+    // would re-emit per-batch state changes or the full result table per batch
+    // respectively, neither of which matches batch CDC semantics. Reject those modes
+    // at analysis time with a clear error rather than silently producing a misleading
+    // change feed.
+    if (outputMode != InternalOutputModes.Append &&
+        aggregates.exists(a => a.aggregateExpressions.exists {
+          case ne: NamedExpression if ne.resolved =>
+            ne.name == ResolveChangelogTable.HelperColumn.Events
+          case _ => false
+        })) {
+      throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
+        outputMode, "Change Data Capture (CDC) streaming reads with post-processing")
     }
 
     /**

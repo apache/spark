@@ -131,6 +131,26 @@ abstract class DataStreamReader {
    *     .changes("my_table")
    * }}}
    *
+   * Streaming reads support the same `computeUpdates` and `deduplicationMode = dropCarryovers`
+   * post-processing as batch reads. `deduplicationMode = netChanges` is currently batch-only --
+   * it requires reasoning over the entire requested range, which is not incrementalized yet.
+   * Requesting it on a streaming read raises an explicit
+   * `INVALID_CDC_OPTION.STREAMING_NET_CHANGES_NOT_SUPPORTED` error.
+   *
+   * When the requested options engage row-level post-processing (carry-over removal or update
+   * detection), the rewrite injects an internal `EventTimeWatermark` on `_commit_timestamp` and a
+   * stateful streaming aggregate. Two implications follow:
+   *   - A commit's events are emitted in the next micro-batch after the commit is read
+   *     (append-mode aggregate eviction is `eventTime &lt;= watermark`, and the watermark
+   *     advances to the max `_commit_timestamp` observed in the previous batch). A stream that
+   *     reads its last commit and stops will keep that commit's events in state until a
+   *     subsequent (no-data) micro-batch fires.
+   *   - The query is constrained to `Append` output mode; `Update` and `Complete` are rejected at
+   *     writer-start time with `STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION`. The internal
+   *     watermark metadata is stripped from the user-visible `_commit_timestamp` output, so
+   *     downstream user-supplied watermarks on other columns do not interact with it via the
+   *     global multi-watermark policy.
+   *
    * @param tableName
    *   a qualified or unqualified name that designates a table.
    * @since 4.2.0

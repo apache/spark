@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryTable, InMemoryTableCatalog, Table}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class TableLookupCacheSuite extends AnalysisTest with Matchers {
@@ -74,6 +75,14 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
     when(catalogManager.v1SessionCatalog).thenReturn(v1Catalog)
     when(catalogManager.currentCatalog).thenReturn(v2Catalog)
     when(catalogManager.currentNamespace).thenReturn(Array("default"))
+    when(catalogManager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(
+      (v2Catalog.name() +: Array("default")).toSeq)
+    when(catalogManager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(catalogManager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
 
     new Analyzer(catalogManager)
   }

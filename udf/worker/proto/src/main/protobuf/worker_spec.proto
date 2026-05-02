@@ -140,12 +140,16 @@ message WorkerCapabilities {
     // Whether multiple, concurrent UDF
     // connections are supported by this worker
     // (for example via multi-threading).
-    // 
+    //
     // In the first implementation of the engine-side
     // worker specification, this property will not be used.
-    // 
+    //
     // Usage of this property can be enabled in the future if the
     // engine implements more advanced resource management (TBD).
+    //
+    // TODO: wire this into planning/scheduling -- SPIP worker-spec §2.4
+    // "Parallelism" describes the intended use (e.g., multiplex tasks onto
+    // a single worker vs. spawn multiple workers per executor).
     //
     // (Optional)
     optional bool supports_concurrent_udfs = 3;
@@ -190,25 +194,31 @@ message UDFWorkerProperties {
     // (Optional)
     optional int32 graceful_termination_timeout_ms = 2;
 
-    // The connection this [[DirectWorker]] supports. Note that a single
-    // connection is sufficient to run multiple UDFs and (gRPC) services.
+    // A [[DirectWorker]] exposes one server-side connection endpoint (a
+    // UDS path or a TCP port) that all sessions on the worker share.
+    // Multi-connection workers (e.g., separate data and control channels)
+    // are not supported in this release.
     //
-    // On [[DirectWorker]] creation, connection information 
-    // is passed to the callable as a string parameter. 
-    // The string format depends on the [[WorkerConnection]]:
-    // 
+    // On [[DirectWorker]] creation, connection information
+    // is passed to the callable as a string parameter.
+    // The string format depends on the [[WorkerConnectionSpec]]:
+    //
     // For example, when using TCP, the callable argument will be:
     // --connection PORT
     // Here is a concrete example
     // --connection 8080
-    // 
+    //
     // For the format of each specific transport type, see the comments below.
     //
     // (Required)
-    WorkerConnection connection = 3;
+    WorkerConnectionSpec connection = 3;
 }
 
-message WorkerConnection {
+// Describes one connection (transport endpoint) that a [[DirectWorker]]
+// exposes. This is a configuration message -- the live transport object
+// used by the engine at runtime is the Scala abstraction
+// `org.apache.spark.udf.worker.core.WorkerConnection`.
+message WorkerConnectionSpec {
     // (Required)
     oneof transport {
         UnixDomainSocket unix_domain_socket = 1;
@@ -275,7 +285,7 @@ message ProcessCallable {
     // 
     // --connection
     // The value of the connection argument is a string with
-    // engine-assinged connection parameters. See [[UDFWorkerProperties]]
+    // engine-assigned connection parameters. See [[UDFWorkerProperties]]
     // for details.
     //
     // (Optional)

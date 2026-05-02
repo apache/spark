@@ -52,7 +52,7 @@ class ErrorsTestsMixin:
                 self.spark.sql("select cast('abc' as boolean)").show()
 
 
-class ErrorsTests(ReusedSQLTestCase, ErrorsTestsMixin):
+class ErrorsTests(ErrorsTestsMixin, ReusedSQLTestCase):
     pass
 
 

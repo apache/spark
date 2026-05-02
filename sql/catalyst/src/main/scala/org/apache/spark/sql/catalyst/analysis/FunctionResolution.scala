@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -32,7 +35,8 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogPlugin,
   CatalogV2Util,
   Identifier,
-  LookupCatalog
+  LookupCatalog,
+  ProcedureCatalog
 }
 
 /**
@@ -56,14 +60,13 @@ import org.apache.spark.sql.connector.catalog.functions.{
   UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
 class FunctionResolution(
     override val catalogManager: CatalogManager,
     relationResolution: RelationResolution)
-    extends DataTypeErrorsBase with LookupCatalog with Logging {
+    extends DataTypeErrorsBase with LookupCatalog with SQLConfHelper with Logging {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
   private val trimWarningEnabled = new AtomicBoolean(true)
@@ -83,23 +86,41 @@ class FunctionResolution(
   /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
-   * 1. Single-part names: expanded via the search path, where each search path entry is
-   *    fully qualified so appending the name produces fully qualified candidates.
+   * 1. Single-part names: expanded via [[CatalogManager.sqlResolutionPathEntries]] (same list as
+   *    relation resolution), where each path entry is fully qualified so appending the name
+   *    produces fully qualified candidates.
    * 2. `builtin.name` or `session.name`: prepending `system` creates a fully qualified
    *    system catalog candidate. The original 2-part name is also kept as a persistent
    *    catalog candidate (qualified downstream). Order is controlled by
    *    the `persistentCatalogFirst` config.
    *
    * All other multi-part names are returned as-is for downstream resolution.
+   *
+   * When [[AnalysisContext.resolutionPathEntries]] is set (view or SQL function / table function
+   * body with a pinned path, with [[SQLConf.PATH_ENABLED]] true), that frozen list is used
+   * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
+   * aligned with relation order.
    */
+  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
+    AnalysisContext.get.resolutionPathEntries match {
+      case Some(entries) if conf.pathEnabled => entries
+      case _ =>
+        val pathDefault = currentCatalogPath
+        catalogManager.sqlResolutionPathEntries(
+          pathDefault.head,
+          pathDefault.tail.toSeq,
+          catalogManager.currentCatalog.name,
+          catalogManager.currentNamespace.toSeq)
+    }
+  }
+
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
-      searchPath.map(_ ++ nameParts)
+      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
-      if (SQLConf.get.prioritizeSystemCatalog) {
+      if (conf.prioritizeSystemCatalog) {
         Seq(systemCandidate, nameParts)
       } else {
         Seq(nameParts, systemCandidate)
@@ -174,9 +195,10 @@ class FunctionResolution(
           case None =>
         }
       }
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
-        unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
+        unresolvedFunc.nameParts,
+        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+        unresolvedFunc.origin)
     }
   }
 
@@ -345,6 +367,25 @@ class FunctionResolution(
     }
 
     // Check external catalog for persistent functions
+    if (nameParts.length == 1) {
+      // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
+      // session order, not only the current namespace (LookupCatalog single-part rule).
+      for (candidate <- resolutionCandidates(nameParts)) {
+        try {
+          candidate match {
+            case CatalogAndIdentifier(catalog, ident) =>
+              if (catalog.asFunctionCatalog.functionExists(ident)) {
+                return FunctionType.Persistent
+              }
+            case _ =>
+          }
+        } catch {
+          case NonFatal(_) =>
+        }
+      }
+      return FunctionType.NotFound
+    }
+
     val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
     if (catalog.asFunctionCatalog.functionExists(ident)) {
       return FunctionType.Persistent
@@ -591,6 +632,66 @@ class FunctionResolution(
     throw new AnalysisException(
       errorClass = errorClass,
       messageParameters = messageParameters)
+  }
+
+  /**
+   * Resolves [[UnresolvedProcedure]] for `CALL` / `DESCRIBE PROCEDURE` using the same multipart
+   * candidates as SQL functions and relations ([[resolutionCandidates]] /
+   * [[sqlResolutionPathEntriesForAnalysis]]). Catalogs that do not implement
+   * [[ProcedureCatalog]] are skipped for unqualified names; an explicitly catalog-qualified name
+   * that targets a non-[[ProcedureCatalog]] still raises
+   * [[QueryCompilationErrors.missingCatalogProceduresAbilityError]].
+   */
+  def resolveProcedure(unresolved: UnresolvedProcedure): LogicalPlan = {
+    val candidates = resolutionCandidates(unresolved.nameParts)
+    val skipCandidateFailures = unresolved.nameParts.length == 1
+    for (multipart <- candidates) {
+      val expandedOpt =
+        try {
+          Some(relationResolution.expandIdentifier(multipart))
+        } catch {
+          case NonFatal(_) => None
+        }
+      expandedOpt.foreach { expanded =>
+        CatalogAndIdentifier.unapply(expanded).foreach { case (catalog, ident) =>
+          catalog match {
+            case pc: ProcedureCatalog =>
+              try {
+                val procedure = pc.loadProcedure(ident)
+                return ResolvedProcedure(pc, ident, procedure)
+              } catch {
+                // ProcedureCatalog has no standard "not found" exception type today. For
+                // unqualified names searched through PATH, treat candidate failures as misses and
+                // continue to the next entry (matching table/function PATH iteration semantics).
+                // Explicitly catalog-qualified names still preserve existing error behavior.
+                case _: AnalysisException if skipCandidateFailures =>
+                case _: SparkThrowable if skipCandidateFailures =>
+                case NonFatal(_) if skipCandidateFailures =>
+                case e: AnalysisException => throw e
+                case e: SparkThrowable => throw e
+                case NonFatal(e) =>
+                  val cause = e match {
+                    case ex: Exception => ex
+                    case th => new RuntimeException(th)
+                  }
+                  throw QueryCompilationErrors.failedToLoadRoutineError(
+                    catalog.name +: ident.asMultipartIdentifier,
+                    cause)
+              }
+            case _ =>
+              if (unresolved.nameParts.length > 1 &&
+                  catalogManager.isCatalogRegistered(unresolved.nameParts.head) &&
+                  catalog.name().equalsIgnoreCase(unresolved.nameParts.head)) {
+                throw QueryCompilationErrors.missingCatalogProceduresAbilityError(catalog)
+              }
+          }
+        }
+      }
+    }
+    throw QueryCompilationErrors.unresolvedRoutineError(
+      unresolved.nameParts,
+      sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+      unresolved.origin)
   }
 }
 

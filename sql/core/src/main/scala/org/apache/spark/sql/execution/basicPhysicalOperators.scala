@@ -180,12 +180,18 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
+    // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
+    // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
+    // Any change to this algorithm must be mirrored there (and vice versa).
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
-        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        val idx = notNullPreds.indexWhere {
+          case IsNotNull(n) => n.semanticEquals(r)
+          case _ => false
+        }
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
@@ -254,41 +260,128 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // Apply CSE to otherPreds only (notNullPreds are simple IsNotNull checks with no CSE value).
-    val (inputVarsCode, subExprsCode, predicateCode) =
+    // Apply CSE to otherPreds, mirroring the non-CSE branch's ordering so we preserve
+    // short-circuit semantics. The non-CSE branch lives in `generatePredicateCode`
+    // above; any future change to that algorithm should be reflected here (and vice
+    // versa) -- the two paths must stay in lockstep on notNullPreds/otherPreds
+    // interleaving. Three invariants:
+    //   (a) Between otherPreds: emit each common subexpression's precompute *just
+    //       before* the first otherPred that references it, not at the top of the
+    //       `do { }` block. A later otherPred still reuses the cached value -- it just
+    //       doesn't pay the cost for rows an earlier otherPred rejected. See #55471.
+    //   (b) Between notNullPreds and otherPreds: `notNullPreds` may include
+    //       `IsNotNull(expensive_or_throwing)` inferred by `InferFiltersFromConstraints`,
+    //       so emitting all notNullPreds up front would evaluate the inner expression
+    //       on rows an earlier-ordered otherPred would have rejected -- same class of
+    //       bug as (a) but across the notNullPreds / otherPreds boundary. Per-otherPred,
+    //       for each reference `r`: if `notNullPreds` has a direct `IsNotNull(r)`, emit
+    //       it; else if `r` is covered by `notNullAttributes` through some complex
+    //       `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic `IsNotNull(r)` so
+    //       the tightened-output binding below is safe without evaluating the
+    //       throw-capable inner expression. Then emit the otherPred's CSE precompute
+    //       and body. Remaining notNullPreds (including complex-child forms whose refs
+    //       got synthetic coverage) emit after all otherPreds.
+    //   (c) CSE state materialization: binding otherPreds (and the CSE analysis)
+    //       against `output` (with `notNullAttributes` tightened to non-nullable)
+    //       requires that the matching IsNotNull has already short-circuited -- else
+    //       CSE's `value_X = isNull ? default : compute` materializes `null` into
+    //       `value_X` for non-primitive types, which downstream accessors may NPE on
+    //       without consulting `isNull_X`. The (b) interleaving gives us that ordering
+    //       for free, since the IsNotNull check fires before the CSE precompute keyed
+    //       off the same reference.
+    val (prologueCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
-        // Bind against child.output (not output) so that columns in
-        // notNullAttributes keep their original nullable=true for the
-        // CSE precomputation, which runs BEFORE IsNotNull short-circuits.
-        val boundOtherPreds = otherPreds.map(
-          BindReferences.bindReference(_, child.output))
         // Pre-evaluate input variables before CSE analysis: CSE clears
-        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino fails
-        // with "Unknown variable or type" when notNullPreds reference the same input columns.
+        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
+        // fails when otherPreds reference the same input columns that CSE already
+        // consumed.
         val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
         val inputVarsEvalCode = evaluateRequiredVariables(
           child.output, input, otherPredInputAttrs)
 
+        val boundOtherPreds = otherPreds.map(BindReferences.bindReference(_, output))
         val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundOtherPreds)
+
+        // Group CSE states by the index of the first otherPred that references them.
+        // `evaluateSubExprEliminationState` recursively emits each state's children
+        // before the state itself and marks emitted code as `EmptyBlock`, so emitting
+        // a later group whose states depend on an earlier group's states is a no-op
+        // for the already-emitted dependencies.
+        val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
+          subExprs.states.toSeq.groupBy { case (exprEq, _) =>
+            boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
+          }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
+
+        // Emit an IsNotNull check, binding against child.output so the inner expression
+        // is evaluated with its original nullability (the tightened-nullability `output`
+        // is only appropriate inside otherPreds, where the required checks have fired).
+        // The `bound.nullable` gate below is defensive -- `IsNotNull` always produces a
+        // non-nullable Boolean, so this branch is structurally unreachable today; it
+        // mirrors the non-CSE helper's shape to keep future refactors safe.
+        def genNotNull(pred: Expression): String = {
+          val bound = BindReferences.bindReference(pred, child.output)
+          val evaluated = evaluateRequiredVariables(child.output, input, pred.references)
+          val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+          val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
+          s"""
+             |$evaluated
+             |${ev.code}
+             |if (${nullCheck}!${ev.value}) continue;
+           """.stripMargin
+        }
+
+        val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+        val extraIsNotNullAttrs = mutable.Set[Attribute]()
+
         val predCode: String = {
-          var code = ""
+          val parts = new StringBuilder
           ctx.withSubExprEliminationExprs(subExprs.states) {
-            code = generatePredicateCode(
-              ctx, child.output, input, child.output, notNullPreds, otherPreds, notNullAttributes)
+            otherPreds.zip(boundOtherPreds).zipWithIndex.foreach {
+              case ((orig, bound), idx) =>
+                orig.references.foreach { r =>
+                  val ni = notNullPreds.indexWhere {
+                    case IsNotNull(c) => c.semanticEquals(r)
+                    case _ => false
+                  }
+                  if (ni != -1 && !generatedIsNotNullChecks(ni)) {
+                    generatedIsNotNullChecks(ni) = true
+                    parts.append(genNotNull(notNullPreds(ni)))
+                    parts.append('\n')
+                  } else if (notNullAttributes.contains(r.exprId) &&
+                      !extraIsNotNullAttrs.contains(r)) {
+                    extraIsNotNullAttrs += r
+                    parts.append(genNotNull(IsNotNull(r)))
+                    parts.append('\n')
+                  }
+                }
+                statesByFirstUse.get(idx).foreach { states =>
+                  parts.append(ctx.evaluateSubExprEliminationState(states))
+                  parts.append('\n')
+                }
+                val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+                val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
+                parts.append(ev.code.toString)
+                parts.append(s"\nif (${nullCheck}!${ev.value}) continue;\n")
+            }
             Seq.empty
           }
-          code
+          parts.toString
         }
-        // Note: subExprs.exprCodesNeedEvaluate is intentionally not used here, unlike ProjectExec.
-        // evaluateRequiredVariables above cleared input[i].code = EmptyBlock for all
-        // otherPredInputAttrs before CSE analysis ran, so getLocalInputVariableValues never
-        // adds them to exprCodesNeedEvaluate -- it is always empty. Do NOT replace the
-        // pre-evaluation above with evaluateVariables(subExprs.exprCodesNeedEvaluate):
-        // that would leave notNullPreds referencing undeclared variables (Janino: "Unknown
-        // variable or type") for any input column shared between notNullPreds and otherPreds.
-        (inputVarsEvalCode, ctx.evaluateSubExprEliminationState(subExprs.states.values), predCode)
+
+        // Leftover notNullPreds: any IsNotNull that no otherPred's reference matched by
+        // `semanticEquals`. These run after all otherPreds to match the non-CSE ordering.
+        // Note: a complex `IsNotNull(expr(r))` can still land here even when the (b) path
+        // already emitted a synthetic `IsNotNull(r)` ahead of some otherPred -- the
+        // synthetic check only guards the tightened-output binding; the inner expression
+        // itself may still need its null check (e.g. under non-ANSI `cast(s as int)` can
+        // return null for unparseable strings, so we must filter the resulting row).
+        val leftoverNotNull = notNullPreds.zipWithIndex.collect {
+          case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
+        }.mkString("\n")
+
+        (inputVarsEvalCode, predCode + "\n" + leftoverNotNull)
       } else {
-        ("", "", generatePredicateCode(
+        ("", generatePredicateCode(
           ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
       }
 
@@ -304,8 +397,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
-       |  $inputVarsCode
-       |  $subExprsCode
+       |  $prologueCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}

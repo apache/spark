@@ -79,6 +79,12 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
+      if (nameParts.length == 1 &&
+          !catalogManager.sessionScopeUnqualifiedAllowed(
+            catalogManager.currentCatalog.name(),
+            catalogManager.currentNamespace.toSeq)) {
+        throw QueryCompilationErrors.unresolvedVariableError(nameParts, Seq("SYSTEM", "SESSION"))
+      }
       val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
       assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)

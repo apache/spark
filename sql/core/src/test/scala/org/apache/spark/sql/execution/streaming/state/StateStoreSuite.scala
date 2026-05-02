@@ -1709,7 +1709,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   override protected def testQuietly(name: String)(f: => Unit): Unit = {
     // Use the implementation from StateStoreSuiteBase.
-    // There is another in SQLTestUtils. Doing this to avoid conflict error.
+    // There is another in QueryTest. Doing this to avoid conflict error.
     super[StateStoreSuiteBase].testQuietly(name)(f)
   }
 }
@@ -2794,7 +2794,7 @@ class StateStoreSuiteWithRowChecksum
   extends StateStoreSuite with EnableStateStoreRowChecksum {
   override protected def testQuietly(name: String)(f: => Unit): Unit = {
     // Use the implementation from StateStoreSuiteBase.
-    // There is another in SQLTestUtils. Doing this to avoid conflict error.
+    // There is another in QueryTest. Doing this to avoid conflict error.
     super[StateStoreSuite].testQuietly(name)(f)
   }
 }

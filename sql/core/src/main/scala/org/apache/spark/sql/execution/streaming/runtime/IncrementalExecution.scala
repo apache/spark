@@ -143,6 +143,9 @@ class IncrementalExecution(
     }
   }
 
+  // Use `this` for explain so the already-open transaction and executedPlan are reused.
+  override protected def queryExecutionForExplain: QueryExecution = this
+
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
 

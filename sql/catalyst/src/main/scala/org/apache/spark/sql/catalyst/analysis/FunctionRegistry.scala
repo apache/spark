@@ -777,6 +777,7 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
+    expressionBuilder("time_bucket", TimeBucketExpressionBuilder),
 
     // collection functions
     expression[CreateArray]("array"),

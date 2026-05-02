@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -252,7 +251,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 }
 
-object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+object PROCESS_TABLES extends QueryTest {
   // TODO In SPARK-46302, the env SKIP_SPARK_RELEASE_VERSIONS has been added to
   //  allow Maven tests to skip problematic release versions.
   //  Related issues will be fixed in SPARK-46400, and testing will be resumed

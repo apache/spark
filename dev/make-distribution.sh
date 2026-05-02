@@ -169,7 +169,6 @@ fi
 cd "$SPARK_HOME"
 
 if [ "$SBT_ENABLED" == "true" ] ; then
-  export NOLINT_ON_COMPILE=1
   # Store the command as an array because $SBT variable might have spaces in it.
   # Normal quoting tricks don't work.
   # See: http://mywiki.wooledge.org/BashFAQ/050

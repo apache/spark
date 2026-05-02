@@ -42,7 +42,7 @@ if have_pandas:
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message,
 )
-class MapInArrowTestsMixin(object):
+class MapInArrowTestsMixin:
     def test_map_in_arrow(self):
         def func(iterator):
             for batch in iterator:
