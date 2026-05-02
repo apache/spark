@@ -284,9 +284,10 @@ object UnsupportedOperationChecker extends Logging {
     // [[ResolveChangelogTable]] are designed and validated only for Append output mode.
     // Two markers can identify a CDC-rewritten plan:
     //   - The row-level rewrite (`addStreamingRowLevelPostProcessing`) injects a
-    //     streaming Aggregate buffering input rows into the helper column
-    //     `ResolveChangelogTable.HelperColumn.Events` ("__spark_cdc_events") before
-    //     re-emitting them via `Generate(Inline(...))`.
+    //     streaming Aggregate whose `__spark_cdc_events` alias's output attribute
+    //     carries the metadata marker
+    //     `ResolveChangelogTable.streamingPostProcessingMarker` (mirrors
+    //     `SessionWindow.marker` / `EventTimeWatermark.delayKey`).
     //   - The netChanges rewrite (`addStreamingNetChangeComputation`) injects a
     //     `TransformWithState` driven by `CdcNetChangesStatefulProcessor`.
     // Under Update or Complete the Aggregate / TransformWithState would re-emit
@@ -296,9 +297,10 @@ object UnsupportedOperationChecker extends Logging {
     // netChanges-only marker is needed here primarily to catch Update mode.) Reject
     // those modes at analysis time with a clear error rather than silently producing
     // a misleading change feed.
-    val containsCdcEventsAggregate = aggregates.exists(a => a.aggregateExpressions.exists {
+    val containsCdcRowLevelRewrite = aggregates.exists(a => a.aggregateExpressions.exists {
       case ne: NamedExpression if ne.resolved =>
-        ne.name == ResolveChangelogTable.HelperColumn.Events
+        ne.metadata.contains(ResolveChangelogTable.streamingPostProcessingMarker) &&
+          ne.metadata.getBoolean(ResolveChangelogTable.streamingPostProcessingMarker)
       case _ => false
     })
     val containsCdcNetChangesProcessor = plan.exists {
@@ -307,7 +309,7 @@ object UnsupportedOperationChecker extends Logging {
       case _ => false
     }
     if (outputMode != InternalOutputModes.Append &&
-        (containsCdcEventsAggregate || containsCdcNetChangesProcessor)) {
+        (containsCdcRowLevelRewrite || containsCdcNetChangesProcessor)) {
       throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
         outputMode, "Change Data Capture (CDC) streaming reads with post-processing")
     }

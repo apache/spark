@@ -91,6 +91,17 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   /**
+   * Metadata-key marker placed on the `__spark_cdc_events` aggregate's output attribute
+   * by [[addStreamingRowLevelPostProcessing]]. Downstream rules
+   * (`UnsupportedOperationChecker`'s CDC-specific output-mode check) detect the
+   * streaming row-level rewrite by looking for this marker rather than by string-matching
+   * the helper column's name -- mirroring the existing `EventTimeWatermark.delayKey` and
+   * `SessionWindow.marker` patterns and surviving any optimization that might relabel
+   * or rewrite the alias.
+   */
+  final val streamingPostProcessingMarker = "spark.cdc.streamingPostProcessing"
+
+  /**
    * Reserved (`__spark_cdc_*`) column names used internally by net-change
    * computation; connectors must not emit columns with these names.
    */
@@ -385,23 +396,22 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // both inside the struct and as top-level grouping outputs; the top-level duplicates
     // are dropped via `unrequiredChildIndex` below.
     val structOfAllCols = CreateStruct(watermarked.output)
+    // Attach a metadata marker to the `__spark_cdc_events` alias so downstream rules
+    // can detect the streaming row-level rewrite by metadata rather than by helper
+    // column name (mirrors `SessionWindow.marker` / `EventTimeWatermark.delayKey`).
+    val eventsMetadata = new MetadataBuilder()
+      .putBoolean(streamingPostProcessingMarker, true)
+      .build()
     val eventsAlias = Alias(
-      new CollectList(structOfAllCols).toAggregateExpression(), HelperColumn.Events)()
+      new CollectList(structOfAllCols).toAggregateExpression(), HelperColumn.Events)(
+      explicitMetadata = Some(eventsMetadata))
 
     val aggregateExprs: Seq[NamedExpression] =
       groupingNamedExprs ++ Seq(delCntAlias, insCntAlias) ++ rvAliases :+ eventsAlias
     val aggregated = Aggregate(groupingExprs, aggregateExprs, watermarked)
 
     val filtered: LogicalPlan = if (requiresCarryOverRemoval) {
-      val delCnt = getAttribute(aggregated, HelperColumn.DelCnt)
-      val insCnt = getAttribute(aggregated, HelperColumn.InsCnt)
-      val minRv = getAttribute(aggregated, HelperColumn.MinRv)
-      val maxRv = getAttribute(aggregated, HelperColumn.MaxRv)
-      val rvCnt = getAttribute(aggregated, HelperColumn.RvCnt)
-      val isCarryoverPair = And(
-        And(EqualTo(delCnt, Literal(1L)), EqualTo(insCnt, Literal(1L))),
-        And(EqualTo(rvCnt, Literal(2L)), EqualTo(minRv, maxRv)))
-      Filter(Not(isCarryoverPair), aggregated)
+      Filter(Not(buildCarryOverPairPredicate(aggregated)), aggregated)
     } else aggregated
 
     // Inline the struct array back into rows. Drop the events column (consumed by Inline)
@@ -531,23 +541,33 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   /**
-   * Adds a Filter node that drops rows belonging to a CoW carry-over pair.
-   * A pair is a carry-over iff
-   * `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND _min_rv = _max_rv`.
-   * The `_rv_cnt = 2` clause guards against a NULL rowVersion silently matching
+   * Builds the carry-over pair predicate against the helper attributes exposed by
+   * `input`: a pair is a CoW carry-over iff
+   * `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND _min_rv = _max_rv`. The
+   * `_rv_cnt = 2` clause guards against a NULL rowVersion silently matching
    * `_min_rv = _max_rv` (Spark's min/max skip NULLs).
+   *
+   * Used by both the batch path (`addCarryOverPairFilter` over a Window child) and the
+   * streaming path (in `addStreamingRowLevelPostProcessing` over an Aggregate child).
+   * The helper-attribute layout is the same in both cases.
    */
-  private def addCarryOverPairFilter(input: LogicalPlan): LogicalPlan = {
+  private def buildCarryOverPairPredicate(input: LogicalPlan): Expression = {
     val delCnt = getAttribute(input, HelperColumn.DelCnt)
     val insCnt = getAttribute(input, HelperColumn.InsCnt)
     val minRv = getAttribute(input, HelperColumn.MinRv)
     val maxRv = getAttribute(input, HelperColumn.MaxRv)
     val rvCnt = getAttribute(input, HelperColumn.RvCnt)
-
-    val isCarryoverPair = And(
+    And(
       And(EqualTo(delCnt, Literal(1L)), EqualTo(insCnt, Literal(1L))),
       And(EqualTo(rvCnt, Literal(2L)), EqualTo(minRv, maxRv)))
-    Filter(Not(isCarryoverPair), input)
+  }
+
+  /**
+   * Adds a Filter node that drops rows belonging to a CoW carry-over pair, using the
+   * shared `buildCarryOverPairPredicate`.
+   */
+  private def addCarryOverPairFilter(input: LogicalPlan): LogicalPlan = {
+    Filter(Not(buildCarryOverPairPredicate(input)), input)
   }
 
   /**
