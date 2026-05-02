@@ -143,18 +143,18 @@ abstract class DataStreamReader {
    * changes for a row identity over the entire requested version range. Streaming netChanges is
    * incremental: it collapses changes that fall within a single watermark window for a row
    * identity (i.e. up to the timer firing that emits its current net result). After a row
-   * identity's net result has been emitted, subsequent commits on the same identity start a
-   * fresh window and produce additional output rows -- streaming cannot retract previously
-   * emitted results to match the batch range-scoped collapse. For a query that observes id=1
-   * inserted at v1 and deleted at v3 with another commit at v2 in between, batch netChanges over
-   * [v1..v3] cancels to no row, while streaming emits an `insert` (when v2 advances the
-   * watermark past v1) followed later by a `delete` (when end-of-stream or another commit
-   * advances the watermark past v3).
+   * identity's net result has been emitted, subsequent commits on the same identity start a fresh
+   * window and produce additional output rows -- streaming cannot retract previously emitted
+   * results to match the batch range-scoped collapse. For a query that observes id=1 inserted at
+   * v1 and deleted at v3 with another commit at v2 in between, batch netChanges over [v1..v3]
+   * cancels to no row, while streaming emits an `insert` (when v2 advances the watermark past v1)
+   * followed later by a `delete` (when end-of-stream or another commit advances the watermark
+   * past v3).
    *
    * Because the streaming netChanges path uses `transformWithState`, the state store provider
    * must be RocksDB. Set `spark.sql.streaming.stateStore.providerClass` to
-   * `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider` before starting
-   * a streaming netChanges query; the default HDFS-backed provider is rejected at query start.
+   * `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider` before starting a
+   * streaming netChanges query; the default HDFS-backed provider is rejected at query start.
    *
    * When the requested options engage post-processing (carry-over removal, update detection, or
    * netChanges), the rewrite injects an internal `EventTimeWatermark` on `_commit_timestamp` and
