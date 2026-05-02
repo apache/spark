@@ -280,22 +280,34 @@ object UnsupportedOperationChecker extends Logging {
       case _ =>
     }
 
-    // The streaming Change Data Capture (CDC) row-level post-processing rewrite in
-    // [[ResolveChangelogTable.addStreamingRowLevelPostProcessing]] injects a streaming
-    // Aggregate buffering input rows into the helper column
-    // `ResolveChangelogTable.HelperColumn.Events` ("__spark_cdc_events") before
-    // re-emitting them via `Generate(Inline(...))`. The rewrite is designed and
-    // validated only for Append output mode -- under Update or Complete the Aggregate
-    // would re-emit per-batch state changes or the full result table per batch
-    // respectively, neither of which matches batch CDC semantics. Reject those modes
-    // at analysis time with a clear error rather than silently producing a misleading
-    // change feed.
+    // The streaming Change Data Capture (CDC) post-processing rewrites in
+    // [[ResolveChangelogTable]] are designed and validated only for Append output mode.
+    // Two markers can identify a CDC-rewritten plan:
+    //   - The row-level rewrite (`addStreamingRowLevelPostProcessing`) injects a
+    //     streaming Aggregate buffering input rows into the helper column
+    //     `ResolveChangelogTable.HelperColumn.Events` ("__spark_cdc_events") before
+    //     re-emitting them via `Generate(Inline(...))`.
+    //   - The netChanges rewrite (`addStreamingNetChangeComputation`) injects a
+    //     `TransformWithState` driven by `CdcNetChangesStatefulProcessor`.
+    // Under Update or Complete the Aggregate / TransformWithState would re-emit
+    // per-batch state changes or the full result table per batch, neither of which
+    // matches batch CDC semantics. (Complete mode without any streaming Aggregate is
+    // already rejected by the generic `aggregates.isEmpty` check above, so the
+    // netChanges-only marker is needed here primarily to catch Update mode.) Reject
+    // those modes at analysis time with a clear error rather than silently producing
+    // a misleading change feed.
+    val containsCdcEventsAggregate = aggregates.exists(a => a.aggregateExpressions.exists {
+      case ne: NamedExpression if ne.resolved =>
+        ne.name == ResolveChangelogTable.HelperColumn.Events
+      case _ => false
+    })
+    val containsCdcNetChangesProcessor = plan.exists {
+      case t: TransformWithState if t.isStreaming &&
+        t.statefulProcessor.isInstanceOf[CdcNetChangesStatefulProcessor] => true
+      case _ => false
+    }
     if (outputMode != InternalOutputModes.Append &&
-        aggregates.exists(a => a.aggregateExpressions.exists {
-          case ne: NamedExpression if ne.resolved =>
-            ne.name == ResolveChangelogTable.HelperColumn.Events
-          case _ => false
-        })) {
+        (containsCdcEventsAggregate || containsCdcNetChangesProcessor)) {
       throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
         outputMode, "Change Data Capture (CDC) streaming reads with post-processing")
     }

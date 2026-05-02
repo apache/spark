@@ -641,7 +641,12 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    *     matrix and emits 0, 1, or 2 output rows.
    *  4. [[SerializeFromObject]] (added by the `transformWithState` factory) brings the
    *     processor's `Row` outputs back into a regular tabular shape.
-   *  5. Final [[Project]] drops the rowId helper columns so the user-visible schema
+   *  5. [[Project]] (via [[stripCommitTimestampWatermarkMetadata]]) clears the
+   *     auto-injected `EventTimeWatermark.delayKey` metadata from the user-visible
+   *     `_commit_timestamp`. The metadata is preserved through the `transformWithState`
+   *     encoder roundtrip and would otherwise interact with downstream user-supplied
+   *     watermarks via the global multi-watermark policy.
+   *  6. Final [[Project]] drops the rowId helper columns so the user-visible schema
    *     matches the connector's declared changelog schema.
    *
    * Streaming netChanges is incremental, not range-scoped: per-row-identity state is
@@ -718,9 +723,18 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // 4. Wrap with SerializeFromObject so the obj column becomes regular tabular output.
     val serialized = CatalystSerde.serialize(tws)(rowEncoder)
 
-    // 5. Drop the rowId helper columns so the final output matches the connector's schema.
+    // 5. Strip the auto-injected EventTimeWatermark metadata from the user-visible
+    //    `_commit_timestamp`. The metadata is preserved through the `transformWithState`
+    //    encoder roundtrip (the encoder schema carries StructField metadata), so we
+    //    must clear it here at the boundary of the rewrite -- otherwise downstream
+    //    user-supplied watermarks would interact with our internal watermark via the
+    //    global multi-watermark policy. Mirrors the row-level path's call at the end
+    //    of `addStreamingRowLevelPostProcessing`.
+    val cleaned = stripCommitTimestampWatermarkMetadata(serialized)
+
+    // 6. Drop the rowId helper columns so the final output matches the connector's schema.
     val helperNames = rowIdHelpers.map(_.name).toSet
-    Project(serialized.output.filterNot(a => helperNames.contains(a.name)), serialized)
+    Project(cleaned.output.filterNot(a => helperNames.contains(a.name)), cleaned)
   }
 
   /**

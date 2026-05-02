@@ -36,11 +36,13 @@ import org.apache.spark.sql.types.StructType
  * matrix on `(existedBefore, existsAfter)`. That `Window` is rejected on streaming
  * queries (`NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING`).
  *
- * This processor reproduces the same semantics with `transformWithState`. Per-row-identity
+ * This processor reuses the same SPIP collapse matrix with `transformWithState`, applied
+ * per watermark window rather than over the full requested version range. Per-row-identity
  * state stores the first event ever observed and the most-recent event observed; an event
  * time timer keyed on `_commit_timestamp` advances with each batch and fires once the
  * global watermark passes the latest event time observed for the key, at which point the
- * SPIP matrix is evaluated and the net result is emitted.
+ * SPIP matrix is evaluated and the net result is emitted. See the paragraph below for how
+ * the per-window collapse differs from batch netChanges' range-scoped collapse.
  *
  * Output schema: identical to the connector's changelog schema.
  *

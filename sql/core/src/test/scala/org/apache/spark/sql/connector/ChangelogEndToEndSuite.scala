@@ -843,11 +843,11 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     // update_preimage + update_postimage pair (rather than delete + insert).
     catalog.addChangeRows(id, Seq(
       // v1: pre-existing Alice updated to Bob
-      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE,  1L, 1000000L),
-      ppRow(1L, "Bob",   1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 1L, 1000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
       // v2: Bob updated to Robert -- the v1 preimage and the v2 postimage are the
       // first and last events for row identity 1 across the entire range.
-      ppRow(1L, "Bob",    1L, CHANGE_TYPE_UPDATE_PREIMAGE,  2L, 2000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 2L, 2000000L),
       ppRow(1L, "Robert", 2L, CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, 2000000L)))
 
     withSQLConf(rocksDbProviderConf) {
@@ -867,7 +867,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
         checkAnswer(
           spark.sql("SELECT * FROM cdc_stream_netchanges_update"),
           Seq(
-            Row(1L, "Alice",  CHANGE_TYPE_UPDATE_PREIMAGE),
+            Row(1L, "Alice", CHANGE_TYPE_UPDATE_PREIMAGE),
             Row(1L, "Robert", CHANGE_TYPE_UPDATE_POSTIMAGE)))
       } finally {
         q.stop()
@@ -930,6 +930,70 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       s"Error should mention CDC: ${e.getMessage}")
   }
 
+  // The streaming netChanges-only path injects a TransformWithState whose internal
+  // outputMode is Append. Without an explicit per-operator check the analyzer would
+  // happily accept the user requesting Update output mode at the writer, even though
+  // the rewrite is only valid for Append (Update would re-emit per-batch state changes
+  // that don't match batch netChanges semantics). UnsupportedOperationChecker therefore
+  // detects the netChanges processor and rejects non-Append modes with a clear error.
+  // (Complete is also rejected by the generic "Complete requires aggregations" check
+  // since the netChanges-only path has no streaming Aggregate, but we assert it here
+  // too for symmetry with the row-level rejection tests above.)
+
+  test("streaming netChanges with update output mode is rejected") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L)))
+
+    val e = intercept[AnalysisException] {
+      withSQLConf(rocksDbProviderConf) {
+        spark.readStream
+          .option("startingVersion", "1")
+          .option("deduplicationMode", "netChanges")
+          .changes(fullTableName)
+          .writeStream
+          .format("memory")
+          .queryName("cdc_stream_netchanges_update_rejected")
+          .outputMode("update")
+          .start()
+      }
+    }
+    assert(e.getCondition == "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      s"Unexpected error: ${e.getMessage}")
+    assert(e.getMessage.contains("Change Data Capture"),
+      s"Error should mention CDC: ${e.getMessage}")
+  }
+
+  test("streaming netChanges with complete output mode is rejected") {
+    val id = recreateWithRowVersion()
+    catalog.setChangelogProperties(id, ChangelogProperties(
+      containsIntermediateChanges = true,
+      rowIdNames = Seq("id"),
+      rowVersionName = Some("row_commit_version")))
+    catalog.addChangeRows(id, Seq(
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L)))
+
+    val e = intercept[AnalysisException] {
+      withSQLConf(rocksDbProviderConf) {
+        spark.readStream
+          .option("startingVersion", "1")
+          .option("deduplicationMode", "netChanges")
+          .changes(fullTableName)
+          .writeStream
+          .format("memory")
+          .queryName("cdc_stream_netchanges_complete_rejected")
+          .outputMode("complete")
+          .start()
+      }
+    }
+    assert(e.getCondition == "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+      s"Unexpected error: ${e.getMessage}")
+  }
+
   test("streaming row-level rewrite raises on NULL _commit_timestamp") {
     val id = recreateWithRowVersion()
     catalog.setChangelogProperties(id, ChangelogProperties(
@@ -976,11 +1040,11 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
 
     catalog.addChangeRows(id, Seq(
       // v1: pre-existing Alice gets updated to Bob.
-      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE,  1L, 1000000L),
-      ppRow(1L, "Bob",   1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 1L, 1000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
       // v2: Bob deleted -- the v1 preimage is the first event and the v2 delete is
       // the last event for row identity 1 across the entire range.
-      ppRow(1L, "Bob",   1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
       // v3: insert Carol -- gives the watermark something to advance past, so row
       // identity 1's timer fires before end-of-input.
       ppRow(2L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
@@ -1023,11 +1087,11 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
 
     catalog.addChangeRows(id, Seq(
       // v1: pre-existing Alice updated to Bob.
-      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE,  1L, 1000000L),
-      ppRow(1L, "Bob",   1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
+      ppRow(1L, "Alice", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 1L, 1000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_POSTIMAGE, 1L, 1000000L),
       // v2: Bob updated to Robert -- row identity 1 spans (preimage Alice) ..
       // (postimage Robert).
-      ppRow(1L, "Bob",    1L, CHANGE_TYPE_UPDATE_PREIMAGE,  2L, 2000000L),
+      ppRow(1L, "Bob", 1L, CHANGE_TYPE_UPDATE_PREIMAGE, 2L, 2000000L),
       ppRow(1L, "Robert", 2L, CHANGE_TYPE_UPDATE_POSTIMAGE, 2L, 2000000L)))
 
     withSQLConf(rocksDbProviderConf) {
@@ -1047,7 +1111,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
         checkAnswer(
           spark.sql("SELECT * FROM cdc_stream_netchanges_no_compute_updates"),
           Seq(
-            Row(1L, "Alice",  CHANGE_TYPE_DELETE),
+            Row(1L, "Alice", CHANGE_TYPE_DELETE),
             Row(1L, "Robert", CHANGE_TYPE_INSERT)))
       } finally {
         q.stop()
@@ -1070,12 +1134,12 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
     catalog.addChangeRows(id, Seq(
       // v1: insert Alice, Bob (rcv=1).
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
-      ppRow(2L, "Bob",   1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 1L, 1000000L),
       // v2: real delete Alice + carry-over for Bob (rcv unchanged means CoW rewrite,
       // no content change).
       ppRow(1L, "Alice", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
-      ppRow(2L, "Bob",   1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
-      ppRow(2L, "Bob",   1L, CHANGE_TYPE_INSERT, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_DELETE, 2L, 2000000L),
+      ppRow(2L, "Bob", 1L, CHANGE_TYPE_INSERT, 2L, 2000000L),
       // v3: insert Carol -- advances the watermark past v2 so timers for row
       // identities 1 and 2 fire and the netChanges output is emitted.
       ppRow(3L, "Carol", 3L, CHANGE_TYPE_INSERT, 3L, 3000000L)))
@@ -1102,7 +1166,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
         checkAnswer(
           spark.sql("SELECT * FROM cdc_stream_netchanges_with_carryover"),
           Seq(
-            Row(2L, "Bob",   CHANGE_TYPE_INSERT),
+            Row(2L, "Bob", CHANGE_TYPE_INSERT),
             Row(3L, "Carol", CHANGE_TYPE_INSERT)))
       } finally {
         q.stop()

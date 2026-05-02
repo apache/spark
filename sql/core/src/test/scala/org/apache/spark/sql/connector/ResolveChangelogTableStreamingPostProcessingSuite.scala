@@ -263,6 +263,12 @@ class ResolveChangelogTableStreamingPostProcessingSuite
       s"Expected TransformWithState grouping by [__spark_cdc_rowid_0]; got $groupingNames. " +
         s"Plan:\n$analyzed")
     assertHelperColumnsRemoved(analyzed)
+    // The auto-injected `EventTimeWatermark` metadata flows through the
+    // `transformWithState` encoder roundtrip on the netChanges-only path. The
+    // rewrite must strip it from the user-visible `_commit_timestamp` so a
+    // downstream user-supplied watermark cannot accidentally interact with our
+    // internal watermark via the global multi-watermark policy.
+    assertNoWatermarkMetadataOnOutput(analyzed)
   }
 
   test("netChanges with composite rowId groups by all helper columns") {
