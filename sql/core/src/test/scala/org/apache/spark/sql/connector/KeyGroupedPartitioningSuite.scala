@@ -4145,4 +4145,42 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       }
     }
   }
+
+  test("SPARK-46367: window with PARTITION BY subset of partition keys uses GroupPartitionsExec " +
+      "with allowKeysSubsetOfPartitionKeys") {
+    // Same narrowing mechanism as the aggregate test: the partial HashAggregate (a
+    // PartitioningPreservingUnaryExecNode) for the inner GROUP BY id, price projects away 'name',
+    // narrowing KP([id,name]) to KP([id], isNarrowed=true, isGrouped=false). With
+    // allowKeysSubsetOfPartitionKeys enabled, EnsureRequirements inserts GroupPartitionsExec to
+    // coalesce both id=1 partitions for the final aggregate. The window PARTITION BY id then sees
+    // KP([id], isGrouped=true) from the aggregate output and needs no further exchange.
+    //
+    // MAX(name) in the subquery keeps 'name' in the scan output so that
+    // V2ScanPartitioningAndOrdering does not drop the KP before PartitioningPreservingUnaryExecNode
+    // narrowing can happen.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 20.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""SELECT id, SUM(price) OVER (PARTITION BY id ORDER BY price) AS running_sum, max_name
+         |FROM (SELECT id, MAX(name) AS max_name, price FROM testcat.ns.$items GROUP BY id, price)
+         |""".stripMargin
+    val expected = Seq(Row(1L, 10.0, "aa"), Row(1L, 30.0, "bb"), Row(2L, 30.0, "cc"))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnswer(sql(query), expected)
+      assert(collectAllShuffles(sql(query).queryExecution.executedPlan).nonEmpty,
+        "shuffle required: KP([id,name]) does not satisfy ClusteredDistribution([id])")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        checkAnswer(sql(query), expected)
+        assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+          "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
+      }
+    }
+  }
 }

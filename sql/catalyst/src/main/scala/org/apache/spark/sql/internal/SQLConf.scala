@@ -2145,10 +2145,10 @@ object SQLConf {
    val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =
     buildConf("spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled")
       .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
-      .doc("Whether to allow storage-partitioned operations (joins and aggregates) in the case " +
-        "where the operation's keys are a subset of the partition keys of the source tables. At " +
-        "planning time, Spark will group the partitions by only those keys that are in the " +
-        "operation's keys. " +
+      .doc("Whether to allow storage-partitioned operations (joins, aggregates, and windows) in " +
+        "the case where the operation's keys are a subset of the partition keys of the source " +
+        "tables. At  planning time, Spark will group the partitions by only those keys that are " +
+        "in the operation's keys. " +
         s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
         "is false."
       )
