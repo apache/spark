@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
@@ -354,9 +354,9 @@ case class ReplaceDataExec(
   override def writingTask: WritingSparkTask[_] = {
     projections.metadataProjection match {
       case Some(metadataProj) =>
-        DataAndMetadataWritingSparkTask(projections.rowProjection, metadataProj, operationMetrics)
+        DataAndMetadataWritingSparkTask(projections.rowProjection, metadataProj, sparkMetrics)
       case None =>
-        DataWithProjectionWritingSparkTask(projections.rowProjection, operationMetrics)
+        DataWithProjectionWritingSparkTask(projections.rowProjection, sparkMetrics)
     }
   }
 
@@ -400,9 +400,9 @@ case class WriteDeltaExec(
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
-      DeltaWithMetadataWritingSparkTask(projections, operationMetrics)
+      DeltaWithMetadataWritingSparkTask(projections, sparkMetrics)
     } else {
-      DeltaWritingSparkTask(projections, operationMetrics)
+      DeltaWritingSparkTask(projections, sparkMetrics)
     }
   }
 
@@ -424,9 +424,8 @@ case class WriteToDataSourceV2Exec(
 
   override def stringArgs: Iterator[Any] = Iterator(batchWrite, query)
 
-  override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
-    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-  }.toMap
+  override lazy val customMetrics: Map[String, SQLMetric] =
+    createCustomMetrics(writeMetrics.toArray)
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(batchWrite)
@@ -457,32 +456,18 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
 
   override def nodeName: String = s"${super.nodeName} $tableName"
 
-  override val customMetrics: Map[String, SQLMetric] =
-    write.supportedCustomMetrics().map { customMetric =>
-      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-    }.toMap
+  override lazy val customMetrics: Map[String, SQLMetric] =
+    createCustomMetrics(write.supportedCustomMetrics())
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = try {
       writeWithV2(write.toBatch)
     } finally {
-      postDriverMetrics()
+      postDriverMetrics(write.reportDriverMetrics())
     }
     transaction.foreach(TransactionUtils.commit)
     refreshCache()
     writtenRows
-  }
-
-  protected def postDriverMetrics(): Unit = {
-    val driveSQLMetrics = write.reportDriverMetrics().map(customTaskMetric => {
-      val metric = metrics(customTaskMetric.name())
-      metric.set(customTaskMetric.value())
-      metric
-    })
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      driveSQLMetrics.toImmutableArraySeq)
   }
 }
 
@@ -492,7 +477,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
 trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   def rowLevelCommand: RowLevelOperation.Command
 
-  override lazy val operationMetrics: Map[String, SQLMetric] = rowLevelCommand match {
+  override protected lazy val sparkMetrics: Map[String, SQLMetric] = rowLevelCommand match {
     case UPDATE =>
       Map(
         "numUpdatedRows" -> SQLMetrics.createMetric(sparkContext, "number of updated rows"),
@@ -528,12 +513,12 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
         }
       case UPDATE =>
         Some(UpdateSummaryImpl(
-          getMetricValue(operationMetrics, "numUpdatedRows"),
-          getMetricValue(operationMetrics, "numCopiedRows")))
+          getMetricValue(sparkMetrics, "numUpdatedRows"),
+          getMetricValue(sparkMetrics, "numCopiedRows")))
       case DELETE =>
         Some(DeleteSummaryImpl(
-          getMetricValue(operationMetrics, "numDeletedRows"),
-          getMetricValue(operationMetrics, "numCopiedRows")))
+          getMetricValue(sparkMetrics, "numDeletedRows"),
+          getMetricValue(sparkMetrics, "numCopiedRows")))
     }
   }
 }
@@ -541,7 +526,12 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
+trait V2TableWriteExec
+  extends V2CommandExec
+  with UnaryExecNode
+  with AdaptiveSparkPlanHelper
+  with SupportsCustomDriverMetrics {
+
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask
 
@@ -550,10 +540,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
-  protected val customMetrics: Map[String, SQLMetric] = Map.empty
-  protected def operationMetrics: Map[String, SQLMetric] = Map.empty
-
-  override lazy val metrics = customMetrics ++ operationMetrics
+  override def customMetrics: Map[String, SQLMetric] = Map.empty
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
@@ -725,7 +712,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 case class DataAndMetadataWritingSparkTask(
     dataProj: ProjectingInternalRow,
     metadataProj: ProjectingInternalRow,
-    operationMetrics: Map[String, SQLMetric])
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
   override protected def write(
@@ -759,14 +746,14 @@ case class DataAndMetadataWritingSparkTask(
       }
     }
 
-    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
-    operationMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
+    sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
+    sparkMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
   }
 }
 
 case class DataWithProjectionWritingSparkTask(
     dataProj: ProjectingInternalRow,
-    operationMetrics: Map[String, SQLMetric])
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DataWriter[InternalRow]] {
 
   override protected def write(
@@ -798,8 +785,8 @@ case class DataWithProjectionWritingSparkTask(
       }
     }
 
-    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
-    operationMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
+    sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
+    sparkMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
   }
 }
 
@@ -812,7 +799,7 @@ object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
 
 case class DeltaWritingSparkTask(
     projections: WriteDeltaProjections,
-    operationMetrics: Map[String, SQLMetric])
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
@@ -855,14 +842,14 @@ case class DeltaWritingSparkTask(
       }
     }
 
-    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
-    operationMetrics.get("numDeletedRows").foreach(_.add(numDeletedRows))
+    sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
+    sparkMetrics.get("numDeletedRows").foreach(_.add(numDeletedRows))
   }
 }
 
 case class DeltaWithMetadataWritingSparkTask(
     projections: WriteDeltaProjections,
-    operationMetrics: Map[String, SQLMetric])
+    sparkMetrics: Map[String, SQLMetric])
   extends WritingSparkTask[DeltaWriter[InternalRow]] {
 
   private lazy val rowProjection = projections.rowProjection.orNull
@@ -909,8 +896,8 @@ case class DeltaWithMetadataWritingSparkTask(
       }
     }
 
-    operationMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
-    operationMetrics.get("numDeletedRows").foreach(_.add(numDeletedRows))
+    sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
+    sparkMetrics.get("numDeletedRows").foreach(_.add(numDeletedRows))
   }
 }
 

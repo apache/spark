@@ -33,10 +33,48 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},
  *       {@code update_preimage}, or {@code update_postimage}</li>
- *   <li>{@code _commit_version} (connector-defined type, e.g. LONG) — the version containing
- *       this change</li>
- *   <li>{@code _commit_timestamp} (TIMESTAMP) — the timestamp of the commit</li>
+ *   <li>{@code _commit_version} — the commit version containing this change. Must be of
+ *       an atomic orderable type (e.g. {@code LongType}, {@code StringType},
+ *       {@code IntegerType}, {@code TimestampType}); complex types
+ *       ({@code ArrayType}, {@code MapType}, {@code StructType}) are rejected.
+ *       Spark post-processing sorts rows of a given row identity by this column to
+ *       determine the first and last events</li>
+ *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
+ *       belonging to a single {@code _commit_version} must share the same
+ *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
+ *       two additional requirements apply:
+ *       <ol>
+ *         <li>All rows of a single commit must appear in the same micro-batch (i.e.
+ *             micro-batch boundaries align with commit boundaries).</li>
+ *         <li>Each micro-batch's rows must have {@code _commit_timestamp} strictly
+ *             greater than the maximum {@code _commit_timestamp} of any prior
+ *             micro-batch.</li>
+ *       </ol>
+ *       Streaming post-processing uses {@code _commit_timestamp} as event time with a
+ *       zero-delay watermark, so once a micro-batch observes max event time T the
+ *       global watermark advances to T. Both Spark's late-event filter and its
+ *       state-eviction predicate then use {@code eventTime <= T} -- so any later row
+ *       at {@code _commit_timestamp <= T} (whether from the same commit split across
+ *       batches, a different commit emitted later, or simply an out-of-order commit)
+ *       is silently dropped as late. Requirement 1 keeps a single commit's rows
+ *       together; requirement 2 keeps distinct commits in strictly increasing
+ *       event-time order across batches. Multiple distinct commits with equal
+ *       {@code _commit_timestamp} are allowed within a single micro-batch -- only
+ *       <em>across</em> batches does timestamp progression need to be strictly
+ *       increasing. Atomic-commit CDC connectors (e.g. Delta versions, Iceberg
+ *       snapshots) that derive {@code _commit_timestamp} from wall-clock time at
+ *       commit time naturally satisfy both requirements.
+ *       {@code _commit_timestamp} must be non-{@code NULL} on every row of a streaming
+ *       read engaging post-processing; both the row-level Aggregate path and the
+ *       netChanges {@code transformWithState} path raise
+ *       {@code CHANGELOG_CONTRACT_VIOLATION.NULL_COMMIT_TIMESTAMP} on a violation</li>
  * </ul>
+ * <p>
+ * Streaming reads support carry-over removal, update detection, and net change
+ * computation. Net change collapses are kept in the state store keyed by row identity;
+ * row identities only touched in the latest observed commit are held back until either a
+ * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
+ * past them, or the source terminates.
  *
  * @since 4.2.0
  */
@@ -81,6 +119,9 @@ public interface Changelog {
    * Spark will collapse multiple changes per row identity into the net effect.
    * If {@code false}, the connector guarantees at most one change per row identity across
    * the entire changelog range, and Spark will skip net change computation.
+   * <p>
+   * Note this flag is range-scoped (across all commits in the request), not
+   * micro-batch-scoped.
    */
   boolean containsIntermediateChanges();
 

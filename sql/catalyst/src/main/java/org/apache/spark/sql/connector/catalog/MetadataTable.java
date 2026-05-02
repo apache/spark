@@ -50,9 +50,12 @@ public class MetadataTable implements Table {
 
   /**
    * @param info metadata for the table or view. Pass a {@link ViewInfo} for a view.
-   * @param name human-readable name for this table, used by places that read {@link #name()}
-   *             (e.g. the {@code Name} row of {@code DESCRIBE TABLE EXTENDED}). Catalogs
-   *             returning a {@code MetadataTable} from {@link TableCatalog#loadTable} or
+   * @param name human-readable name for this table, returned by {@link #name()} and surfaced
+   *             in places that read it (e.g. {@code BatchScan} plan-tree labels and
+   *             partition-management error messages). {@code DESCRIBE TABLE EXTENDED} does
+   *             not read this field; it emits the resolved identifier as structured
+   *             {@code Catalog} / {@code Namespace} / {@code Table} rows. Catalogs returning
+   *             a {@code MetadataTable} from {@link TableCatalog#loadTable} or
    *             {@link TableViewCatalog#loadTableOrView} should typically pass
    *             {@code ident.toString()}, matching the quoted multi-part form used elsewhere
    *             for v2 identifiers.

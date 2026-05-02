@@ -368,22 +368,9 @@ class ResolveChangelogTablePostProcessingSuite
       s"Expected ChangelogTable to be marked resolved by the rule. Plan:\n$plan")
   }
 
-  test("streaming with post-processing options is rejected") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsCarryoverRows = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.readStream
-          .option("startingVersion", "1")
-          .changes(s"$catalogName.$testTableName")
-          .queryExecution.analyzed
-      },
-      condition = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
-      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
-  }
+  // The streaming netChanges path is covered by
+  // ResolveChangelogTableStreamingPostProcessingSuite -- not duplicated here, since
+  // this suite focuses on the batch path.
 
   // ===========================================================================
   // Combined

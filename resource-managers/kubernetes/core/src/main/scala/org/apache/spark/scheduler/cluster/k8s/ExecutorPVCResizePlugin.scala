@@ -31,7 +31,7 @@ import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, PluginContext,
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CURRENT_DISK_SIZE, ORIGINAL_DISK_SIZE, PVC_METADATA_NAME}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CURRENT_DISK_SIZE, ORIGINAL_DISK_SIZE, PVC_METADATA_NAME}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -74,6 +74,13 @@ class ExecutorPVCResizeDriverPlugin extends DriverPlugin with Logging {
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("pvc-resize-plugin")
 
   override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+    val allocator = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)
+    if (allocator != "direct") {
+      logWarning(log"ExecutorPVCResizePlugin requires the 'direct' pods allocator; " +
+        log"${MDC(CONFIG, KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key)} is " +
+        log"${MDC(CONFIG2, allocator)}. Plugin will not start.")
+      return Map.empty[String, String].asJava
+    }
     val interval = sc.conf.get(PVC_RESIZE_INTERVAL)
     if (interval <= 0) {
       logInfo("PVCResizePlugin disabled (interval <= 0).")

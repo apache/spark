@@ -1818,9 +1818,10 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
-  <td><code>0min</code></td>
+  <td><code>5min</code></td>
   <td>
-    Interval between executor PVC resize operations. To disable, set 0 (default).
+    Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
+    Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
     Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
     is registered via <code>spark.plugins</code>.
   </td>

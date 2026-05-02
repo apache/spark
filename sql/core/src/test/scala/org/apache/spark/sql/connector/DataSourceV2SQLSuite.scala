@@ -3912,8 +3912,8 @@ class DataSourceV2SQLSuiteV1Filter
         QueryTest.checkAnswer(
           descriptionDf.filter(
             "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
-              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
-              "'Type', '_partition', ''))"),
+              "'index', 'Location', 'Name', 'Namespace', 'Owner', 'Provider', 'Table', " +
+              "'Table Properties', 'Type', '_partition', ''))"),
           Seq(
             Row("# Detailed Table Information", "", ""),
             Row("# Column Default Values", "", ""),

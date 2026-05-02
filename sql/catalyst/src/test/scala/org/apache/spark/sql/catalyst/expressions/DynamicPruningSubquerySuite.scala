@@ -86,4 +86,29 @@ class DynamicPruningSubquerySuite extends SparkFunSuite {
       .copy(broadcastKeyIndices = Seq(1))
     assert(dynamicPruningSubquery.resolved == false)
   }
+
+  test("SPARK-56694: Canonicalized buildKeys are consistent for identical build queries with " +
+      "different ExprIds") {
+    val attr1 = AttributeReference("key", IntegerType)()
+    val attr2 = AttributeReference("key", IntegerType)()
+    assert(attr1.exprId != attr2.exprId, "precondition: fresh attributes have distinct ExprIds")
+
+    val dpq1 = DynamicPruningSubquery(
+      pruningKey = Literal(1),
+      buildQuery = LocalRelation(attr1),
+      buildKeys = Seq(attr1),
+      broadcastKeyIndices = Seq(0),
+      onlyInBroadcast = false)
+
+    val dpq2 = DynamicPruningSubquery(
+      pruningKey = Literal(1),
+      buildQuery = LocalRelation(attr2),
+      buildKeys = Seq(attr2),
+      broadcastKeyIndices = Seq(0),
+      onlyInBroadcast = false)
+
+    assert(dpq1.canonicalized == dpq2.canonicalized,
+      "DynamicPruningSubquery with identical build queries but different ExprIds " +
+      "must produce identical canonicalized forms so PlanMerger can deduplicate them")
+  }
 }

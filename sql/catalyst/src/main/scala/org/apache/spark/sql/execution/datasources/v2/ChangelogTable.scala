@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column,
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{DataType, StringType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, DataType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -39,8 +39,7 @@ case class ChangelogTable(
     resolved: Boolean = false) extends Table with SupportsRead {
 
   // Validate that the connector returned a schema with the required CDC metadata columns
-  // and correct types. `_commit_version` is connector-defined per the Changelog contract,
-  // so its type is not checked.
+  // and correct types.
   ChangelogTable.validateSchema(changelog)
 
   override def name: String = changelog.name
@@ -67,7 +66,15 @@ object ChangelogTable {
       }
     }
     check("_change_type", StringType)
-    check("_commit_version")           // connector-defined, any type accepted
+    // `_commit_version` is connector-defined but must be an atomic orderable type. Both
+    // the batch (Catalyst `SortOrder`) and the streaming netChanges (typed Comparable
+    // ordering inside the stateful processor) paths require an orderable scalar.
+    val versionCol = byName.getOrElse("_commit_version",
+      throw QueryCompilationErrors.changelogMissingColumnError(cl.name, "_commit_version"))
+    if (!versionCol.dataType.isInstanceOf[AtomicType]) {
+      throw QueryCompilationErrors.changelogInvalidColumnTypeError(
+        cl.name, "_commit_version", "an atomic orderable type", versionCol.dataType.sql)
+    }
     check("_commit_timestamp", TimestampType)
 
     // Only call `rowId()` / `rowVersion()` when a capability requires them; a connector

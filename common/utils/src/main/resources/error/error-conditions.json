@@ -666,6 +666,11 @@
       "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
     ],
     "subClass" : {
+      "NULL_COMMIT_TIMESTAMP" : {
+        "message" : [
+          "Connector emitted a row with a NULL `_commit_timestamp` on a streaming read engaging post-processing. The `Changelog` contract requires `_commit_timestamp` to be non-NULL for streaming reads, since post-processing uses it as event time to advance the watermark."
+        ]
+      },
       "UNEXPECTED_CHANGE_TYPE" : {
         "message" : [
           "Connector emitted a row with a `_change_type` value that is not one of the four supported types (`insert`, `delete`, `update_preimage`, `update_postimage`). The `Changelog` contract requires every emitted row to carry one of these four values."
@@ -3301,11 +3306,6 @@
       "MISSING_STARTING_VERSION" : {
         "message" : [
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
-        ]
-      },
-      "STREAMING_POST_PROCESSING_NOT_SUPPORTED" : {
-        "message" : [
-          "Change Data Capture (CDC) streaming reads on connector `<changelogName>` do not yet support post-processing (carry-over removal, update detection, or net change computation). The requested combination of options would require post-processing, which is currently only available for batch reads. Use a batch read, or set `deduplicationMode = none` and `computeUpdates = false` to receive raw change rows in streaming."
         ]
       },
       "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
