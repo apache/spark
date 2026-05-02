@@ -26283,13 +26283,13 @@ def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'), 'NDR'))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='00000000013FF00000000000004000000000000000')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 4: Getting WKB (big-endian) from GEOMETRY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'), 'XDR'))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), XDR))='00000000013FF00000000000004000000000000000')]
     """
     if endianness is None:
         return _invoke_function_over_columns("st_asbinary", geo)
