@@ -65,7 +65,7 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
         ) match {
           case Some(variable) => variable.copy(canFold = false)
           case _ => throw unresolvedVariableError(
-            u.nameParts, Seq(Seq("SYSTEM", "SESSION")), u.origin)
+            u.nameParts, variableResolution.searchPathEntriesForError, u.origin)
         }
 
       case other => throw SparkException.internalError(

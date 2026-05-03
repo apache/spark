@@ -355,12 +355,18 @@ class FunctionResolution(
     if (nameParts.length == 1) {
       // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
       // session order, not only the current namespace (LookupCatalog single-part rule).
-      // `system.*` candidates are handled by [[lookupBuiltinOrTempFunction]] /
-      // [[lookupBuiltinOrTempTableFunction]] above; skip them here to avoid redundant
-      // catalog calls.
+      // `system.session.<name>` and `system.builtin.<name>` candidates were already resolved by
+      // [[lookupBuiltinOrTempFunction]] / [[lookupBuiltinOrTempTableFunction]] above (they
+      // route through `identifierFromSystemNameParts`, which only accepts those two
+      // namespaces); skip them here to avoid redundant catalog calls. Other `system.<x>`
+      // namespaces -- if any are ever added -- still go through persistent lookup.
       val persistentCandidates = resolutionCandidates(nameParts).filterNot { c =>
         c.length >= 2 &&
-          c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
+          c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) && {
+            val ns = c(1)
+            ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
+              ns.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+          }
       }
       for (candidate <- persistentCandidates) {
         try {

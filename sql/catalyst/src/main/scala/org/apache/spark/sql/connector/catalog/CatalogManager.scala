@@ -203,9 +203,13 @@ class CatalogManager(
       currentCatalog, currentNamespace)
 
   /**
-   * True if `system.session` is on the SQL path. Only literal path entries can match; the
-   * [[CurrentSchemaEntry]] marker can never be `system.session`. Inspecting stored entries
-   * directly avoids loading the configured default catalog.
+   * True if `system.session` is on the SQL path. Only literal path entries can match: the
+   * [[CurrentSchemaEntry]] marker expands to `currentCatalog.name() +: currentNamespace`, and
+   * `system` is not a registered catalog (it is a synthetic namespace served via
+   * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,
+   * not loadable via [[catalog]]), so `currentCatalog.name()` cannot be `"system"`. If that
+   * invariant ever changes, this short-circuit must be revisited.
+   * Inspecting stored entries directly avoids loading the configured default catalog.
    */
   def isSystemSessionOnPath: Boolean = synchronized {
     if (!conf.pathEnabled) return true
