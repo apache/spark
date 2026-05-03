@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
@@ -33,8 +34,19 @@ if TYPE_CHECKING:
 
 __all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
 
-PathOrPaths = Union[str, List[str]]
+PathLikeOrString = Union[str, os.PathLike[str]]
+PathOrPaths = Union[PathLikeOrString, List[str], List[PathLikeOrString]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
+
+
+def _to_str_path(path: PathLikeOrString) -> str:
+    return os.fsdecode(path)
+
+
+def _to_str_paths(paths: PathOrPaths) -> List[str]:
+    if isinstance(paths, (str, os.PathLike)):
+        return [_to_str_path(paths)]
+    return [_to_str_path(path) for path in paths]
 
 
 class OptionUtils:
@@ -268,8 +280,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        path : str or list, optional
-            optional string or a list of string for file-system backed data sources.
+        path : str, :class:`os.PathLike`, list, optional
+            optional path or list of paths for file-system backed data sources.
         format : str, optional
             optional string for format of the data source. Default to 'parquet'.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
@@ -308,19 +320,20 @@ class DataFrameReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if isinstance(path, str):
-            return self._df(self._jreader.load(path))
+        if isinstance(path, (str, os.PathLike)):
+            return self._df(self._jreader.load(_to_str_path(path)))
         elif path is not None:
             if not isinstance(path, list):
                 path = [path]
             assert self._spark._sc._jvm is not None
-            return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+            paths = _to_str_paths(cast(PathOrPaths, path))
+            return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
         else:
             return self._df(self._jreader.load())
 
     def json(
         self,
-        path: Union[str, List[str], "RDD[str]", "DataFrame"],
+        path: Union[PathOrPaths, "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -366,8 +379,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        path : str, list, :class:`RDD`, or :class:`DataFrame`
-            string represents path to the JSON dataset, or a list of paths,
+        path : str, :class:`os.PathLike`, list, :class:`RDD`, or :class:`DataFrame`
+            string or path-like object represents path to the JSON dataset, or a list of paths,
             or RDD of Strings storing JSON objects,
             or a DataFrame with a single string column containing JSON strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
@@ -480,9 +493,10 @@ class DataFrameReader(OptionUtils):
             allowNonNumericNumbers=allowNonNumericNumbers,
             useUnsafeRow=useUnsafeRow,
         )
-        if isinstance(path, str):
-            path = [path]
+        if isinstance(path, (str, os.PathLike)):
+            path = [_to_str_path(path)]
         if isinstance(path, list):
+            path = _to_str_paths(cast(PathOrPaths, path))
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -584,7 +598,7 @@ class DataFrameReader(OptionUtils):
         """
         return self._df(self._jreader.changes(tableName))
 
-    def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
+    def parquet(self, *paths: PathLikeOrString, **options: "OptionalPrimitiveType") -> "DataFrame":
         """
         Loads Parquet files, returning the result as a :class:`DataFrame`.
 
@@ -595,7 +609,7 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        paths : str
+        paths : str or :class:`os.PathLike`
             One or more file paths to read the Parquet files from.
 
         Other Parameters
@@ -693,7 +707,7 @@ class DataFrameReader(OptionUtils):
             int96RebaseMode=int96RebaseMode,
         )
 
-        return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
+        return self._df(self._jreader.parquet(_to_seq(self._spark._sc, _to_str_paths(list(paths)))))
 
     def text(
         self,
@@ -720,8 +734,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        paths : str or list
-            string, or list of strings, for input path(s).
+        paths : str, :class:`os.PathLike`, or list
+            path, or list of paths, for input path(s).
 
         Other Parameters
         ----------------
@@ -761,14 +775,13 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
         )
 
-        if isinstance(paths, str):
-            paths = [paths]
+        paths = _to_str_paths(paths)
         assert self._spark._sc._jvm is not None
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     def csv(
         self,
-        path: Union[str, List[str], "RDD[str]", "DataFrame"],
+        path: Union[PathOrPaths, "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -819,8 +832,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        path : str, list, :class:`RDD`, or :class:`DataFrame`
-            string, or list of strings, for input path(s),
+        path : str, :class:`os.PathLike`, list, :class:`RDD`, or :class:`DataFrame`
+            path, or list of paths, for input path(s),
             or RDD of Strings storing CSV rows,
             or a DataFrame with a single string column containing CSV rows.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
@@ -889,9 +902,10 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             unescapedQuoteHandling=unescapedQuoteHandling,
         )
-        if isinstance(path, str):
-            path = [path]
+        if isinstance(path, (str, os.PathLike)):
+            path = [_to_str_path(path)]
         if isinstance(path, list):
+            path = _to_str_paths(cast(PathOrPaths, path))
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -940,7 +954,7 @@ class DataFrameReader(OptionUtils):
 
     def xml(
         self,
-        path: Union[str, List[str], "RDD[str]", "DataFrame"],
+        path: Union[PathOrPaths, "RDD[str]", "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -973,8 +987,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        path : str, list, :class:`RDD`, or :class:`DataFrame`
-            string, or list of strings, for input path(s),
+        path : str, :class:`os.PathLike`, list, :class:`RDD`, or :class:`DataFrame`
+            path, or list of paths, for input path(s),
             or RDD of Strings storing XML rows,
             or a DataFrame with a single string column containing XML strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
@@ -1045,9 +1059,10 @@ class DataFrameReader(OptionUtils):
             samplingRatio=samplingRatio,
             locale=locale,
         )
-        if isinstance(path, str):
-            path = [path]
+        if isinstance(path, (str, os.PathLike)):
+            path = [_to_str_path(path)]
         if isinstance(path, list):
+            path = _to_str_paths(cast(PathOrPaths, path))
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -1111,7 +1126,8 @@ class DataFrameReader(OptionUtils):
 
         Parameters
         ----------
-        path : str or list
+        path : str, :class:`os.PathLike`, or list
+            path, or list of paths, for input path(s).
 
         Other Parameters
         ----------------
@@ -1150,9 +1166,7 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             recursiveFileLookup=recursiveFileLookup,
         )
-        if isinstance(path, str):
-            path = [path]
-        return self._df(self._jreader.orc(_to_seq(self._spark._sc, path)))
+        return self._df(self._jreader.orc(_to_seq(self._spark._sc, _to_str_paths(path))))
 
     @overload
     def jdbc(
@@ -1769,7 +1783,7 @@ class DataFrameWriter(OptionUtils):
 
     def save(
         self,
-        path: Optional[str] = None,
+        path: Optional[PathLikeOrString] = None,
         format: Optional[str] = None,
         mode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
@@ -1788,7 +1802,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str, optional
+        path : str or :class:`os.PathLike`, optional
             the path in a Hadoop supported file system
         format : str, optional
             the format used to save
@@ -1832,7 +1846,7 @@ class DataFrameWriter(OptionUtils):
         if path is None:
             self._jwrite.save()
         else:
-            self._jwrite.save(path)
+            self._jwrite.save(_to_str_path(path))
 
     def insertInto(self, tableName: str, overwrite: Optional[bool] = None) -> None:
         """Inserts the content of the :class:`DataFrame` to the specified table.
@@ -1959,7 +1973,7 @@ class DataFrameWriter(OptionUtils):
 
     def json(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         compression: Optional[str] = None,
         dateFormat: Optional[str] = None,
@@ -1979,7 +1993,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str
+        path : str or :class:`os.PathLike`
             the path in any Hadoop supported file system
         mode : str, optional
             specifies the behavior of the save operation when data already exists.
@@ -2027,11 +2041,11 @@ class DataFrameWriter(OptionUtils):
             encoding=encoding,
             ignoreNullFields=ignoreNullFields,
         )
-        self._jwrite.json(path)
+        self._jwrite.json(_to_str_path(path))
 
     def parquet(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
@@ -2045,7 +2059,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str
+        path : str or :class:`os.PathLike`
             the path in any Hadoop supported file system
         mode : str, optional
             specifies the behavior of the save operation when data already exists.
@@ -2090,10 +2104,13 @@ class DataFrameWriter(OptionUtils):
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         self._set_opts(compression=compression)
-        self._jwrite.parquet(path)
+        self._jwrite.parquet(_to_str_path(path))
 
     def text(
-        self, path: str, compression: Optional[str] = None, lineSep: Optional[str] = None
+        self,
+        path: PathLikeOrString,
+        compression: Optional[str] = None,
+        lineSep: Optional[str] = None,
     ) -> None:
         """Saves the content of the DataFrame in a text file at the specified path.
         The text files will be encoded as UTF-8.
@@ -2105,7 +2122,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str
+        path : str or :class:`os.PathLike`
             the path in any Hadoop supported file system
 
         Other Parameters
@@ -2143,11 +2160,11 @@ class DataFrameWriter(OptionUtils):
         +---------+
         """
         self._set_opts(compression=compression, lineSep=lineSep)
-        self._jwrite.text(path)
+        self._jwrite.text(_to_str_path(path))
 
     def csv(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         compression: Optional[str] = None,
         sep: Optional[str] = None,
@@ -2175,7 +2192,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str
+        path : str or :class:`os.PathLike`
             the path in any Hadoop supported file system
         mode : str, optional
             specifies the behavior of the save operation when data already exists.
@@ -2233,11 +2250,11 @@ class DataFrameWriter(OptionUtils):
             emptyValue=emptyValue,
             lineSep=lineSep,
         )
-        self._jwrite.csv(path)
+        self._jwrite.csv(_to_str_path(path))
 
     def xml(
         self,
-        path: str,
+        path: PathLikeOrString,
         rowTag: Optional[str] = None,
         mode: Optional[str] = None,
         attributePrefix: Optional[str] = None,
@@ -2258,7 +2275,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str
+        path : str or :class:`os.PathLike`
             the path in any Hadoop supported file system
         mode : str, optional
             specifies the behavior of the save operation when data already exists.
@@ -2312,11 +2329,11 @@ class DataFrameWriter(OptionUtils):
             encoding=encoding,
             validateName=validateName,
         )
-        self._jwrite.xml(path)
+        self._jwrite.xml(_to_str_path(path))
 
     def orc(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
@@ -2330,7 +2347,7 @@ class DataFrameWriter(OptionUtils):
 
         Parameters
         ----------
-        path : str
+        path : str or :class:`os.PathLike`
             the path in any Hadoop supported file system
         mode : str, optional
             specifies the behavior of the save operation when data already exists.
@@ -2375,7 +2392,7 @@ class DataFrameWriter(OptionUtils):
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         self._set_opts(compression=compression)
-        self._jwrite.orc(path)
+        self._jwrite.orc(_to_str_path(path))
 
     def jdbc(
         self,

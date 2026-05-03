@@ -19,6 +19,7 @@ import uuid
 import datetime
 import decimal
 import math
+from pathlib import Path
 
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
@@ -599,6 +600,15 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(data_source.options.get("op2"), "opv2")
         self.assertEqual(len(data_source.paths), 1)
         self.assertEqual(data_source.paths[0], "test_path")
+
+        reader = DataFrameReader(self.connect)
+        df = reader.load(
+            path=[Path("test_path1"), Path("test_path2")],
+            format="text",
+        )
+        plan = df._plan.to_proto(self.connect)
+        data_source = plan.root.read.data_source
+        self.assertEqual(list(data_source.paths), ["test_path1", "test_path2"])
 
     def test_relation_changes(self):
         reader = DataFrameReader(self.connect)

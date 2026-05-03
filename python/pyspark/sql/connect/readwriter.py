@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
@@ -34,6 +35,10 @@ from pyspark.sql.readwriter import (
     DataFrameWriter as PySparkDataFrameWriter,
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
+    PathLikeOrString,
+    PathOrPaths,
+    _to_str_path,
+    _to_str_paths,
 )
 from pyspark.errors import (
     AnalysisException,
@@ -51,7 +56,6 @@ if TYPE_CHECKING:
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
-PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
@@ -130,15 +134,13 @@ class DataFrameReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
 
-        paths = path
-        if isinstance(path, str):
-            paths = [path]
+        paths = None if path is None else _to_str_paths(path)
 
         plan = DataSource(
             format=self._format,
             schema=self._schema,
             options=self._options,
-            paths=paths,  # type: ignore[arg-type]
+            paths=paths,
         )
         return self._df(plan)
 
@@ -220,10 +222,8 @@ class DataFrameReader(OptionUtils):
             allowNonNumericNumbers=allowNonNumericNumbers,
             useUnsafeRow=useUnsafeRow,
         )
-        if isinstance(path, str):
-            path = [path]
-        if isinstance(path, list):
-            return self.load(path=path, format="json", schema=schema)
+        if isinstance(path, (str, os.PathLike, list)):
+            return self.load(path=_to_str_paths(path), format="json", schema=schema)
 
         from pyspark.sql.connect.dataframe import DataFrame
 
@@ -251,7 +251,7 @@ class DataFrameReader(OptionUtils):
 
     json.__doc__ = PySparkDataFrameReader.json.__doc__
 
-    def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
+    def parquet(self, *paths: PathLikeOrString, **options: "OptionalPrimitiveType") -> "DataFrame":
         mergeSchema = options.get("mergeSchema", None)
         pathGlobFilter = options.get("pathGlobFilter", None)
         modifiedBefore = options.get("modifiedBefore", None)
@@ -269,7 +269,7 @@ class DataFrameReader(OptionUtils):
             int96RebaseMode=int96RebaseMode,
         )
 
-        return self.load(path=list(paths), format="parquet")
+        return self.load(path=_to_str_paths(list(paths)), format="parquet")
 
     parquet.__doc__ = PySparkDataFrameReader.parquet.__doc__
 
@@ -292,9 +292,7 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
         )
 
-        if isinstance(paths, str):
-            paths = [paths]
-        return self.load(path=paths, format="text")
+        return self.load(path=_to_str_paths(paths), format="text")
 
     text.__doc__ = PySparkDataFrameReader.text.__doc__
 
@@ -369,9 +367,6 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             unescapedQuoteHandling=unescapedQuoteHandling,
         )
-        if isinstance(path, str):
-            path = [path]
-
         from pyspark.sql.connect.dataframe import DataFrame
 
         if isinstance(path, DataFrame):
@@ -387,7 +382,16 @@ class DataFrameReader(OptionUtils):
                     options=self._options,
                 )
             )
-        return self.load(path=path, format="csv", schema=schema)
+        if isinstance(path, (str, os.PathLike, list)):
+            return self.load(path=_to_str_paths(path), format="csv", schema=schema)
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "path",
+                "expected_type": "str, list, or DataFrame",
+                "arg_type": type(path).__name__,
+            },
+        )
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__
 
@@ -435,10 +439,8 @@ class DataFrameReader(OptionUtils):
             samplingRatio=samplingRatio,
             locale=locale,
         )
-        if isinstance(path, str):
-            path = [path]
-        if isinstance(path, list):
-            return self.load(path=path, format="xml", schema=schema)
+        if isinstance(path, (str, os.PathLike, list)):
+            return self.load(path=_to_str_paths(path), format="xml", schema=schema)
 
         from pyspark.sql.connect.dataframe import DataFrame
 
@@ -482,9 +484,7 @@ class DataFrameReader(OptionUtils):
             modifiedAfter=modifiedAfter,
             recursiveFileLookup=recursiveFileLookup,
         )
-        if isinstance(path, str):
-            path = [path]
-        return self.load(path=path, format="orc")
+        return self.load(path=_to_str_paths(path), format="orc")
 
     orc.__doc__ = PySparkDataFrameReader.orc.__doc__
 
@@ -747,7 +747,7 @@ class DataFrameWriter(OptionUtils):
 
     def save(
         self,
-        path: Optional[str] = None,
+        path: Optional[PathLikeOrString] = None,
         format: Optional[str] = None,
         mode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
@@ -758,7 +758,7 @@ class DataFrameWriter(OptionUtils):
             self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
-        self._write.path = path
+        self._write.path = None if path is None else _to_str_path(path)
         _, _, ei = self._spark.client.execute_command(
             self._write.command(self._spark.client), self._write.observations
         )
@@ -802,7 +802,7 @@ class DataFrameWriter(OptionUtils):
 
     def json(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         compression: Optional[str] = None,
         dateFormat: Optional[str] = None,
@@ -826,7 +826,7 @@ class DataFrameWriter(OptionUtils):
 
     def parquet(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
@@ -840,7 +840,10 @@ class DataFrameWriter(OptionUtils):
     parquet.__doc__ = PySparkDataFrameWriter.parquet.__doc__
 
     def text(
-        self, path: str, compression: Optional[str] = None, lineSep: Optional[str] = None
+        self,
+        path: PathLikeOrString,
+        compression: Optional[str] = None,
+        lineSep: Optional[str] = None,
     ) -> None:
         self._set_opts(compression=compression, lineSep=lineSep)
         self.format("text").save(path)
@@ -849,7 +852,7 @@ class DataFrameWriter(OptionUtils):
 
     def csv(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         compression: Optional[str] = None,
         sep: Optional[str] = None,
@@ -893,7 +896,7 @@ class DataFrameWriter(OptionUtils):
 
     def xml(
         self,
-        path: str,
+        path: PathLikeOrString,
         rowTag: Optional[str] = None,
         mode: Optional[str] = None,
         attributePrefix: Optional[str] = None,
@@ -929,7 +932,7 @@ class DataFrameWriter(OptionUtils):
 
     def orc(
         self,
-        path: str,
+        path: PathLikeOrString,
         mode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
