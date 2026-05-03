@@ -189,14 +189,14 @@ async def _handle_execute_sql(args: Dict[str, Any], holder: SessionHolder) -> Di
         buf = io.BytesIO()
         page_df_arrow = df.offset(offset).limit(capped_limit) if offset else df.limit(capped_limit)
         try:
-            import pyarrow as pa  # noqa: F401
+            import pyarrow as pa
         except ImportError as exc:  # pragma: no cover
             raise PySparkRuntimeError(
                 errorClass="MCP_PYARROW_REQUIRED",
                 messageParameters={"format": "arrow_base64"},
             ) from exc
         table = await _with_timeout(holder, page_df_arrow.toArrow, label="execute_sql")
-        with pa.ipc.new_stream(buf, table.schema) as writer:  # type: ignore[name-defined]
+        with pa.ipc.new_stream(buf, table.schema) as writer:
             writer.write_table(table)
         payload["arrow_base64"] = base64.b64encode(buf.getvalue()).decode("ascii")
     else:
