@@ -97,7 +97,12 @@ same shape:
 | `SPARK_REMOTE` | Spark Connect URL (`sc://host:port[/;params]`). |
 | `SPARK_MCP_READ_ONLY` | `true` (default) or `false`. |
 | `SPARK_MCP_USER_ID` | Optional Spark Connect session user id. |
+| `SPARK_MCP_MAX_ROWS` | Hard cap on rows returned per tool call (default `1000`). |
+| `SPARK_MCP_QUERY_TIMEOUT_SECONDS` | Wall-clock cap per tool call (default `60`; `0` disables). |
 | `SPARK_MCP_TRANSPORT` | Reserved; only `stdio` is implemented. |
+
+Equivalent CLI flags: `--user-id`, `--max-rows`, `--query-timeout-seconds`.
+CLI flags take precedence over env vars.
 
 To verify the wiring, ask the LLM to list catalogs, or to call
 `get_session_info` — the response should include the Spark version

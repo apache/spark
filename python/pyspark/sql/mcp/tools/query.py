@@ -19,12 +19,36 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import asyncio
+from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar
 
 from pyspark.sql.mcp.safety import assert_read_only
 from pyspark.sql.mcp.session import SessionHolder
 from pyspark.sql.mcp.tools.catalog import _to_dict
 from pyspark.sql.mcp.tools.registry import ToolSpec
+
+
+T = TypeVar("T")
+
+
+class QueryTimeoutError(RuntimeError):
+    """Raised when a tool call exceeds ``query_timeout_seconds``."""
+
+
+async def _with_timeout(
+    holder: SessionHolder, func: Callable[[], T], *, label: str
+) -> T:
+    """Run a blocking Spark Connect call in a worker thread under the configured timeout."""
+    timeout = holder.config.query_timeout_seconds
+    coro: Awaitable[T] = asyncio.to_thread(func)
+    if timeout and timeout > 0:
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise QueryTimeoutError(
+                f"{label} exceeded {timeout}s timeout"
+            ) from exc
+    return await coro
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +165,8 @@ async def _handle_execute_sql(args: Dict[str, Any], holder: SessionHolder) -> Di
     schema_fields = _schema_fields(df.schema)
 
     page_df = df.offset(offset).limit(capped_limit + 1) if offset else df.limit(capped_limit + 1)
-    rows = [_row_to_dict(r) for r in page_df.collect()]
+    collected = await _with_timeout(holder, page_df.collect, label="execute_sql")
+    rows = [_row_to_dict(r) for r in collected]
     truncated = len(rows) > capped_limit
     rows = rows[:capped_limit]
 
@@ -169,7 +194,7 @@ async def _handle_execute_sql(args: Dict[str, Any], holder: SessionHolder) -> Di
             import pyarrow as pa  # noqa: F401
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("arrow_base64 format requires pyarrow") from exc
-        table = page_df_arrow.toArrow()
+        table = await _with_timeout(holder, page_df_arrow.toArrow, label="execute_sql")
         with pa.ipc.new_stream(buf, table.schema) as writer:  # type: ignore[name-defined]
             writer.write_table(table)
         payload["arrow_base64"] = base64.b64encode(buf.getvalue()).decode("ascii")
@@ -272,7 +297,9 @@ async def _handle_explain_query(args: Dict[str, Any], holder: SessionHolder) -> 
         assert_read_only(query)
 
     df = _sql(spark, query, args.get("args"))
-    plan = df._explain_string(mode=mode)
+    plan = await _with_timeout(
+        holder, lambda: df._explain_string(mode=mode), label="explain_query"
+    )
     return {"mode": mode, "plan": plan}
 
 
@@ -309,8 +336,12 @@ async def _handle_analyze_query(args: Dict[str, Any], holder: SessionHolder) -> 
         assert_read_only(query)
 
     df = _sql(spark, query, args.get("args"))
-    extended = df._explain_string(mode="extended")
-    formatted = df._explain_string(mode="formatted")
+    extended = await _with_timeout(
+        holder, lambda: df._explain_string(mode="extended"), label="analyze_query"
+    )
+    formatted = await _with_timeout(
+        holder, lambda: df._explain_string(mode="formatted"), label="analyze_query"
+    )
     schema = [
         {"name": field.name, "type": str(field.dataType), "nullable": field.nullable}
         for field in df.schema.fields

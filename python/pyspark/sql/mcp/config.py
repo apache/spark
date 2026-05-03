@@ -17,7 +17,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import Optional
 
 
 DEFAULT_MAX_ROWS = 1000
@@ -34,8 +34,6 @@ class ServerConfig:
 
     connect_url: str
     read_only: bool = True
-    allowed_catalogs: Optional[Sequence[str]] = None
-    allowed_databases: Optional[Sequence[str]] = None
     max_rows: int = DEFAULT_MAX_ROWS
     default_page_size: int = DEFAULT_PAGE_SIZE
     query_timeout_seconds: int = DEFAULT_QUERY_TIMEOUT_SECONDS
@@ -50,6 +48,9 @@ class ServerConfig:
         connect_url: Optional[str] = None,
         read_only: Optional[bool] = None,
         transport: Optional[str] = None,
+        max_rows: Optional[int] = None,
+        query_timeout_seconds: Optional[int] = None,
+        user_id: Optional[str] = None,
     ) -> "ServerConfig":
         url = connect_url or os.environ.get("SPARK_REMOTE")
         if not url:
@@ -59,8 +60,15 @@ class ServerConfig:
         return cls(
             connect_url=url,
             read_only=_default(read_only, _env_bool("SPARK_MCP_READ_ONLY", True)),
+            max_rows=_default(
+                max_rows, _env_int("SPARK_MCP_MAX_ROWS", DEFAULT_MAX_ROWS)
+            ),
+            query_timeout_seconds=_default(
+                query_timeout_seconds,
+                _env_int("SPARK_MCP_QUERY_TIMEOUT_SECONDS", DEFAULT_QUERY_TIMEOUT_SECONDS),
+            ),
             transport=transport or os.environ.get("SPARK_MCP_TRANSPORT", "stdio"),
-            user_id=os.environ.get("SPARK_MCP_USER_ID"),
+            user_id=user_id or os.environ.get("SPARK_MCP_USER_ID"),
         )
 
 
@@ -73,3 +81,13 @@ def _env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer; got {raw!r}") from exc

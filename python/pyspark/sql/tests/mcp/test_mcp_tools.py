@@ -286,6 +286,144 @@ class MCPToolsTest(unittest.TestCase):
         )
         self.assertEqual(out["row_count"], 1)
 
+    def test_execute_sql_query_timeout_disabled(self):
+        # query_timeout_seconds <= 0 disables the timeout entirely; the call
+        # should complete even if the underlying collect sleeps.
+        holder = _FakeHolder(query_timeout_seconds=0)
+        rows = [{"id": 0, "amount": 0}]
+        schema = _Schema(
+            [_StructField("id", "long", False), _StructField("amount", "long", True)]
+        )
+
+        class _SlightlySlow(_FakeDataFrame):
+            def limit(self, n):
+                return self
+
+            def offset(self, n):
+                return self
+
+            def collect(self):
+                import time
+
+                time.sleep(0.05)
+                return [_Row(r) for r in rows]
+
+        holder._spark = _FakeSpark(_SlightlySlow(rows, schema))
+        out = _run(
+            _spec("execute_sql").handler({"query": "SELECT * FROM t"}, holder)
+        )
+        self.assertEqual(out["row_count"], 1)
+
+    def test_execute_sql_query_timeout_fires(self):
+        from pyspark.sql.mcp.tools.query import QueryTimeoutError
+
+        rows = [{"id": 0, "amount": 0}]
+        schema = _Schema(
+            [_StructField("id", "long", False), _StructField("amount", "long", True)]
+        )
+
+        class _TooSlow(_FakeDataFrame):
+            def limit(self, n):
+                return self
+
+            def offset(self, n):
+                return self
+
+            def collect(self):
+                import time
+
+                time.sleep(2)
+                return [_Row(r) for r in rows]
+
+        holder = _FakeHolder(query_timeout_seconds=1)
+        holder._spark = _FakeSpark(_TooSlow(rows, schema))
+        with self.assertRaises(QueryTimeoutError):
+            _run(_spec("execute_sql").handler({"query": "SELECT * FROM t"}, holder))
+
+
+class ServerConfigTest(unittest.TestCase):
+    def _scrub_env(self):
+        import os
+
+        for key in [
+            "SPARK_REMOTE",
+            "SPARK_MCP_READ_ONLY",
+            "SPARK_MCP_MAX_ROWS",
+            "SPARK_MCP_QUERY_TIMEOUT_SECONDS",
+            "SPARK_MCP_USER_ID",
+            "SPARK_MCP_TRANSPORT",
+        ]:
+            os.environ.pop(key, None)
+
+    def setUp(self):
+        self._scrub_env()
+
+    def tearDown(self):
+        self._scrub_env()
+
+    def test_from_env_requires_connect_url(self):
+        with self.assertRaises(ValueError):
+            ServerConfig.from_env()
+
+    def test_cli_args_override_env(self):
+        import os
+
+        os.environ["SPARK_REMOTE"] = "sc://from-env:1"
+        os.environ["SPARK_MCP_MAX_ROWS"] = "42"
+        cfg = ServerConfig.from_env(
+            connect_url="sc://from-cli:2", max_rows=7, query_timeout_seconds=3
+        )
+        self.assertEqual(cfg.connect_url, "sc://from-cli:2")
+        self.assertEqual(cfg.max_rows, 7)
+        self.assertEqual(cfg.query_timeout_seconds, 3)
+
+    def test_env_vars_populate_defaults(self):
+        import os
+
+        os.environ["SPARK_REMOTE"] = "sc://env:1"
+        os.environ["SPARK_MCP_READ_ONLY"] = "false"
+        os.environ["SPARK_MCP_MAX_ROWS"] = "5"
+        os.environ["SPARK_MCP_QUERY_TIMEOUT_SECONDS"] = "11"
+        os.environ["SPARK_MCP_USER_ID"] = "alice"
+        cfg = ServerConfig.from_env()
+        self.assertEqual(cfg.connect_url, "sc://env:1")
+        self.assertFalse(cfg.read_only)
+        self.assertEqual(cfg.max_rows, 5)
+        self.assertEqual(cfg.query_timeout_seconds, 11)
+        self.assertEqual(cfg.user_id, "alice")
+
+    def test_env_int_rejects_garbage(self):
+        import os
+
+        os.environ["SPARK_REMOTE"] = "sc://env:1"
+        os.environ["SPARK_MCP_MAX_ROWS"] = "not-a-number"
+        with self.assertRaises(ValueError):
+            ServerConfig.from_env()
+
+
+class CLIParserTest(unittest.TestCase):
+    def test_parser_exposes_new_flags(self):
+        from pyspark.sql.mcp.server import _parse_args
+
+        args = _parse_args(
+            [
+                "--connect-url",
+                "sc://localhost:15002",
+                "--max-rows",
+                "250",
+                "--query-timeout-seconds",
+                "5",
+                "--user-id",
+                "bob",
+            ]
+        )
+        self.assertEqual(args.connect_url, "sc://localhost:15002")
+        self.assertEqual(args.max_rows, 250)
+        self.assertEqual(args.query_timeout_seconds, 5)
+        self.assertEqual(args.user_id, "bob")
+        # read_only is a tri-state (None means "use env/default").
+        self.assertIsNone(args.read_only)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -84,6 +84,9 @@ def run(argv: list[str] | None = None) -> None:
         connect_url=args.connect_url,
         read_only=args.read_only,
         transport=args.transport,
+        max_rows=args.max_rows,
+        query_timeout_seconds=args.query_timeout_seconds,
+        user_id=args.user_id,
     )
     _serve(build_server(config), config)
 
@@ -133,6 +136,32 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         choices=["stdio"],
         default=None,
         help="MCP transport (currently only stdio is implemented).",
+    )
+    parser.add_argument(
+        "--user-id",
+        dest="user_id",
+        default=None,
+        help="Spark Connect session user id. Defaults to $SPARK_MCP_USER_ID.",
+    )
+    parser.add_argument(
+        "--max-rows",
+        dest="max_rows",
+        default=None,
+        type=int,
+        help=(
+            "Hard cap on rows returned per row-producing tool call. Defaults "
+            "to $SPARK_MCP_MAX_ROWS or 1000."
+        ),
+    )
+    parser.add_argument(
+        "--query-timeout-seconds",
+        dest="query_timeout_seconds",
+        default=None,
+        type=int,
+        help=(
+            "Wall-clock timeout for individual tool invocations that touch "
+            "the cluster. Defaults to $SPARK_MCP_QUERY_TIMEOUT_SECONDS or 60."
+        ),
     )
     return parser.parse_args(argv)
 

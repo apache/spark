@@ -20,27 +20,10 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from pyspark.sql.mcp.session import SessionHolder
 from pyspark.sql.mcp.tools.registry import ToolSpec
-
-
-# ---------------------------------------------------------------------------
-# Whitelist enforcement
-# ---------------------------------------------------------------------------
-
-
-def _check_catalog_allowed(holder: SessionHolder, catalog: Optional[str]) -> None:
-    allowed = holder.config.allowed_catalogs
-    if allowed and catalog and catalog not in allowed:
-        raise PermissionError(f"catalog {catalog!r} is not in the allow-list")
-
-
-def _check_database_allowed(holder: SessionHolder, database: Optional[str]) -> None:
-    allowed = holder.config.allowed_databases
-    if allowed and database and database not in allowed:
-        raise PermissionError(f"database {database!r} is not in the allow-list")
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +66,6 @@ def _paginate(items: List[Any], limit: int, offset: int) -> Dict[str, Any]:
 async def _handle_list_catalogs(args: Dict[str, Any], holder: SessionHolder) -> Dict[str, Any]:
     spark = holder.get()
     catalogs = list(spark.catalog.listCatalogs())
-    if holder.config.allowed_catalogs:
-        allowed = set(holder.config.allowed_catalogs)
-        catalogs = [c for c in catalogs if getattr(c, "name", None) in allowed]
     limit = int(args.get("limit", holder.config.default_page_size))
     offset = int(args.get("offset", 0))
     return _paginate(catalogs, limit, offset)
@@ -116,7 +96,6 @@ async def _handle_list_databases(args: Dict[str, Any], holder: SessionHolder) ->
     spark = holder.get()
     catalog = args.get("catalog")
     pattern = args.get("pattern")
-    _check_catalog_allowed(holder, catalog)
 
     if catalog:
         spark.catalog.setCurrentCatalog(catalog)
@@ -124,10 +103,6 @@ async def _handle_list_databases(args: Dict[str, Any], holder: SessionHolder) ->
         databases = list(spark.catalog.listDatabases(pattern))
     else:
         databases = list(spark.catalog.listDatabases())
-
-    if holder.config.allowed_databases:
-        allowed = set(holder.config.allowed_databases)
-        databases = [d for d in databases if getattr(d, "name", None) in allowed]
 
     limit = int(args.get("limit", holder.config.default_page_size))
     offset = int(args.get("offset", 0))
@@ -164,7 +139,6 @@ async def _handle_list_tables(args: Dict[str, Any], holder: SessionHolder) -> Di
     spark = holder.get()
     database = args.get("database")
     pattern = args.get("pattern")
-    _check_database_allowed(holder, database)
 
     kwargs: Dict[str, Any] = {}
     if database is not None:
