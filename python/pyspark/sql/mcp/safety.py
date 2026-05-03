@@ -32,10 +32,6 @@ _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 
 
-class ReadOnlyViolation(PySparkValueError):
-    """Raised when a SQL statement violates the read-only policy."""
-
-
 def assert_read_only(query: str) -> None:
     """Reject queries that mutate state when the server is in read-only mode.
 
@@ -45,13 +41,13 @@ def assert_read_only(query: str) -> None:
     """
     stripped = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", query)).strip()
     if not stripped:
-        raise ReadOnlyViolation(
+        raise PySparkValueError(
             errorClass="MCP_EMPTY_QUERY",
             messageParameters={},
         )
     if not _READ_ONLY_LEAD.match(stripped):
         first_token = stripped.split(None, 1)[0]
-        raise ReadOnlyViolation(
+        raise PySparkValueError(
             errorClass="MCP_READ_ONLY_VIOLATION",
             messageParameters={"statement": first_token},
         )

@@ -32,10 +32,6 @@ from pyspark.sql.mcp.tools.registry import ToolSpec
 T = TypeVar("T")
 
 
-class QueryTimeoutError(PySparkRuntimeError):
-    """Raised when a tool call exceeds ``query_timeout_seconds``."""
-
-
 async def _with_timeout(
     holder: SessionHolder, func: Callable[[], T], *, label: str
 ) -> T:
@@ -46,7 +42,7 @@ async def _with_timeout(
         try:
             return await asyncio.wait_for(coro, timeout=timeout)
         except asyncio.TimeoutError as exc:
-            raise QueryTimeoutError(
+            raise PySparkRuntimeError(
                 errorClass="MCP_QUERY_TIMEOUT",
                 messageParameters={"label": label, "timeout": str(timeout)},
             ) from exc

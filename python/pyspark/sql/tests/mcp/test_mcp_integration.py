@@ -181,10 +181,11 @@ class MCPToolsConnectIntegrationTest(unittest.TestCase):
         self.assertTrue(out["truncated"])
 
     def test_execute_sql_blocks_ddl_in_read_only(self):
-        from pyspark.sql.mcp.safety import ReadOnlyViolation
+        from pyspark.errors import PySparkValueError
 
-        with self.assertRaises(ReadOnlyViolation):
+        with self.assertRaises(PySparkValueError) as ctx:
             self._call("execute_sql", {"query": "DROP TABLE mcp_test_orders"})
+        self.assertEqual(ctx.exception.getCondition(), "MCP_READ_ONLY_VIOLATION")
 
     def test_explain_query_returns_plan_text(self):
         out = self._call(

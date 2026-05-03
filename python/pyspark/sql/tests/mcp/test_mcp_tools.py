@@ -29,8 +29,8 @@ import unittest
 from collections import namedtuple
 from typing import Any, Dict, List
 
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql.mcp.config import ServerConfig
-from pyspark.sql.mcp.safety import ReadOnlyViolation
 from pyspark.sql.mcp.tools.registry import all_tools
 
 
@@ -231,8 +231,9 @@ class MCPToolsTest(unittest.TestCase):
         self.assertNotIn("rows", out)
 
     def test_execute_sql_read_only_blocks_ddl(self):
-        with self.assertRaises(ReadOnlyViolation):
+        with self.assertRaises(PySparkValueError) as ctx:
             _run(_spec("execute_sql").handler({"query": "DROP TABLE t"}, _FakeHolder()))
+        self.assertEqual(ctx.exception.getCondition(), "MCP_READ_ONLY_VIOLATION")
 
     def test_execute_sql_read_only_off_allows_ddl(self):
         out = _run(
@@ -315,8 +316,6 @@ class MCPToolsTest(unittest.TestCase):
         self.assertEqual(out["row_count"], 1)
 
     def test_execute_sql_query_timeout_fires(self):
-        from pyspark.sql.mcp.tools.query import QueryTimeoutError
-
         rows = [{"id": 0, "amount": 0}]
         schema = _Schema(
             [_StructField("id", "long", False), _StructField("amount", "long", True)]
@@ -337,8 +336,9 @@ class MCPToolsTest(unittest.TestCase):
 
         holder = _FakeHolder(query_timeout_seconds=1)
         holder._spark = _FakeSpark(_TooSlow(rows, schema))
-        with self.assertRaises(QueryTimeoutError):
+        with self.assertRaises(PySparkRuntimeError) as ctx:
             _run(_spec("execute_sql").handler({"query": "SELECT * FROM t"}, holder))
+        self.assertEqual(ctx.exception.getCondition(), "MCP_QUERY_TIMEOUT")
 
 
 class ServerConfigTest(unittest.TestCase):
