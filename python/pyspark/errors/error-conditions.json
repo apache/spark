@@ -577,6 +577,56 @@
       "A master URL must be set in your configuration."
     ]
   },
+  "MCP_CONNECT_URL_REQUIRED": {
+    "message": [
+      "Spark Connect URL must be provided via --connect-url or the SPARK_REMOTE environment variable."
+    ]
+  },
+  "MCP_EMPTY_QUERY": {
+    "message": [
+      "Query is empty."
+    ]
+  },
+  "MCP_INVALID_ENV_INT": {
+    "message": [
+      "Environment variable `<name>` must be an integer; got <value>."
+    ]
+  },
+  "MCP_INVALID_EXPLAIN_MODE": {
+    "message": [
+      "Explain mode must be one of <allowed>; got <mode>."
+    ]
+  },
+  "MCP_PYARROW_REQUIRED": {
+    "message": [
+      "Format `<format>` requires PyArrow to be installed."
+    ]
+  },
+  "MCP_QUERY_TIMEOUT": {
+    "message": [
+      "Tool `<label>` exceeded the configured `<timeout>`s timeout."
+    ]
+  },
+  "MCP_READ_ONLY_VIOLATION": {
+    "message": [
+      "Statement type `<statement>` is not allowed in read-only mode."
+    ]
+  },
+  "MCP_TRANSPORT_NOT_IMPLEMENTED": {
+    "message": [
+      "MCP transport `<transport>` is not implemented."
+    ]
+  },
+  "MCP_UNKNOWN_TOOL": {
+    "message": [
+      "Unknown MCP tool: `<name>`."
+    ]
+  },
+  "MCP_UNSUPPORTED_FORMAT": {
+    "message": [
+      "Unsupported result format `<format>`; expected one of <allowed>."
+    ]
+  },
   "MEMORY_PROFILE_INVALID_SOURCE": {
     "message": [
       "Memory profiler can only be used on editors with line numbers."

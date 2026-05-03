@@ -17,6 +17,8 @@
 
 import re
 
+from pyspark.errors import PySparkValueError
+
 # Read-only allow-list. Comments and leading whitespace are stripped before
 # matching. We deliberately keep this conservative — anything not on the list
 # is rejected when read_only is on.
@@ -30,7 +32,7 @@ _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _LINE_COMMENT = re.compile(r"--[^\n]*")
 
 
-class ReadOnlyViolation(ValueError):
+class ReadOnlyViolation(PySparkValueError):
     """Raised when a SQL statement violates the read-only policy."""
 
 
@@ -43,9 +45,13 @@ def assert_read_only(query: str) -> None:
     """
     stripped = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", query)).strip()
     if not stripped:
-        raise ReadOnlyViolation("empty query")
+        raise ReadOnlyViolation(
+            errorClass="MCP_EMPTY_QUERY",
+            messageParameters={},
+        )
     if not _READ_ONLY_LEAD.match(stripped):
         first_token = stripped.split(None, 1)[0]
         raise ReadOnlyViolation(
-            f"statement type {first_token!r} is not allowed in read-only mode"
+            errorClass="MCP_READ_ONLY_VIOLATION",
+            messageParameters={"statement": first_token},
         )

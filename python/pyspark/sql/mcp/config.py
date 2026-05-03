@@ -19,6 +19,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+from pyspark.errors import PySparkValueError
+
 
 DEFAULT_MAX_ROWS = 1000
 DEFAULT_PAGE_SIZE = 100
@@ -54,8 +56,9 @@ class ServerConfig:
     ) -> "ServerConfig":
         url = connect_url or os.environ.get("SPARK_REMOTE")
         if not url:
-            raise ValueError(
-                "Spark Connect URL must be provided via --connect-url or SPARK_REMOTE"
+            raise PySparkValueError(
+                errorClass="MCP_CONNECT_URL_REQUIRED",
+                messageParameters={},
             )
         return cls(
             connect_url=url,
@@ -90,4 +93,7 @@ def _env_int(name: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError as exc:
-        raise ValueError(f"{name} must be an integer; got {raw!r}") from exc
+        raise PySparkValueError(
+            errorClass="MCP_INVALID_ENV_INT",
+            messageParameters={"name": name, "value": repr(raw)},
+        ) from exc

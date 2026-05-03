@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar
 
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql.mcp.safety import assert_read_only
 from pyspark.sql.mcp.session import SessionHolder
 from pyspark.sql.mcp.tools.catalog import _to_dict
@@ -31,7 +32,7 @@ from pyspark.sql.mcp.tools.registry import ToolSpec
 T = TypeVar("T")
 
 
-class QueryTimeoutError(RuntimeError):
+class QueryTimeoutError(PySparkRuntimeError):
     """Raised when a tool call exceeds ``query_timeout_seconds``."""
 
 
@@ -46,7 +47,8 @@ async def _with_timeout(
             return await asyncio.wait_for(coro, timeout=timeout)
         except asyncio.TimeoutError as exc:
             raise QueryTimeoutError(
-                f"{label} exceeded {timeout}s timeout"
+                errorClass="MCP_QUERY_TIMEOUT",
+                messageParameters={"label": label, "timeout": str(timeout)},
             ) from exc
     return await coro
 
@@ -193,13 +195,22 @@ async def _handle_execute_sql(args: Dict[str, Any], holder: SessionHolder) -> Di
         try:
             import pyarrow as pa  # noqa: F401
         except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("arrow_base64 format requires pyarrow") from exc
+            raise PySparkRuntimeError(
+                errorClass="MCP_PYARROW_REQUIRED",
+                messageParameters={"format": "arrow_base64"},
+            ) from exc
         table = await _with_timeout(holder, page_df_arrow.toArrow, label="execute_sql")
         with pa.ipc.new_stream(buf, table.schema) as writer:  # type: ignore[name-defined]
             writer.write_table(table)
         payload["arrow_base64"] = base64.b64encode(buf.getvalue()).decode("ascii")
     else:
-        raise ValueError(f"unsupported format: {fmt}")
+        raise PySparkValueError(
+            errorClass="MCP_UNSUPPORTED_FORMAT",
+            messageParameters={
+                "format": str(fmt),
+                "allowed": "json, markdown, arrow_base64",
+            },
+        )
     return payload
 
 
@@ -292,7 +303,13 @@ async def _handle_explain_query(args: Dict[str, Any], holder: SessionHolder) -> 
     query = args["query"]
     mode = args.get("mode", "formatted")
     if mode not in _EXPLAIN_MODES:
-        raise ValueError(f"mode must be one of {_EXPLAIN_MODES}")
+        raise PySparkValueError(
+            errorClass="MCP_INVALID_EXPLAIN_MODE",
+            messageParameters={
+                "allowed": ", ".join(_EXPLAIN_MODES),
+                "mode": str(mode),
+            },
+        )
     if holder.config.read_only:
         assert_read_only(query)
 

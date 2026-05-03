@@ -31,6 +31,7 @@ import argparse
 import json
 from typing import Any, TYPE_CHECKING
 
+from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 from pyspark.sql.mcp.config import ServerConfig
 from pyspark.sql.mcp.session import SessionHolder
 from pyspark.sql.mcp.tools.registry import all_tools
@@ -73,7 +74,10 @@ def _register_tools(server: "Server", holder: SessionHolder) -> None:
     async def _call_tool(name: str, arguments: dict) -> list:
         spec = specs.get(name)
         if spec is None:
-            raise ValueError(f"unknown tool: {name}")
+            raise PySparkValueError(
+                errorClass="MCP_UNKNOWN_TOOL",
+                messageParameters={"name": name},
+            )
         result = await spec.handler(arguments or {}, holder)
         return [types.TextContent(type="text", text=json.dumps(result, default=str))]
 
@@ -102,8 +106,9 @@ def _serve(server: "Server", config: ServerConfig) -> None:
 
         anyio.run(main)
     else:
-        raise NotImplementedError(
-            f"transport {config.transport!r} is not implemented yet"
+        raise PySparkNotImplementedError(
+            errorClass="MCP_TRANSPORT_NOT_IMPLEMENTED",
+            messageParameters={"transport": str(config.transport)},
         )
 
 
