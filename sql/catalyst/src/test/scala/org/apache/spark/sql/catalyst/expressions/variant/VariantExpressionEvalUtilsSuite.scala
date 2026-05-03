@@ -140,6 +140,52 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-56654: reject unpaired UTF-16 surrogates in JSON strings") {
+    val invalidJsonInputs = Seq(
+      "\"\\uD835\"",                  // lone high surrogate (string value)
+      "\"\\uDC00\"",                  // lone low surrogate (string value)
+      "\"\\uD835x\\uDC00\"",          // surrogates separated by non-surrogate
+      "\"\\uD835\\uD835\"",           // two high surrogates in a row
+      "\"prefix \\uD835\"",           // trailing lone high surrogate
+      "{\"\\uD835\":1}",              // lone surrogate in an object key
+      "[\"ok\", \"\\uDC00\"]"         // lone surrogate inside an array element
+    )
+    for (json <- invalidJsonInputs) {
+      checkError(
+        exception = intercept[SparkThrowable] {
+          VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+            allowDuplicateKeys = false)
+        },
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+      )
+      val tryResult = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        allowDuplicateKeys = false, failOnError = false)
+      assert(tryResult === null)
+    }
+    val validJsonInputs = Seq(
+      "\"\\uD83D\\uDE05\"",           // U+1F605 GRINNING FACE WITH SWEAT
+      "\"\\uD835\\uDC00\"",           // U+1D400 MATHEMATICAL BOLD CAPITAL A
+      "{\"\\uD83D\\uDE05\":1}",       // surrogate pair in an object key
+      "[\"\\uD835\\uDC00\"]"          // surrogate pair inside an array
+    )
+    for (json <- validJsonInputs) {
+      val parsed = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+        allowDuplicateKeys = false)
+      assert(parsed != null, s"expected non-null variant for $json")
+    }
+  }
+
+  test("SPARK-56654: legacy mode accepts unpaired surrogates") {
+    val json = "\"\\uD835\""
+    val parsed = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+      allowDuplicateKeys = false, validateUtf8InJsonParsing = false)
+    assert(parsed != null)
+    val tryParsed = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
+      allowDuplicateKeys = false, failOnError = false, validateUtf8InJsonParsing = false)
+    assert(tryParsed != null)
+  }
+
   test("isVariantNull") {
     def check(json: String, expected: Boolean): Unit = {
       if (json != null) {

@@ -43,7 +43,12 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  */
 public class VariantBuilder {
   public VariantBuilder(boolean allowDuplicateKeys) {
+    this(allowDuplicateKeys, true);
+  }
+
+  public VariantBuilder(boolean allowDuplicateKeys, boolean validateUtf8InJsonParsing) {
     this.allowDuplicateKeys = allowDuplicateKeys;
+    this.validateUtf8InJsonParsing = validateUtf8InJsonParsing;
   }
 
   /**
@@ -53,18 +58,41 @@ public class VariantBuilder {
    * @throws IOException if any JSON parsing error happens.
    */
   public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
+    return parseJson(json, allowDuplicateKeys, true);
+  }
+
+  /**
+   * Similar to {@link #parseJson(String, boolean)}, but additionally controls whether JSON
+   * string contents are validated to be well-formed Unicode (no unpaired UTF-16 surrogate code
+   * units). Strict validation is the default and matches RFC 8259 section 7. The flag exists
+   * to allow callers to opt out for backward compatibility with input that previously parsed
+   * (with the unpaired surrogate silently replaced by the Unicode replacement character).
+   */
+  public static Variant parseJson(String json, boolean allowDuplicateKeys,
+      boolean validateUtf8InJsonParsing) throws IOException {
     try (JsonParser parser = new JsonFactory().createParser(json)) {
       parser.nextToken();
-      return parseJson(parser, allowDuplicateKeys);
+      return parseJson(parser, allowDuplicateKeys, validateUtf8InJsonParsing);
     }
   }
 
   /**
-   * Similar {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string input.
+   * Similar to {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string
+   * input.
    */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
       throws IOException {
-    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys);
+    return parseJson(parser, allowDuplicateKeys, true);
+  }
+
+  /**
+   * Similar to {@link #parseJson(JsonParser, boolean)}, but additionally controls whether JSON
+   * string contents are validated to be well-formed Unicode. See
+   * {@link #parseJson(String, boolean, boolean)}.
+   */
+  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
+      boolean validateUtf8InJsonParsing) throws IOException {
+    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys, validateUtf8InJsonParsing);
     builder.buildJson(parser);
     return builder.result();
   }
@@ -495,6 +523,9 @@ public class VariantBuilder {
         int start = writePos;
         while (parser.nextToken() != JsonToken.END_OBJECT) {
           String key = parser.currentName();
+          if (validateUtf8InJsonParsing) {
+            checkValidUnicodeString(key, parser);
+          }
           parser.nextToken();
           int id = addKey(key);
           fields.add(new FieldEntry(key, id, writePos - start));
@@ -513,9 +544,14 @@ public class VariantBuilder {
         finishWritingArray(start, offsets);
         break;
       }
-      case VALUE_STRING:
-        appendString(parser.getText());
+      case VALUE_STRING: {
+        String text = parser.getText();
+        if (validateUtf8InJsonParsing) {
+          checkValidUnicodeString(text, parser);
+        }
+        appendString(text);
         break;
+      }
       case VALUE_NUMBER_INT:
         try {
           appendLong(parser.getLongValue());
@@ -557,6 +593,30 @@ public class VariantBuilder {
     }
   }
 
+  // Reject JSON strings that contain unpaired UTF-16 surrogate code units. Java strings can
+  // hold lone surrogates, but RFC 8259 section 7 requires JSON string contents to be well-formed
+  // Unicode. Stricter parsers such as simdjson reject these inputs, while Jackson's
+  // `ReaderBasedJsonParser` accepts them and silently drops the invalid character to U+FFFD
+  // when the result is encoded as UTF-8. That silent replacement causes data corruption, so
+  // we surface a JSON parse error instead.
+  private static void checkValidUnicodeString(String str, JsonParser parser)
+      throws JsonParseException {
+    int len = str.length();
+    for (int i = 0; i < len; ++i) {
+      char c = str.charAt(i);
+      if (Character.isHighSurrogate(c)) {
+        if (i + 1 >= len || !Character.isLowSurrogate(str.charAt(i + 1))) {
+          throw new JsonParseException(parser, String.format(
+              "Invalid Unicode in JSON string: lone high surrogate U+%04X", (int) c));
+        }
+        ++i;
+      } else if (Character.isLowSurrogate(c)) {
+        throw new JsonParseException(parser, String.format(
+            "Invalid Unicode in JSON string: lone low surrogate U+%04X", (int) c));
+      }
+    }
+  }
+
   // Try to parse a JSON number as a decimal. Return whether the parsing succeeds. The input must
   // only use the decimal format (an integer value with an optional '.' in it) and must not use
   // scientific notation. It also must fit into the precision limitation of decimal types.
@@ -583,4 +643,8 @@ public class VariantBuilder {
   // Store all keys in `dictionary` in the order of id.
   private final ArrayList<byte[]> dictionaryKeys = new ArrayList<>();
   private final boolean allowDuplicateKeys;
+  // When true, JSON string contents are validated to be well-formed Unicode (RFC 8259 sec 7).
+  // Unpaired UTF-16 surrogate code units cause a `JsonParseException` to be thrown during
+  // `buildJson`, which surfaces as a `MALFORMED_RECORD_IN_PARSING` error to SQL callers.
+  private final boolean validateUtf8InJsonParsing;
 }
