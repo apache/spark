@@ -83,12 +83,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} /
  * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}.
  * Predicates on {@code _change_type}, the {@link #rowVersion()} column, or
- * data columns are kept above the scan: pushing them would drop one half of
- * a delete/insert pair within a row-identity group and silently break
- * post-processing. Catalyst's pushdown rules enforce this via the rewrite
- * operators, so connectors do not need to code the restriction themselves --
- * but must not bypass it via connector-specific options. When no
- * post-processing pass applies, pushdown is unrestricted.
+ * non-rowId data columns are kept above the scan: pushing them would drop
+ * one half of a delete/insert pair within a row-identity group and silently
+ * break post-processing. Catalyst's pushdown rules enforce this via the
+ * rewrite operators, so connectors do not need to code the restriction
+ * themselves -- but must not bypass it via connector-specific options. When
+ * no post-processing pass applies, Spark does not impose any CDC-specific
+ * predicate-pushdown restriction.
  * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}
  * (column pruning) is unrestricted in either case: Spark's pruning already
  * respects what the rewrite operators reference.
