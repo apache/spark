@@ -860,18 +860,20 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         select = metricViewColumns)
       createMetricView(fullMetricViewName, mv)
 
-      // SHOW CREATE TABLE on a v2 view (including metric views) is rejected by
-      // DataSourceV2Strategy via `unsupportedTableOperationError(...)`. There's no
-      // round-trippable `CREATE VIEW ... WITH METRICS` form yet, so explicit "unsupported"
-      // is the right answer rather than emitting a misleading plain `CREATE VIEW ...`.
+      // SHOW CREATE TABLE on a metric view is rejected with the dedicated
+      // UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW error class (same one the v1 path uses
+      // in `tables.scala`'s `ShowCreateTableCommand`), so the message is identical no matter
+      // which catalog kind owns the view. There's no round-trippable
+      // `CREATE VIEW ... WITH METRICS` form yet, so explicit "unsupported" is the right
+      // answer rather than emitting a misleading plain `CREATE VIEW ...`.
       val ex = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $fullMetricViewName")
       }
-      assert(ex.getCondition === "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-        s"Expected UNSUPPORTED_FEATURE.TABLE_OPERATION, got " +
+      assert(ex.getCondition === "UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW",
+        s"Expected UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW, got " +
           s"${ex.getCondition}: ${ex.getMessage}")
-      assert(ex.getMessage.contains("SHOW CREATE TABLE"),
-        s"Error message should mention 'SHOW CREATE TABLE', got: ${ex.getMessage}")
+      assert(ex.getMessage.contains("metric view"),
+        s"Error message should mention 'metric view', got: ${ex.getMessage}")
     }
   }
 

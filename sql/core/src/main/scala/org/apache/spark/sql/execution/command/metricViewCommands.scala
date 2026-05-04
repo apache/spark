@@ -140,10 +140,10 @@ object MetricViewHelper {
    * dependency consumers as nondeterministic arity.
    */
   private def qualifyV1(parts: Seq[String]): Seq[String] = parts match {
-    case Seq(t)         => Seq(SESSION_CATALOG_NAME, SessionCatalog.DEFAULT_DATABASE, t)
-    case Seq(db, t)     => Seq(SESSION_CATALOG_NAME, db, t)
-    case Seq(_, _, _)   => parts
-    case other          => other  // Unexpected arity; pass through unchanged.
+    case Seq(t) => Seq(SESSION_CATALOG_NAME, SessionCatalog.DEFAULT_DATABASE, t)
+    case Seq(db, t) => Seq(SESSION_CATALOG_NAME, db, t)
+    case Seq(_, _, _) => parts
+    case other => other  // Unexpected arity; pass through unchanged.
   }
 
   /**
