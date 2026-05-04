@@ -3431,6 +3431,7 @@ class FunctionsTestsMixin:
             self.assertEqual([r[0] for r in resultDf.collect()], expected)
 
         check(df.select(F.is_variant_null(v)), [False, False])
+        check(df.select(F.is_valid_variant(v)), [True, True])
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
