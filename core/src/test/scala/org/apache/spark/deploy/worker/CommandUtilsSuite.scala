@@ -94,4 +94,35 @@ class CommandUtilsSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       env => assert(cmd.environment(env) === "password")
     )
   }
+
+  test("SPARK-46912: local environment takes a precedence") {
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val foo = "Foo"
+    val anotherKey = "AnotherKey"
+    val doesntExistInLocal = "DoesntExistInLocal"
+    val envFromCommand = Map(foo -> "commandBar", anotherKey -> "commandValue",
+      doesntExistInLocal -> "I don't exist", "JAVA_HOME" -> "opt/command/jdk")
+    val localEnv = Map(foo -> "localBar", anotherKey -> "localValue",
+      "JAVA_HOME" -> "opt/local/jdk")
+
+
+    val cmd = Command("mainClass", Seq(), envFromCommand, Seq(), Seq("libraryPathToB"), Seq())
+    val builder = CommandUtils.buildProcessBuilder(
+      cmd, new SecurityManager(new SparkConf), 512, sparkHome, t => t, Seq(),
+      env = localEnv)
+    val libraryPath = Utils.libraryPathEnvName
+    val env = builder.environment
+
+    assert(env.containsKey(foo))
+    assert(env.containsKey(anotherKey))
+    assert(env.containsKey(libraryPath))
+    assert(env.containsKey(doesntExistInLocal))
+    assert(env.containsKey("JAVA_HOME"))
+
+    assert(env.get(foo) equals  "localBar")
+    assert(env.get(anotherKey) equals  "localValue")
+    assert(env.get(doesntExistInLocal) equals  "I don't exist")
+    assert(env.get(libraryPath).startsWith("libraryPathToB"))
+    assert(builder.command().get(0).startsWith("opt/local/jdk"))
+  }
 }

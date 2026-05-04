@@ -20,6 +20,7 @@ package org.apache.spark.deploy.worker
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import scala.collection.Map
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SSLOptions}
@@ -39,13 +40,13 @@ object CommandUtils extends Logging {
    * The `env` argument is exposed for testing.
    */
   def buildProcessBuilder(
-      command: Command,
-      securityMgr: SecurityManager,
-      memory: Int,
-      sparkHome: String,
-      substituteArguments: String => String,
-      classPaths: Seq[String] = Seq.empty,
-      env: Map[String, String] = sys.env): ProcessBuilder = {
+                           command: Command,
+                           securityMgr: SecurityManager,
+                           memory: Int,
+                           sparkHome: String,
+                           substituteArguments: String => String,
+                           classPaths: Seq[String] = Seq.empty,
+                           env: Map[String, String] = sys.env): ProcessBuilder = {
     val localCommand = buildLocalCommand(
       command, securityMgr, substituteArguments, classPaths, env)
     val commandSeq = buildCommandSeq(localCommand, memory, sparkHome)
@@ -70,29 +71,33 @@ object CommandUtils extends Logging {
    * any extra class paths.
    */
   private def buildLocalCommand(
-      command: Command,
-      securityMgr: SecurityManager,
-      substituteArguments: String => String,
-      classPath: Seq[String] = Seq.empty,
-      env: Map[String, String]): Command = {
+                                 command: Command,
+                                 securityMgr: SecurityManager,
+                                 substituteArguments: String => String,
+                                 classPath: Seq[String] = Seq.empty,
+                                 env: Map[String, String]): Command = {
     val libraryPathName = Utils.libraryPathEnvName
     val libraryPathEntries = command.libraryPathEntries
     val cmdLibraryPath = command.environment.get(libraryPathName)
 
-    var newEnvironment = if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
+    val newEnvironment = new mutable.HashMap[String, String]()
+    newEnvironment.addAll(env)
+
+    if (libraryPathEntries.nonEmpty && libraryPathName.nonEmpty) {
       val libraryPaths = libraryPathEntries ++ cmdLibraryPath ++ env.get(libraryPathName)
-      command.environment ++ Map(libraryPathName -> libraryPaths.mkString(File.pathSeparator))
-    } else {
-      command.environment
+      newEnvironment.put(libraryPathName, libraryPaths.mkString(File.pathSeparator))
+    }
+
+    for ((k, v) <- command.environment) {
+      newEnvironment.getOrElseUpdate(k, v)
     }
 
     // set auth secret to env variable if needed
     if (securityMgr.isAuthenticationEnabled()) {
-      newEnvironment = newEnvironment ++
-        Map(SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey())
+      newEnvironment.put(SecurityManager.ENV_AUTH_SECRET, securityMgr.getSecretKey())
     }
     // set SSL env variables if needed
-    newEnvironment ++= securityMgr.getEnvironmentForSslRpcPasswords
+    newEnvironment.addAll(securityMgr.getEnvironmentForSslRpcPasswords)
 
     Command(
       command.mainClass,
@@ -103,9 +108,9 @@ object CommandUtils extends Logging {
       // filter out secrets from java options
       command.javaOpts.filterNot(opts =>
         opts.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-        SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.exists(
-          field => opts.startsWith("-D" + field)
-        )
+          SSLOptions.SPARK_RPC_SSL_PASSWORD_FIELDS.exists(
+            field => opts.startsWith("-D" + field)
+          )
       ))
   }
 
