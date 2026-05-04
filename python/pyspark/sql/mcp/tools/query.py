@@ -105,7 +105,7 @@ def list_functions_spec() -> ToolSpec:
 # ---------------------------------------------------------------------------
 
 
-def _row_to_dict(row) -> Dict[str, Any]:
+def _row_to_dict(row: Any) -> Dict[str, Any]:
     if hasattr(row, "asDict"):
         return row.asDict(recursive=True)
     if hasattr(row, "_asdict"):
@@ -131,7 +131,7 @@ def _md_cell(value: Any) -> str:
     return text
 
 
-def _schema_fields(schema) -> List[str]:
+def _schema_fields(schema: Any) -> List[str]:
     try:
         return [field.name for field in schema.fields]
     except AttributeError:
@@ -206,7 +206,7 @@ async def _handle_execute_sql(args: Dict[str, Any], holder: SessionHolder) -> Di
     return payload
 
 
-def _sql(spark, query: str, sql_args: Optional[Any]):
+def _sql(spark: Any, query: str, sql_args: Optional[Any]) -> Any:
     if sql_args is None:
         return spark.sql(query)
     return spark.sql(query, args=sql_args)

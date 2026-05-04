@@ -51,7 +51,7 @@ async def _handle(_args: Dict[str, Any], holder: SessionHolder) -> Dict[str, Any
     }
 
 
-def _collect_safe_configs(spark) -> Dict[str, str]:
+def _collect_safe_configs(spark: Any) -> Dict[str, str]:
     try:
         items = spark.conf.getAll()
     except Exception:

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Optional
 from pyspark.sql.mcp.config import ServerConfig
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.session import SparkSession
 
 
 class SessionHolder:
@@ -47,6 +47,7 @@ class SessionHolder:
             if self._config.user_id is not None:
                 builder = builder.config("spark.connect.session.userId", self._config.user_id)
             self._session = builder.getOrCreate()
+        assert self._session is not None
         return self._session
 
     def close(self) -> None:

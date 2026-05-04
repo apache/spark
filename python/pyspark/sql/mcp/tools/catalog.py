@@ -34,7 +34,7 @@ from pyspark.sql.mcp.tools.registry import ToolSpec
 def _to_dict(obj: Any) -> Dict[str, Any]:
     """Best-effort conversion of catalog dataclasses (CatalogMetadata, Database,
     Table, Column, Function) into plain dicts."""
-    if is_dataclass(obj):
+    if is_dataclass(obj) and not isinstance(obj, type):
         return asdict(obj)
     if hasattr(obj, "_asdict"):  # NamedTuple
         return dict(obj._asdict())

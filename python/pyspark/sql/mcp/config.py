@@ -17,7 +17,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, TypeVar
 
 from pyspark.errors import PySparkValueError
 
@@ -73,7 +73,10 @@ class ServerConfig:
         )
 
 
-def _default(value, fallback):
+_T = TypeVar("_T")
+
+
+def _default(value: Optional[_T], fallback: _T) -> _T:
     return fallback if value is None else value
 
 
