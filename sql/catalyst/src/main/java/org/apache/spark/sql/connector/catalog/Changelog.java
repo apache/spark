@@ -75,6 +75,31 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * row identities only touched in the latest observed commit are held back until either a
  * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
  * past them, or the source terminates.
+ * <p>
+ * <b>Predicate pushdown.</b> Connectors may implement
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} or
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters} on the
+ * {@link org.apache.spark.sql.connector.read.ScanBuilder} returned by
+ * {@link #newScanBuilder(org.apache.spark.sql.util.CaseInsensitiveStringMap)}.
+ * When any post-processing pass applies (carry-over removal, update detection,
+ * or netChanges) Spark will only push predicates referencing safe columns --
+ * {@code _commit_version}, {@code _commit_timestamp}, and the columns named by
+ * {@link #rowId()}. Predicates on {@code _change_type}, the
+ * {@link #rowVersion()} column, or any data column are kept above the scan and
+ * never reach {@code pushFilters} / {@code pushPredicates}, because pushing
+ * them would drop a single half of a delete/insert pair within a row-identity
+ * group and silently break post-processing.
+ * <p>
+ * This restriction is enforced by the post-processing rewrite shape:
+ * the row-level rewrite places a {@code Window} (or streaming {@code Aggregate})
+ * partitioned/grouped by {@code (rowId, _commit_version[, _commit_timestamp])}
+ * between the relation and the user's filter, and the netChanges rewrite places
+ * a {@code Window} (or {@code TransformWithState}) keyed on {@code rowId} there;
+ * Spark's predicate-pushdown rules only push through these operators when every
+ * referenced column is a partition / grouping key. Connectors implementing
+ * pushdown therefore do not need to code this restriction themselves -- but they
+ * must not bypass it (e.g. by self-applying filters from connector-specific
+ * options when post-processing applies).
  *
  * @since 4.2.0
  */
