@@ -43,10 +43,25 @@ class VariableResolution(
    * (PATH enabled and explicitly set).
    */
   private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
-    if (nameParts.length != 1) return true
-    catalogManager.sessionScopeUnqualifiedAllowed(
-      catalogManager.currentCatalog.name(),
-      catalogManager.currentNamespace.toSeq)
+    nameParts.length != 1 || catalogManager.isSystemSessionOnPath
+  }
+
+  /**
+   * Search-path entries to report in `UNRESOLVED_VARIABLE` for DML lookups (`SET VAR`,
+   * `FETCH ... INTO`). The full SQL path is reported regardless of how the name was
+   * qualified, matching the convention used by `TABLE_OR_VIEW_NOT_FOUND` and
+   * `UNRESOLVED_ROUTINE`. Keeping the rendering qualification-independent also avoids
+   * re-shaping the error if Spark ever grows struct-field assignment, where 2-part forms
+   * become genuinely ambiguous.
+   *
+   * DDL paths (`DECLARE` / `DROP` name validation in
+   * [[org.apache.spark.sql.catalyst.analysis.ResolveCatalogs]]) do not consult the SQL path
+   * and report `[system.session]` directly at their throw site.
+   */
+  def searchPathEntriesForError: Seq[Seq[String]] = {
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
   }
 
   /**

@@ -155,6 +155,13 @@ object SQLConf {
     override def initialValue: SQLConf = null
   }
 
+  /**
+   * Returns the [[SQLConf]] installed by an outer [[withExistingConf]] scope, or [[None]] if
+   * there is no such scope. Unlike [[get]], this peeks directly at the threadlocal so callers
+   * can distinguish "no outer scope" from "outer scope happens to install the same conf".
+   */
+  def getExistingConfIfSet: Option[SQLConf] = Option(existingConf.get())
+
   def withExistingConf[T](conf: SQLConf)(f: => T): T = {
     val old = existingConf.get()
     existingConf.set(conf)

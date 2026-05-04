@@ -243,6 +243,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .thenReturn(defaultPath)
     when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
       .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -268,6 +271,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       any[String], any[Seq[String]], any[String], any[Seq[String]]))
       .thenReturn(defaultPath2)
     when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
       .thenReturn(defaultPath2)
     manager
   }

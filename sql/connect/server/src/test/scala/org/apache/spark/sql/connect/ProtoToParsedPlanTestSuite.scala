@@ -135,17 +135,16 @@ class ProtoToParsedPlanTestSuite
 
   /**
    * Isolated from [[SharedSparkSession]] so PATH / session path settings do not affect catalog.
+   * Cloned from the test session's conf so all sparkConf overrides (ANSI, alias config, etc.) are
+   * preserved automatically; only the genuine isolation knob is overridden explicitly.
    */
-  private val analyzerIsolationConf: SQLConf = {
-    val c = new SQLConf()
+  private lazy val analyzerIsolationConf: SQLConf = {
+    val c = spark.sessionState.conf.clone()
     c.setConf(SQLConf.PATH_ENABLED, false)
-    // Match [[sparkConf]]: a bare SQLConf defaults ANSI_ENABLED to true, which changes
-    // function signatures in analyzed plans (e.g. make_date) vs golden files.
-    c.setConf(SQLConf.ANSI_ENABLED, false)
     c
   }
 
-  private val analyzer = {
+  private lazy val analyzer = {
     val inMemoryCatalog = new InMemoryChangelogCatalog
     // Name must match [[CatalogManager.SESSION_CATALOG_NAME]]: path entries use
     // [[currentCatalog.name()]], then resolution calls [[catalogManager.catalog]] on that segment.
