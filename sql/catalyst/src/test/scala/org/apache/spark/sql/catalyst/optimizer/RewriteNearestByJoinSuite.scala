@@ -19,13 +19,21 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateStruct, Inline, Literal, MonotonicallyIncreasingID, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateStruct, Inline, Literal, Rand, Uuid}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, First, MaxMinByK}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, JoinHint, LocalRelation, NearestByJoin, Project}
 import org.apache.spark.sql.types.IntegerType
 
 class RewriteNearestByJoinSuite extends PlanTest {
+
+  // The rewrite synthesizes `Uuid(Some(<random>))` for `__qid`, whose seed is fresh per call;
+  // expected plans below use `Uuid(Some(0L))`, and we normalize the actual plan's `Uuid`
+  // seeds to 0L before `comparePlans` so the structural shape is the only thing being
+  // compared, not the (necessarily different) random seed values.
+  private def normalizeUuidSeed(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
+      : org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
+    plan.transformAllExpressions { case _: Uuid => Uuid(Some(0L)) }
 
   private def expectedRewrite(
       left: LocalRelation,
@@ -34,7 +42,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking: org.apache.spark.sql.catalyst.expressions.Expression,
       reverse: Boolean,
       outer: Boolean) = {
-    val qidAlias = Alias(MonotonicallyIncreasingID(), "__qid")()
+    val qidAlias = Alias(Uuid(Some(0L)), "__qid")()
     val taggedLeft = Project(left.output :+ qidAlias, left)
     val join = Join(taggedLeft, right, LeftOuter, None, JoinHint.NONE)
 
@@ -77,7 +85,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) + right.output(0),
       reverse = false, outer = false)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("distance, inner, k=3") {
@@ -94,7 +102,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) - right.output(0),
       reverse = true, outer = false)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("similarity, left outer, k=1") {
@@ -111,7 +119,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) + right.output(0),
       reverse = false, outer = true)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("distance, left outer, k=2") {
@@ -128,7 +136,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) - right.output(0),
       reverse = true, outer = true)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("EXACT (approx = false) produces the same rewrite as APPROX") {
@@ -148,7 +156,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) + right.output(0),
       reverse = false, outer = false)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("k = 1 (lower boundary)") {
@@ -165,7 +173,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) + right.output(0),
       reverse = false, outer = false)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("k = NearestByJoin.MaxNumResults (upper boundary)") {
@@ -182,7 +190,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = left.output(0) + right.output(0),
       reverse = false, outer = false)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("self-join: rewrite resolves duplicate ExprIds via DeduplicateRelations") {
@@ -202,7 +210,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
       ranking = t.output(0) + tDup.output(0),
       reverse = false, outer = false)
 
-    comparePlans(rewritten, expected, checkAnalysis = false)
+    comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
   test("APPROX with nondeterministic ranking pre-materializes via Project") {

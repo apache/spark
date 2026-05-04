@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.rules._
  *           [first(left.col0) AS left.col0, ..., first(left.colN-1) AS left.colN-1,
  *            max_by(struct(right.*), expr, k) AS _matches]
  *          +- Join LeftOuter
- *             :- Project [left.*, monotonically_increasing_id() AS __qid]
+ *             :- Project [left.*, uuid() AS __qid]
  *             :  +- left
  *             +- right
  * }}}
@@ -68,11 +68,13 @@ import org.apache.spark.sql.catalyst.rules._
  * makes the intended shape explicit and avoids round-tripping through subquery decorrelation.
  */
 object RewriteNearestByJoin extends Rule[LogicalPlan] {
+  private lazy val random = new scala.util.Random()
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction) =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
-      val qidAlias = Alias(MonotonicallyIncreasingID(), "__qid")()
+      val qidAlias = Alias(Uuid(Some(random.nextLong())), "__qid")()
       val taggedLeft = Project(left.output :+ qidAlias, left)
       val qidAttr = qidAlias.toAttribute
 

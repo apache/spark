@@ -280,14 +280,14 @@ AdaptiveSparkPlan isFinalPlan=false
 +- Project [user_id#x, product#x]
    +- Generate inline(__nearest_matches__#x), [user_id#x], false, [product#x, pscore#x]
       +- Filter ((size(__nearest_matches__#x, false) > 0) AND isnotnull(__nearest_matches__#x))
-         +- SortAggregate(key=[__qid#xL], functions=[first(user_id#x, false), max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
-            +- Sort [__qid#xL ASC NULLS FIRST], false, 0
-               +- Exchange hashpartitioning(__qid#xL, 4), ENSURE_REQUIREMENTS, [plan_id=x]
-                  +- SortAggregate(key=[__qid#xL], functions=[partial_first(user_id#x, false), partial_max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
-                     +- Sort [__qid#xL ASC NULLS FIRST], false, 0
-                        +- Project [user_id#x, __qid#xL, product#x, pscore#x, (rand(0) + cast(pscore#x as double)) AS __ranking__#x]
+         +- SortAggregate(key=[__qid#x], functions=[first(user_id#x, false), max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
+            +- Sort [__qid#x ASC NULLS FIRST], false, 0
+               +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
+                  +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
+                     +- Sort [__qid#x ASC NULLS FIRST], false, 0
+                        +- Project [user_id#x, __qid#x, product#x, pscore#x, (rand(0) + cast(pscore#x as double)) AS __ranking__#x]
                            +- BroadcastNestedLoopJoin BuildRight, LeftOuter
-                              :- Project [col1#x AS user_id#x, monotonically_increasing_id() AS __qid#xL]
+                              :- Project [col1#x AS user_id#x, uuid(Some(x)) AS __qid#x]
                               :  +- LocalTableScan [col1#x, col2#x]
                               +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
                                  +- Project [col1#x AS product#x, col2#x AS pscore#x]
@@ -308,14 +308,14 @@ AdaptiveSparkPlan isFinalPlan=false
 +- Project [user_id#x, product#x]
    +- Generate inline(__nearest_matches__#x), [user_id#x], false, [product#x, pscore#x]
       +- Filter ((size(__nearest_matches__#x, false) > 0) AND isnotnull(__nearest_matches__#x))
-         +- SortAggregate(key=[__qid#xL], functions=[first(user_id#x, false), min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
-            +- Sort [__qid#xL ASC NULLS FIRST], false, 0
-               +- Exchange hashpartitioning(__qid#xL, 4), ENSURE_REQUIREMENTS, [plan_id=x]
-                  +- SortAggregate(key=[__qid#xL], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
-                     +- Sort [__qid#xL ASC NULLS FIRST], false, 0
+         +- SortAggregate(key=[__qid#x], functions=[first(user_id#x, false), min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
+            +- Sort [__qid#x ASC NULLS FIRST], false, 0
+               +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
+                  +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
+                     +- Sort [__qid#x ASC NULLS FIRST], false, 0
                         +- BroadcastNestedLoopJoin BuildRight, LeftOuter
                            :- Filter (user_id#x > 1)
-                           :  +- Project [col1#x AS user_id#x, col2#x AS score#x, monotonically_increasing_id() AS __qid#xL]
+                           :  +- Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]
                            :     +- LocalTableScan [col1#x, col2#x]
                            +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
                               +- Project [col1#x AS product#x, col2#x AS pscore#x]
@@ -337,13 +337,13 @@ AdaptiveSparkPlan isFinalPlan=false
    +- Filter (isnotnull(product#x) AND NOT (product#x = C))
       +- Generate inline(__nearest_matches__#x), [user_id#x], false, [product#x, pscore#x]
          +- Filter ((size(__nearest_matches__#x, false) > 0) AND isnotnull(__nearest_matches__#x))
-            +- SortAggregate(key=[__qid#xL], functions=[first(user_id#x, false), min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
-               +- Sort [__qid#xL ASC NULLS FIRST], false, 0
-                  +- Exchange hashpartitioning(__qid#xL, 4), ENSURE_REQUIREMENTS, [plan_id=x]
-                     +- SortAggregate(key=[__qid#xL], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
-                        +- Sort [__qid#xL ASC NULLS FIRST], false, 0
+            +- SortAggregate(key=[__qid#x], functions=[first(user_id#x, false), min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
+               +- Sort [__qid#x ASC NULLS FIRST], false, 0
+                  +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
+                     +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
+                        +- Sort [__qid#x ASC NULLS FIRST], false, 0
                            +- BroadcastNestedLoopJoin BuildRight, LeftOuter
-                              :- Project [col1#x AS user_id#x, col2#x AS score#x, monotonically_increasing_id() AS __qid#xL]
+                              :- Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]
                               :  +- LocalTableScan [col1#x, col2#x]
                               +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
                                  +- Project [col1#x AS product#x, col2#x AS pscore#x]
@@ -370,7 +370,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "_LEGACY_ERROR_TEMP_1211",
   "messageParameters" : {
     "joinType" : "LEFT OUTER",
-    "leftPlan" : "Project [col1#x AS user_id#x, col2#x AS score#x, monotonically_increasing_id() AS __qid#xL]\n+- LocalRelation [col1#x, col2#x]",
+    "leftPlan" : "Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]\n+- LocalRelation [col1#x, col2#x]",
     "rightPlan" : "Project [col1#x AS product#x, col2#x AS pscore#x]\n+- LocalRelation [col1#x, col2#x]"
   }
 }

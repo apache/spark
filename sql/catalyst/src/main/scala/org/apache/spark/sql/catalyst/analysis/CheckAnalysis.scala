@@ -657,15 +657,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
-          // Reject streaming inputs early. The optimizer rewrite groups by a `__qid` derived
-          // from `MonotonicallyIncreasingID()` and feeds it to a global `Aggregate`, which
-          // Spark turns into a stateful streaming aggregation. Because MID restarts per
-          // micro-batch, `__qid` values collide across batches, and the stateful aggregate
-          // silently merges state from old batches into new rows that share the same key --
-          // producing wrong top-K results. Failing at analysis time is clearer than letting
-          // this slip through. Streaming support is tracked as a follow-up; resolving it does
-          // not require streaming-aware MID and is likely to come from a different grouping
-          // strategy or a dedicated physical operator.
+          // Reject streaming inputs early. The optimizer rewrite is built around an
+          // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
+          // identifier (`__qid`). That shape doesn't compose cleanly with structured-streaming
+          // semantics: a stateful aggregate keyed by a freshly-generated identifier accumulates
+          // state indefinitely (every batch creates new keys, old keys never match again) and a
+          // cross-product against a streaming right side has no bounded state model today.
+          // Failing at analysis time is clearer than letting either fail at runtime. Streaming
+          // support is tracked as a follow-up; resolving it likely comes from a different
+          // grouping strategy or a dedicated physical operator.
           case j: NearestByJoin if j.isStreaming =>
             j.failAnalysis(
               errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
