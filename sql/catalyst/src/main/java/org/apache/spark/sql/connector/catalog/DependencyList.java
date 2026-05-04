@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.List;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
@@ -26,28 +27,26 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * <ul>
  *   <li>When {@code null}, the dependency information is not provided.</li>
- *   <li>When the array is empty, dependencies are provided but the object has none.</li>
- *   <li>When the array is non-empty, each entry describes one dependency.</li>
+ *   <li>When the list is empty, dependencies are provided but the object has none.</li>
+ *   <li>When the list is non-empty, each entry describes one dependency.</li>
  * </ul>
+ * <p>
+ * {@code dependencies} is held as an immutable {@link List} so the record's auto-generated
+ * {@code equals}/{@code hashCode} delegate to per-element value semantics on the contained
+ * {@link Dependency} entries.
  *
- * @param dependencies array of dependencies
+ * @param dependencies list of dependencies (immutable copy made)
  * @since 4.2.0
  */
 @Evolving
-public record DependencyList(Dependency[] dependencies) {
+public record DependencyList(List<Dependency> dependencies) {
 
   public DependencyList {
     Objects.requireNonNull(dependencies, "dependencies must not be null");
-    dependencies = dependencies.clone();
-  }
-
-  /** Returns a defensive copy of the underlying dependencies array. */
-  @Override
-  public Dependency[] dependencies() {
-    return dependencies.clone();
+    dependencies = List.copyOf(dependencies);
   }
 
   public static DependencyList of(Dependency... dependencies) {
-    return new DependencyList(dependencies);
+    return new DependencyList(List.of(dependencies));
   }
 }

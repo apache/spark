@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.List;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
@@ -26,31 +27,28 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * The dependent table is identified by its structural multi-part name. {@code nameParts}
  * arity matches the catalog's namespace depth plus one for the table name -- for a catalog
- * with single-level namespaces the parts are typically
- * {@code [catalog, schema, table]}; for a catalog with multi-level namespaces (e.g. Iceberg
- * with {@code db1.db2}) the parts are {@code [catalog, db1, db2, ..., table]}; for sources
- * referenced through a session catalog without an explicit catalog component the parts can
- * be {@code [db, table]} or just {@code [table]}. The structural form preserves arity and
- * is unambiguous against quoted identifiers containing a literal {@code .}; consumers that
- * need a flat string should join the parts themselves with a quoting scheme appropriate to
- * their wire format.
+ * with single-level namespaces the parts are {@code [catalog, schema, table]}; for a catalog
+ * with multi-level namespaces (e.g. Iceberg with {@code db1.db2}) the parts are
+ * {@code [catalog, db1, db2, ..., table]}; for v1 sources resolved through the session
+ * catalog producers should normalize to {@code [spark_catalog, db, table]} so consumers see
+ * a stable arity per source kind. The structural form preserves arity and is unambiguous
+ * against quoted identifiers containing a literal {@code .}; consumers that need a flat
+ * string should join the parts themselves with a quoting scheme appropriate to their wire
+ * format.
+ * <p>
+ * {@code nameParts} is held as an immutable {@link List} so the record's auto-generated
+ * {@code equals}/{@code hashCode} delegate to per-element value semantics.
  *
- * @param nameParts structural multi-part identifier (defensive copy made; never empty)
+ * @param nameParts structural multi-part identifier (immutable copy made; never empty)
  * @since 4.2.0
  */
 @Evolving
-public record TableDependency(String[] nameParts) implements Dependency {
+public record TableDependency(List<String> nameParts) implements Dependency {
   public TableDependency {
     Objects.requireNonNull(nameParts, "nameParts must not be null");
-    if (nameParts.length == 0) {
+    if (nameParts.isEmpty()) {
       throw new IllegalArgumentException("nameParts must not be empty");
     }
-    nameParts = nameParts.clone();
-  }
-
-  /** Returns a defensive copy of the underlying parts array. */
-  @Override
-  public String[] nameParts() {
-    return nameParts.clone();
+    nameParts = List.copyOf(nameParts);
   }
 }

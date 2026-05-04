@@ -21,13 +21,15 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaUnsupported}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.metricview.serde.MetricView
 import org.apache.spark.sql.metricview.util.MetricViewPlanner
 import org.apache.spark.sql.types.StructType
 
@@ -68,13 +70,17 @@ case class CreateMetricViewCommand(
       resolved: ResolvedIdentifier): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val name = resolved.identifier.asTableIdentifier
-    val analyzed = MetricViewHelper.analyzeMetricViewText(
+    val (analyzed, metricView) = MetricViewHelper.analyzeMetricViewText(
       sparkSession, name.nameParts, originalText)
     validateUserColumns(name, analyzed)
+    // Merge the descriptor `metric_view.*` properties (`from.type`, `from.name`/`from.sql`,
+    // `where`) into the user-supplied properties so v1 DESCRIBE TABLE EXTENDED surfaces the
+    // same descriptor rows as the v2 path in `DataSourceV2Strategy`.
+    val mergedProps = properties ++ metricView.getProperties
     catalog.createTable(
       ViewHelper.prepareTable(
         sparkSession, name, Some(originalText), analyzed, userSpecifiedColumns,
-        properties, SchemaUnsupported, comment,
+        mergedProps, SchemaUnsupported, comment,
         None, isMetricView = true),
       ignoreIfExists = allowExisting)
     Seq.empty
@@ -91,9 +97,13 @@ object MetricViewHelper {
 
   /**
    * Walks the analyzed plan to collect direct table/view dependencies. Each dependency is
-   * returned as a structural multi-part name (`Seq[String]`); arity is preserved per source
-   * so consumers can reason about catalog / namespace / table boundaries without parsing a
-   * dot-flattened string.
+   * returned as a structural multi-part name (`Seq[String]`); v1 sources (resolved through
+   * the session catalog) are normalized to a stable 3-part shape
+   * `[spark_catalog, db, table]` -- `TableIdentifier.nameParts` returns 1, 2, or 3 parts
+   * depending on whether the analyzer captured the catalog / database, so without
+   * normalization the same source can produce a different shape across runs. v2 sources
+   * already arrive fully qualified (catalog + namespace + table) and are returned as-is so
+   * multi-level namespaces survive.
    *
    * Stops recursion at relation leaf nodes and persistent `View` nodes so only direct
    * (not transitive) dependencies are recorded.
@@ -102,16 +112,16 @@ object MetricViewHelper {
     val tables = scala.collection.mutable.ArrayBuffer.empty[Seq[String]]
     def traverse(p: LogicalPlan): Unit = p match {
       case v: View if !v.isTempView =>
-        tables += v.desc.identifier.nameParts
+        tables += qualifyV1(v.desc.identifier.nameParts)
       case r: DataSourceV2Relation if r.catalog.isDefined && r.identifier.isDefined =>
         val ident = r.identifier.get
         // V2 catalogs may have multi-level namespaces; preserve the full arity rather than
         // dot-joining the namespace into a single component.
         tables += (r.catalog.get.name() +: ident.namespace().toIndexedSeq) :+ ident.name()
       case r: HiveTableRelation =>
-        tables += r.tableMeta.identifier.nameParts
+        tables += qualifyV1(r.tableMeta.identifier.nameParts)
       case r: LogicalRelation if r.catalogTable.isDefined =>
-        tables += r.catalogTable.get.identifier.nameParts
+        tables += qualifyV1(r.catalogTable.get.identifier.nameParts)
       case other =>
         other.children.foreach(traverse)
         other.expressions.foreach(_.foreach {
@@ -124,8 +134,24 @@ object MetricViewHelper {
   }
 
   /**
+   * Normalizes v1 source identifiers to a stable 3-part `[spark_catalog, db, table]` shape.
+   * `TableIdentifier.nameParts` may return 1, 2, or 3 parts depending on whether the analyzer
+   * captured the catalog / database components, which would otherwise leak through to
+   * dependency consumers as nondeterministic arity.
+   */
+  private def qualifyV1(parts: Seq[String]): Seq[String] = parts match {
+    case Seq(t)         => Seq(SESSION_CATALOG_NAME, SessionCatalog.DEFAULT_DATABASE, t)
+    case Seq(db, t)     => Seq(SESSION_CATALOG_NAME, db, t)
+    case Seq(_, _, _)   => parts
+    case other          => other  // Unexpected arity; pass through unchanged.
+  }
+
+  /**
    * Analyzes a metric-view YAML body so the create / alter path can capture the source plan
-   * and its dependencies.
+   * and its dependencies. Returns the analyzed plan together with the parsed [[MetricView]]
+   * descriptor (the latter is grabbed off the un-analyzed [[MetricViewPlaceholder]] before
+   * the analyzer rewrites it away, so callers needing the descriptor for property emission
+   * don't have to re-parse the YAML).
    *
    * `nameParts` is the multi-part target identifier (catalog + namespace + table). The synthetic
    * [[CatalogTable]] used as analysis context still carries a [[TableIdentifier]] (capped at
@@ -138,7 +164,7 @@ object MetricViewHelper {
   def analyzeMetricViewText(
       session: SparkSession,
       nameParts: Seq[String],
-      viewText: String): LogicalPlan = {
+      viewText: String): (LogicalPlan, MetricView) = {
     val analyzer = session.sessionState.analyzer
     val syntheticIdent = nameParts match {
       case Seq(table) =>
@@ -163,11 +189,15 @@ object MetricViewHelper {
       schema = new StructType(),
       viewOriginalText = Some(viewText),
       viewText = Some(viewText))
-    val metricViewNode = MetricViewPlanner.planWrite(
+    val placeholder = MetricViewPlanner.planWrite(
       tableMeta, viewText, session.sessionState.sqlParser)
-    val analyzed = analyzer.executeAndCheck(metricViewNode, new QueryPlanningTracker)
+    // Grab the parsed descriptor BEFORE analysis -- the placeholder gets replaced by
+    // ResolvedMetricView during analyzer rules, after which `MetricView` is no longer
+    // recoverable from the plan tree.
+    val metricView = placeholder.desc
+    val analyzed = analyzer.executeAndCheck(placeholder, new QueryPlanningTracker)
     ViewHelper.verifyTemporaryObjectsNotExists(
       isTemporary = false, nameParts, analyzed, Seq.empty)
-    analyzed
+    (analyzed, metricView)
   }
 }

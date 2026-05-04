@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.List;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
@@ -26,23 +27,20 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * The dependent function is identified by its structural multi-part name. See
  * {@link TableDependency} for the parts-form contract.
+ * <p>
+ * {@code nameParts} is held as an immutable {@link List} so the record's auto-generated
+ * {@code equals}/{@code hashCode} delegate to per-element value semantics.
  *
- * @param nameParts structural multi-part identifier (defensive copy made; never empty)
+ * @param nameParts structural multi-part identifier (immutable copy made; never empty)
  * @since 4.2.0
  */
 @Evolving
-public record FunctionDependency(String[] nameParts) implements Dependency {
+public record FunctionDependency(List<String> nameParts) implements Dependency {
   public FunctionDependency {
     Objects.requireNonNull(nameParts, "nameParts must not be null");
-    if (nameParts.length == 0) {
+    if (nameParts.isEmpty()) {
       throw new IllegalArgumentException("nameParts must not be empty");
     }
-    nameParts = nameParts.clone();
-  }
-
-  /** Returns a defensive copy of the underlying parts array. */
-  @Override
-  public String[] nameParts() {
-    return nameParts.clone();
+    nameParts = List.copyOf(nameParts);
   }
 }

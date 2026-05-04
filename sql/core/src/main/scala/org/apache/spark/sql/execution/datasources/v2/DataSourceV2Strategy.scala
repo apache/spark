@@ -49,7 +49,6 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRe
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
-import org.apache.spark.sql.metricview.serde.MetricViewFactory
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -342,9 +341,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // views with multi-level-namespace targets analyze correctly (`asTableIdentifier` would
       // throw `requiresSinglePartNamespaceError` for namespace arity > 1).
       val nameParts = (catalog.name() +: ident.namespace().toIndexedSeq) :+ ident.name()
-      val analyzed = MetricViewHelper.analyzeMetricViewText(
+      val (analyzed, metricView) = MetricViewHelper.analyzeMetricViewText(
         session, nameParts, originalText)
-      val metricView = MetricViewFactory.fromYAML(originalText)
       val mergedProps = properties ++ metricView.getProperties
       val depParts = MetricViewHelper.collectTableDependencies(analyzed)
       val deps = if (depParts.nonEmpty) {
@@ -391,9 +389,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // SHOW CREATE TABLE on a metric view is explicitly unsupported: `ShowCreateV2ViewExec`
       // would emit a plain `CREATE VIEW <ident> AS <yaml>`, which is not a round-trippable
       // metric-view DDL form (the right form is `CREATE VIEW <ident> WITH METRICS LANGUAGE
-      // YAML AS $$ <yaml> $$`). Reject up front rather than emit lossy DDL.
-      throw QueryCompilationErrors.unsupportedTableOperationError(
-        catalog, ident, "SHOW CREATE TABLE")
+      // YAML AS $$ <yaml> $$`). Reject up front with the same dedicated error class the v1
+      // path uses (`UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW`) so users see the same
+      // actionable message regardless of catalog kind.
+      val quoted = (catalog.name() +: ident.asMultipartIdentifier)
+        .map(quoteIfNeeded).mkString(".")
+      throw QueryCompilationErrors.showCreateTableNotSupportedOnMetricViewError(quoted)
 
     case ShowCreateTable(rpv @ ResolvedPersistentView(catalog, ident, _), _, output) =>
       val quoted = (catalog.name() +: ident.asMultipartIdentifier).map(quoteIfNeeded).mkString(".")
@@ -604,9 +605,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedIdentifier, ifExists, purge) =>
-      val tableCatalog = r.catalog.asTableCatalog
       val invalidateFunc = () => CommandUtils.uncacheTableOrView(session, r)
-      DropTableExec(tableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
+      DropTableExec(
+        r.catalog.asTableCatalog, r.identifier, ifExists, purge, invalidateFunc) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil, None) :: Nil

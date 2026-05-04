@@ -153,9 +153,9 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
 
       val deps = info.viewDependencies()
       assert(deps != null)
-      assert(deps.dependencies().length === 1)
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
+      assert(deps.dependencies().size() === 1)
+      val tableDep = deps.dependencies().get(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().asScala.toSeq ===
         Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
@@ -209,9 +209,9 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       assert(props.get(TableCatalog.PROP_COMMENT) === "my mv")
 
       val deps = info.viewDependencies()
-      assert(deps != null && deps.dependencies().length === 1)
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
+      assert(deps != null && deps.dependencies().size() === 1)
+      val tableDep = deps.dependencies().get(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().asScala.toSeq ===
         Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
@@ -250,8 +250,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         where = None,
         select = metricViewColumns)
       val yaml = MetricViewFactory.toYAML(metricView)
-      // Give both columns new names, and a comment on each. Without the `retainMetadata`
-      // fix to `ViewHelper.aliasPlan`, the metric_view.* keys disappear here.
+      // Pins aliasPlan(retainMetadata = true): metric_view.* keys must survive a column
+      // rename with comments.
       sql(
         s"""CREATE VIEW $fullMetricViewName (reg COMMENT 'region alias', n COMMENT 'count')
            |WITH METRICS
@@ -313,9 +313,9 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       assert(finalInfo.queryText().trim === replacementYaml.trim)
       assert(finalInfo.properties().get(MetricView.PROP_WHERE) === "count > 100")
       val deps = finalInfo.viewDependencies()
-      assert(deps != null && deps.dependencies().length === 1)
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
+      assert(deps != null && deps.dependencies().size() === 1)
+      val tableDep = deps.dependencies().get(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().asScala.toSeq ===
         Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
@@ -505,8 +505,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
 
         val deps = capturedViewInfo().viewDependencies()
         assert(deps != null)
-        val depParts =
-          deps.dependencies().map(_.asInstanceOf[TableDependency].nameParts().toSeq).toSet
+        val depParts = deps.dependencies().asScala
+          .map(_.asInstanceOf[TableDependency].nameParts().asScala.toSeq).toSet
         assert(depParts === Set(
           Seq(testCatalogName, testNamespace, sourceTableName),
           Seq(testCatalogName, testNamespace, "customers")),
@@ -530,11 +530,11 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       createMetricView(fullMetricViewName, metricView)
 
       val deps = capturedViewInfo().viewDependencies()
-      assert(deps != null && deps.dependencies().length === 1,
+      assert(deps != null && deps.dependencies().size() === 1,
         s"Expected 1 deduplicated dependency, got " +
-          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
+          s"${Option(deps).map(_.dependencies().size()).getOrElse(0)}")
+      val tableDep = deps.dependencies().get(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().asScala.toSeq ===
         Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
@@ -555,11 +555,11 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       createMetricView(fullMetricViewName, metricView)
 
       val deps = capturedViewInfo().viewDependencies()
-      assert(deps != null && deps.dependencies().length === 1,
+      assert(deps != null && deps.dependencies().size() === 1,
         s"Expected 1 deduplicated dependency for self-join, got " +
-          s"${Option(deps).map(_.dependencies().length).getOrElse(0)}")
-      val tableDep = deps.dependencies()(0).asInstanceOf[TableDependency]
-      assert(tableDep.nameParts().toSeq ===
+          s"${Option(deps).map(_.dependencies().size()).getOrElse(0)}")
+      val tableDep = deps.dependencies().get(0).asInstanceOf[TableDependency]
+      assert(tableDep.nameParts().asScala.toSeq ===
         Seq(testCatalogName, testNamespace, sourceTableName))
     }
   }
@@ -580,15 +580,18 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         createMetricView(fullMetricViewName, mv)
 
         val deps = capturedViewInfo().viewDependencies()
-        assert(deps != null && deps.dependencies().length === 1)
-        val parts = deps.dependencies()(0).asInstanceOf[TableDependency].nameParts().toSeq
-        // For a session-catalog source, `TableIdentifier.nameParts` includes catalog + db +
-        // table when the catalog is set; here we expect at least 2 parts (`db.table`) and
-        // up to 3 (`spark_catalog.db.table`) -- both are valid producer outputs depending
-        // on whether the analyzer captured the session-catalog component.
+        assert(deps != null && deps.dependencies().size() === 1)
+        val parts =
+          deps.dependencies().get(0).asInstanceOf[TableDependency].nameParts().asScala.toSeq
+        // `MetricViewHelper.qualifyV1` normalizes any `TableIdentifier.nameParts` shape
+        // (1, 2, or 3 parts depending on what the analyzer captured) to the stable
+        // `[spark_catalog, db, table]` shape so downstream consumers see deterministic
+        // arity per source kind.
+        assert(parts.length === 3,
+          s"V1 nameParts should normalize to exactly 3 parts, got ${parts.length}: $parts")
+        assert(parts.head === "spark_catalog",
+          s"V1 nameParts head should be the session-catalog name, got $parts")
         assert(parts.last === v1Source, s"Last part should be the table name, got $parts")
-        assert(parts.length >= 2 && parts.length <= 3,
-          s"V1 nameParts arity should be 2 or 3, got ${parts.length}: $parts")
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $v1Source")
@@ -614,8 +617,9 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
         createMetricView(fullMetricViewName, mv)
 
         val deps = capturedViewInfo().viewDependencies()
-        assert(deps != null && deps.dependencies().length === 1)
-        val parts = deps.dependencies()(0).asInstanceOf[TableDependency].nameParts().toSeq
+        assert(deps != null && deps.dependencies().size() === 1)
+        val parts =
+          deps.dependencies().get(0).asInstanceOf[TableDependency].nameParts().asScala.toSeq
         assert(parts === Seq(testCatalogName, multiNamespace(0), multiNamespace(1), multiTable),
           s"Multi-level nameParts should preserve every namespace component, got $parts")
       } finally {
@@ -746,10 +750,9 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       // `MetadataTable(ViewInfo)`. The analyzer wraps it as a `ResolvedPersistentView` and
       // `DataSourceV2Strategy` routes through SPARK-56655's `DescribeV2ViewExec`, which
       // reads the typed `ViewInfo` directly and emits the standard "Type" / "View Text" /
-      // "View Current Catalog" / "View Schema Mode" / etc. rows. The "Type" row was added
-      // alongside this metric-view PR so `DescribeV2ViewExec` matches v1 parity for the
-      // v1 `CatalogTable.toJsonLinkedHashMap` `Type` row, and so users see whether they're
-      // looking at a plain VIEW or a sub-kind like METRIC_VIEW.
+      // "View Current Catalog" / "View Schema Mode" / etc. rows. Pins `DescribeV2ViewExec`
+      // emits a "Type" row matching v1 `CatalogTable.toJsonLinkedHashMap` parity, so users
+      // can distinguish a plain VIEW from a sub-kind like METRIC_VIEW.
       val rows = sql(s"DESCRIBE TABLE EXTENDED $fullMetricViewName").collect()
       val rowMap = rows.map(r => r.getString(0) -> r.getString(1)).toMap
 

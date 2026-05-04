@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.List;
+
 import org.apache.spark.annotation.Evolving;
 
 /**
@@ -37,7 +39,7 @@ public sealed interface Dependency permits TableDependency, FunctionDependency {
    * components followed by the table name.
    */
   static TableDependency table(String... nameParts) {
-    return new TableDependency(nameParts);
+    return new TableDependency(List.of(nameParts));
   }
 
   /**
@@ -47,6 +49,6 @@ public sealed interface Dependency permits TableDependency, FunctionDependency {
    * elements are namespace components followed by the function name.
    */
   static FunctionDependency function(String... nameParts) {
-    return new FunctionDependency(nameParts);
+    return new FunctionDependency(List.of(nameParts));
   }
 }
