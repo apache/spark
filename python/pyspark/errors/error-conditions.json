@@ -589,12 +589,12 @@
   },
   "MCP_INVALID_ENV_INT": {
     "message": [
-      "Environment variable `<name>` must be an integer; got <value>."
+      "Environment variable `<name>` must be an integer; got `<value>`."
     ]
   },
   "MCP_INVALID_EXPLAIN_MODE": {
     "message": [
-      "Explain mode must be one of <allowed>; got <mode>."
+      "Explain mode must be one of `<allowed>`; got `<mode>`."
     ]
   },
   "MCP_PYARROW_REQUIRED": {
@@ -604,7 +604,7 @@
   },
   "MCP_QUERY_TIMEOUT": {
     "message": [
-      "Tool `<label>` exceeded the configured `<timeout>`s timeout."
+      "Tool `<label>` exceeded the configured timeout of `<timeout>` seconds."
     ]
   },
   "MCP_READ_ONLY_VIOLATION": {
@@ -624,7 +624,7 @@
   },
   "MCP_UNSUPPORTED_FORMAT": {
     "message": [
-      "Unsupported result format `<format>`; expected one of <allowed>."
+      "Unsupported result format `<format>`; expected one of `<allowed>`."
     ]
   },
   "MEMORY_PROFILE_INVALID_SOURCE": {
