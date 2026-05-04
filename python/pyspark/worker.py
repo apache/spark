@@ -3097,9 +3097,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                 udf_func, udf_args_offsets, udf_kwargs_offsets
             )
             udf_infos.append((wrapped_func, args_kwargs_offsets, udf_return_type))
-        col_names = [f"_{i}" for i in range(len(udfs))]
         return_schema = StructType(
-            [StructField(name, info[2]) for name, info in zip(col_names, udf_infos)]
+            [StructField(f"_{i}", info[2]) for i, info in enumerate(udf_infos)]
         )
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
