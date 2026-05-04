@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog}
@@ -30,13 +31,17 @@ import org.apache.spark.util.Clock
  * @param asyncWritesExecutorService The executor service for async writes
  * @param asyncProgressTrackingCheckpointingIntervalMs The interval for async progress
  * @param triggerClock The clock to use for trigger time
+ * @param asyncWriteError Shared first-error reference between the offset and commit logs.
+ *                       Once set, any subsequent async write task short-circuits and
+ *                       fails with the recorded error instead of writing to storage.
  */
 class AsyncStreamingQueryCheckpointMetadata(
     sparkSession: SparkSession,
     resolvedCheckpointRoot: String,
     asyncWritesExecutorService: ThreadPoolExecutor,
     asyncProgressTrackingCheckpointingIntervalMs: Long,
-    triggerClock: Clock)
+    triggerClock: Clock,
+    asyncWriteError: AtomicReference[Throwable])
   extends StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot) {
 
   override lazy val offsetLog = new AsyncOffsetSeqLog(
@@ -44,13 +49,15 @@ class AsyncStreamingQueryCheckpointMetadata(
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_OFFSETS),
     asyncWritesExecutorService,
     asyncProgressTrackingCheckpointingIntervalMs,
-    clock = triggerClock
+    clock = triggerClock,
+    asyncWriteError = asyncWriteError
   )
 
   override lazy val commitLog = new AsyncCommitLog(
     sparkSession,
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
-    asyncWritesExecutorService
+    asyncWritesExecutorService,
+    asyncWriteError = asyncWriteError
   )
 
 }

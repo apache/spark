@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.File
-import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, Semaphore, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ListBuffer
 
@@ -29,14 +30,14 @@ import org.scalatest.time.{Seconds, Span}
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeq}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, LongOffset, MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED, ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK}
 import org.apache.spark.sql.functions.{column, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class AsyncProgressTrackingMicroBatchExecutionSuite
   extends StreamTest with BeforeAndAfter with Matchers {
@@ -772,6 +773,70 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
   test("bubble up async commit log write errors 2" +
     ": commit file already exists for a batch") {
     testAsyncWriteErrorsPermissionsIssue("/commits")
+  }
+
+  // Regression test: once a previous async log write fails, the shared
+  // first-error reference is populated and any subsequent task scheduled on
+  // the shared executor (offset or commit) short-circuits with that *same*
+  // error instead of writing anything to durable storage. This prevents gaps
+  // such as offset N missing while offset N+1 is present, or a commit-log
+  // entry written without its corresponding offset-log entry.
+  test("async log writes record first error and gate subsequent writes") {
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val offsetsDir = new File(checkpointLocation + "/offsets")
+    val commitsDir = checkpointLocation + "/commits"
+    offsetsDir.mkdirs()
+
+    val executor = ThreadUtils.newDaemonSingleThreadExecutor("async-log-write-test")
+    try {
+      val sharedError = new AtomicReference[Throwable]()
+      val offsetLog = new AsyncOffsetSeqLog(
+        spark, offsetsDir.getAbsolutePath, executor, offsetCommitIntervalMs = 0,
+        asyncWriteError = sharedError)
+      val commitLog = new AsyncCommitLog(
+        spark, commitsDir, executor, asyncWriteError = sharedError)
+
+      // Make the offsets dir read-only so the first write fails.
+      offsetsDir.setReadOnly()
+      try {
+        val firstFuture = offsetLog.addAsync(0L, OffsetSeq.fill(LongOffset(0)))
+        val firstEx = intercept[ExecutionException] {
+          firstFuture.get(5, TimeUnit.SECONDS)
+        }
+        // Sanity: the actual failure was recorded in the shared ref.
+        assert(sharedError.get() ne null,
+          "expected first async write failure to populate shared error ref")
+        assert(sharedError.get() eq firstEx.getCause)
+        val firstError = sharedError.get()
+
+        // A subsequent commit-log write must short-circuit with that same
+        // error instance (and must not produce a commit file).
+        val commitFuture = commitLog.addAsync(0L, CommitMetadata())
+        val commitEx = intercept[ExecutionException] {
+          commitFuture.get(5, TimeUnit.SECONDS)
+        }
+        assert(commitEx.getCause eq firstError,
+          "expected commit-log write to short-circuit with the shared first error")
+        assert(getListOfFiles(commitsDir).isEmpty,
+          s"expected no commit files but found: ${getListOfFiles(commitsDir)}")
+
+        // A subsequent offset-log write must also short-circuit with the same
+        // first error (compareAndSet semantics preserve it across cascading
+        // failures).
+        val secondOffsetFuture = offsetLog.addAsync(1L, OffsetSeq.fill(LongOffset(1)))
+        val secondOffsetEx = intercept[ExecutionException] {
+          secondOffsetFuture.get(5, TimeUnit.SECONDS)
+        }
+        assert(secondOffsetEx.getCause eq firstError,
+          "expected later offset-log write to short-circuit with the shared first error")
+        assert(sharedError.get() eq firstError,
+          "shared error must still hold the first error after later short-circuits")
+      } finally {
+        offsetsDir.setWritable(true)
+      }
+    } finally {
+      executor.shutdownNow()
+    }
   }
 
   test("commit intervals happy path") {
