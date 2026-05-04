@@ -746,15 +746,15 @@ object SQLConf {
 
   val RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.rowLevelOperationGroupFilter.enabled")
-      .doc("Enables runtime group filtering for group-based row-level operations. " +
-        "Data sources that replace groups of data (e.g. files, partitions) may prune entire " +
-        "groups using provided data source filters when planning a row-level operation scan. " +
-        "However, such filtering is limited as not all expressions can be converted into data " +
-        "source filters and some expressions can only be evaluated by Spark (e.g. subqueries). " +
-        "Since rewriting groups is expensive, Spark can execute a query at runtime to find what " +
-        "records match the condition of the row-level operation. The information about matching " +
-        "records will be passed back to the row-level operation scan, allowing data sources to " +
-        "discard groups that don't have to be rewritten.")
+      .doc("Enables runtime filtering for group-based and delta-based row-level operations. " +
+        "Data sources may prune entire file groups at runtime when planning a row-level " +
+        "operation scan. Planning-time filter pushdown is limited as not all expressions can " +
+        "be converted into data source filters and some expressions can only be evaluated by " +
+        "Spark (e.g. subqueries). Since rewriting groups or scanning unnecessary files is " +
+        "expensive, Spark can execute a lightweight query at runtime to find what records match " +
+        "the condition of the row-level operation. The information about matching records will " +
+        "be passed back to the row-level operation scan, allowing data sources to skip files " +
+        "that don't have to be processed.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
@@ -6596,15 +6596,29 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED =
-    buildConf("spark.sql.optimizer.mergeSubplans.symmetricFilterPropagation.enabled")
-      .doc("When set to true, two non-grouping aggregate subplans that both have filter " +
-        "conditions (but with different predicates) can be merged into a single scan using " +
-        "FILTER (WHERE ...) clauses on each aggregate expression. " +
-        "Merging two filtered scans broadens the combined filter to OR(f1, f2), which may " +
-        "reduce IO pruning (e.g. partition or file skipping) compared to the individual " +
-        "filters. Disabled by default; enable once the behaviour has been validated in your " +
-        "workload, particularly on heavily partitioned or file-pruned tables. " +
+  val MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED = buildConf(
+    "spark.sql.optimizer.mergeSubplans.filterPropagation.symmetricFilterPropagation.enabled")
+    .doc("When set to true, two non-grouping aggregate subplans that both have filter " +
+      "conditions (but with different predicates) can be merged into a single scan using " +
+      "FILTER (WHERE ...) clauses on each aggregate expression. " +
+      "Merging two filtered scans broadens the combined filter to OR(f1, f2), which may " +
+      "reduce IO pruning (e.g. partition or file skipping) compared to the individual " +
+      "filters. Disabled by default; enable once the behaviour has been validated in your " +
+      "workload, particularly on heavily partitioned or file-pruned tables. " +
+      s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
+    .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
+  val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
+    buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
+      .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +
+        "merging, allowing subplans that differ only in their filter conditions and share a " +
+        "common join to be merged into a single scan. A filter attribute is only propagated " +
+        "through a join when it originates from the non-nullable (preserved) side: the left side " +
+        "of LeftOuter/LeftSemi/LeftAnti, the right side of RightOuter, or either side of " +
+        "Inner/Cross. FullOuter joins are never eligible. " +
         s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)

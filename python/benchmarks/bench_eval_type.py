@@ -1081,6 +1081,55 @@ class GroupedMapPandasUDFPeakmemBench(_GroupedMapPandasBenchMixin, _PeakmemBench
     pass
 
 
+# -- SQL_GROUPED_MAP_PANDAS_ITER_UDF -------------------------------------------
+# UDF receives ``Iterator[pandas.DataFrame]`` per group, returns
+# ``Iterator[pandas.DataFrame]``.
+
+
+class _GroupedMapPandasIterBenchMixin(_GroupedMapPandasBenchMixin):
+    """Provides ``_write_scenario`` for SQL_GROUPED_MAP_PANDAS_ITER_UDF."""
+
+    def _grouped_map_pandas_iter_identity(pdfs):
+        yield from pdfs
+
+    def _grouped_map_pandas_iter_sort(pdfs):
+        for pdf in pdfs:
+            yield pdf.sort_values(pdf.columns[0])
+
+    def _grouped_map_pandas_iter_key_identity(key, pdfs):
+        yield from pdfs
+
+    _udfs = {
+        "identity_udf": (_grouped_map_pandas_iter_identity, None, 1),
+        "sort_udf": (_grouped_map_pandas_iter_sort, None, 1),
+        "key_identity_udf": (_grouped_map_pandas_iter_key_identity, None, 2),
+    }
+    params = [list(_GroupedMapPandasBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, schema = self._build_scenario(scenario)
+        udf_func, ret_type, n_args = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = StructType(schema.fields[n_args - 1 :]) if n_args > 1 else schema
+        n_cols = len(schema.fields)
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(n_args - 1, n_cols - (n_args - 1))
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
+            buf,
+        )
+
+
+class GroupedMapPandasIterUDFTimeBench(_GroupedMapPandasIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class GroupedMapPandasIterUDFPeakmemBench(_GroupedMapPandasIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
 # -- SQL_MAP_ARROW_ITER_UDF ------------------------------------------------
 # UDF receives ``Iterator[pa.RecordBatch]``, returns ``Iterator[pa.RecordBatch]``.
 
@@ -1164,6 +1213,89 @@ class MapArrowIterUDFTimeBench(_MapArrowIterBenchMixin, _TimeBenchBase):
 
 
 class MapArrowIterUDFPeakmemBench(_MapArrowIterBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_MAP_PANDAS_ITER_UDF -------------------------------------------------
+# UDF receives ``Iterator[pandas.DataFrame]``, returns ``Iterator[pandas.DataFrame]``.
+
+
+class _MapPandasIterBenchMixin:
+    """Provides ``_write_scenario`` for SQL_MAP_PANDAS_ITER_UDF.
+
+    Wraps input batches in a struct column to match the JVM-side wire format
+    (``MapInBatchEvaluatorFactory`` wraps each row in another row, and the
+    Pandas serializer turns that struct back into a ``pandas.DataFrame``
+    when ``df_for_struct=True``).
+    """
+
+    def _identity_pdf_iter(it):
+        yield from it
+
+    def _sort_pdf_iter(it):
+        for pdf in it:
+            yield pdf.sort_values(pdf.columns[0]).reset_index(drop=True)
+
+    def _filter_pdf_iter(it):
+        for pdf in it:
+            yield pdf[pdf[pdf.columns[0]].notna()]
+
+    # Scaled down vs SQL_MAP_ARROW_ITER_UDF: pandas conversion adds
+    # per-batch Arrow<->Pandas overhead across all columns.
+    _scenario_configs = {
+        "sm_batch_few_col": ("mixed", 100_000, 5, 1_000),
+        "sm_batch_many_col": ("mixed", 10_000, 50, 1_000),
+        "lg_batch_few_col": ("mixed", 1_000_000, 5, 10_000),
+        "lg_batch_many_col": ("mixed", 100_000, 50, 10_000),
+        "pure_ints": ("pure_ints", 200_000, 10, 5_000),
+        "pure_floats": ("pure_floats", 200_000, 10, 5_000),
+        "pure_strings": ("pure_strings", 200_000, 10, 5_000),
+        "pure_ts": ("pure_ts", 200_000, 10, 5_000),
+        "mixed_types": ("mixed", 200_000, 10, 5_000),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        type_key, num_rows, num_cols, batch_size = _MapPandasIterBenchMixin._scenario_configs[name]
+        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
+        struct_type = MockDataFactory.make_struct_type(
+            num_fields=num_cols,
+            base_types=pool,
+        )
+        return MockDataFactory.make_batches(
+            num_rows=num_rows,
+            num_cols=1,
+            spark_type_pool=[struct_type],
+            batch_size=batch_size,
+        )
+
+    _udfs = {
+        "identity_udf": (_identity_pdf_iter, [0]),
+        "sort_udf": (_sort_pdf_iter, [0]),
+        "filter_udf": (_filter_pdf_iter, [0]),
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._build_scenario(scenario)
+        udf_func, arg_offsets = self._udfs[udf_name]
+        ret_type = schema.fields[0].dataType
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+        )
+
+
+class MapPandasIterUDFTimeBench(_MapPandasIterBenchMixin, _TimeBenchBase):
+    pass
+
+
+class MapPandasIterUDFPeakmemBench(_MapPandasIterBenchMixin, _PeakmemBenchBase):
     pass
 
 
@@ -1467,4 +1599,79 @@ class WindowAggArrowUDFTimeBench(_WindowAggArrowBenchMixin, _TimeBenchBase):
 
 
 class WindowAggArrowUDFPeakmemBench(_WindowAggArrowBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_WINDOW_AGG_PANDAS_UDF -----------------------------------------------
+# UDF receives ``pd.Series`` columns for the entire window partition, returns scalar.
+
+
+class _WindowAggPandasBenchMixin:
+    """Provides _write_scenario for SQL_WINDOW_AGG_PANDAS_UDF."""
+
+    def _window_agg_pandas_sum(col):
+        """Sum a single Pandas Series."""
+        return col.sum()
+
+    def _window_agg_pandas_mean_multi(col0, col1):
+        """Mean of two Pandas Series combined."""
+        return (col0.mean() or 0) + (col1.mean() or 0)
+
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5),
+        "few_groups_lg": (50, 50_000, 5),
+        "many_groups_sm": (2_000, 500, 5),
+        "many_groups_lg": (500, 10_000, 5),
+        "wide_cols": (200, 5_000, 20),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        num_groups, rows_per_group, n_cols = _WindowAggPandasBenchMixin._scenario_configs[name]
+        return MockDataFactory.make_grouped_batches(
+            num_groups=num_groups,
+            num_rows=rows_per_group,
+            num_cols=n_cols,
+            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+            batch_size=rows_per_group,
+        )
+
+    _udfs = {
+        "sum_udf": _window_agg_pandas_sum,
+        "mean_multi_udf": _window_agg_pandas_mean_multi,
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        groups, _schema = self._build_scenario(scenario)
+        udf_func = self._udfs[udf_name]
+
+        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
+        if "multi" in udf_name:
+            arg_offsets = [0, 1]
+        else:
+            arg_offsets = [0]
+
+        return_type = DoubleType()
+
+        def write_udf(b):
+            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            write_udf,
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
+            buf,
+            runner_conf={"window_bound_types": "unbounded"},
+        )
+
+
+class WindowAggPandasUDFTimeBench(_WindowAggPandasBenchMixin, _TimeBenchBase):
+    pass
+
+
+class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBase):
     pass

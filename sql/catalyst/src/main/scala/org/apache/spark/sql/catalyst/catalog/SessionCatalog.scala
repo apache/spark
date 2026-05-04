@@ -1058,7 +1058,7 @@ class SessionCatalog(
     // so the SubqueryAlias qualifier reflects the real catalog + multi-part namespace.
     // Fall back to the historical 3-part form for v1 session-catalog tables -- we intentionally
     // always include `SESSION_CATALOG_NAME` here and ignore
-    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-MetadataOnlyTable behavior.
+    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-MetadataTable behavior.
     val multiParts = metadata.multipartIdentifier.getOrElse {
       val qualifiedIdent = qualifyIdentifier(metadata.identifier)
       Seq(CatalogManager.SESSION_CATALOG_NAME, qualifiedIdent.database.get, qualifiedIdent.table)

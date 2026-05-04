@@ -3728,6 +3728,19 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
 
 
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+time_bucket.__doc__ = pysparkfuncs.time_bucket.__doc__
+
+
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,

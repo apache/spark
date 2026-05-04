@@ -3353,6 +3353,10 @@ class SparkConnectPlanner(
       w.format(writeOperation.getSource)
     }
 
+    if (writeOperation.getWithSchemaEvolution) {
+      w.withSchemaEvolution()
+    }
+
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.saveCommand(None)
       case proto.WriteOperation.SaveTypeCase.PATH =>
@@ -3417,6 +3421,10 @@ class SparkConnectPlanner(
     if (writeOperation.getClusteringColumnsCount > 0) {
       val names = writeOperation.getClusteringColumnsList.asScala
       w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
+    if (writeOperation.getWithSchemaEvolution) {
+      w.withSchemaEvolution()
     }
 
     writeOperation.getMode match {

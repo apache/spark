@@ -666,6 +666,16 @@
       "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
     ],
     "subClass" : {
+      "NULL_COMMIT_TIMESTAMP" : {
+        "message" : [
+          "Connector emitted a row with a NULL `_commit_timestamp` on a streaming read engaging post-processing. The `Changelog` contract requires `_commit_timestamp` to be non-NULL for streaming reads, since post-processing uses it as event time to advance the watermark."
+        ]
+      },
+      "UNEXPECTED_CHANGE_TYPE" : {
+        "message" : [
+          "Connector emitted a row with a `_change_type` value that is not one of the four supported types (`insert`, `delete`, `update_preimage`, `update_postimage`). The `Changelog` contract requires every emitted row to carry one of these four values."
+        ]
+      },
       "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
         "message" : [
           "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
@@ -2798,6 +2808,12 @@
           "<errors>"
         ]
       },
+      "COLUMN_ID_MISMATCH" : {
+        "message" : [
+          "Column IDs have changed:",
+          "<errors>"
+        ]
+      },
       "METADATA_COLUMNS_MISMATCH" : {
         "message" : [
           "Metadata columns have changed:",
@@ -3290,16 +3306,6 @@
       "MISSING_STARTING_VERSION" : {
         "message" : [
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
-        ]
-      },
-      "NET_CHANGES_NOT_YET_SUPPORTED" : {
-        "message" : [
-          "The `deduplicationMode = netChanges` option on connector `<changelogName>` is not yet supported. Use `deduplicationMode = dropCarryovers` (default) or `deduplicationMode = none` instead."
-        ]
-      },
-      "STREAMING_POST_PROCESSING_NOT_SUPPORTED" : {
-        "message" : [
-          "Change Data Capture (CDC) streaming reads on connector `<changelogName>` do not yet support post-processing (carry-over removal, update detection, or net change computation). The requested combination of options would require post-processing, which is currently only available for batch reads. Use a batch read, or set `deduplicationMode = none` and `computeUpdates = false` to receive raw change rows in streaming."
         ]
       },
       "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
@@ -8217,6 +8223,29 @@
       "NON_EXISTENT_PATH" : {
         "message" : [
           "a non-existent path."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this write."
+    ],
+    "subClass" : {
+      "CREATE_TABLE" : {
+        "message" : [
+          "Creating a new table does not support schema evolution."
+        ]
+      },
+      "REPLACE_TABLE" : {
+        "message" : [
+          "Replacing a table does not support schema evolution."
+        ]
+      },
+      "V1_TABLE" : {
+        "message" : [
+          "Writes to V1 tables or V1 data sources do not support schema evolution."
         ]
       }
     },

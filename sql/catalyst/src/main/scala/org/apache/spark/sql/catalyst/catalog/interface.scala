@@ -447,7 +447,7 @@ case class CatalogTable(
     ignoredProperties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
     // Multi-part identifier [catalog, namespace..., name] for tables synthesized from a v2
-    // `MetadataOnlyTable` whose namespace has more than one part -- the v1 `identifier:
+    // `MetadataTable` whose namespace has more than one part -- the v1 `identifier:
     // TableIdentifier` (single-string database) cannot carry that losslessly. `None` for
     // v1-native tables; callers should use `fullIdent` which falls back to `identifier.nameParts`.
     multipartIdentifier: Option[Seq[String]] = None)

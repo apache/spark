@@ -13126,6 +13126,67 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 
 @_try_remote_functions
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    """
+    Aligns a timestamp to the start of a fixed-size interval bucket.
+
+    Returns the start of the bucket that ``ts`` falls into, where buckets are defined by
+    the given ``bucket_size`` interval aligned to optional ``origin``. For ``TIMESTAMP_NTZ``,
+    bucketing is performed in UTC. For ``TIMESTAMP``, year-month interval buckets and
+    calendar-day components of day-time interval buckets align to the session time zone.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    bucket_size : :class:`~pyspark.sql.Column`
+        A day-time or year-month interval defining the bucket size. Must be positive
+        and foldable.
+    ts : :class:`~pyspark.sql.Column` or column name
+        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+    origin : :class:`~pyspark.sql.Column`, optional
+        Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
+        ``ts`` and must be foldable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The start of the bucket containing ``ts``, as the same type as ``ts``.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2024, 1, 1, 11, 27, 0),)], ['ts'])
+    >>> df.select(
+    ...     sf.time_bucket(sf.expr("INTERVAL '15' MINUTE"), 'ts').alias("bucket")
+    ... ).collect()
+    [Row(bucket=datetime.datetime(2024, 1, 1, 11, 15))]
+
+    Shift the grid with an explicit origin: buckets run at :05, :20, :35, :50:
+
+    >>> df.select(
+    ...     sf.time_bucket(
+    ...         sf.expr("INTERVAL '15' MINUTE"),
+    ...         'ts',
+    ...         sf.expr("TIMESTAMP '1970-01-01 00:05:00'")
+    ...     ).alias("bucket")
+    ... ).collect()
+    [Row(bucket=datetime.datetime(2024, 1, 1, 11, 20))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
