@@ -524,7 +524,8 @@ __all__ = [  # noqa: F405
     "user",
     # "uuid": Excluded because of the name conflict with builtin uuid module
     "version",
-    # UDF, UDTF and UDT
+    # UDF, UDAF, UDTF and UDT
+    "Aggregator",
     "AnalyzeArgument",
     "AnalyzeResult",
     "ArrowUDFType",
@@ -534,6 +535,7 @@ __all__ = [  # noqa: F405
     "SelectedColumn",
     "SkipRestOfInputTableException",
     "UserDefinedFunction",
+    "UserDefinedAggregateFunction",
     "UserDefinedTableFunction",
     "arrow_udf",
     # Datasketch Functions
@@ -586,6 +588,7 @@ __all__ = [  # noqa: F405
     "call_udf",
     "pandas_udf",
     "udf",
+    "udaf",
     "udtf",
     "arrow_udtf",
     "unwrap_udt",
