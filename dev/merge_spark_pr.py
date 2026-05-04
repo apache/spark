@@ -152,14 +152,17 @@ def _sort_version_names_lex_desc(names):
 
 
 def _dedupe_fix_versions_adjacent_major_zero(default_fix_versions):
-    """Drop V when V is M.minor.0 and predecessor (minor-1).0.0 exists in the list.
+    """Preserve order; drop duplicate names, then drop V when V is M.minor.0 and
+    predecessor (minor-1).0.0 exists in the list.
 
+    >>> _dedupe_fix_versions_adjacent_major_zero(["6.0.0", "4.3.0", "4.3.0"])
+    ['6.0.0', '4.3.0']
     >>> _dedupe_fix_versions_adjacent_major_zero(["2.0.0", "1.1.0", "1.0.0"])
     ['2.0.0', '1.0.0']
     >>> _dedupe_fix_versions_adjacent_major_zero(["1.0.0", "2.0.0"])
     ['1.0.0', '2.0.0']
     """
-    out = list(default_fix_versions)
+    out = list(dict.fromkeys(default_fix_versions))
     for v in list(out):
         major, minor, patch = v.split(".")
         if patch == "0":
@@ -230,6 +233,11 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     ...     ["master", "branch-5.x", "branch-4.x"], ["5.2.0", "4.3.0", "6.0.0"]
     ... )[0]
     ['6.0.0', '5.2.0', '4.3.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.x"], ["6.0.0", "4.3.0"]
+    ... )[0]
+    ['6.0.0', '4.3.0']
     """
     names = _sort_version_names_lex_desc(list(unreleased_version_names))
     merged_set = set(merge_branches)
