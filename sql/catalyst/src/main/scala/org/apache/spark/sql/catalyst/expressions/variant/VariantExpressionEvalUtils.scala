@@ -35,7 +35,7 @@ object VariantExpressionEvalUtils {
       input: UTF8String,
       allowDuplicateKeys: Boolean = false,
       failOnError: Boolean = true,
-      validateUtf8InJsonParsing: Boolean = true): VariantVal = {
+      validateUnicodeInJsonParsing: Boolean = true): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
         throw exception
@@ -45,7 +45,7 @@ object VariantExpressionEvalUtils {
     }
     try {
       val v = VariantBuilder.parseJson(
-        input.toString, allowDuplicateKeys, validateUtf8InJsonParsing)
+        input.toString, allowDuplicateKeys, validateUnicodeInJsonParsing)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>

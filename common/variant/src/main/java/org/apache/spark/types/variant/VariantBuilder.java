@@ -46,9 +46,9 @@ public class VariantBuilder {
     this(allowDuplicateKeys, true);
   }
 
-  public VariantBuilder(boolean allowDuplicateKeys, boolean validateUtf8InJsonParsing) {
+  public VariantBuilder(boolean allowDuplicateKeys, boolean validateUnicodeInJsonParsing) {
     this.allowDuplicateKeys = allowDuplicateKeys;
-    this.validateUtf8InJsonParsing = validateUtf8InJsonParsing;
+    this.validateUnicodeInJsonParsing = validateUnicodeInJsonParsing;
   }
 
   /**
@@ -69,10 +69,10 @@ public class VariantBuilder {
    * (with the unpaired surrogate silently replaced by the Unicode replacement character).
    */
   public static Variant parseJson(String json, boolean allowDuplicateKeys,
-      boolean validateUtf8InJsonParsing) throws IOException {
+      boolean validateUnicodeInJsonParsing) throws IOException {
     try (JsonParser parser = new JsonFactory().createParser(json)) {
       parser.nextToken();
-      return parseJson(parser, allowDuplicateKeys, validateUtf8InJsonParsing);
+      return parseJson(parser, allowDuplicateKeys, validateUnicodeInJsonParsing);
     }
   }
 
@@ -91,8 +91,8 @@ public class VariantBuilder {
    * {@link #parseJson(String, boolean, boolean)}.
    */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
-      boolean validateUtf8InJsonParsing) throws IOException {
-    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys, validateUtf8InJsonParsing);
+      boolean validateUnicodeInJsonParsing) throws IOException {
+    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys, validateUnicodeInJsonParsing);
     builder.buildJson(parser);
     return builder.result();
   }
@@ -523,7 +523,7 @@ public class VariantBuilder {
         int start = writePos;
         while (parser.nextToken() != JsonToken.END_OBJECT) {
           String key = parser.currentName();
-          if (validateUtf8InJsonParsing) {
+          if (validateUnicodeInJsonParsing) {
             checkValidUnicodeString(key, parser);
           }
           parser.nextToken();
@@ -546,7 +546,7 @@ public class VariantBuilder {
       }
       case VALUE_STRING: {
         String text = parser.getText();
-        if (validateUtf8InJsonParsing) {
+        if (validateUnicodeInJsonParsing) {
           checkValidUnicodeString(text, parser);
         }
         appendString(text);
@@ -646,5 +646,5 @@ public class VariantBuilder {
   // When true, JSON string contents are validated to be well-formed Unicode (RFC 8259 sec 7).
   // Unpaired UTF-16 surrogate code units cause a `JsonParseException` to be thrown during
   // `buildJson`, which surfaces as a `MALFORMED_RECORD_IN_PARSING` error to SQL callers.
-  private final boolean validateUtf8InJsonParsing;
+  private final boolean validateUnicodeInJsonParsing;
 }

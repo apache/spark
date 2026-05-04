@@ -195,10 +195,9 @@ class VariantEndToEndSuite extends SharedSparkSession {
       df.selectExpr("parse_json(j)").collect()
     }
     val cause = Option(parseJsonError.getCause).getOrElse(parseJsonError)
-    assert(cause.getMessage.contains("MALFORMED_RECORD_IN_PARSING") ||
-      cause.getMessage.toLowerCase.contains("surrogate"),
+    assert(cause.getMessage.contains("MALFORMED_RECORD_IN_PARSING"),
       s"Unexpected error message: ${cause.getMessage}")
-    withSQLConf(SQLConf.VARIANT_VALIDATE_UTF8_IN_JSON_PARSING.key -> "false") {
+    withSQLConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING.key -> "false") {
       val parsed = df.selectExpr("parse_json(j)").collect()
       assert(parsed.length == 1 && parsed.head.get(0) != null,
         "legacy mode should accept unpaired surrogates")

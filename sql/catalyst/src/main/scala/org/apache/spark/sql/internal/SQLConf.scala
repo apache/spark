@@ -6050,8 +6050,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val VARIANT_VALIDATE_UTF8_IN_JSON_PARSING =
-    buildConf("spark.sql.variant.validateUtf8InJsonParsing")
+  val VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING =
+    buildConf("spark.sql.variant.validateUnicodeInJsonParsing")
       .internal()
       .doc("When true, parsing variant from JSON rejects strings that contain unpaired UTF-16 " +
         "surrogate code units (such as a lone high surrogate like \\uD835), which are invalid " +
@@ -6059,6 +6059,7 @@ object SQLConf {
         "the unpaired surrogate is silently replaced by the Unicode replacement character " +
         "during UTF-8 encoding, causing data corruption that diverges from strict JSON parsers.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 

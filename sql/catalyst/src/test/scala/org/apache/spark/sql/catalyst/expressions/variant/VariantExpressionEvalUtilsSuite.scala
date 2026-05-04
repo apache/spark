@@ -179,10 +179,10 @@ class VariantExpressionEvalUtilsSuite extends SparkFunSuite {
   test("SPARK-56654: legacy mode accepts unpaired surrogates") {
     val json = "\"\\uD835\""
     val parsed = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
-      allowDuplicateKeys = false, validateUtf8InJsonParsing = false)
+      allowDuplicateKeys = false, validateUnicodeInJsonParsing = false)
     assert(parsed != null)
     val tryParsed = VariantExpressionEvalUtils.parseJson(UTF8String.fromString(json),
-      allowDuplicateKeys = false, failOnError = false, validateUtf8InJsonParsing = false)
+      allowDuplicateKeys = false, failOnError = false, validateUnicodeInJsonParsing = false)
     assert(tryParsed != null)
   }
 

@@ -63,7 +63,7 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
       child,
       Literal(SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS), BooleanType),
       Literal(failOnError, BooleanType),
-      Literal(SQLConf.get.getConf(SQLConf.VARIANT_VALIDATE_UTF8_IN_JSON_PARSING), BooleanType)),
+      Literal(SQLConf.get.getConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING), BooleanType)),
     inputTypes :+ BooleanType :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
