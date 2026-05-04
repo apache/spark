@@ -1177,6 +1177,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     invalid(Array(primitiveHeader(INT1), 0), Array[Byte](3, 0, 0))
     invalid(Array(primitiveHeader(INT1), 0), Array[Byte](2, 0, 0))
 
+    // Malformed metadata: offset > nextOffset for key id 0.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 1, 2, 1) ++ Array[Byte]('a', 'b'))
+
+    // Malformed metadata: truncated offset list (declares dict size 1 but is missing nextOffset).
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 1, 0))
+
     // Valid metadata formats: extra bits are ignored.
     valid(Array(primitiveHeader(TRUE)), Array[Byte](VERSION | 1 << 4, 0, 0))
     valid(Array(primitiveHeader(TRUE)), Array[Byte](VERSION | 1 << 5, 0, 0))
