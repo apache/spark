@@ -555,13 +555,11 @@ jobs:
           - ${{ inputs.java }}
         modules:
           - >-
-            pyspark-sql, pyspark-resource, pyspark-testing
-          - >-
-            pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger
+            pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger
           - >-
             pyspark-mllib, pyspark-ml, pyspark-ml-connect, pyspark-pipelines
           - >-
-            pyspark-structured-streaming, pyspark-structured-streaming-connect
+            pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect
           - >-
             pyspark-connect
           - >-
@@ -578,10 +576,9 @@ jobs:
           # Always run if pyspark == 'true', even infra-image is skip (such as non-master job)
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-core, pyspark-errors, pyspark-streaming, pyspark-logger' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-sql, pyspark-resource, pyspark-testing, pyspark-core, pyspark-errors, pyspark-logger' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
-          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
@@ -665,7 +662,7 @@ jobs:
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
-        if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
+        if [[ "$MODULES_TO_TEST" == *"pyspark-pipelines"* ]]; then
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
         fi
