@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column,
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AtomicType, DataType, StringType, TimestampType}
+import org.apache.spark.sql.types.{DataType, LongType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -66,14 +66,19 @@ object ChangelogTable {
       }
     }
     check("_change_type", StringType)
-    // `_commit_version` is connector-defined but must be an atomic orderable type. Both
-    // the batch (Catalyst `SortOrder`) and the streaming netChanges (typed Comparable
-    // ordering inside the stateful processor) paths require an orderable scalar.
+    // `_commit_version` must be either `LongType` or `StringType`. Connectors must
+    // additionally guarantee that the column's natural ordering (numeric /
+    // lexicographic) matches commit order, because the netChanges post-processing path
+    // sorts rows by this column. These two types cover every realistic CDC source;
+    // broader atomic types like `IntegerType` are strict subsets of `LongType`, and
+    // `TimestampType` duplicates the role of `_commit_timestamp`. The narrower
+    // contract can always be relaxed later (relaxing is non-breaking; restricting is
+    // not).
     val versionCol = byName.getOrElse("_commit_version",
       throw QueryCompilationErrors.changelogMissingColumnError(cl.name, "_commit_version"))
-    if (!versionCol.dataType.isInstanceOf[AtomicType]) {
+    if (versionCol.dataType != LongType && versionCol.dataType != StringType) {
       throw QueryCompilationErrors.changelogInvalidColumnTypeError(
-        cl.name, "_commit_version", "an atomic orderable type", versionCol.dataType.sql)
+        cl.name, "_commit_version", "BIGINT or STRING", versionCol.dataType.sql)
     }
     check("_commit_timestamp", TimestampType)
 

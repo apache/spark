@@ -33,12 +33,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},
  *       {@code update_preimage}, or {@code update_postimage}</li>
- *   <li>{@code _commit_version} — the commit version containing this change. Must be of
- *       an atomic orderable type (e.g. {@code LongType}, {@code StringType},
- *       {@code IntegerType}, {@code TimestampType}); complex types
- *       ({@code ArrayType}, {@code MapType}, {@code StructType}) are rejected.
- *       Spark post-processing sorts rows of a given row identity by this column to
- *       determine the first and last events</li>
+ *   <li>{@code _commit_version} — the commit version containing this change. Must be
+ *       either {@code LongType} or {@code StringType}; all other types are rejected.
+ *       The column's natural ordering (numeric for {@code LongType}, lexicographic for
+ *       {@code StringType}) must match commit order, because the netChanges
+ *       post-processing path sorts rows of a given row identity by this column to
+ *       determine the first and last events.</li>
  *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
  *       belonging to a single {@code _commit_version} must share the same
  *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
