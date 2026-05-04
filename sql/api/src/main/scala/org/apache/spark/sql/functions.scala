@@ -9586,6 +9586,17 @@ object functions {
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
   /**
+   * Check if a variant value is valid. Returns true if the variant is valid, false if it is
+   * malformed, and NULL if the input is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.2.0
+   */
+  def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
+
+  /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *

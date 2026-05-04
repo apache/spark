@@ -954,7 +954,7 @@ case class SchemaOfVariantAgg(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(v) - Returns true if the variant is valid, false if it is malformed.",
+  usage = "_FUNC_(v) - Returns true if the variant is valid, false if it is malformed, NULL if `v` is NULL.",
   examples = """
     Examples:
       > SELECT _FUNC_(parse_json('null'));

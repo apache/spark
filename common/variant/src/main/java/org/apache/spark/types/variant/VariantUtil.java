@@ -669,6 +669,10 @@ public class VariantUtil {
       case UUID:
         getUuid(value, pos);
         break;
+      default:
+        // This is practically unreachable because we have handle all possible types. It only
+        // intends to ensure we don't forget adding a new case when adding a new type.
+        throw malformedVariant();
     }
   }
 
