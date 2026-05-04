@@ -74,12 +74,16 @@ case class NearestByJoin(
   // the analyzer's whitelist.
   override def allowNonDeterministicExpression: Boolean = approx
 
-  // Right-side attributes are always declared nullable because the rewrite materializes them
-  // through `Inline` over `MaxMinByK`'s `ArrayType(.., containsNull = true)`, which widens
-  // every struct field to nullable. Declaring them nullable here keeps the analyzed schema
-  // consistent with the optimized plan (and with what users see in cached or written outputs).
+  // Both left- and right-side attributes are declared nullable to match the schema produced
+  // by `RewriteNearestByJoin`. Right-side attributes are widened because the rewrite
+  // materializes them through `Inline` over `MaxMinByK`'s `ArrayType(.., containsNull = true)`,
+  // which widens every struct field to nullable. Left-side attributes are widened because the
+  // rewrite carries each left column through a `First` aggregate, whose result type is always
+  // nullable (`First` may return `null` for empty groups). Declaring both nullable here keeps
+  // the analyzed schema consistent with the optimized plan (and with what users see in cached
+  // or written outputs).
   override def output: Seq[Attribute] =
-    left.output ++ right.output.map(_.withNullability(true))
+    left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cre
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, First, MaxMinByK}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, JoinHint, LocalRelation, NearestByJoin, Project}
+import org.apache.spark.sql.types.IntegerType
 
 class RewriteNearestByJoinSuite extends PlanTest {
 
@@ -252,5 +253,31 @@ class RewriteNearestByJoinSuite extends PlanTest {
     assert(agg.child.isInstanceOf[Join],
       s"expected Aggregate's child to be the Join directly when ranking is deterministic, " +
         s"got ${agg.child.getClass.getSimpleName}")
+  }
+
+  test("output declares both left- and right-side attributes nullable") {
+    // The rewrite carries left columns through `First` aggregates (always nullable result type)
+    // and right columns through `Inline` over `MaxMinByK`'s `ArrayType(.., containsNull = true)`
+    // (every struct field becomes nullable). NearestByJoin.output must reflect both widenings
+    // so the analyzed schema matches the optimized plan; otherwise cached / written outputs
+    // would advertise a stricter nullability than the data actually carries.
+    val left = LocalRelation(
+      AttributeReference("a", IntegerType, nullable = false)(),
+      AttributeReference("b", IntegerType, nullable = false)())
+    val right = LocalRelation(
+      AttributeReference("x", IntegerType, nullable = false)(),
+      AttributeReference("y", IntegerType, nullable = false)())
+    val query = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = left.output(0) + right.output(0),
+      direction = NearestBySimilarity)
+
+    assert(left.output.forall(!_.nullable),
+      "preconditions: left input attributes should start non-nullable")
+    assert(right.output.forall(!_.nullable),
+      "preconditions: right input attributes should start non-nullable")
+    assert(query.output.forall(_.nullable),
+      "NearestByJoin.output should declare every attribute nullable, regardless of the " +
+        "nullability of the underlying inputs")
   }
 }
