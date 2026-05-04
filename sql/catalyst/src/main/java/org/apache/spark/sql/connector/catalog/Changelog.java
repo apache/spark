@@ -75,6 +75,24 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * row identities only touched in the latest observed commit are held back until either a
  * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
  * past them, or the source terminates.
+ * <p>
+ * <b>Pushdown contract.</b> When any post-processing pass applies (carry-over
+ * removal, update detection, or netChanges), Spark only pushes predicates
+ * that reference {@code _commit_version}, {@code _commit_timestamp}, or
+ * columns named by {@link #rowId()} to the connector's
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} /
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}.
+ * Predicates on {@code _change_type}, the {@link #rowVersion()} column, or
+ * non-rowId data columns are kept above the scan: pushing them would drop
+ * one half of a delete/insert pair within a row-identity group and silently
+ * break post-processing. Catalyst's pushdown rules enforce this via the
+ * rewrite operators, so connectors do not need to code the restriction
+ * themselves -- but must not bypass it via connector-specific options. When
+ * no post-processing pass applies, Spark does not impose any CDC-specific
+ * predicate-pushdown restriction.
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}
+ * (column pruning) is unrestricted in either case: Spark's pruning already
+ * respects what the rewrite operators reference.
  *
  * @since 4.2.0
  */
