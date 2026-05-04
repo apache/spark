@@ -158,9 +158,7 @@ class _FakeHolder:
     def __init__(self, **overrides: Any):
         self.config = ServerConfig(connect_url="sc://fake", **overrides)
         rows = [{"id": i, "amount": i * 10} for i in range(5)]
-        schema = _Schema(
-            [_StructField("id", "long", False), _StructField("amount", "long", True)]
-        )
+        schema = _Schema([_StructField("id", "long", False), _StructField("amount", "long", True)])
         self._spark = _FakeSpark(_FakeDataFrame(rows, schema))
 
     def get(self) -> _FakeSpark:
@@ -292,9 +290,7 @@ class MCPToolsTest(unittest.TestCase):
         # should complete even if the underlying collect sleeps.
         holder = _FakeHolder(query_timeout_seconds=0)
         rows = [{"id": 0, "amount": 0}]
-        schema = _Schema(
-            [_StructField("id", "long", False), _StructField("amount", "long", True)]
-        )
+        schema = _Schema([_StructField("id", "long", False), _StructField("amount", "long", True)])
 
         class _SlightlySlow(_FakeDataFrame):
             def limit(self, n):
@@ -310,16 +306,12 @@ class MCPToolsTest(unittest.TestCase):
                 return [_Row(r) for r in rows]
 
         holder._spark = _FakeSpark(_SlightlySlow(rows, schema))
-        out = _run(
-            _spec("execute_sql").handler({"query": "SELECT * FROM t"}, holder)
-        )
+        out = _run(_spec("execute_sql").handler({"query": "SELECT * FROM t"}, holder))
         self.assertEqual(out["row_count"], 1)
 
     def test_execute_sql_query_timeout_fires(self):
         rows = [{"id": 0, "amount": 0}]
-        schema = _Schema(
-            [_StructField("id", "long", False), _StructField("amount", "long", True)]
-        )
+        schema = _Schema([_StructField("id", "long", False), _StructField("amount", "long", True)])
 
         class _TooSlow(_FakeDataFrame):
             def limit(self, n):

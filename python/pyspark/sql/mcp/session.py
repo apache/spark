@@ -45,9 +45,7 @@ class SessionHolder:
             for key, value in self._config.extra_session_configs.items():
                 builder = builder.config(key, value)
             if self._config.user_id is not None:
-                builder = builder.config(
-                    "spark.connect.session.userId", self._config.user_id
-                )
+                builder = builder.config("spark.connect.session.userId", self._config.user_id)
             self._session = builder.getOrCreate()
         return self._session
 

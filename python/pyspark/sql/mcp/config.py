@@ -63,9 +63,7 @@ class ServerConfig:
         return cls(
             connect_url=url,
             read_only=_default(read_only, _env_bool("SPARK_MCP_READ_ONLY", True)),
-            max_rows=_default(
-                max_rows, _env_int("SPARK_MCP_MAX_ROWS", DEFAULT_MAX_ROWS)
-            ),
+            max_rows=_default(max_rows, _env_int("SPARK_MCP_MAX_ROWS", DEFAULT_MAX_ROWS)),
             query_timeout_seconds=_default(
                 query_timeout_seconds,
                 _env_int("SPARK_MCP_QUERY_TIMEOUT_SECONDS", DEFAULT_QUERY_TIMEOUT_SECONDS),
