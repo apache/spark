@@ -41,7 +41,11 @@ def _to_dict(obj: Any) -> Dict[str, Any]:
     if isinstance(obj, dict):
         return obj
     # Fallback: scrape public attributes.
-    return {k: getattr(obj, k) for k in dir(obj) if not k.startswith("_") and not callable(getattr(obj, k))}
+    return {
+        k: getattr(obj, k)
+        for k in dir(obj)
+        if not k.startswith("_") and not callable(getattr(obj, k))
+    }
 
 
 def _paginate(items: List[Any], limit: int, offset: int) -> Dict[str, Any]:

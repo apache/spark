@@ -32,9 +32,7 @@ from pyspark.sql.mcp.tools.registry import ToolSpec
 T = TypeVar("T")
 
 
-async def _with_timeout(
-    holder: SessionHolder, func: Callable[[], T], *, label: str
-) -> T:
+async def _with_timeout(holder: SessionHolder, func: Callable[[], T], *, label: str) -> T:
     """Run a blocking Spark Connect call in a worker thread under the configured timeout."""
     timeout = holder.config.query_timeout_seconds
     coro: Awaitable[T] = asyncio.to_thread(func)
@@ -122,9 +120,7 @@ def _render_markdown(rows: List[Dict[str, Any]], schema_fields: List[str]) -> st
     sep = "| " + " | ".join("---" for _ in schema_fields) + " |"
     body = []
     for row in rows:
-        body.append(
-            "| " + " | ".join(_md_cell(row.get(c)) for c in schema_fields) + " |"
-        )
+        body.append("| " + " | ".join(_md_cell(row.get(c)) for c in schema_fields) + " |")
     return "\n".join([header, sep, *body])
 
 
@@ -231,8 +227,7 @@ def execute_sql_spec() -> ToolSpec:
                 "query": {"type": "string", "description": "SQL statement."},
                 "args": {
                     "description": (
-                        "Bind parameters. Object for named (':name'), array for "
-                        "positional ('?')."
+                        "Bind parameters. Object for named (':name'), array for positional ('?')."
                     ),
                     "oneOf": [{"type": "object"}, {"type": "array"}],
                 },
@@ -310,9 +305,7 @@ async def _handle_explain_query(args: Dict[str, Any], holder: SessionHolder) -> 
         assert_read_only(query)
 
     df = _sql(spark, query, args.get("args"))
-    plan = await _with_timeout(
-        holder, lambda: df._explain_string(mode=mode), label="explain_query"
-    )
+    plan = await _with_timeout(holder, lambda: df._explain_string(mode=mode), label="explain_query")
     return {"mode": mode, "plan": plan}
 
 

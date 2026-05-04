@@ -70,7 +70,9 @@ class MCPToolsConnectIntegrationTest(unittest.TestCase):
 
         # Seed a small dataset so the catalog/preview tools have something
         # to chew on.
-        cls.spark.sql("CREATE TABLE IF NOT EXISTS mcp_test_orders (id BIGINT, amount DECIMAL(10,2)) USING parquet")
+        cls.spark.sql(
+            "CREATE TABLE IF NOT EXISTS mcp_test_orders (id BIGINT, amount DECIMAL(10,2)) USING parquet"
+        )
         cls.spark.sql("INSERT INTO mcp_test_orders VALUES (1, 10.50), (2, 20.00), (3, 30.75)")
 
         from pyspark.sql.mcp.config import ServerConfig

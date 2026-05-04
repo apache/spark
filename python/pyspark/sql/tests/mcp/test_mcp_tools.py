@@ -58,7 +58,7 @@ class _FakeDataFrame:
 
     def limit(self, n: int) -> "_FakeDataFrame":
         end = self._offset + n
-        return _FakeDataFrame(self._rows[self._offset:end], self.schema)
+        return _FakeDataFrame(self._rows[self._offset : end], self.schema)
 
     def collect(self) -> List[_Row]:
         return [_Row(r) for r in self._rows]
@@ -70,15 +70,9 @@ class _FakeDataFrame:
 class _FakeCatalog:
     _CatalogMeta = namedtuple("CatalogMetadata", "name description")
     _Database = namedtuple("Database", "name catalog description locationUri")
-    _Table = namedtuple(
-        "Table", "name catalog namespace description tableType isTemporary"
-    )
-    _Column = namedtuple(
-        "Column", "name description dataType nullable isPartition isBucket"
-    )
-    _Function = namedtuple(
-        "Function", "name catalog namespace description className isTemporary"
-    )
+    _Table = namedtuple("Table", "name catalog namespace description tableType isTemporary")
+    _Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
+    _Function = namedtuple("Function", "name catalog namespace description className isTemporary")
 
     def __init__(self):
         self._catalog = "spark_catalog"
@@ -103,16 +97,10 @@ class _FakeCatalog:
         return [self._Database("default", "spark_catalog", None, "/tmp")]
 
     def listTables(self, dbName=None, pattern=None):
-        return [
-            self._Table(
-                "orders", "spark_catalog", ["default"], "orders", "MANAGED", False
-            )
-        ]
+        return [self._Table("orders", "spark_catalog", ["default"], "orders", "MANAGED", False)]
 
     def getTable(self, name):
-        return self._Table(
-            "orders", "spark_catalog", ["default"], "orders", "MANAGED", False
-        )
+        return self._Table("orders", "spark_catalog", ["default"], "orders", "MANAGED", False)
 
     def listColumns(self, name, dbName=None):
         return [
@@ -122,12 +110,8 @@ class _FakeCatalog:
 
     def listFunctions(self, dbName=None, pattern=None):
         return [
-            self._Function(
-                "coalesce", "spark_catalog", [], "", "BuiltIn", True
-            ),
-            self._Function(
-                "explode", "spark_catalog", [], "", "BuiltIn", True
-            ),
+            self._Function("coalesce", "spark_catalog", [], "", "BuiltIn", True),
+            self._Function("explode", "spark_catalog", [], "", "BuiltIn", True),
         ]
 
 
@@ -210,9 +194,7 @@ class MCPToolsTest(unittest.TestCase):
 
     def test_execute_sql_json_truncates(self):
         out = _run(
-            _spec("execute_sql").handler(
-                {"query": "SELECT * FROM t", "limit": 3}, _FakeHolder()
-            )
+            _spec("execute_sql").handler({"query": "SELECT * FROM t", "limit": 3}, _FakeHolder())
         )
         self.assertEqual(out["row_count"], 3)
         self.assertTrue(out["truncated"])
@@ -235,9 +217,7 @@ class MCPToolsTest(unittest.TestCase):
 
     def test_execute_sql_read_only_off_allows_ddl(self):
         out = _run(
-            _spec("execute_sql").handler(
-                {"query": "DROP TABLE t"}, _FakeHolder(read_only=False)
-            )
+            _spec("execute_sql").handler({"query": "DROP TABLE t"}, _FakeHolder(read_only=False))
         )
         # Fake session returns the canned DataFrame; the test only asserts no
         # exception escaped past the safety filter.
@@ -256,9 +236,7 @@ class MCPToolsTest(unittest.TestCase):
 
     def test_explain_query_modes(self):
         out = _run(
-            _spec("explain_query").handler(
-                {"query": "SELECT 1", "mode": "extended"}, _FakeHolder()
-            )
+            _spec("explain_query").handler({"query": "SELECT 1", "mode": "extended"}, _FakeHolder())
         )
         self.assertEqual(out["mode"], "extended")
         self.assertIn("extended plan", out["plan"])
@@ -278,11 +256,7 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("formatted_plan", out)
 
     def test_preview_table_delegates_to_execute_sql(self):
-        out = _run(
-            _spec("preview_table").handler(
-                {"name": "orders", "limit": 1}, _FakeHolder()
-            )
-        )
+        out = _run(_spec("preview_table").handler({"name": "orders", "limit": 1}, _FakeHolder()))
         self.assertEqual(out["row_count"], 1)
 
     def test_execute_sql_query_timeout_disabled(self):
