@@ -5325,17 +5325,17 @@
       },
       "NON_ORDERABLE_RANKING_EXPRESSION" : {
         "message" : [
-          "The ranking expression <expression> of type <type> is not orderable."
+          "The ranking expression <expression> of type <type> is not orderable. Provide an expression that returns an orderable type, such as a numeric distance like abs(a.col - b.col) or a numeric similarity score."
         ]
       },
       "NUM_RESULTS_OUT_OF_RANGE" : {
         "message" : [
-          "The number of results <numResults> must be between <min> and <max>."
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
         ]
       },
       "STREAMING_NOT_SUPPORTED" : {
         "message" : [
-          "nearest-by join is not supported with streaming DataFrames/Datasets."
+          "Nearest-by join is not supported with streaming DataFrames/Datasets."
         ]
       },
       "UNSUPPORTED_DIRECTION" : {

@@ -69,11 +69,11 @@ relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_
 
     `DISTANCE | SIMILARITY`
 
-    `DISTANCE` ranks rows by smallest value of `ranking_expression` first. `SIMILARITY` ranks rows by largest value first.
+    `DISTANCE` ranks rows by smallest value of `ranking_expression` first. `SIMILARITY` ranks rows by largest value first. Matched right-side rows are emitted in best-first order: smallest ranking value first under `DISTANCE`, largest first under `SIMILARITY`. (Downstream operators may reorder; add an explicit `ORDER BY` if you need to lock in the ordering.)
 
     `ranking_expression`
 
-    A scalar expression that returns an orderable type.
+    A scalar expression that returns an orderable type. Must be deterministic with `EXACT`; may be nondeterministic with `APPROX` (e.g., `rand()` for randomized tie-breaking). The expression is evaluated once per (left, right) pair on the brute-force path, so avoid expensive or side-effecting UDFs in ranking expressions.
 
     **Performance note.** The current implementation evaluates the full cross-product of the left and right sides and bounds memory per left row by `num_results`. Per-query work is `O(|left| × |right| × log num_results)`. Index-backed approximate strategies (transparent to `APPROX` queries) are planned in a future release; until then, pre-filter the right side (e.g. via a subquery) when it is large.
 

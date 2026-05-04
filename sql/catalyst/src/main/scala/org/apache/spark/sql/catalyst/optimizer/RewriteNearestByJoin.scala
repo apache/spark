@@ -50,6 +50,11 @@ import org.apache.spark.sql.catalyst.rules._
  * constructed with `outer = true` so left rows with no matches (empty/null `_matches`) are
  * preserved with `NULL` right-side columns.
  *
+ * The matches in `_matches` are produced by `MaxMinByK` ordered by the ranking value: best
+ * match first (largest ranking value for `SIMILARITY`, smallest for `DISTANCE`). `Inline`
+ * preserves array order, so the K rows emitted per left row appear best-first in the output
+ * of this rule. (Downstream operators may reorder.)
+ *
  * If `rankingExpression` is nondeterministic (legal only under `APPROX`), an extra
  * `Project` is inserted above the `Join` to materialize the value as `__ranking__`. The
  * standard projection machinery runs `Nondeterministic.initialize(partitionIndex)` on every
@@ -63,7 +68,7 @@ import org.apache.spark.sql.catalyst.rules._
  * makes the intended shape explicit and avoids round-tripping through subquery decorrelation.
  */
 object RewriteNearestByJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
     case j @ NearestByJoin(left, right, joinType, _, numResults, rankingExpression, direction) =>
       // 1. Tag each left row with a unique id so that rows from the same left row can later be
       //    grouped together after the cross-join with `right`.
@@ -77,10 +82,11 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       //    columns after the aggregate + inline below. When `right` is non-empty every left
       //    row already has right-row pairings, so LEFT OUTER and INNER are equivalent.
       //
-      //    `CheckCartesianProducts` recognizes this synthetic join structurally (by its
-      //    parent `Aggregate` containing a `MaxMinByK`) and skips it, so user queries
-      //    written as `NEAREST BY` are not rejected when `spark.sql.crossJoin.enabled` is
-      //    false.
+      //    This synthetic join is an unconditioned cross-product, so `NEAREST BY` queries
+      //    are subject to `CheckCartesianProducts` and will be rejected when the user has
+      //    set `spark.sql.crossJoin.enabled = false`. That is intentional: if the user has
+      //    opted out of cross-products, the NEAREST BY rewrite -- which is itself a bounded
+      //    cross-product today -- should not silently bypass that choice.
       val join = Join(taggedLeft, right, LeftOuter, None, JoinHint.NONE)
 
       val (aggInput, rankingForAgg) = if (!rankingExpression.deterministic) {
@@ -122,20 +128,21 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
 
       // 4. Generate inline(_matches) expands the K-element array into K rows, exposing each
       //    struct field as a top-level column. `outer = true` for LEFT OUTER preserves the
-      //    left row with NULL right columns when there are no matches.
+      //    left row with NULL right columns when there are no matches. Preserving the right
+      //    side's `ExprId`s in `generatorOutput` (rather than allocating fresh ones) keeps
+      //    `generate.output` byte-for-byte equivalent to `j.output` -- which already used
+      //    those ExprIds with `nullable = true` -- so parent-operator references continue to
+      //    resolve naturally and the rule can use plain `transformUp` without an attrMapping.
       val generatorOutput = right.output.map { a =>
         AttributeReference(a.name, a.dataType, nullable = true, a.metadata)(
-          qualifier = a.qualifier)
+          exprId = a.exprId, qualifier = a.qualifier)
       }
-      val generate = Generate(
+      Generate(
         Inline(matchesAlias.toAttribute),
         unrequiredChildIndex = Seq(aggregate.output.indexOf(matchesAlias.toAttribute)),
         outer = joinType == LeftOuter,
         qualifier = None,
         generatorOutput = generatorOutput,
         child = aggregate)
-
-      val attrMapping = j.output.zip(generate.output)
-      generate -> attrMapping
   }
 }

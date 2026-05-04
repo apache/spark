@@ -8,6 +8,19 @@ SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
 
+-- SELECT * to validate the output schema. Must surface only the user-visible columns from
+-- left and right (`user_id`, `score`, `product`, `pscore`) -- no rewrite-internal columns
+-- (`__qid`, `__nearest_matches__`, `__ranking__`) and no Generator-aliased names.
+SELECT *
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
+
+-- Same schema check but for LEFT OUTER. Right-side columns are nullable in this mode (left
+-- rows with no matches surface as NULL); the schema still must not leak internal columns.
+SELECT *
+FROM users u LEFT OUTER JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
+
 -- APPROX NEAREST BY DISTANCE with k = 2
 SELECT u.user_id, p.product, p.pscore
 FROM users u JOIN products p
@@ -87,39 +100,9 @@ SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY rand(0) + p.pscore;
 
--- spark.sql.crossJoin.enabled = false must NOT reject NEAREST BY queries.
--- The synthetic LEFT OUTER cross-join inside the rewrite is recognized structurally
--- by `CheckCartesianProducts` (its parent `Aggregate` contains `MaxMinByK`) and skipped.
-SET spark.sql.crossJoin.enabled = false;
-
--- Basic NEAREST BY with crossJoin disabled.
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
-
--- NEAREST BY with a top-level filter on a right-side column. This exercises the path
--- where filter pushdown / column pruning may run between the rewrite (FinishAnalysis batch)
--- and `CheckCartesianProducts` (a much later batch).
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE p.product != 'C';
-
--- NEAREST BY with a top-level filter on a left-side column.
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE u.user_id > 1;
-
--- LEFT OUTER NEAREST BY with crossJoin disabled.
-SELECT u.user_id, p.product
-FROM users u LEFT OUTER JOIN products p
-  EXACT NEAREST 1 BY DISTANCE abs(u.score - p.pscore);
-
 -- EXPLAIN of a query whose left-side predicate (user_id > 1) is pushed down to the left
--- input of the rewrite's synthetic join. Demonstrates that CheckCartesianProducts succeeds
--- AFTER pushdown rules run, and that the rewrite's Aggregate -> Join shape is preserved in
--- the optimized plan.
+-- input of the rewrite's synthetic join. Demonstrates that pushdown rules walk through
+-- the rewrite's Generate -> Aggregate -> Join shape and reach the underlying left input.
 EXPLAIN
 SELECT u.user_id, p.product
 FROM users u JOIN products p
@@ -128,12 +111,22 @@ WHERE u.user_id > 1;
 
 -- EXPLAIN of a query whose right-side predicate (p.product != 'C') cannot push below the
 -- rewrite's Generate(inline) and stays above it. Demonstrates that the optimizer pipeline
--- runs end-to-end without CheckCartesianProducts rejecting the synthetic join.
+-- runs end-to-end and the rewrite's plan shape (Generate over Aggregate over Join) survives
+-- to physical planning even when a top-level filter cannot be pushed into it.
 EXPLAIN
 SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
 WHERE p.product != 'C';
+
+-- The rewrite produces an unconditioned cross-product internally. When the user has opted
+-- out of cross-products via `spark.sql.crossJoin.enabled = false`, NEAREST BY queries are
+-- rejected by `CheckCartesianProducts` -- the rewrite does not bypass the user's choice.
+SET spark.sql.crossJoin.enabled = false;
+
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
 
 SET spark.sql.crossJoin.enabled = true;
 

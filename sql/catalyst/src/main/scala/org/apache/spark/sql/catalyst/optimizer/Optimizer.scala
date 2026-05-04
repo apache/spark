@@ -2542,36 +2542,14 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
+  def apply(plan: LogicalPlan): LogicalPlan =
     if (conf.crossJoinEnabled) {
-      return plan
-    }
-
-    // Joins synthesized by `RewriteNearestByJoin` are an intentional, bounded cross-product
-    // wrapped by a `MaxMinByK` aggregate. Identify them by their unambiguous post-rewrite
-    // signature -- `Aggregate(_, exprs, Join(_, _, LeftOuter, None, _))` where `exprs`
-    // contains a `MaxMinByK` -- and skip them so user queries written as `NEAREST BY` are not
-    // rejected when `spark.sql.crossJoin.enabled = false`. We use structural detection rather
-    // than a `TreeNodeTag` because a tag set on the `Join` would be silently dropped by any
-    // intervening optimizer rule that constructs a fresh `Join` via the case-class
-    // constructor without calling `copyTagsFrom`.
-    val nearestByJoins: java.util.IdentityHashMap[Join, Unit] = {
-      val acc = new java.util.IdentityHashMap[Join, Unit]()
-      plan.foreach {
-        case Aggregate(_, exprs, j @ Join(_, _, LeftOuter, None, _), _)
-            if exprs.exists(_.exists(_.isInstanceOf[MaxMinByK])) =>
-          acc.put(j, ())
-        case _ =>
-      }
-      acc
-    }
-
-    plan.transformWithPruning(_.containsAnyPattern(INNER_LIKE_JOIN, OUTER_JOIN)) {
+      plan
+    } else plan.transformWithPruning(_.containsAnyPattern(INNER_LIKE_JOIN, OUTER_JOIN)) {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)
-          if isCartesianProduct(j) && !nearestByJoins.containsKey(j) =>
+          if isCartesianProduct(j) =>
         throw QueryCompilationErrors.joinConditionMissingOrTrivialError(j, left, right)
     }
-  }
 }
 
 /**

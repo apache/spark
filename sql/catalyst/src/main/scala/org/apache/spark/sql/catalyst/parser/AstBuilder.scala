@@ -2363,32 +2363,7 @@ class AstBuilder extends DataTypeAstBuilder
       }
 
       if (ctx.nearestByClause != null) {
-        if (ctx.LATERAL != null) {
-          throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
-        }
-        if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
-          throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
-            ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
-        }
-        val clause = ctx.nearestByClause
-        val approx = clause.APPROX != null
-        val numResults = Option(clause.num).map { n =>
-          // Guard against literals that overflow Long.
-          val value = try n.getText.toLong catch {
-            case _: NumberFormatException =>
-              throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
-                ctx, n.getText, NearestByJoin.MaxNumResults)
-          }
-          if (value < 1 || value > NearestByJoin.MaxNumResults) {
-            throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
-              ctx, value.toString, NearestByJoin.MaxNumResults)
-          }
-          value.toInt
-        }.getOrElse(1)
-        val direction = if (clause.DISTANCE != null) NearestByDistance else NearestBySimilarity
-        val rankingExpr = expression(clause.expression)
-        NearestByJoin(
-          base, plan(ctx.right), baseJoinType, approx, numResults, rankingExpr, direction)
+        withNearestByJoin(ctx, base, baseJoinType)
       } else {
         // Resolve the join type and join condition
         val (joinType, condition) = Option(ctx.joinCriteria) match {
@@ -2426,6 +2401,44 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
     }
+  }
+
+  /**
+   * Build a [[NearestByJoin]] from the parsed `NEAREST BY` clause attached to a join relation.
+   * Validates that the clause is not combined with `LATERAL` and that the base join type is one
+   * of the supported types (`INNER` or `LEFT OUTER`), parses `num_results` (with bounds checks),
+   * the direction (`DISTANCE` / `SIMILARITY`), and the ranking expression.
+   */
+  private def withNearestByJoin(
+      ctx: JoinRelationContext,
+      base: LogicalPlan,
+      baseJoinType: JoinType): NearestByJoin = {
+    if (ctx.LATERAL != null) {
+      throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
+    }
+    if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
+      throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
+        ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
+    }
+    val clause = ctx.nearestByClause
+    val approx = clause.APPROX != null
+    val numResults = Option(clause.num).map { n =>
+      // Guard against literals that overflow Long.
+      val value = try n.getText.toLong catch {
+        case _: NumberFormatException =>
+          throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
+            ctx, n.getText, NearestByJoin.MaxNumResults)
+      }
+      if (value < 1 || value > NearestByJoin.MaxNumResults) {
+        throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
+          ctx, value.toString, NearestByJoin.MaxNumResults)
+      }
+      value.toInt
+    }.getOrElse(1)
+    val direction = if (clause.DISTANCE != null) NearestByDistance else NearestBySimilarity
+    val rankingExpr = expression(clause.expression)
+    NearestByJoin(
+      base, plan(ctx.right), baseJoinType, approx, numResults, rankingExpr, direction)
   }
 
   /**

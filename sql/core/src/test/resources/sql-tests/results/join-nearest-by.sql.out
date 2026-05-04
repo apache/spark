@@ -28,6 +28,30 @@ struct<user_id:int,product:string>
 
 
 -- !query
+SELECT *
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query schema
+struct<user_id:int,score:decimal(3,1),product:string,pscore:decimal(3,1)>
+-- !query output
+1	10.0	A	11.0
+2	20.0	B	22.0
+3	30.0	B	22.0
+
+
+-- !query
+SELECT *
+FROM users u LEFT OUTER JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query schema
+struct<user_id:int,score:decimal(3,1),product:string,pscore:decimal(3,1)>
+-- !query output
+1	10.0	A	11.0
+2	20.0	B	22.0
+3	30.0	B	22.0
+
+
+-- !query
 SELECT u.user_id, p.product, p.pscore
 FROM users u JOIN products p
   APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
@@ -271,67 +295,6 @@ AdaptiveSparkPlan isFinalPlan=false
 
 
 -- !query
-SET spark.sql.crossJoin.enabled = false
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.crossJoin.enabled	false
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
--- !query schema
-struct<user_id:int,product:string>
--- !query output
-1	A
-2	B
-3	B
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE p.product != 'C'
--- !query schema
-struct<user_id:int,product:string>
--- !query output
-1	A
-2	A
-2	B
-3	A
-3	B
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE u.user_id > 1
--- !query schema
-struct<user_id:int,product:string>
--- !query output
-2	A
-2	B
-3	A
-3	B
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u LEFT OUTER JOIN products p
-  EXACT NEAREST 1 BY DISTANCE abs(u.score - p.pscore)
--- !query schema
-struct<user_id:int,product:string>
--- !query output
-1	A
-2	B
-3	B
-
-
--- !query
 EXPLAIN
 SELECT u.user_id, p.product
 FROM users u JOIN products p
@@ -385,6 +348,32 @@ AdaptiveSparkPlan isFinalPlan=false
                               +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
                                  +- Project [col1#x AS product#x, col2#x AS pscore#x]
                                     +- LocalTableScan [col1#x, col2#x]
+
+
+-- !query
+SET spark.sql.crossJoin.enabled = false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.crossJoin.enabled	false
+
+
+-- !query
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1211",
+  "messageParameters" : {
+    "joinType" : "LEFT OUTER",
+    "leftPlan" : "Project [col1#x AS user_id#x, col2#x AS score#x, monotonically_increasing_id() AS __qid#xL]\n+- LocalRelation [col1#x, col2#x]",
+    "rightPlan" : "Project [col1#x AS product#x, col2#x AS pscore#x]\n+- LocalRelation [col1#x, col2#x]"
+  }
+}
 
 
 -- !query

@@ -33,6 +33,44 @@ Project [user_id#x, product#x]
 
 
 -- !query
+SELECT *
+FROM users u JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query analysis
+Project [user_id#x, score#x, product#x, pscore#x]
++- NearestByJoin Inner, true, 1, -abs((score#x - pscore#x)), NearestBySimilarity
+   :- SubqueryAlias u
+   :  +- SubqueryAlias spark_catalog.default.users
+   :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+   :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+   :           +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias p
+      +- SubqueryAlias spark_catalog.default.products
+         +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
+            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT *
+FROM users u LEFT OUTER JOIN products p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query analysis
+Project [user_id#x, score#x, product#x, pscore#x]
++- NearestByJoin LeftOuter, true, 1, -abs((score#x - pscore#x)), NearestBySimilarity
+   :- SubqueryAlias u
+   :  +- SubqueryAlias spark_catalog.default.users
+   :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
+   :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
+   :           +- LocalRelation [col1#x, col2#x]
+   +- SubqueryAlias p
+      +- SubqueryAlias spark_catalog.default.products
+         +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
+            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 SELECT u.user_id, p.product, p.pscore
 FROM users u JOIN products p
   APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
@@ -280,6 +318,26 @@ ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
 
 
 -- !query
+EXPLAIN
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+WHERE u.user_id > 1
+-- !query analysis
+ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
+
+
+-- !query
+EXPLAIN
+SELECT u.user_id, p.product
+FROM users u JOIN products p
+  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
+WHERE p.product != 'C'
+-- !query analysis
+ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
+
+
+-- !query
 SET spark.sql.crossJoin.enabled = false
 -- !query analysis
 SetCommand (spark.sql.crossJoin.enabled,Some(false))
@@ -302,87 +360,6 @@ Project [user_id#x, product#x]
          +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
             +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
                +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE p.product != 'C'
--- !query analysis
-Project [user_id#x, product#x]
-+- Filter NOT (product#x = C)
-   +- NearestByJoin Inner, true, 2, abs((score#x - pscore#x)), NearestByDistance
-      :- SubqueryAlias u
-      :  +- SubqueryAlias spark_catalog.default.users
-      :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
-      :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
-      :           +- LocalRelation [col1#x, col2#x]
-      +- SubqueryAlias p
-         +- SubqueryAlias spark_catalog.default.products
-            +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-               +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
-                  +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE u.user_id > 1
--- !query analysis
-Project [user_id#x, product#x]
-+- Filter (user_id#x > 1)
-   +- NearestByJoin Inner, true, 2, abs((score#x - pscore#x)), NearestByDistance
-      :- SubqueryAlias u
-      :  +- SubqueryAlias spark_catalog.default.users
-      :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
-      :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
-      :           +- LocalRelation [col1#x, col2#x]
-      +- SubqueryAlias p
-         +- SubqueryAlias spark_catalog.default.products
-            +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-               +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
-                  +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-SELECT u.user_id, p.product
-FROM users u LEFT OUTER JOIN products p
-  EXACT NEAREST 1 BY DISTANCE abs(u.score - p.pscore)
--- !query analysis
-Project [user_id#x, product#x]
-+- NearestByJoin LeftOuter, false, 1, abs((score#x - pscore#x)), NearestByDistance
-   :- SubqueryAlias u
-   :  +- SubqueryAlias spark_catalog.default.users
-   :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
-   :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
-   :           +- LocalRelation [col1#x, col2#x]
-   +- SubqueryAlias p
-      +- SubqueryAlias spark_catalog.default.products
-         +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
-               +- LocalRelation [col1#x, col2#x]
-
-
--- !query
-EXPLAIN
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE u.user_id > 1
--- !query analysis
-ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
-
-
--- !query
-EXPLAIN
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  APPROX NEAREST 2 BY DISTANCE abs(u.score - p.pscore)
-WHERE p.product != 'C'
--- !query analysis
-ExplainCommand 'Project ['u.user_id, 'p.product], SimpleMode
 
 
 -- !query
