@@ -1369,6 +1369,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     producers.foreach {
       case a: Alias =>
         producerReferences.get(a.toAttribute).foreach { case (count, relatedConsumers) =>
+          lazy val canInlineProducer = count == 1 || cheapToInlineProducer(a, relatedConsumers)
           lazy val containsUDF = a.child.exists {
             case udf: PythonUDF =>
               isScalarPythonUDF(udf) &&
@@ -1379,9 +1380,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
           if (!a.child.deterministic) {
             neverInlines += a
-          } else if (alwaysInline || containsUDF) {
+          } else if (alwaysInline) {
             mustInlines += a
-          } else if (count == 1 || cheapToInlineProducer(a, relatedConsumers)) {
+          } else if (containsUDF && canInlineProducer) {
+            mustInlines += a
+          } else if (canInlineProducer) {
             maybeInlines += a
           } else {
             neverInlines += a
@@ -2115,17 +2118,19 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       } else {
         // Break up the filter into its respective components by &&s.
         val splitCondition = splitConjunctivePredicates(condition)
-        // Find the different aliases each component of the filter uses.
-        val originalAndRewrittenConditionsWithUsedAlias = splitCondition.map { cond =>
-          // Here we get which aliases were used in a given filter so we can see if the filter
-          // referenced an expensive alias v.s. just checking if the filter is expensive.
-          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
-          (cond, usedAliases, replaced)
+        // Find the different aliases each component of the filter uses before expanding them.
+        // This avoids inlining long chains of expensive aliases just to discover that the
+        // predicate should stay above the projection.
+        val originalConditionsWithUsedAlias = splitCondition.map { cond =>
+          val usedAliases = AttributeMap(cond.references.toSeq.flatMap { attr =>
+            aliasMap.get(attr).map(alias => attr -> alias)
+          })
+          (cond, usedAliases)
         }
         // Split the filter's components into cheap and expensive while keeping track of
         // what each references from the projection.
-        val (cheapWithUsed, expensiveWithUsed) = originalAndRewrittenConditionsWithUsedAlias
-          .partition { case (cond, used, replaced) =>
+        val (cheapWithUsed, expensiveWithUsed) = originalConditionsWithUsedAlias
+          .partition { case (cond, used) =>
             // Didn't use anything? We're good
             if (used.isEmpty) {
               true
@@ -2142,7 +2147,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         if (cheapWithUsed.isEmpty) {
           f
         } else {
-          val cheap: Seq[Expression] = cheapWithUsed.map(_._3)
+          val cheap: Seq[Expression] = cheapWithUsed.map { case (cond, _) =>
+            replaceAlias(cond, aliasMap)
+          }
           // Make a base instance which has all of the cheap filters pushed down.
           // For all filter which do not reference any expensive aliases then
           // just push the filter while resolving the non-expensive aliases.

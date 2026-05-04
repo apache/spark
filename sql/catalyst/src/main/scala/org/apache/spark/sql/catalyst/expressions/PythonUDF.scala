@@ -83,6 +83,7 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   def resultId: ExprId
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+  override def expensive: Boolean = true
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
