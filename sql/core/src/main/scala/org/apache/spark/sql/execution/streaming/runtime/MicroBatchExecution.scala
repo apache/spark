@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -111,6 +111,22 @@ class MicroBatchExecution(
   @volatile protected var sourceIdMap: Map[String, SparkDataStream] = Map.empty
 
   override protected def sourceToIdMap: Map[SparkDataStream, String] = sourceIdMap.map(_.swap)
+
+  // Sink name for commit log support
+  // If sink evolution is enabled, use user-provided sinkName (or error if not provided)
+  // Otherwise, always use DEFAULT_SINK_NAME for backward compatibility
+  private val sinkName: String = {
+    if (sparkSession.sessionState.conf.enableStreamingSinkEvolution) {
+      plan.sinkName.getOrElse {
+        throw new SparkException(
+          errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SINKS_WITH_ENFORCEMENT",
+          messageParameters = Map.empty,
+          cause = null)
+      }
+    } else {
+      MicroBatchExecution.DEFAULT_SINK_NAME
+    }
+  }
 
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
@@ -1466,6 +1482,12 @@ class MicroBatchExecution(
 
 object MicroBatchExecution {
   val BATCH_ID_KEY = "streaming.sql.batchId"
+
+  /**
+   * Default sink name used when sink evolution is disabled or no explicit name is provided.
+   * This maintains backward compatibility with existing streaming queries.
+   */
+  private[sql] val DEFAULT_SINK_NAME = "sink-0"
 }
 
 case class OffsetHolder(start: OffsetV2, end: Option[OffsetV2]) extends LeafNode {

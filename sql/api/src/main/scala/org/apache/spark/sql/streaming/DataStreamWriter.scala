@@ -18,9 +18,11 @@ package org.apache.spark.sql.streaming
 
 import java.util.concurrent.TimeoutException
 
+import scala.util.matching.Regex
+
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
-import org.apache.spark.sql.{Dataset, ForeachWriter, WriteConfigMethods}
+import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter, WriteConfigMethods}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -89,6 +91,19 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * @since 2.0.0
    */
   def queryName(queryName: String): this.type
+
+  /**
+   * Assigns a name to this streaming sink for sink evolution capability.
+   * When sinks are named, they can be tracked in checkpoint metadata,
+   * enabling query evolution.
+   *
+   * If not specified, sinks are automatically assigned a default name
+   * based on their position in the query, which maintains backward compatibility.
+   *
+   * @param sinkName the unique name for this sink (alphanumeric and underscore only)
+   * @since 4.1.0
+   */
+  private[sql] def name(sinkName: String): this.type
 
   /**
    * Specifies the underlying output data source.
@@ -216,6 +231,26 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   @Evolving
   @throws[TimeoutException]
   def toTable(tableName: String): StreamingQuery
+
+  /**
+   * Validates that a streaming sink name only contains alphanumeric characters and underscores.
+   *
+   * @param sinkName
+   *   the sink name to validate
+   * @throws AnalysisException
+   *   if the sink name contains invalid characters
+   */
+  private[sql] def validateSinkName(sinkName: String): Unit = {
+    require(sinkName != null, "Sink name cannot be null")
+    require(sinkName.nonEmpty, "Sink name cannot be empty")
+
+    val validNamePattern: Regex = "^[a-zA-Z0-9_]+$".r
+    if (!validNamePattern.pattern.matcher(sinkName).matches()) {
+      throw new AnalysisException(
+        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SINK_NAME",
+        messageParameters = Map("sinkName" -> sinkName))
+    }
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Covariant Overrides
