@@ -76,25 +76,22 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
  * past them, or the source terminates.
  * <p>
- * <b>Pushdown contract when post-processing applies.</b> When the
- * {@link org.apache.spark.sql.connector.read.ScanBuilder} returned by
- * {@link #newScanBuilder(org.apache.spark.sql.util.CaseInsensitiveStringMap)}
- * implements {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters}
- * or {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters},
- * Spark only pushes predicates that reference {@code _commit_version},
- * {@code _commit_timestamp}, or columns named by {@link #rowId()}. Predicates
- * on {@code _change_type}, the {@link #rowVersion()} column, or data columns
- * are kept above the scan -- pushing them would drop one half of a
- * delete/insert pair within a row-identity group and silently break
- * post-processing. Catalyst's pushdown rules already enforce this via the
- * rewrite operators (a {@code Window} / {@code Aggregate} partitioned on
- * {@code rowId, _commit_version} sits between the relation and the user
- * filter), so connectors do not need to code the restriction themselves -- but
- * they must not bypass it via connector-specific options.
+ * <b>Pushdown contract.</b> When any post-processing pass applies (carry-over
+ * removal, update detection, or netChanges), Spark only pushes predicates
+ * that reference {@code _commit_version}, {@code _commit_timestamp}, or
+ * columns named by {@link #rowId()} to the connector's
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} /
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}.
+ * Predicates on {@code _change_type}, the {@link #rowVersion()} column, or
+ * data columns are kept above the scan: pushing them would drop one half of
+ * a delete/insert pair within a row-identity group and silently break
+ * post-processing. Catalyst's pushdown rules enforce this via the rewrite
+ * operators, so connectors do not need to code the restriction themselves --
+ * but must not bypass it via connector-specific options. When no
+ * post-processing pass applies, pushdown is unrestricted.
  * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}
- * is unrestricted: Spark's column pruning already respects what the rewrite
- * operators reference, so connectors should serve whatever required-column set
- * Spark requests.
+ * (column pruning) is unrestricted in either case: Spark's pruning already
+ * respects what the rewrite operators reference.
  *
  * @since 4.2.0
  */
