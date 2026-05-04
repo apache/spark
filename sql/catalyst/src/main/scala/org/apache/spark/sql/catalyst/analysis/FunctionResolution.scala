@@ -71,13 +71,6 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
-  /** Returns the current catalog path, preferring the view's context if resolving a view. */
-  private def currentCatalogPath: Seq[String] = {
-    val ctx = AnalysisContext.get.catalogAndNamespace
-    if (ctx.nonEmpty) ctx
-    else (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
-  }
-
   /** True if nameParts is 3-part and the first part is the system catalog name. */
   private def isSystemCatalogQualified(nameParts: Seq[String]): Boolean =
     nameParts.length == 3 &&
@@ -101,18 +94,10 @@ class FunctionResolution(
    * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
    * aligned with relation order.
    */
-  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
-    AnalysisContext.get.resolutionPathEntries match {
-      case Some(entries) if conf.pathEnabled => entries
-      case _ =>
-        val pathDefault = currentCatalogPath
-        catalogManager.sqlResolutionPathEntries(
-          pathDefault.head,
-          pathDefault.tail.toSeq,
-          catalogManager.currentCatalog.name,
-          catalogManager.currentNamespace.toSeq)
-    }
-  }
+  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] =
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
@@ -370,7 +355,20 @@ class FunctionResolution(
     if (nameParts.length == 1) {
       // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
       // session order, not only the current namespace (LookupCatalog single-part rule).
-      for (candidate <- resolutionCandidates(nameParts)) {
+      // `system.session.<name>` and `system.builtin.<name>` candidates were already resolved by
+      // [[lookupBuiltinOrTempFunction]] / [[lookupBuiltinOrTempTableFunction]] above (they
+      // route through `identifierFromSystemNameParts`, which only accepts those two
+      // namespaces); skip them here to avoid redundant catalog calls. Other `system.<x>`
+      // namespaces -- if any are ever added -- still go through persistent lookup.
+      val persistentCandidates = resolutionCandidates(nameParts).filterNot { c =>
+        c.length >= 2 &&
+          c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) && {
+            val ns = c(1)
+            ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
+              ns.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+          }
+      }
+      for (candidate <- persistentCandidates) {
         try {
           candidate match {
             case CatalogAndIdentifier(catalog, ident) =>
@@ -380,7 +378,12 @@ class FunctionResolution(
             case _ =>
           }
         } catch {
-          case NonFatal(_) =>
+          // Only treat explicit "not found" / "forbidden" signals as a miss. Any other failure
+          // (e.g. permission denied, transient catalog error) propagates.
+          case _: NoSuchFunctionException
+             | _: NoSuchNamespaceException
+             | _: CatalogNotFoundException =>
+          case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
         }
       }
       return FunctionType.NotFound
