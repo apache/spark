@@ -105,10 +105,11 @@ abstract class DataStreamReader {
   }
 
   /**
-   * Specifies a name for the streaming source. This name is used to identify the source
-   * in checkpoint metadata and enables stable checkpoint locations for source evolution.
+   * Specifies a name for the streaming source. This name is used to identify the source in
+   * checkpoint metadata and enables stable checkpoint locations for source evolution.
    *
-   * @param sourceName the name to assign to this streaming source
+   * @param sourceName
+   *   the name to assign to this streaming source
    * @since 4.2.0
    */
   @Experimental
