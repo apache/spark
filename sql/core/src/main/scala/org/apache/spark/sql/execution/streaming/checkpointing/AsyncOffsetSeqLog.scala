@@ -143,9 +143,6 @@ class AsyncOffsetSeqLog(
     } else {
       executorService.submit(new Runnable {
         override def run(): Unit = {
-          // If a previous async write task already failed, short-circuit
-          // without writing anything so we don't introduce gaps on durable
-          // storage (e.g. offset N missing while offset N+1 is present).
           val priorError = asyncWriteError.get()
           if (priorError != null) {
             logWarning(log"Skipping async offset write for batch " +

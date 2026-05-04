@@ -775,12 +775,6 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     testAsyncWriteErrorsPermissionsIssue("/commits")
   }
 
-  // Regression test: once a previous async log write fails, the shared
-  // first-error reference is populated and any subsequent task scheduled on
-  // the shared executor (offset or commit) short-circuits with that *same*
-  // error instead of writing anything to durable storage. This prevents gaps
-  // such as offset N missing while offset N+1 is present, or a commit-log
-  // entry written without its corresponding offset-log entry.
   test("async log writes record first error and gate subsequent writes") {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     val offsetsDir = new File(checkpointLocation + "/offsets")
