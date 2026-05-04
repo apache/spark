@@ -161,27 +161,27 @@ class PlanMerger(
           // `ReusedSubqueryExec` rule can handle them without extracting the plans to CTEs.
           // But, when a non-subquery subplan is identical to a cached plan we need to mark the plan
           // `merged` and so extract it to a CTE later.
-          val newMergedPlan = MergedPlan(mp.plan, cache(i).merged || !subqueryPlan)
+          val newMergedPlan = MergedPlan(mp.plan, mp.merged || !subqueryPlan)
           cache(i) = newMergedPlan
           val outputMap = AttributeMap(plan.output.zipWithIndex)
           MergeResult(newMergedPlan, i, outputMap)
         }.orElse {
           tryMergePlans(plan, mp.plan, false).collect {
             case TryMergeResult(mergedPlan, npMapping, None, None) =>
-              val newMergePlan = MergedPlan(mergedPlan, true)
-              cache(i) = newMergePlan
+              val newMergedPlan = MergedPlan(mergedPlan, true)
+              cache(i) = newMergedPlan
               val outputMap = AttributeMap(npMapping.iterator.map { case (origAttr, mergedAttr) =>
                 origAttr -> mergedPlan.output.indexWhere(_.exprId == mergedAttr.exprId)
               }.toSeq)
-              MergeResult(newMergePlan, i, outputMap)
+              MergeResult(newMergedPlan, i, outputMap)
           }
         }
       case _ => None
     }).getOrElse {
-      val newMergePlan = MergedPlan(plan, false)
-      cache += newMergePlan
+      val newMergedPlan = MergedPlan(plan, false)
+      cache += newMergedPlan
       val outputMap = AttributeMap(plan.output.zipWithIndex)
-      MergeResult(newMergePlan, cache.length - 1, outputMap)
+      MergeResult(newMergedPlan, cache.length - 1, outputMap)
     }
   }
 
@@ -355,7 +355,8 @@ class PlanMerger(
                   }
                   existingNPFilter match {
                     case Some(reusedFilter) =>
-                      Some(TryMergeResult(cp, npMapping, Some((reusedFilter, false)), None))
+                      val newFilter = cp.withNewChildren(Seq(mergedChild))
+                      Some(TryMergeResult(newFilter, npMapping, Some((reusedFilter, false)), None))
                     case None =>
                       val newNPFilterAlias =
                         Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
@@ -410,7 +411,7 @@ class PlanMerger(
                 Alias(newNPCondition, s"propagatedFilter_${PlanMerger.newId}")()
               val newNPFilter = newNPFilterAlias.toAttribute
               val project = Project(
-                mergedChild.output.toList ++ Seq(newNPFilterAlias) ++ cpFilter.toSeq,
+                mergedChild.output.toList :+ newNPFilterAlias,
                 mergedChild)
               TryMergeResult(project, npMapping, Some((newNPFilter, true)), cpFilter)
           }
@@ -421,14 +422,25 @@ class PlanMerger(
             // symmetricFilterPropagationEnabled.
             case TryMergeResult(mergedChild, npMapping, npFilter, cpFilter)
                 if npFilter.isEmpty || symmetricFilterPropagationEnabled =>
-              val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
-              val newCPFilterAlias =
-                Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
-              val newCPFilter = newCPFilterAlias.toAttribute
-              val project = Project(
-                mergedChild.output.toList ++ npFilter.map(_._1).toSeq ++ Seq(newCPFilterAlias),
-                mergedChild)
-              TryMergeResult(project, npMapping, npFilter, Some(newCPFilter))
+              if (cp.getTagValue(PlanMerger.MERGED_FILTER_TAG).isDefined) {
+                // cp is a previously-merged Filter: its condition is `OR(pf_0, pf_1, ...)` and cp's
+                // aggregate expressions already carry individual `FILTER (WHERE pf_i)` clauses that
+                // restrict each aggregation to its originating side. Synthesising a new cpFilter
+                // alias for cp.condition would just produce `FILTER AND(OR(pf_0, pf_1, ...), pf_i)`
+                // upstream, which simplifies to `FILTER pf_i` -- wasted work and plan bloat.
+                // Drop cp's Filter and let the recursion's result flow up with cpFilter = None so
+                // cp's aggregates are left untouched.
+                TryMergeResult(mergedChild, npMapping, npFilter, None)
+              } else {
+                val newCPCondition = cpFilter.fold(cp.condition)(And(_, cp.condition))
+                val newCPFilterAlias =
+                  Alias(newCPCondition, s"propagatedFilter_${PlanMerger.newId}")()
+                val newCPFilter = newCPFilterAlias.toAttribute
+                val project = Project(
+                  mergedChild.output.toList :+ newCPFilterAlias,
+                  mergedChild)
+                TryMergeResult(project, npMapping, npFilter, Some(newCPFilter))
+              }
           }
 
         case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
