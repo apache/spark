@@ -404,6 +404,53 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("PATH enabled: unqualified FETCH ... INTO follows PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true") {
+      sql("DECLARE OR REPLACE VARIABLE path_fetch_target INT")
+      try {
+        // Sanity: FETCH INTO works under the default path (system.session is on it).
+        val ok = sql(
+          """
+            |BEGIN
+            |  DECLARE cur CURSOR FOR SELECT 42 AS val;
+            |  OPEN cur;
+            |  FETCH cur INTO path_fetch_target;
+            |  CLOSE cur;
+            |END;
+            |""".stripMargin)
+        checkAnswer(ok, Seq.empty[Row])
+        checkAnswer(sql("SELECT path_fetch_target"), Row(42))
+
+        // Set PATH to exclude system.session: unqualified FETCH INTO target now fails
+        // with the actual SQL path rendered as a bracketed list.
+        sql("SET PATH = spark_catalog.default")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """
+                |BEGIN
+                |  DECLARE cur CURSOR FOR SELECT 99 AS val;
+                |  OPEN cur;
+                |  FETCH cur INTO path_fetch_target;
+                |  CLOSE cur;
+                |END;
+                |""".stripMargin)
+          },
+          condition = "UNRESOLVED_VARIABLE",
+          sqlState = "42883",
+          parameters = Map(
+            "variableName" -> "`path_fetch_target`",
+            "searchPath" -> "[`spark_catalog`.`default`]"),
+          context = ExpectedContext("path_fetch_target", -1, -1))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY VARIABLE IF EXISTS path_fetch_target")
+      }
+    }
+  }
+
   test("PATH enabled: DECLARE / SET VAR / DROP cycle under non-default PATH") {
     withPathEnabled {
       sql("CREATE SCHEMA IF NOT EXISTS path_var_cycle")
