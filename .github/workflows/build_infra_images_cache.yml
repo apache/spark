@@ -54,18 +54,18 @@ jobs:
       - name: Checkout Spark repository
         uses: actions/checkout@v6
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
       - name: Login to DockerHub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
         id: docker_build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/infra/
           push: true
@@ -77,7 +77,7 @@ jobs:
       - name: Build and push (Documentation)
         if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         id: docker_build_docs
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/docs/
           push: true
@@ -90,7 +90,7 @@ jobs:
       - name: Build and push (Linter)
         if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
         id: docker_build_lint
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/lint/
           push: true
@@ -103,7 +103,7 @@ jobs:
       - name: Build and push (SparkR)
         if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
         id: docker_build_sparkr
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/sparkr/
           push: true
@@ -116,7 +116,7 @@ jobs:
       - name: Build and push (PySpark with old dependencies)
         if: hashFiles('dev/spark-test-image/python-minimum/Dockerfile') != ''
         id: docker_build_pyspark_python_minimum
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-minimum/
           push: true
@@ -129,7 +129,7 @@ jobs:
       - name: Build and push (PySpark PS with old dependencies)
         if: hashFiles('dev/spark-test-image/python-ps-minimum/Dockerfile') != ''
         id: docker_build_pyspark_python_ps_minimum
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-ps-minimum/
           push: true
@@ -142,7 +142,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.10)
         if: hashFiles('dev/spark-test-image/python-310/Dockerfile') != ''
         id: docker_build_pyspark_python_310
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-310/
           push: true
@@ -155,7 +155,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.11)
         if: hashFiles('dev/spark-test-image/python-311/Dockerfile') != ''
         id: docker_build_pyspark_python_311
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-311/
           push: true
@@ -168,7 +168,7 @@ jobs:
       - name: Build and push (PySpark Classic Only with Python 3.12)
         if: hashFiles('dev/spark-test-image/python-312-classic-only/Dockerfile') != ''
         id: docker_build_pyspark_python_312_classic_only
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-312-classic-only/
           push: true
@@ -181,7 +181,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.12)
         if: hashFiles('dev/spark-test-image/python-312/Dockerfile') != ''
         id: docker_build_pyspark_python_312
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-312/
           push: true
@@ -194,7 +194,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.12 Pandas 3)
         if: hashFiles('dev/spark-test-image/python-312-pandas-3/Dockerfile') != ''
         id: docker_build_pyspark_python_312_pandas_3
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-312-pandas-3/
           push: true
@@ -207,7 +207,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.13)
         if: hashFiles('dev/spark-test-image/python-313/Dockerfile') != ''
         id: docker_build_pyspark_python_313
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-313/
           push: true
@@ -220,7 +220,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.14)
         if: hashFiles('dev/spark-test-image/python-314/Dockerfile') != ''
         id: docker_build_pyspark_python_314
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-314/
           push: true
@@ -233,7 +233,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.14 no GIL)
         if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
         id: docker_build_pyspark_python_314_nogil
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-314-nogil/
           push: true
