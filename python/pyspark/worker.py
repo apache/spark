@@ -39,7 +39,6 @@ from typing import (
     Union,
     get_args,
     get_origin,
-    overload,
 )
 
 T = TypeVar("T")
@@ -249,15 +248,7 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-@overload
-def verify_return_type(result: Any, expected_type: Type[T]) -> T: ...
-
-
-@overload
-def verify_return_type(result: Any, expected_type: Any) -> Any: ...
-
-
-def verify_return_type(result: Any, expected_type: Any) -> Any:
+def verify_return_type(result: Any, expected_type: Type[T]) -> T:
     """
     Verify a UDF return value against an expected type.
 
@@ -287,7 +278,7 @@ def verify_return_type(result: Any, expected_type: Any) -> Any:
                 )
             return element
 
-        return map(check_element, result)
+        return map(check_element, result)  # type: ignore[return-value]
 
     if not isinstance(result, expected_type):
         package = getattr(inspect.getmodule(expected_type), "__package__", "")
@@ -2463,7 +2454,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             output_batches = udf_func(input_batches)
 
             # Post-processing
-            verified_iter = verify_return_type(output_batches, Iterator[pa.RecordBatch])
+            verified_iter = verify_return_type(
+                output_batches,
+                Iterator[pa.RecordBatch],  # type: ignore[type-abstract]
+            )
             yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
 
         # profiling is not supported for UDF
@@ -2528,7 +2522,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             args_iter = map(extract_args, data)
 
             # Call UDF and verify result type (iterator of pa.Array)
-            verified_iter = verify_return_type(udf_func(args_iter), Iterator[pa.Array])
+            verified_iter = verify_return_type(
+                udf_func(args_iter),
+                Iterator[pa.Array],  # type: ignore[type-abstract]
+            )
 
             # Process results: enforce schema and assemble into RecordBatch
             target_schema = pa.schema([pa.field("_0", arrow_return_type)])
@@ -2830,7 +2827,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     result = grouped_udf(key, value_batches)
 
                 # Verify, reorder, and wrap each output batch
-                for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
+                for batch in verify_return_type(
+                    result,
+                    Iterator[pa.RecordBatch],  # type: ignore[type-abstract]
+                ):
                     verify_arrow_result(
                         batch, runner_conf.assign_cols_by_name, expected_cols_and_types
                     )
