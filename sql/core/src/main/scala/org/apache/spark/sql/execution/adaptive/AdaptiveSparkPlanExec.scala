@@ -278,6 +278,7 @@ case class AdaptiveSparkPlanExec(
       var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
+      val obsoleteCancelledStageIds = new mutable.HashSet[Int]
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -333,7 +334,9 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption.set(Some(res))
           case StageFailure(stage, ex) =>
             stage.error.set(Some(ex))
-            errors.append(ex)
+            if (!obsoleteCancelledStageIds.contains(stage.id)) {
+              errors.append(ex)
+            }
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -373,6 +376,7 @@ case class AdaptiveSparkPlanExec(
                 currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
               logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
               cleanUpTempTags(newPhysicalPlan)
+              obsoleteCancelledStageIds ++= cancelObsoleteStages(newPhysicalPlan, stagesToReplace)
               currentPhysicalPlan = newPhysicalPlan
               currentLogicalPlan = newLogicalPlan
               stagesToReplace = Seq.empty[QueryStageExec]
@@ -393,6 +397,31 @@ case class AdaptiveSparkPlanExec(
     // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
     currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
       .get.asInstanceOf[T]
+  }
+
+  private def cancelObsoleteStages(
+      newPhysicalPlan: SparkPlan,
+      stagesToReplace: Seq[QueryStageExec]): Seq[Int] = {
+    val newStages = newPhysicalPlan.collect {
+      case stage: QueryStageExec => stage
+    }
+    val obsoleteStages = stagesToReplace.collect {
+      case stage: ExchangeQueryStageExec
+          if !newStages.exists(newStage =>
+            newStage.id == stage.id || newStage.resultOption.eq(stage.resultOption)) => stage
+    }
+    obsoleteStages.foreach { stage =>
+      if (!stage.isMaterialized) {
+        removeStageFromCache(stage)
+        try {
+          stage.cancel()
+        } catch {
+          case NonFatal(t) =>
+            logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+        }
+      }
+    }
+    obsoleteStages.map(_.id)
   }
 
   // Use a lazy val to avoid this being called more than once.
