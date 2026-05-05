@@ -172,7 +172,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       val info = capturedViewInfo()
       val props = info.properties()
 
-      // metric_view.* descriptive properties (mirrors DBR SingleSourceMetricView).
+      // metric_view.* descriptive properties (mirrors the canonical metric-view property
+      // layout).
       assert(props.get(MetricView.PROP_FROM_TYPE) === "ASSET")
       assert(props.get(MetricView.PROP_FROM_NAME) === fullSourceTableName)
       assert(props.get(MetricView.PROP_FROM_SQL) === null)
@@ -750,8 +751,8 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
       // `MetadataTable(ViewInfo)`. The analyzer wraps it as a `ResolvedPersistentView` and
       // `DataSourceV2Strategy` routes through SPARK-56655's `DescribeV2ViewExec`, which
       // reads the typed `ViewInfo` directly and emits the standard "Type" / "View Text" /
-      // "View Current Catalog" / "View Schema Mode" / etc. rows. Pins `DescribeV2ViewExec`
-      // emits a "Type" row matching v1 `CatalogTable.toJsonLinkedHashMap` parity, so users
+      // "View Current Catalog" / "View Schema Mode" / etc. rows. Pins that `DescribeV2ViewExec`
+      // emits a "Type" row for parity with v1 `CatalogTable.toJsonLinkedHashMap`, so users
       // can distinguish a plain VIEW from a sub-kind like METRIC_VIEW.
       val rows = sql(s"DESCRIBE TABLE EXTENDED $fullMetricViewName").collect()
       val rowMap = rows.map(r => r.getString(0) -> r.getString(1)).toMap
@@ -880,6 +881,43 @@ class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
   test("DROP VIEW IF EXISTS on a non-existent V2 metric view is a no-op") {
     withTestCatalogTables {
       sql(s"DROP VIEW IF EXISTS $testCatalogName.$testNamespace.does_not_exist")
+    }
+  }
+
+  test("ALTER VIEW <metric_view> RENAME TO ... succeeds and preserves metric view metadata") {
+    withTestCatalogTables {
+      val mv = MetricView(
+        "0.1",
+        AssetSource(fullSourceTableName),
+        where = None,
+        select = metricViewColumns)
+      createMetricView(fullMetricViewName, mv)
+      val renamedFull = s"$testCatalogName.$testNamespace.mv_renamed"
+      try {
+        // RenameTable on a `ResolvedPersistentView` is routed by `DataSourceV2Strategy` to
+        // `RenameV2ViewExec`, which calls `ViewCatalog.renameView` -- the fixture
+        // `MetricViewRecordingCatalog.renameView` relocates both the `views` entry and the
+        // `capturedViews` entry under the new ident. Pin the wiring end-to-end so the
+        // metric view kind survives the rename.
+        sql(s"ALTER VIEW $fullMetricViewName RENAME TO $renamedFull")
+
+        // Old ident is gone from the v2 catalog -- DESCRIBE should fail to resolve.
+        val oldEx = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $fullMetricViewName").collect()
+        }
+        assert(oldEx.getCondition === "TABLE_OR_VIEW_NOT_FOUND",
+          s"Expected TABLE_OR_VIEW_NOT_FOUND for the old ident, got " +
+            s"${oldEx.getCondition}: ${oldEx.getMessage}")
+
+        // New ident loads through `TableViewCatalog.loadTableOrView` and surfaces the same
+        // metric-view kind on `DESCRIBE TABLE EXTENDED`.
+        val rows = sql(s"DESCRIBE TABLE EXTENDED $renamedFull").collect()
+        val rowMap = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(rowMap.get("Type").contains(TableSummary.METRIC_VIEW_TABLE_TYPE),
+          s"Renamed view should still be a METRIC_VIEW, got Type=${rowMap.get("Type")}")
+      } finally {
+        sql(s"DROP VIEW IF EXISTS $renamedFull")
+      }
     }
   }
 

@@ -345,10 +345,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         session, nameParts, originalText)
       val mergedProps = properties ++ metricView.getProperties
       val depParts = MetricViewHelper.collectTableDependencies(analyzed)
-      val deps = if (depParts.nonEmpty) {
-        Some(DependencyList.of(
-          depParts.map(parts => Dependency.table(parts: _*)): _*))
-      } else None
+      // Always emit a `Some(DependencyList)` for metric views (even when `depParts` is empty,
+      // e.g. `SQLSource("SELECT 1 AS x")`): per `ViewInfo.viewDependencies()` Javadoc, `null`
+      // means "no dependency list was supplied" while an empty list means "supplied but the
+      // object has none". Metric-view CREATE always *computes* deps, so the right empty
+      // representation is `Some(empty list)`, not `None`.
+      val deps = Some(DependencyList.of(
+        depParts.map(parts => Dependency.table(parts: _*)): _*))
       CreateV2MetricViewExec(viewCatalog, ident, userSpecifiedColumns, comment, mergedProps,
         originalText, analyzed, allowExisting, replace, deps) :: Nil
 

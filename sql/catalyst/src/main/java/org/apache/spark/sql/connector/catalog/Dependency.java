@@ -26,6 +26,12 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * A dependency is one of: {@link TableDependency} or {@link FunctionDependency}. The
  * {@code sealed} declaration enforces this structurally.
+ * <p>
+ * Note: today the only producer in Spark itself is metric-view dependency extraction, which
+ * emits {@link TableDependency} only. {@link FunctionDependency} and the
+ * {@link #function(String...)} factory are exposed as groundwork for future producers
+ * (e.g. SQL UDF dependency tracking); consumers iterating a {@link DependencyList} received
+ * from Spark today should expect to see only {@link TableDependency} instances.
  *
  * @since 4.2.0
  */

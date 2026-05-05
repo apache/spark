@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Evolving;
  * with single-level namespaces the parts are {@code [catalog, schema, table]}; for a catalog
  * with multi-level namespaces (e.g. Iceberg with {@code db1.db2}) the parts are
  * {@code [catalog, db1, db2, ..., table]}; for v1 sources resolved through the session
- * catalog producers should normalize to {@code [spark_catalog, db, table]} so consumers see
+ * catalog, producers should normalize to {@code [spark_catalog, db, table]} so consumers see
  * a stable arity per source kind. The structural form preserves arity and is unambiguous
  * against quoted identifiers containing a literal {@code .}; consumers that need a flat
  * string should join the parts themselves with a quoting scheme appropriate to their wire
