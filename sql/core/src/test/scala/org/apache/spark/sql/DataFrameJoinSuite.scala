@@ -35,8 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameJoinSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameJoinSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

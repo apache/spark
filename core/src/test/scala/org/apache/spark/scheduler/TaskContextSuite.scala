@@ -199,6 +199,41 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocations == 2)
   }
 
+  test("SPARK-56330: task completion during interrupt listener execution") {
+    val context = TaskContext.empty()
+    val completionListener = mock(classOf[TaskCompletionListener])
+    context.addTaskCompletionListener(completionListener)
+
+    // Add a task interrupt listener that blocks until released.
+    val interruptListenerStarted = new Semaphore(0)
+    val interruptListenerRelease = new Semaphore(0)
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = {
+        interruptListenerStarted.release()
+        interruptListenerRelease.acquire()
+      }
+    })
+
+    // Interrupt the task from a separate thread and wait until the interrupt listener starts.
+    val interruptThread = new Thread(() => context.markInterrupted("test interrupt"))
+    interruptThread.start()
+    interruptListenerStarted.acquire()
+
+    // While the interrupt listener is running on the interrupt thread, mark the task completed
+    // on this thread. With the dedicated interrupt listener loop, this must NOT be blocked.
+    context.markTaskCompleted(None)
+
+    // The completion listener should have been called even though the interrupt listener is still
+    // running. If `invokeListeners()` were shared between interrupt and completion listeners,
+    // the completion listener would be silently skipped because `listenerInvocationThread` would
+    // be held by the interrupt thread.
+    verify(completionListener, times(1)).onTaskCompletion(any())
+
+    // Release the interrupt listener and join the interrupt thread.
+    interruptListenerRelease.release()
+    interruptThread.join()
+  }
+
   test("FailureListener throws after task body fails") {
     val context = TaskContext.empty()
     val listenerCalls = ArrayBuffer.empty[String]

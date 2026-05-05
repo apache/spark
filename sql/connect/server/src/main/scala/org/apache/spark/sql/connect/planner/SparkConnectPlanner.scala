@@ -1762,14 +1762,13 @@ class SparkConnectPlanner(
       val input = transformRelation(rel.getInput)
       val df = Dataset.ofRows(session, input)
       val fields = df.schema.fields
-      if (fields.isEmpty) {
-        throw QueryCompilationErrors.parseInputNotStringTypeError(
-          org.apache.spark.sql.types.NullType)
+      if (fields.length != 1) {
+        throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
       }
       if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
-        throw QueryCompilationErrors.parseInputNotStringTypeError(fields.head.dataType)
+        throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
       }
-      df.select(df.columns.head).as(Encoders.STRING)
+      df.as(Encoders.STRING)
     }
 
     rel.getFormat match {
@@ -1777,6 +1776,8 @@ class SparkConnectPlanner(
         dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
         dataFrameReader.json(ds).queryExecution.analyzed
+      case ParseFormat.PARSE_FORMAT_XML =>
+        dataFrameReader.xml(ds).queryExecution.analyzed
       case other => throw InvalidInputErrors.invalidEnum(other)
     }
   }
@@ -3352,6 +3353,10 @@ class SparkConnectPlanner(
       w.format(writeOperation.getSource)
     }
 
+    if (writeOperation.getWithSchemaEvolution) {
+      w.withSchemaEvolution()
+    }
+
     writeOperation.getSaveTypeCase match {
       case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.saveCommand(None)
       case proto.WriteOperation.SaveTypeCase.PATH =>
@@ -3416,6 +3421,10 @@ class SparkConnectPlanner(
     if (writeOperation.getClusteringColumnsCount > 0) {
       val names = writeOperation.getClusteringColumnsList.asScala
       w.clusterBy(names.head, names.tail.toSeq: _*)
+    }
+
+    if (writeOperation.getWithSchemaEvolution) {
+      w.withSchemaEvolution()
     }
 
     writeOperation.getMode match {

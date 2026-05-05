@@ -18,7 +18,7 @@
 #
 
 # Script to create API docs and vignettes for SparkR
-# This requires `devtools`, `knitr` and `rmarkdown` to be installed on the machine.
+# This requires `roxygen2`, `knitr`, `rmarkdown`, and `pkgdown` to be installed on the machine.
 
 # After running this script the html docs can be found in
 # $SPARK_HOME/R/pkg/html

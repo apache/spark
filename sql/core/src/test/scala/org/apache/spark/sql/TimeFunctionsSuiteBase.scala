@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession {
+abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
   import testImplicits._
 
   // Helper method to assert that two DataFrames with TimeType values are approximately equal.

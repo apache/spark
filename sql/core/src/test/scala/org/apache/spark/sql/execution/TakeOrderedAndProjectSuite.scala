@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 
-class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
+class TakeOrderedAndProjectSuite extends SharedSparkSession {
 
   private var rand: Random = _
   private var seed: Long = 0

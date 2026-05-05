@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, BroadcastQueryStageExec}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class PushDownJoinThroughUnionSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
   import testImplicits._
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(SQLConf.PUSH_DOWN_JOIN_THROUGH_UNION_ENABLED.key, "true")
 
   test("UNION ALL + broadcast JOIN produces correct results") {
     withTempView("fact1", "fact2", "dim") {

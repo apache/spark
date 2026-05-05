@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ANALYSIS_ERROR, QUERY_PLAN}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, SessionWindow, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CurrentDate, CurrentTimestampLike, Expression, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID, NamedExpression, SessionWindow, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -280,6 +280,40 @@ object UnsupportedOperationChecker extends Logging {
       case _ =>
     }
 
+    // The streaming Change Data Capture (CDC) post-processing rewrites in
+    // [[ResolveChangelogTable]] are designed and validated only for Append output mode.
+    // Two markers can identify a CDC-rewritten plan:
+    //   - The row-level rewrite (`addStreamingRowLevelPostProcessing`) injects a
+    //     streaming Aggregate whose `__spark_cdc_events` alias's output attribute
+    //     carries the metadata marker
+    //     `ResolveChangelogTable.streamingPostProcessingMarker` (mirrors
+    //     `SessionWindow.marker` / `EventTimeWatermark.delayKey`).
+    //   - The netChanges rewrite (`addStreamingNetChangeComputation`) injects a
+    //     `TransformWithState` driven by `CdcNetChangesStatefulProcessor`.
+    // Under Update or Complete the Aggregate / TransformWithState would re-emit
+    // per-batch state changes or the full result table per batch, neither of which
+    // matches batch CDC semantics. (Complete mode without any streaming Aggregate is
+    // already rejected by the generic `aggregates.isEmpty` check above, so the
+    // netChanges-only marker is needed here primarily to catch Update mode.) Reject
+    // those modes at analysis time with a clear error rather than silently producing
+    // a misleading change feed.
+    val containsCdcRowLevelRewrite = aggregates.exists(a => a.aggregateExpressions.exists {
+      case ne: NamedExpression if ne.resolved =>
+        ne.metadata.contains(ResolveChangelogTable.streamingPostProcessingMarker) &&
+          ne.metadata.getBoolean(ResolveChangelogTable.streamingPostProcessingMarker)
+      case _ => false
+    })
+    val containsCdcNetChangesProcessor = plan.exists {
+      case t: TransformWithState if t.isStreaming &&
+        t.statefulProcessor.isInstanceOf[CdcNetChangesStatefulProcessor] => true
+      case _ => false
+    }
+    if (outputMode != InternalOutputModes.Append &&
+        (containsCdcRowLevelRewrite || containsCdcNetChangesProcessor)) {
+      throw QueryCompilationErrors.unsupportedOutputModeForStreamingOperationError(
+        outputMode, "Change Data Capture (CDC) streaming reads with post-processing")
+    }
+
     /**
      * Whether the subplan will contain complete data or incremental data in every incremental
      * execution. Some operations may be allowed only when the child logical plan gives complete
@@ -441,9 +475,24 @@ object UnsupportedOperationChecker extends Logging {
           }
 
         case j @ Join(left, right, joinType, condition, _) =>
-          if (left.isStreaming && right.isStreaming && outputMode != InternalOutputModes.Append) {
-            throwError("Join between two streaming DataFrames/Datasets is not supported" +
-              s" in ${outputMode} output mode, only in Append output mode")
+          if (left.isStreaming && right.isStreaming) {
+            joinType match {
+              // The behavior for unmatched rows in outer joins with update mode
+              // hasn't been defined yet.
+              case LeftOuter | RightOuter | FullOuter =>
+                if (outputMode != InternalOutputModes.Append) {
+                  throwError(s"$joinType join between two streaming DataFrames/Datasets" +
+                    s" is not supported in ${outputMode} output mode, only in Append output mode")
+                }
+              case _: InnerLike | LeftSemi =>
+                if (outputMode != InternalOutputModes.Append &&
+                    outputMode != InternalOutputModes.Update) {
+                  throwError(s"$joinType join between two streaming DataFrames/Datasets" +
+                    s" is not supported in ${outputMode} output mode, only in Append and Update " +
+                    "output modes")
+                }
+              case _ => // further unsupported cases will be checked in the next pattern match
+            }
           }
 
           joinType match {

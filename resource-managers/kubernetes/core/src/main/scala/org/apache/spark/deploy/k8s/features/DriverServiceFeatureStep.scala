@@ -92,6 +92,7 @@ private[spark] class DriverServiceFeatureStep(
           .withName(SPARK_CONNECT_SERVER_PORT_NAME)
           .withPort(driverSparkConnectServerPort)
           .withNewTargetPort(driverSparkConnectServerPort)
+          .withAppProtocol("grpc")
           .endPort()
         .endSpec()
       .build()

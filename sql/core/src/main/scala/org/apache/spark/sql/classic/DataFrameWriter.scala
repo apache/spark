@@ -192,17 +192,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
           checkPartitioningMatchesV2Table(table)
           if (curmode == SaveMode.Append) {
-            AppendData.byName(relation, df.logicalPlan, finalOptions)
+            AppendData.byName(relation, df.logicalPlan, finalOptions, _withSchemaEvolution)
           } else {
             // Truncate the table. TableCapabilityCheck will throw a nice exception if this
             // isn't supported
             OverwriteByExpression.byName(
-              relation, df.logicalPlan, Literal(true), finalOptions)
+              relation, df.logicalPlan, Literal(true), finalOptions, _withSchemaEvolution)
           }
 
         case createMode =>
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
+              if (_withSchemaEvolution) {
+                throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
+              }
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
@@ -233,13 +236,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fallback to saving as though it's a V1 source.
+                assertSchemaEvolutionNotEnabledForV1Write()
                 saveToV1SourceCommand(path)
               }
           }
       }
 
     } else {
+      assertSchemaEvolutionNotEnabledForV1Write()
       saveToV1SourceCommand(path)
+    }
+  }
+
+  private def assertSchemaEvolutionNotEnabledForV1Write(): Unit = {
+    if (_withSchemaEvolution) {
+      throw QueryCompilationErrors.schemaEvolutionNotSupportedForV1TableWriteError()
     }
   }
 
@@ -347,7 +358,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     curmode match {
       case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
-        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
+        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
@@ -355,14 +366,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
-          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
+          OverwritePartitionsDynamic.byPosition(
+            table, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
         } else {
-          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          OverwriteByExpression.byPosition(
+            table, df.logicalPlan, Literal(true), extraOptions.toMap, _withSchemaEvolution)
         }
     }
   }
 
   private def insertIntoCommand(tableIdent: TableIdentifier): LogicalPlan = {
+    assertSchemaEvolutionNotEnabledForV1Write()
     InsertIntoStatement(
       table = UnresolvedRelation(tableIdent).requireWritePrivileges(getWritePrivileges),
       partitionSpec = Map.empty[String, Option[String]],
@@ -452,6 +466,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         saveAsTableCommand(catalog.asTableCatalog, v2ProviderOpt, ident, nameParts)
 
       case AsTableIdentifier(tableIdentifier) =>
+        assertSchemaEvolutionNotEnabledForV1Write()
         saveAsV1TableCommand(tableIdentifier)
 
       case other =>
@@ -470,14 +485,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
     (curmode, tableOpt) match {
       case (_, Some(_: V1Table)) =>
+        assertSchemaEvolutionNotEnabledForV1Write()
         saveAsV1TableCommand(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
         checkPartitioningMatchesV2Table(table)
         val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-        AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap)
+        AppendData.byName(v2Relation, df.logicalPlan, extraOptions.toMap, _withSchemaEvolution)
 
       case (SaveMode.Overwrite, _) =>
+        if (_withSchemaEvolution) {
+          throw QueryCompilationErrors.schemaEvolutionNotSupportedForReplaceTableWriteError()
+        }
         val tableSpec = UnresolvedTableSpec(
           properties = Map.empty,
           provider = Some(source),
@@ -504,6 +523,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>
+        if (_withSchemaEvolution) {
+          throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
+        }
         // We have a potential race condition here in AppendMode, if the table suddenly gets
         // created between our existence check and physical execution, but this can't be helped
         // in any case.

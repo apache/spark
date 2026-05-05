@@ -23,12 +23,12 @@ import java.time.format.DateTimeFormatter
 
 import scala.util.Random
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.{stringToFile, DateTimeUtils}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class PathFilterSuite extends QueryTest with SharedSparkSession {
+class PathFilterSuite extends SharedSparkSession {
   import testImplicits._
 
   test("SPARK-31962: modifiedBefore specified" +

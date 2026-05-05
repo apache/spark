@@ -1784,7 +1784,7 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
+        unit = {k: _unit_map[k.lower()] for k in arg if k.lower() in _unit_map}
         unit_rev = {v: k for k, v in unit.items()}
         list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
         for u in ["h", "m", "s", "ms", "us"]:

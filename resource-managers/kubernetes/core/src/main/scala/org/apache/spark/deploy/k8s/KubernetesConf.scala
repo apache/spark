@@ -285,6 +285,20 @@ private[spark] object KubernetesConf {
       proxyUser)
   }
 
+  /**
+   * Java-friendly version of [[createDriverConf]] that accepts a nullable String
+   * for proxyUser instead of Option[String].
+   */
+  def createDriverConf(
+      sparkConf: SparkConf,
+      appId: String,
+      mainAppResource: MainAppResource,
+      mainClass: String,
+      appArgs: Array[String],
+      proxyUser: String): KubernetesDriverConf = {
+    createDriverConf(sparkConf, appId, mainAppResource, mainClass, appArgs, Option(proxyUser))
+  }
+
   def createExecutorConf(
       sparkConf: SparkConf,
       executorId: String,

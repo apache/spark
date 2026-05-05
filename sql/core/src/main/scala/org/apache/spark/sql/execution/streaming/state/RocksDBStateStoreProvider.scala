@@ -97,6 +97,13 @@ private[sql] class RocksDBStateStoreProvider
       (RELEASED, METRICS) -> RELEASED
     )
 
+    /**
+     * Returns the [[RocksDBStateStoreProvider]] that created this store instance.
+     * Keeping private within state and shouldn't be exposed outside.
+     */
+    private[state] def creatingProvider: RocksDBStateStoreProvider =
+      RocksDBStateStoreProvider.this
+
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId
 
     override def version: Long = lastVersion
@@ -549,6 +556,68 @@ private[sql] class RocksDBStateStoreProvider
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
+    override def rangeScan(
+        startKey: Option[UnsafeRow],
+        endKey: Option[UnsafeRow],
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("rangeScan", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportsRangeScan,
+        "Range scan requires an encoder that supports range scanning!")
+
+      val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
+      val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
+
+      val rowPair = new UnsafeRowPair()
+      val rocksDbIter = rocksDB.rangeScan(encodedStartKey, encodedEndKey, colFamilyName)
+      val iter = rocksDbIter.map { kv =>
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
+        rowPair
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
+    override def rangeScanWithMultiValues(
+        startKey: Option[UnsafeRow],
+        endKey: Option[UnsafeRow],
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("rangeScanWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportsRangeScan,
+        "Range scan with multiple values requires an encoder that supports range scanning!")
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
+      val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
+      val rocksDbIter = rocksDB.rangeScan(encodedStartKey, encodedEndKey, colFamilyName)
+
+      val rowPair = new UnsafeRowPair()
+      val iter = rocksDbIter.flatMap { kv =>
+        val keyRow = kvEncoder._1.decodeKey(kv.key)
+        val valueRows = kvEncoder._2.decodeValues(kv.value)
+        valueRows.iterator.map { valueRow =>
+          rowPair.withRows(keyRow, valueRow)
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
     private var storedMetrics: Option[RocksDBMetrics] = None
 
@@ -938,10 +1007,27 @@ private[sql] class RocksDBStateStoreProvider
       " the same stateStoreId")
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
+
+    val rocksDBReadStore = readStore.asInstanceOf[RocksDBStateStore]
+    // SPARK-56476: If the provider that created the read store is a different object than this
+    // provider, another thread removed the original provider from loadedProviders between the
+    // read and write phases (e.g. maintenance or task unload). This provider's state machine
+    // never issued the read store's stamp, so calling loadStateStore here would fail with
+    // StateStoreInvalidStamp. Delegate to the original provider instead.
+    // It is safe to call the original provider because we still have a read stamp on it.
+    if (rocksDBReadStore.creatingProvider ne this) {
+      logWarning(log"Provider " +
+        log"id=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, this.stateStoreProviderId)} " +
+        log"was replaced between read and write phases. Delegating upgradeReadStoreToWriteStore " +
+        log"to the original provider to avoid StateStoreInvalidStamp error.")
+      return rocksDBReadStore.creatingProvider.upgradeReadStoreToWriteStore(
+        readStore, version, uniqueId, forceSnapshotOnCommit)
+    }
+
     loadStateStore(version,
       uniqueId,
       readOnly = false,
-      existingStore = Some(readStore.asInstanceOf[RocksDBStateStore]),
+      existingStore = Some(rocksDBReadStore),
       forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 

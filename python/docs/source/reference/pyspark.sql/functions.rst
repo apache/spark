@@ -299,6 +299,7 @@ Date and Timestamp Functions
     timestamp_micros
     timestamp_millis
     timestamp_seconds
+    time_bucket
     time_diff
     time_trunc
     to_date
@@ -585,6 +586,7 @@ VARIANT Functions
 .. autosummary::
     :toctree: api/
 
+    is_valid_variant
     is_variant_null
     parse_json
     schema_of_variant
@@ -639,6 +641,7 @@ Misc Functions
     bitmap_count
     current_catalog
     current_database
+    current_path
     current_schema
     current_user
     input_file_block_length

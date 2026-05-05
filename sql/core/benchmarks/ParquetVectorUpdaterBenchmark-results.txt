@@ -1,0 +1,84 @@
+================================================================================================
+Identity Updaters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Identity Updaters:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+BooleanUpdater                                        0              0           0      14625.7           0.1       1.0X
+ByteUpdater (INT32 -> Byte)                           0              0           0       3672.0           0.3       0.3X
+ShortUpdater (INT32 -> Short)                         1              1           0       2053.4           0.5       0.1X
+IntegerUpdater                                        0              0           0      10284.1           0.1       0.7X
+LongUpdater                                           0              0           0       5132.8           0.2       0.4X
+FloatUpdater                                          0              0           0      10257.9           0.1       0.7X
+DoubleUpdater                                         0              0           0       5097.0           0.2       0.3X
+BinaryUpdater                                        15             15           1         70.3          14.2       0.0X
+
+
+================================================================================================
+Type-converting Updaters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Type-converting Updaters:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+IntegerToLongUpdater                                     2              2           0        454.5           2.2       1.0X
+IntegerToDoubleUpdater                                   2              2           0        478.3           2.1       1.1X
+FloatToDoubleUpdater                                     2              2           0        480.2           2.1       1.1X
+DateToTimestampNTZUpdater                               36             36           0         29.5          33.9       0.1X
+DowncastLongUpdater (INT64 -> Decimal(9,2))              2              2           0        455.3           2.2       1.0X
+
+
+================================================================================================
+Rebase Updaters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Rebase Updaters:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+IntegerWithRebaseUpdater (DATE legacy)                       0              0           0       2651.7           0.4       1.0X
+LongWithRebaseUpdater (TIMESTAMP_MICROS legacy)              0              1           0       2101.9           0.5       0.8X
+LongAsMicrosUpdater (TIMESTAMP_MILLIS)                       2              2           0        454.6           2.2       0.2X
+
+
+================================================================================================
+Unsigned Updaters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Unsigned Updaters:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+UnsignedIntegerUpdater (UINT32 -> Long)                    1              1           0       1093.3           0.9       1.0X
+UnsignedLongUpdater (UINT64 -> Decimal(20,0))             18             18           0         59.1          16.9       0.1X
+
+
+================================================================================================
+Decimal Updaters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+Decimal Updaters:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerToDecimalUpdater                               0              0           0      10263.1           0.1       1.0X
+LongToDecimalUpdater                                  0              0           0       5133.0           0.2       0.5X
+FixedLenByteArrayToDecimalUpdater                    21             21           0         51.0          19.6       0.0X
+
+
+================================================================================================
+FixedLenByteArray Updaters
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
+AMD EPYC 7763 64-Core Processor
+FixedLenByteArray Updaters:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+FixedLenByteArrayUpdater (len=16 -> Binary)                         19             19           0         54.8          18.3       1.0X
+FixedLenByteArrayAsIntUpdater (len=4 -> Decimal(9,2))                7              7           0        160.2           6.2       2.9X
+FixedLenByteArrayAsLongUpdater (len=8 -> Decimal(18,4))              9              9           0        123.3           8.1       2.3X
+
+

@@ -59,8 +59,7 @@ class TestFileFilter extends PathFilter {
 }
 
 abstract class JsonSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with TestJsonData
   with CommonFileDataSourceSuite {
 

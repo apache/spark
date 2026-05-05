@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -41,7 +41,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Currently, the test cases in this suite should have same behavior across all kind of views
  * TODO: Combine this with [[SQLViewSuite]]
  */
-abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
+abstract class SQLViewTestSuite extends QueryTest {
   import testImplicits._
 
   protected def viewTypeString: String

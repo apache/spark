@@ -504,9 +504,58 @@ Project [scalar-subquery#x [title#x] AS scalarsubquery(title)#xL]
 
 
 -- !query
-SET VARIABLE title = 'Test qualifiers - fail'
+SET VARIABLE title = 'Dropped struct variable -- field access vs qualified name'
 -- !query analysis
 SetVariable [variablereference(system.session.title='Test variable in aggregate')]
++- Project [Dropped struct variable -- field access vs qualified name AS title#x]
+   +- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE session STRUCT<a INT> = NAMED_STRUCT('a', 1)
+-- !query analysis
+CreateVariable default(cast(named_struct(a, 1) as struct<a:int>), sql='NAMED_STRUCT('a', 1)'), true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session
+
+
+-- !query
+SELECT session.a
+-- !query analysis
+Project [variablereference(system.session.session=NAMED_STRUCT('a', 1)).a AS a#x]
++- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY VARIABLE session
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session
+
+
+-- !query
+SELECT session.a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`session`.`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "session.a"
+  } ]
+}
+
+
+-- !query
+SET VARIABLE title = 'Test qualifiers - fail'
+-- !query analysis
+SetVariable [variablereference(system.session.title='Dropped struct variable -- field access vs qualified name')]
 +- Project [Test qualifiers - fail AS title#x]
    +- OneRowRelation
 
@@ -519,9 +568,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
+    "searchPath" : "[`system`.`session`]",
     "variableName" : "`builtin`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 40,
+    "fragment" : "builtin.var1"
+  } ]
 }
 
 
@@ -533,9 +589,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
+    "searchPath" : "[`system`.`session`]",
     "variableName" : "`system`.`sesion`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 46,
+    "fragment" : "system.sesion.var1"
+  } ]
 }
 
 
@@ -547,9 +610,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
+    "searchPath" : "[`system`.`session`]",
     "variableName" : "`sys`.`session`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 44,
+    "fragment" : "sys.session.var1"
+  } ]
 }
 
 
@@ -648,9 +718,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]",
     "variableName" : "`ses`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 21,
+    "fragment" : "ses.var1"
+  } ]
 }
 
 
@@ -662,9 +739,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]",
     "variableName" : "`builtn`.`session`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 32,
+    "fragment" : "builtn.session.var1"
+  } ]
 }
 
 

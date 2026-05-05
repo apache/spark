@@ -448,6 +448,7 @@ setResetStatement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET PATH EQ pathElement (COMMA pathElement)*                     #setPath
     | SET variable assignmentList                                      #setVariable
     | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
@@ -457,6 +458,15 @@ setResetStatement
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
+    ;
+
+pathElement
+    : DEFAULT_PATH
+    | SYSTEM_PATH
+    | PATH
+    | CURRENT_DATABASE
+    | CURRENT_SCHEMA
+    | multipartIdentifier
     ;
 
 executeImmediate
@@ -799,6 +809,7 @@ fromStatementBody
       aggregationClause?
       havingClause?
       windowClause?
+      qualifyClause?
       queryOrganization
     ;
 
@@ -816,7 +827,8 @@ querySpecification
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #regularQuerySpecification
+      windowClause?
+      qualifyClause?                                                        #regularQuerySpecification
     ;
 
 transformClause
@@ -885,6 +897,10 @@ whereClause
 
 havingClause
     : HAVING booleanExpression
+    ;
+
+qualifyClause
+    : QUALIFY booleanExpression
     ;
 
 hint
@@ -1033,7 +1049,7 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
@@ -1050,6 +1066,10 @@ joinType
 joinCriteria
     : ON booleanExpression
     | USING identifierList
+    ;
+
+nearestByClause
+    : (APPROX | EXACT) NEAREST num=INTEGER_VALUE? BY (DISTANCE | SIMILARITY) expression
     ;
 
 sample
@@ -1297,7 +1317,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME)             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_PATH)             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1914,6 +1934,7 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1961,6 +1982,7 @@ ansiNonReserved
     | CURSOR
     | CUBE
     | CURRENT
+    | CURRENT_DATABASE
     | DATA
     | DATABASE
     | DATABASES
@@ -1977,6 +1999,7 @@ ansiNonReserved
     | DECIMAL
     | DECLARE
     | DEFAULT
+    | DEFAULT_PATH
     | DEFINED
     | DEFINER
     | DELAY
@@ -1988,6 +2011,7 @@ ansiNonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTRIBUTE
     | DIV
     | DO
@@ -1997,6 +2021,7 @@ ansiNonReserved
     | ENFORCED
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2094,6 +2119,7 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2112,6 +2138,7 @@ ansiNonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
+    | PATH
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -2122,6 +2149,7 @@ ansiNonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2167,6 +2195,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2187,6 +2216,7 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLES
@@ -2282,6 +2312,7 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | AS
@@ -2342,7 +2373,10 @@ nonReserved
     | CUBE
     | CURRENT
     | CURSOR
+    | CURRENT_DATABASE
     | CURRENT_DATE
+    | CURRENT_PATH
+    | CURRENT_SCHEMA
     | CURRENT_TIME
     | CURRENT_TIMESTAMP
     | CURRENT_USER
@@ -2362,6 +2396,7 @@ nonReserved
     | DECIMAL
     | DECLARE
     | DEFAULT
+    | DEFAULT_PATH
     | DEFINED
     | DEFINER
     | DELAY
@@ -2373,6 +2408,7 @@ nonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTINCT
     | DISTRIBUTE
     | DIV
@@ -2386,6 +2422,7 @@ nonReserved
     | ESCAPE
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2498,6 +2535,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2524,6 +2562,7 @@ nonReserved
     | PARTITION
     | PARTITIONED
     | PARTITIONS
+    | PATH
     | PERCENTLIT
     | PIVOT
     | PLACING
@@ -2535,6 +2574,7 @@ nonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2582,6 +2622,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2604,6 +2645,7 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
     | TABLE

@@ -45,7 +45,7 @@ case class ColumnarExchange(child: SparkPlan) extends Exchange {
     copy(child = newChild)
 }
 
-class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
+class ExchangeSuite extends SharedSparkSession {
   import testImplicits._
 
   setupTestData()

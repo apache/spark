@@ -33,24 +33,44 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class InMemoryRowLevelOperationTable(
+class InMemoryRowLevelOperationTable private (
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty)
+    constraints: Array[Constraint],
+    tableId: String)
   extends InMemoryTable(
     name,
-    CatalogV2Util.structTypeToV2Columns(schema),
+    columns,
     partitioning,
     properties,
-    constraints)
+    constraints,
+    id = tableId)
   with SupportsRowLevelOperations {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString) = {
+    this(
+      name = name,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = tableId)
+  }
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
   private final val SUPPORTS_DELTAS = "supports-deltas"
   private final val SPLIT_UPDATES = "split-updates"
+  private final val NO_METADATA = "no-metadata"
+  private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -73,7 +93,11 @@ class InMemoryRowLevelOperationTable(
     var configuredScan: InMemoryBatchScan = _
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
-      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      if (noMetadata) {
+        Array.empty
+      } else {
+        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      }
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
@@ -89,22 +113,29 @@ class InMemoryRowLevelOperationTable(
     override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
       lastWriteInfo = info
       new WriteBuilder {
-        override def build(): Write = new Write with RequiresDistributionAndOrdering {
-          override def requiredDistribution: Distribution = {
-            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+        override def build(): Write = if (noMetadata) {
+          new Write {
+            override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
+            override def description: String = "InMemoryWrite"
           }
+        } else {
+          new Write with RequiresDistributionAndOrdering {
+            override def requiredDistribution: Distribution = {
+              Distributions.clustered(Array(PARTITION_COLUMN_REF))
+            }
 
-          override def requiredOrdering: Array[SortOrder] = {
-            Array[SortOrder](
-              LogicalExpressions.sort(
-                PARTITION_COLUMN_REF,
-                SortDirection.ASCENDING,
-                SortDirection.ASCENDING.defaultNullOrdering()))
+            override def requiredOrdering: Array[SortOrder] = {
+              Array[SortOrder](
+                LogicalExpressions.sort(
+                  PARTITION_COLUMN_REF,
+                  SortDirection.ASCENDING,
+                  SortDirection.ASCENDING.defaultNullOrdering()))
+            }
+
+            override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
+
+            override def description: String = "InMemoryWrite"
           }
-
-          override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
-
-          override def description: String = "InMemoryWrite"
         }
       }
     }
@@ -138,7 +169,11 @@ class InMemoryRowLevelOperationTable(
     private final val PK_COLUMN_REF = FieldReference("pk")
 
     override def requiredMetadataAttributes(): Array[NamedReference] = {
-      Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      if (noMetadata) {
+        Array.empty
+      } else {
+        Array(PARTITION_COLUMN_REF, INDEX_COLUMN_REF)
+      }
     }
 
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
@@ -150,22 +185,28 @@ class InMemoryRowLevelOperationTable(
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder = {
       lastWriteInfo = info
       new DeltaWriteBuilder {
-        override def build(): DeltaWrite = new DeltaWrite with RequiresDistributionAndOrdering {
-
-          override def requiredDistribution(): Distribution = {
-            Distributions.clustered(Array(PARTITION_COLUMN_REF))
+        override def build(): DeltaWrite = if (noMetadata) {
+          new DeltaWrite {
+            override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
+        } else {
+          new DeltaWrite with RequiresDistributionAndOrdering {
 
-          override def requiredOrdering(): Array[SortOrder] = {
-            Array[SortOrder](
-              LogicalExpressions.sort(
-                PARTITION_COLUMN_REF,
-                SortDirection.ASCENDING,
-                SortDirection.ASCENDING.defaultNullOrdering())
-            )
+            override def requiredDistribution(): Distribution = {
+              Distributions.clustered(Array(PARTITION_COLUMN_REF))
+            }
+
+            override def requiredOrdering(): Array[SortOrder] = {
+              Array[SortOrder](
+                LogicalExpressions.sort(
+                  PARTITION_COLUMN_REF,
+                  SortDirection.ASCENDING,
+                  SortDirection.ASCENDING.defaultNullOrdering())
+              )
+            }
+
+            override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
-
-          override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
         }
       }
     }
@@ -208,7 +249,8 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
   override def delete(meta: InternalRow, id: InternalRow): Unit = {
     val pk = id.getInt(0)
     buffer.deletes += pk
-    val logEntry = new GenericInternalRow(Array[Any](DELETE, pk, meta.copy(), null))
+    val metaCopy = if (meta != null) meta.copy() else null
+    val logEntry = new GenericInternalRow(Array[Any](DELETE, pk, metaCopy, null))
     buffer.log += logEntry
   }
 
@@ -216,13 +258,15 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
     val pk = id.getInt(0)
     buffer.deletes += pk
     buffer.rows.append(row.copy())
-    val logEntry = new GenericInternalRow(Array[Any](UPDATE, pk, meta.copy(), row.copy()))
+    val metaCopy = if (meta != null) meta.copy() else null
+    val logEntry = new GenericInternalRow(Array[Any](UPDATE, pk, metaCopy, row.copy()))
     buffer.log += logEntry
   }
 
   override def reinsert(meta: InternalRow, row: InternalRow): Unit = {
     buffer.rows.append(row.copy())
-    val logEntry = new GenericInternalRow(Array[Any](REINSERT, null, meta.copy(), row.copy()))
+    val metaCopy = if (meta != null) meta.copy() else null
+    val logEntry = new GenericInternalRow(Array[Any](REINSERT, null, metaCopy, row.copy()))
     buffer.log += logEntry
   }
 
@@ -237,4 +281,17 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
   }
 
   override def commit(): WriterCommitMessage = buffer
+}
+
+object InMemoryRowLevelOperationTable {
+  def withColumns(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
+    new InMemoryRowLevelOperationTable(
+      name, columns, partitioning, properties, constraints, tableId)
+  }
 }

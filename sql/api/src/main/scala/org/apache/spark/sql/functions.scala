@@ -4413,6 +4413,14 @@ object functions {
   def current_schema(): Column = Column.fn("current_schema")
 
   /**
+   * Returns the current SQL path as a comma-separated list of qualified schema names.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def current_path(): Column = Column.fn("current_path")
+
+  /**
    * Returns the user name of current execution context.
    *
    * @group misc_funcs
@@ -8479,6 +8487,40 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
+   * aligned to the default origin (1970-01-01 00:00:00). For `TIMESTAMP_NTZ`, bucketing is
+   * performed in UTC. For `TIMESTAMP`, year-month interval buckets and calendar-day components of
+   * day-time interval buckets align to the session time zone.
+   *
+   * @param bucketSize
+   *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
+   * @param ts
+   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketSize: Column, ts: Column): Column =
+    Column.fn("time_bucket", bucketSize, ts)
+
+  /**
+   * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
+   * aligned to `origin`. For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`,
+   * year-month interval buckets and calendar-day components of day-time interval buckets align to
+   * the session time zone.
+   *
+   * @param bucketSize
+   *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
+   * @param ts
+   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   * @param origin
+   *   Alignment anchor. Must be the same type as `ts` and must be foldable.
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketSize: Column, ts: Column, origin: Column): Column =
+    Column.fn("time_bucket", bucketSize, ts, origin)
+
+  /**
    * Returns the difference between two times, measured in specified units. Throws a
    * SparkIllegalArgumentException, in case the specified unit is not supported.
    *
@@ -9542,6 +9584,17 @@ object functions {
    * @since 4.0.0
    */
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
+
+  /**
+   * Check if a variant value is valid. Returns true if the variant is valid, false if it is
+   * malformed, and NULL if the input is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.2.0
+   */
+  def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
 
   /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to

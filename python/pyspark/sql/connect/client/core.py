@@ -305,7 +305,8 @@ class ChannelBuilder:
         ua_len = len(urllib.parse.quote(user_agent))
         if ua_len > 2048:
             raise SparkConnectException(
-                f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
+                f"'user_agent' parameter should not exceed 2048 characters after URL "
+                f"escaping, found {ua_len} characters."
             )
         return " ".join(
             [
@@ -1560,7 +1561,7 @@ class SparkConnectClient(object):
                         if observed_metrics.name == "__python_accumulator__":
                             for metric in observed_metrics.metrics:
                                 aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
-                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
+                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER_V2:
                                     self._profiler_collector._update(update)
                         elif observed_metrics.name in observations:
                             observation_result = observations[observed_metrics.name]._result

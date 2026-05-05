@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
   PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure}
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
+  UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -346,6 +347,27 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitResetQuotedConfiguration(
       ctx: ResetQuotedConfigurationContext): LogicalPlan = withOrigin(ctx) {
     ResetCommand(Some(ctx.configKey().getText))
+  }
+
+  /**
+   * Create a [[SetPathCommand]] to set the session SQL path.
+   * Example SQL :
+   * {{{
+   *   SET PATH = spark_catalog.default, system.builtin;
+   *   SET PATH = DEFAULT_PATH;
+   *   SET PATH = SYSTEM_PATH, spark_catalog.myschema;
+   * }}}
+   */
+  override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
+    val elements = ctx.pathElement().asScala.map { pe =>
+      if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
+      else if (pe.SYSTEM_PATH() != null) PathElement.SystemPath
+      else if (pe.PATH() != null) PathElement.PathRef
+      else if (pe.CURRENT_DATABASE() != null) PathElement.CurrentDatabase
+      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
+      else PathElement.SchemaInPath(visitMultipartIdentifier(pe.multipartIdentifier()))
+    }.toSeq
+    SetPathCommand(elements)
   }
 
   /**
@@ -1419,8 +1441,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
-   * command.
+   * Create a [[DescribeColumn]], [[DescribeRelation]], [[DescribeTablePartition]], or
+   * [[DescribeRelationJsonCommand]] command.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -1429,7 +1451,11 @@ class SparkSqlAstBuilder extends AstBuilder {
       val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
       throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
     }
-    val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
+    val relation = createUnresolvedTableOrView(
+      ctx.identifierReference,
+      "DESCRIBE TABLE",
+      allowTempView = true,
+      UnresolvedTableOrViewSearchPathMode.QueryLike)
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
         throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
@@ -1442,7 +1468,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           isExtended)
       }
     } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
+      val rawSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
         visitPartitionSpec(ctx.partitionSpec).map {
           case (key, Some(value)) => key -> value
@@ -1453,9 +1479,12 @@ class SparkSqlAstBuilder extends AstBuilder {
         Map.empty[String, String]
       }
       if (asJson) {
-        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+        // DescribeRelationJsonCommand uses the raw Map directly (V1 path only).
+        DescribeRelationJsonCommand(relation, rawSpec, isExtended)
+      } else if (rawSpec.nonEmpty) {
+        DescribeTablePartition(relation, UnresolvedPartitionSpec(rawSpec), isExtended)
       } else {
-        DescribeRelation(relation, partitionSpec, isExtended)
+        DescribeRelation(relation, isExtended)
       }
     }
   }

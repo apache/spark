@@ -202,8 +202,7 @@ abstract class InsertIntoTests(
 }
 
 trait InsertIntoSQLOnlyTests
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with BeforeAndAfter {
 
   import testImplicits._
@@ -503,6 +502,23 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (`a.b` string, `c.d` string) USING $v2Format PARTITIONED BY (`a.b`)")
         sql(s"INSERT OVERWRITE $t1 PARTITION (`a.b` = 'a') (`c.d`) VALUES('b')")
         verifyTable(t1, Seq("a" -> "b").toDF("id", "data"))
+      }
+    }
+
+    test("InsertInto: column DEFAULT values") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (c1 INT DEFAULT 42, c2 STRING DEFAULT 'hello') USING $v2Format")
+        sql(s"INSERT INTO $t1 VALUES (1, DEFAULT)")
+        checkAnswer(sql(s"SELECT * FROM $t1"), Row(1, "hello"))
+
+        sql(s"INSERT INTO $t1 VALUES (DEFAULT, DEFAULT)")
+        checkAnswer(
+          sql(s"SELECT * FROM $t1 ORDER BY c1"),
+          Seq(Row(1, "hello"), Row(42, "hello")))
+
+        sql(s"INSERT OVERWRITE $t1 VALUES (100, DEFAULT)")
+        checkAnswer(sql(s"SELECT * FROM $t1"), Row(100, "hello"))
       }
     }
   }
