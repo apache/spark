@@ -561,21 +561,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
-    class JsonToDDL(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        JSON_STRING_FIELD_NUMBER: builtins.int
-        json_string: builtins.str
-        """(Required) The JSON formatted string to be converted to DDL."""
-        def __init__(
-            self,
-            *,
-            json_string: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["json_string", b"json_string"]
-        ) -> None: ...
-
     class GetNumPartitions(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -592,6 +577,21 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["plan", b"plan"]
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        JSON_STRING_FIELD_NUMBER: builtins.int
+        json_string: builtins.str
+        """(Required) The JSON formatted string to be converted to DDL."""
+        def __init__(
+            self,
+            *,
+            json_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["json_string", b"json_string"]
+        ) -> None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
@@ -823,7 +823,7 @@ global___AnalyzePlanRequest = AnalyzePlanRequest
 class AnalyzePlanResponse(google.protobuf.message.Message):
     """Response to performing analysis of the query. Contains relevant metadata to be able to
     reason about the performance.
-    Next ID: 16
+    Next ID: 18
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1011,20 +1011,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
-    class JsonToDDL(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        DDL_STRING_FIELD_NUMBER: builtins.int
-        ddl_string: builtins.str
-        def __init__(
-            self,
-            *,
-            ddl_string: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
-        ) -> None: ...
-
     class GetNumPartitions(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1038,6 +1024,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
+        ) -> None: ...
+
+    class JsonToDDL(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DDL_STRING_FIELD_NUMBER: builtins.int
+        ddl_string: builtins.str
+        def __init__(
+            self,
+            *,
+            ddl_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
         ) -> None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
