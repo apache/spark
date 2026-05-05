@@ -365,14 +365,17 @@ FROM users u JOIN products p
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1211",
-  "messageParameters" : {
-    "joinType" : "LEFT OUTER",
-    "leftPlan" : "Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]\n+- LocalRelation [col1#x, col2#x]",
-    "rightPlan" : "Project [col1#x AS product#x, col2#x AS pscore#x]\n+- LocalRelation [col1#x, col2#x]"
-  }
+  "errorClass" : "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+  "sqlState" : "42604",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 114,
+    "fragment" : "JOIN products p\n  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)"
+  } ]
 }
 
 
