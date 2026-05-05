@@ -629,6 +629,8 @@ class ClientE2ETestSuite
     assert(!df.isStreaming)
     assert(df.toString.contains("[id: bigint]"))
     assert(df.inputFiles.isEmpty)
+    assert(df.repartition(4).getNumPartitions === 4)
+    assert(df.coalesce(1).getNumPartitions === 1)
   }
 
   test("Dataset schema") {
