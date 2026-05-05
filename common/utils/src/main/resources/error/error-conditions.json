@@ -5324,6 +5324,11 @@
       "Invalid nearest-by join."
     ],
     "subClass" : {
+      "CROSS_JOIN_NOT_ENABLED" : {
+        "message" : [
+          "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
+        ]
+      },
       "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
         "message" : [
           "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
