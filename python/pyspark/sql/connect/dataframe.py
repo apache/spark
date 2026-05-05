@@ -2044,6 +2044,12 @@ class DataFrame(ParentDataFrame):
         assert result is not None
         return result
 
+    def getNumPartitions(self) -> int:
+        query = self._plan.to_proto(self._session.client)
+        result = self._session.client._analyze(method="get_num_partitions", plan=query).num_partitions
+        assert result is not None
+        return result
+
     def to(self, schema: StructType) -> ParentDataFrame:
         assert schema is not None
         res = DataFrame(
