@@ -26,6 +26,8 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 ARG APT_INSTALL="apt-get install -y"
 
+ENV PATH="$PATH:/usr/local/bin"
+
 RUN apt-get clean
 RUN apt-get update
 RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
