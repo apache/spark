@@ -778,7 +778,6 @@ jobs:
         SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
         SPARK_CONNECT_TESTING_REMOTE: sc://localhost
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
-      shell: 'script -q -e -c "bash {0}"'
       run: |
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
