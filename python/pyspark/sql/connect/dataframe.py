@@ -814,10 +814,12 @@ class DataFrame(ParentDataFrame):
     @overload
     def sample(
         self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
-    ) -> "DataFrame": ...
+    ) -> ParentDataFrame: ...
 
     @overload
-    def sample(self, withReplacement: float, fraction: Optional[int] = ..., /) -> "DataFrame": ...
+    def sample(
+        self, withReplacement: float, fraction: Optional[int] = ..., /
+    ) -> ParentDataFrame: ...
 
     @overload
     def sample(
@@ -825,7 +827,7 @@ class DataFrame(ParentDataFrame):
         withReplacement: Optional[bool],
         fraction: float,
         seed: Optional[int] = ...,
-    ) -> "DataFrame": ...
+    ) -> ParentDataFrame: ...
 
     def sample(
         self,
