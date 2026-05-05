@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.command
 
-import scala.collection.mutable
-
 import org.json4s._
 import org.json4s.JsonAST.JObject
 import org.json4s.jackson.JsonMethods.{compact, render}
@@ -82,11 +80,10 @@ case class ShowPartitionsJsonCommand(
             sparkSession.sessionState.conf.resolver))
 
         val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
+        Seq(Row(compact(render(JObject("partitions" ->
+          JArray(partNames.map(JString(_)).toList))))))
 
-        val jsonMap = mutable.LinkedHashMap[String, JValue]()
-        jsonMap("partitions") = JArray(partNames.map(JString(_)).toList)
-        Seq(Row(compact(render(JObject(jsonMap.toList)))))
-
+      // ResolvedTempView and ResolvedPersistentView are currently not supported.
       case _ =>
         throw QueryCompilationErrors.showPartitionsAsJsonNotSupportedForV2TablesError()
     }

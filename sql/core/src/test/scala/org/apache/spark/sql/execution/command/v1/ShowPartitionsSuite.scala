@@ -143,6 +143,20 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
         Row("""{"partitions":[]}"""))
     }
   }
+
+  test("null as a partition value AS JSON") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t AS JSON"),
+        Row("""{"partitions":["p1=__HIVE_DEFAULT_PARTITION__"]}"""))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (p1 = null) AS JSON"),
+        Row("""{"partitions":["p1=__HIVE_DEFAULT_PARTITION__"]}"""))
+    }
+  }
 }
 
 /**
@@ -227,6 +241,15 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         s"SHOW PARTITIONS $t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
       checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
+    }
+  }
+
+  test("SPARK-33904: null and empty string as partition values AS JSON") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createNullPartTable(t, "parquet")
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t AS JSON"),
+        Row("""{"partitions":["part=__HIVE_DEFAULT_PARTITION__"]}"""))
     }
   }
 }
