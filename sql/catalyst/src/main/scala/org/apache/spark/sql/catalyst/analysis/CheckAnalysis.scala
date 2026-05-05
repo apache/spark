@@ -671,6 +671,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
               messageParameters = Map.empty)
 
+          case j: NearestByJoin if !conf.crossJoinEnabled =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+              messageParameters = Map.empty)
+
           case j @ NearestByJoin(_, _, _, _, _, rankingExpression, _)
               if !RowOrdering.isOrderable(rankingExpression.dataType) =>
             j.failAnalysis(

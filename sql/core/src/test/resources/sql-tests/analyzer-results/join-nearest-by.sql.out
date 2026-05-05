@@ -348,18 +348,18 @@ SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
 -- !query analysis
-Project [user_id#x, product#x]
-+- NearestByJoin Inner, true, 1, -abs((score#x - pscore#x)), NearestBySimilarity
-   :- SubqueryAlias u
-   :  +- SubqueryAlias spark_catalog.default.users
-   :     +- View (`spark_catalog`.`default`.`users`, [user_id#x, score#x])
-   :        +- Project [cast(col1#x as int) AS user_id#x, cast(col2#x as decimal(3,1)) AS score#x]
-   :           +- LocalRelation [col1#x, col2#x]
-   +- SubqueryAlias p
-      +- SubqueryAlias spark_catalog.default.products
-         +- View (`spark_catalog`.`default`.`products`, [product#x, pscore#x])
-            +- Project [cast(col1#x as string) AS product#x, cast(col2#x as decimal(3,1)) AS pscore#x]
-               +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+  "sqlState" : "42604",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 42,
+    "stopIndex" : 114,
+    "fragment" : "JOIN products p\n  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)"
+  } ]
+}
 
 
 -- !query

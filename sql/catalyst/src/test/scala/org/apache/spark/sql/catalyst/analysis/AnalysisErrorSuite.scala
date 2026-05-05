@@ -938,6 +938,21 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       expectedMessageParameters = Map.empty)
   }
 
+  test("NearestByJoin is rejected when spark.sql.crossJoin.enabled is false") {
+    val left = LocalRelation(AttributeReference("a", IntegerType)())
+    val right = LocalRelation(AttributeReference("b", IntegerType)())
+    val nearestBy = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = left.output.head + right.output.head,
+      direction = NearestBySimilarity)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      assertAnalysisErrorCondition(
+        nearestBy,
+        expectedErrorCondition = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+        expectedMessageParameters = Map.empty)
+    }
+  }
+
   test("check grouping expression data types") {
     def checkDataType(dataType: DataType): Unit = {
       val plan =
