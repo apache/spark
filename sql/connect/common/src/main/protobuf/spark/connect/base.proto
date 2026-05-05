@@ -114,6 +114,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    GetNumPartitions get_num_partitions = 17;
     JsonToDDL json_to_ddl = 18;
   }
 
@@ -221,6 +222,11 @@ message AnalyzePlanRequest {
     Relation relation = 1;
   }
 
+  message GetNumPartitions {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
   message JsonToDDL {
     // (Required) The JSON formatted string to be converted to DDL.
     string json_string = 1;
@@ -229,7 +235,7 @@ message AnalyzePlanRequest {
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
-// Next ID: 16
+// Next ID: 17
 message AnalyzePlanResponse {
   string session_id = 1;
   // Server-side generated idempotency key that the client can use to assert that the server side
@@ -250,6 +256,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    GetNumPartitions get_num_partitions = 15;
     JsonToDDL json_to_ddl = 16;
   }
 
@@ -301,6 +308,11 @@ message AnalyzePlanResponse {
   message GetStorageLevel {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
+  }
+
+  message GetNumPartitions {
+    // The number of partitions in the physical execution plan.
+    int32 num_partitions = 1;
   }
 
   message JsonToDDL {
