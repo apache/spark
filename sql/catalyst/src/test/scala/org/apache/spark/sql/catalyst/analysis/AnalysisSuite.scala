@@ -1764,6 +1764,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
   }
 
+  test("SPARK-56714: __aggregated_access_only should not imply metadata column") {
+    val attr = $"a".int.markAsAggregatedAccessOnly()
+    assert(!attr.isMetadataCol)
+    assert(attr.aggregatedAccessOnly)
+  }
+
   test("SPARK-43030: deduplicate relations with duplicate aliases") {
     // Should not fail with the assertion failure: Found duplicate rewrite attributes.
     val alias = Alias($"a", "x")()
