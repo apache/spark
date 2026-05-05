@@ -597,11 +597,6 @@
       "Explain mode must be one of `<allowed>`; got `<mode>`."
     ]
   },
-  "MCP_PYARROW_REQUIRED": {
-    "message": [
-      "Format `<format>` requires PyArrow to be installed."
-    ]
-  },
   "MCP_QUERY_TIMEOUT": {
     "message": [
       "Tool `<label>` exceeded the configured timeout of `<timeout>` seconds."

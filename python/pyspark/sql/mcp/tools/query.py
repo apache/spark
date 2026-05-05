@@ -178,29 +178,12 @@ async def _handle_execute_sql(args: Dict[str, Any], holder: SessionHolder) -> Di
         payload["rows"] = rows
     elif fmt == "markdown":
         payload["markdown"] = _render_markdown(rows, schema_fields)
-    elif fmt == "arrow_base64":
-        import base64
-        import io
-
-        buf = io.BytesIO()
-        page_df_arrow = df.offset(offset).limit(capped_limit) if offset else df.limit(capped_limit)
-        try:
-            import pyarrow as pa
-        except ImportError as exc:  # pragma: no cover
-            raise PySparkRuntimeError(
-                errorClass="MCP_PYARROW_REQUIRED",
-                messageParameters={"format": "arrow_base64"},
-            ) from exc
-        table = await _with_timeout(holder, page_df_arrow.toArrow, label="execute_sql")
-        with pa.ipc.new_stream(buf, table.schema) as writer:
-            writer.write_table(table)
-        payload["arrow_base64"] = base64.b64encode(buf.getvalue()).decode("ascii")
     else:
         raise PySparkValueError(
             errorClass="MCP_UNSUPPORTED_FORMAT",
             messageParameters={
                 "format": str(fmt),
-                "allowed": "json, markdown, arrow_base64",
+                "allowed": "json, markdown",
             },
         )
     return payload
@@ -235,7 +218,7 @@ def execute_sql_spec() -> ToolSpec:
                 "offset": {"type": "integer", "minimum": 0, "default": 0},
                 "format": {
                     "type": "string",
-                    "enum": ["json", "markdown", "arrow_base64"],
+                    "enum": ["json", "markdown"],
                     "default": "json",
                 },
             },
