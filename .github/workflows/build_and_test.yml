@@ -100,7 +100,7 @@ jobs:
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_install=`./dev/is-changed.py -m pyspark-install`
-          pyspark_connect_old_client=pyspark
+          pyspark_connect_old_client="$pyspark"
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
