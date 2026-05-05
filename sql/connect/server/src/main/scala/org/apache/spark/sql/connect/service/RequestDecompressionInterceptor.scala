@@ -193,6 +193,16 @@ class RequestDecompressionInterceptor extends ServerInterceptor with Logging {
               .build())
         (req, Seq(size))
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.GET_NUM_PARTITIONS =>
+        val (req, size) = decompress(
+          request,
+          request.getGetNumPartitions.getPlan,
+          p =>
+            request.toBuilder
+              .setGetNumPartitions(request.getGetNumPartitions.toBuilder.setPlan(p))
+              .build())
+        (req, Seq(size))
+
       case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
         val (req, size) = decompress(
           request,

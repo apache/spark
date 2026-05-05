@@ -240,6 +240,16 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setDdlString(ddl)
             .build())
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.GET_NUM_PARTITIONS =>
+        val rel = transformRelationPlan(request.getGetNumPartitions.getPlan)
+        val numPartitions =
+          getDataFrameWithoutExecuting(rel).queryExecution.executedPlan.execute().getNumPartitions
+        builder.setGetNumPartitions(
+          proto.AnalyzePlanResponse.GetNumPartitions
+            .newBuilder()
+            .setNumPartitions(numPartitions)
+            .build())
+
       // NOTE: When adding a new AnalyzePlanRequest case here, also update
       // RequestDecompressionInterceptor.decompressAnalyzePlanRequest() to handle
       // this case. The interceptor has a default case that throws UnsupportedOperationException
