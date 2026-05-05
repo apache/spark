@@ -42,6 +42,12 @@ RUN ((add-apt-repository -y ppa:deadsnakes/ppa ||  add-apt-repository -y ppa:dea
     tar -xzf Python-3.8.20.tgz && \
     cd Python-3.8.20 && \
     ./configure --enable-shared --enable-optimizations --prefix=/usr/local LDFLAGS="-Wl,--rpath=/usr/local/lib" && \
+    make altinstall && \
+    cd .. && \
+    curl -O https://www.python.org/ftp/python/3.9.25/Python-3.9.25.tgz && \
+    tar -xzf Python-3.9.25.tgz && \
+    cd Python-3.9.25 && \
+    ./configure --enable-shared --enable-optimizations --prefix=/usr/local LDFLAGS="-Wl,--rpath=/usr/local/lib" && \
     make altinstall)
 
 RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
