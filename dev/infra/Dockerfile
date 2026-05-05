@@ -26,11 +26,11 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 ARG APT_INSTALL="apt-get install -y"
 
-ENV PATH="$PATH:/usr/local/bin"
+ENV PATH "$PATH:/usr/local/bin"
 
-RUN apt-get clean
-RUN apt-get update
-RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
+RUN timeout 5 bash -c 'exec 3<>/dev/tcp/archive.ubuntu.com/80 && printf "HEAD /ubuntu/ HTTP/1.1\r\nHost: archive.ubuntu.com\r\nConnection: close\r\n\r\n" >&3 && IFS= read -r s <&3 && [[ "$s" =~ ^HTTP/.*[[:space:]](2|3)[0-9][0-9] ]]' || find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec sed -i.bak -e 's|archive\.ubuntu\.com|mirror.fcix.net|g' -e 's|security\.ubuntu\.com|mirror.fcix.net|g' {} +
+RUN apt-get clean && apt-get update
+RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev libcurl4-openssl-dev libssl-dev openssl"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
