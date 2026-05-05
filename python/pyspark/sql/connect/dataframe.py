@@ -811,24 +811,6 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    @overload
-    def sample(
-        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
-    ) -> ParentDataFrame: ...
-
-    @overload
-    def sample(
-        self, withReplacement: float, fraction: Optional[int] = ..., /
-    ) -> ParentDataFrame: ...
-
-    @overload
-    def sample(
-        self,
-        withReplacement: Optional[bool],
-        fraction: float,
-        seed: Optional[int] = ...,
-    ) -> ParentDataFrame: ...
-
     def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
