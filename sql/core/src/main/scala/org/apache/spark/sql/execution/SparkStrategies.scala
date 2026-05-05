@@ -971,6 +971,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
+      case logical.externalUDF.MapPartitionsExternalUDF(
+          workerSpec, functionExpr, resultAttrs, child) =>
+        execution.externalUDF.MapPartitionExternalUDFExec(
+          workerSpec, functionExpr,
+          resultAttrs, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child, cache) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child), cache) :: Nil
       case logical.PythonWorkerLogs(jsonAttr) =>

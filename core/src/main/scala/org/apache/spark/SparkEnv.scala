@@ -47,8 +47,13 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
+import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.core.{UDFWorkerManager, WorkerSecurityScope,
+  WorkerSession}
+import org.apache.spark.udf.worker.core.direct.DirectUDFWorkerManager
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkUDFWorkerLogger
 
 /**
  * :: DeveloperApi ::
@@ -120,6 +125,31 @@ class SparkEnv (
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
+  /**
+   * :: Experimental ::
+   * Session factory to generate UDF worker sessions
+   * using the new UDF framework proposed in SPARK-55278
+   */
+  private val udfWorkerManager: UDFWorkerManager = createUDFWorkerManager()
+
+  private def createUDFWorkerManager(): UDFWorkerManager = {
+    // TODO [SPARK-55278]: Select the right manager here.
+    new DirectUDFWorkerManager(new SparkUDFWorkerLogger())
+  }
+
+  /**
+   * :: Experimental ::
+   * Creates a [[WorkerSession]] for the given worker specification
+   * and optional security scope using the registered
+   * [[UDFWorkerManager]].
+   */
+  private[spark] def createExternalUDFSession(
+      workerSpec: UDFWorkerSpecification,
+      securityScope: Option[WorkerSecurityScope] = None
+  ): WorkerSession = {
+    udfWorkerManager.createSession(workerSpec, securityScope)
+  }
+
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata =
@@ -134,6 +164,7 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
+      udfWorkerManager.stop()
       mapOutputTracker.stop()
       if (shuffleManager != null) {
         shuffleManager.stop()
