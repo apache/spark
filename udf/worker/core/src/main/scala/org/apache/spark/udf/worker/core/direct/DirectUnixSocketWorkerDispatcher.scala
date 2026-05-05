@@ -37,7 +37,7 @@ import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.SOCKET_POL
 @Experimental
 abstract class DirectUnixSocketWorkerDispatcher(
     workerSpec: UDFWorkerSpecification,
-    logger: WorkerLogger = WorkerLogger.NoOp)
+    logger: WorkerLogger)
   extends DirectWorkerDispatcher(workerSpec, logger) {
 
   // Removed explicitly in closeTransport(). deleteOnExit is avoided because

@@ -55,8 +55,9 @@ class SocketFileConnection(socketPath: String)
  *   no-op). Tracking the thread-safety contract in the docstring on
  *   [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
  */
-class StubWorkerSession(
-    workerProcess: DirectWorkerProcess) extends DirectWorkerSession(workerProcess) {
+private class StubWorkerSession(
+    workerProcess: DirectWorkerProcess)
+    extends DirectWorkerSession(workerProcess, WorkerLogger.NoOp) {
 
   override protected def doInit(message: InitMessage): Unit = {}
 
@@ -64,7 +65,9 @@ class StubWorkerSession(
       input: Iterator[Array[Byte]]): Iterator[Array[Byte]] =
     Iterator.empty
 
-  override def cancel(): Unit = {}
+  override protected def doCancel(): Unit = {}
+
+  override protected def doClose(): Unit = {}
 }
 
 /**
@@ -73,7 +76,7 @@ class StubWorkerSession(
  * implementation.
  */
 class TestDirectWorkerDispatcher(spec: UDFWorkerSpecification)
-    extends DirectUnixSocketWorkerDispatcher(spec) {
+    extends DirectUnixSocketWorkerDispatcher(spec, WorkerLogger.NoOp) {
 
   override protected def createConnection(
       socketPath: String): UnixSocketWorkerConnection =
@@ -362,7 +365,8 @@ class DirectWorkerDispatcherSuite
     val releaseLatch = new java.util.concurrent.CountDownLatch(1)
     val capturedWorkers =
       new java.util.concurrent.ConcurrentLinkedQueue[DirectWorkerProcess]()
-    val racing = new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner)) {
+    val racing = new DirectUnixSocketWorkerDispatcher(
+      specWithRunner(defaultRunner), WorkerLogger.NoOp) {
       override protected def createConnection(
           socketPath: String): UnixSocketWorkerConnection =
         new SocketFileConnection(socketPath)
@@ -538,7 +542,7 @@ class DirectWorkerDispatcherSuite
     // worker must be terminated rather than leaked until dispatcher.close().
     var capturedWorker: DirectWorkerProcess = null
     val failingDispatcher =
-      new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner)) {
+      new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner), WorkerLogger.NoOp) {
         override protected def createConnection(
             socketPath: String): UnixSocketWorkerConnection =
           new SocketFileConnection(socketPath)
@@ -594,7 +598,7 @@ class DirectWorkerDispatcherSuite
   test("socket file is cleaned up when createConnection throws") {
     val capturedSocketPaths = new java.util.concurrent.ConcurrentLinkedQueue[String]()
     val failingDispatcher =
-      new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner)) {
+      new DirectUnixSocketWorkerDispatcher(specWithRunner(defaultRunner), WorkerLogger.NoOp) {
         override protected def createConnection(
             socketPath: String): UnixSocketWorkerConnection = {
           capturedSocketPaths.add(socketPath)
@@ -760,7 +764,7 @@ class DirectWorkerDispatcherSuite
       .addCommand("sleep 30").build()
     val env = WorkerEnvironment.newBuilder().setInstallation(slowInstall).build()
     val shortTimeoutDispatcher =
-      new DirectUnixSocketWorkerDispatcher(specWithEnv(env = env)) {
+      new DirectUnixSocketWorkerDispatcher(specWithEnv(env = env), WorkerLogger.NoOp) {
         override protected def callableTimeoutMs: Long = 500L
         override protected def createConnection(
             socketPath: String): UnixSocketWorkerConnection =
@@ -897,7 +901,7 @@ class DirectWorkerDispatcherSuite
           s"echo invoked >> ${counterFile.getAbsolutePath}; sleep 30").build())
       .build()
     val timeoutDispatcher =
-      new DirectUnixSocketWorkerDispatcher(specWithEnv(env = env)) {
+      new DirectUnixSocketWorkerDispatcher(specWithEnv(env = env), WorkerLogger.NoOp) {
         override protected def callableTimeoutMs: Long = 500L
         override protected def createConnection(
             socketPath: String): UnixSocketWorkerConnection =

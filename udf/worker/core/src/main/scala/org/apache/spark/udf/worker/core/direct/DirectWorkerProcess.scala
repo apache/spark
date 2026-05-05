@@ -51,7 +51,7 @@ class DirectWorkerProcess(
     val id: String,
     private[direct] val artifacts: WorkerArtifacts,
     val gracefulTimeoutMs: Long,
-    protected val logger: WorkerLogger = WorkerLogger.NoOp,
+    protected val logger: WorkerLogger,
     private[direct] val onLastSessionReleased: DirectWorkerProcess => Unit = _ => ())
   extends AutoCloseable {
 

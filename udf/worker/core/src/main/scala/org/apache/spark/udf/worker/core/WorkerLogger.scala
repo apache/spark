@@ -36,8 +36,34 @@ import org.apache.spark.annotation.Experimental
 trait WorkerLogger {
   def warn(msg: => String): Unit
   def warn(msg: => String, t: Throwable): Unit
+  def info(msg: => String): Unit
+  def info(msg: => String, t: Throwable): Unit
   def debug(msg: => String): Unit
   def debug(msg: => String, t: Throwable): Unit
+
+  /**
+   * Returns a new [[WorkerLogger]] that prefixes every message with
+   * `[className]`. Useful for identifying which class produced a
+   * log line.
+   */
+  def forClass(clazz: Class[_]): WorkerLogger = {
+    val prefix = s"[${clazz.getSimpleName}] "
+    val parent = this
+    new WorkerLogger {
+      override def warn(msg: => String): Unit =
+        parent.warn(prefix + msg)
+      override def warn(msg: => String, t: Throwable): Unit =
+        parent.warn(prefix + msg, t)
+      override def info(msg: => String): Unit =
+        parent.info(prefix + msg)
+      override def info(msg: => String, t: Throwable): Unit =
+        parent.info(prefix + msg, t)
+      override def debug(msg: => String): Unit =
+        parent.debug(prefix + msg)
+      override def debug(msg: => String, t: Throwable): Unit =
+        parent.debug(prefix + msg, t)
+    }
+  }
 }
 
 object WorkerLogger {
@@ -45,6 +71,8 @@ object WorkerLogger {
   val NoOp: WorkerLogger = new WorkerLogger {
     override def warn(msg: => String): Unit = ()
     override def warn(msg: => String, t: Throwable): Unit = ()
+    override def info(msg: => String): Unit = ()
+    override def info(msg: => String, t: Throwable): Unit = ()
     override def debug(msg: => String): Unit = ()
     override def debug(msg: => String, t: Throwable): Unit = ()
   }

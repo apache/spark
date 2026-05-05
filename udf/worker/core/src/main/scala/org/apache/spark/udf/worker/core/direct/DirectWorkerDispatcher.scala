@@ -62,8 +62,11 @@ import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableR
 @Experimental
 abstract class DirectWorkerDispatcher(
     override val workerSpec: UDFWorkerSpecification,
-    protected val logger: WorkerLogger = WorkerLogger.NoOp)
+    workerLogger: WorkerLogger)
   extends WorkerDispatcher {
+
+  protected val logger: WorkerLogger =
+    workerLogger.forClass(getClass)
 
   // TODO: Connection pooling -- reuse idle workers across sessions.
   // TODO: Security scope isolation -- partition pool by WorkerSecurityScope.

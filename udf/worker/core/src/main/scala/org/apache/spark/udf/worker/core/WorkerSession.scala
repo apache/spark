@@ -16,6 +16,7 @@
  */
 package org.apache.spark.udf.worker.core
 
+import java.util.ArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.annotation.Experimental
@@ -76,16 +77,66 @@ case class InitMessage(
  *  - [[close]] must always be called (use try-finally).
  *  - [[cancel]] may be called at any time to abort execution.
  *
- * The lifecycle is enforced here: [[init]] and [[process]] are `final`
- * and delegate to [[doInit]] / [[doProcess]] after AtomicBoolean guards.
+ * The lifecycle is enforced here: [[init]], [[process]], [[cancel]],
+ * and [[close]] are `final` and delegate to [[doInit]] / [[doProcess]] /
+ * [[doCancel]], and [[doClose]] after AtomicBoolean guards.
  * Subclasses implement the protocol-specific work and do not re-check
  * the contract.
+ *
+ * Completion listeners registered via [[addSessionCompletionListener]]
+ * are fired exactly once, after [[doClose]] or [[doCancel]]
+ * (whichever runs first). Note that the completion listener can
+ * be executed in a completely separate thread from the thread who
+ * registered the listener.
  */
 @Experimental
-abstract class WorkerSession extends AutoCloseable {
+abstract class WorkerSession(
+    workerLogger: WorkerLogger
+) extends AutoCloseable {
+
+  protected val logger: WorkerLogger =
+    workerLogger.forClass(getClass)
+
+  /** Unique identifier for this session. */
+  val sessionId: String = java.util.UUID.randomUUID().toString
 
   private val initialized = new AtomicBoolean(false)
   private val processed = new AtomicBoolean(false)
+  private val closed = new AtomicBoolean(false)
+
+  // Guards `completionListeners`, and `completionListenersFired`
+  // to ensure that a listener added after close is fired
+  // immediately and exactly once.
+  private val listenerLock = new Object
+  private var completionListenersFired = false
+  private val completionListeners =
+    new ArrayList[WorkerSession => Unit]()
+
+  /**
+   * Registers a closure to be invoked when this session completes
+   * (via [[close]] or [[cancel]]). Listeners fire exactly once, in
+   * registration order. If the session is already closed when
+   * registering, the listener is fired immediately.
+   */
+  final def addSessionCompletionListener(
+      f: WorkerSession => Unit): Unit = {
+    listenerLock.synchronized {
+      if (completionListenersFired) {
+        // Listeners from the list were already fired
+        // -> Invoke immediately.
+        f(this)
+      } else {
+        completionListeners.add(f)
+      }
+    }
+  }
+
+  private def fireCompletionListeners(): Unit = {
+    listenerLock.synchronized {
+      completionListenersFired = true
+      completionListeners.forEach(_(this))
+    }
+  }
 
   /**
    * Initializes the UDF execution. Must be called exactly once before
@@ -100,6 +151,7 @@ abstract class WorkerSession extends AutoCloseable {
     if (!initialized.compareAndSet(false, true)) {
       throw new IllegalStateException("init has already been called on this session")
     }
+    logger.info(s"Session $sessionId: init")
     doInit(message)
   }
 
@@ -117,21 +169,17 @@ abstract class WorkerSession extends AutoCloseable {
    * @param input iterator of raw input data batches (e.g., Arrow IPC)
    * @return iterator of raw result data batches
    */
-  final def process(input: Iterator[Array[Byte]]): Iterator[Array[Byte]] = {
+  final def process(
+      input: Iterator[Array[Byte]]): Iterator[Array[Byte]] = {
     if (!initialized.get()) {
       throw new IllegalStateException("process called before init")
     }
     if (!processed.compareAndSet(false, true)) {
       throw new IllegalStateException("process has already been called on this session")
     }
+    logger.info(s"Session $sessionId: process started")
     doProcess(input)
   }
-
-  /** Subclass hook for [[init]]. Called once, after the guard. */
-  protected def doInit(message: InitMessage): Unit
-
-  /** Subclass hook for [[process]]. Called at most once, after the guard. */
-  protected def doProcess(input: Iterator[Array[Byte]]): Iterator[Array[Byte]]
 
   /**
    * Requests cancellation of the current UDF execution.
@@ -141,8 +189,34 @@ abstract class WorkerSession extends AutoCloseable {
    * task interruption thread). It may be invoked at any point after
    * [[init]] and should be a no-op if execution has already finished.
    */
-  def cancel(): Unit
+  final def cancel(): Unit = {
+    // TODO [SPARK-55278]: Implement correct cancellation/finish semantics
+    //          according to the worker_spec.proto.
+    if (closed.compareAndSet(false, true)) {
+      logger.info(s"Session $sessionId: cancel")
+      doCancel()
+      fireCompletionListeners()
+    }
+  }
 
   /** Closes this session and releases resources. */
-  override def close(): Unit
+  override final def close(): Unit = {
+    if (closed.compareAndSet(false, true)) {
+      logger.info(s"Session $sessionId: close")
+      doClose()
+      fireCompletionListeners()
+    }
+  }
+
+  /** Subclass hook for [[init]]. Called once, after the guard. */
+  protected def doInit(message: InitMessage): Unit
+
+  /** Subclass hook for [[process]]. Called at most once, after the guard. */
+  protected def doProcess(input: Iterator[Array[Byte]]): Iterator[Array[Byte]]
+
+  /** Subclass hook for [[cancel]]. Called once, after the guard. */
+  protected def doCancel(): Unit
+
+  /** Subclass hook for [[close]]. Called at most once, after the guard. */
+  protected def doClose(): Unit
 }
