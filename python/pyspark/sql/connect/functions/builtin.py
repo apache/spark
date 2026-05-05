@@ -2189,6 +2189,13 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    return _invoke_function("is_valid_variant", _to_col(v))
+
+
+is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
