@@ -230,7 +230,7 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_properties = {"sql_ctx"}
         expected_missing_classic_properties = {"is_cached"}
         expected_missing_connect_methods = set()
-        expected_missing_classic_methods = set()
+        expected_missing_classic_methods = {"getNumPartitions"}
         self.check_compatibility(
             ClassicDataFrame,
             ConnectDataFrame,
