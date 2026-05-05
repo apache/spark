@@ -60,7 +60,7 @@ RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 RUN apt update
 RUN $APT_INSTALL r-base
-RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
+RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2', 'testthat'), repos='https://cloud.r-project.org/')"
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
@@ -68,6 +68,9 @@ RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='htt
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+
+RUN python3.8 -m pip install setuptools virtualenv
+RUN python3.9 -m pip install setuptools virtualenv
 
 RUN python3.8 -m pip  install --only-binary=pandas numpy pandas 'scipy<1.9' coverage 'matplotlib==3.7.2'
 RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'scipy<=1.10' unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'blinker==1.4'
