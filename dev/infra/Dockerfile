@@ -32,7 +32,7 @@ ENV PATH "$PATH:/usr/local/bin"
 
 RUN timeout 5 bash -c 'exec 3<>/dev/tcp/archive.ubuntu.com/80 && printf "HEAD /ubuntu/ HTTP/1.1\r\nHost: archive.ubuntu.com\r\nConnection: close\r\n\r\n" >&3 && IFS= read -r s <&3 && [[ "$s" =~ ^HTTP/.*[[:space:]](2|3)[0-9][0-9] ]]' || find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec sed -i.bak -e 's|archive\.ubuntu\.com|mirror.fcix.net|g' -e 's|security\.ubuntu\.com|mirror.fcix.net|g' {} +
 RUN apt-get clean && apt-get update
-RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev libcurl4-openssl-dev libssl-dev openssl zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev tk-dev uuid-dev"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
+RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev libcurl4-openssl-dev libssl-dev openssl zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev tk-dev uuid-dev pandoc libuv1-dev libuv1"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
@@ -65,11 +65,34 @@ RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57C
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN apt update
 RUN $APT_INSTALL r-base
-RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
+RUN Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
+
+RUN Rscript -e "remotes::install_cran('testthat');" && Rscript -e "library(testthat);"
+# rmarkdown bits
+RUN Rscript -e "remotes::install_cran('fs');library(fs)"
+RUN Rscript -e "remotes::install_cran('sass');library(sass)"
+
+# Install generic packages we let float
+
+RUN Rscript -e " \
+  options(repos = c(CRAN = 'https://cloud.r-project.org/')); \
+  pkgs <- c('knitr', 'markdown', 'rmarkdown', 'e1071', 'survival', 'arrow', 'xml2'); \
+  remotes::install_cran(pkgs, upgrade = 'never'); \
+  missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]; \
+  if (length(missing)) stop('Missing R packages after install: ', paste(missing, collapse = ', ')); \
+    "
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
 RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
+
+# Sanity check the R install
+RUN Rscript -e " \
+  library(testthat); \
+  library(knitr); \
+  library(markdown); \
+  library(rmarkdown); \
+  library(roxygen2); \
+  library(xml2);"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
