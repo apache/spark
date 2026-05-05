@@ -470,6 +470,7 @@ __all__ = [  # noqa: F405
     "schema_of_json",
     "to_json",
     # VARIANT Functions
+    "is_valid_variant",
     "is_variant_null",
     "parse_json",
     "schema_of_variant",
