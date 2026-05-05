@@ -19,7 +19,7 @@ package org.apache.spark.udf.worker.core.direct
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSession}
+import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerLogger, WorkerSession}
 
 /**
  * :: Experimental ::
@@ -41,14 +41,15 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSession}
  */
 @Experimental
 abstract class DirectWorkerSession(
-    private[core] val workerProcess: DirectWorkerProcess) extends WorkerSession {
-
+    private[core] val workerProcess: DirectWorkerProcess,
+    workerLogger: WorkerLogger)
+  extends WorkerSession(workerLogger) {
   private val released = new AtomicBoolean(false)
 
   /** The connection to the worker for this session. */
   def connection: WorkerConnection = workerProcess.connection
 
-  override def close(): Unit = {
+  override protected def doClose(): Unit = {
     if (released.compareAndSet(false, true)) {
       workerProcess.releaseSession()
     }

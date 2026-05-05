@@ -31,6 +31,10 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
 @Experimental
 trait WorkerDispatcher extends AutoCloseable {
 
+  /** Unique identifier for this dispatcher. */
+  val dispatcherId: String =
+    java.util.UUID.randomUUID().toString
+
   def workerSpec: UDFWorkerSpecification
 
   /**
