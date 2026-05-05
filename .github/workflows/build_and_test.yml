@@ -100,6 +100,7 @@ jobs:
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_install=`./dev/is-changed.py -m pyspark-install`
+          pyspark_connect_old_client=pyspark
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -134,6 +135,7 @@ jobs:
             java25=true
           else
             pyspark_install=false
+            pyspark_connect_old_client=false
             pandas=false
             yarn=false
             kubernetes=false
@@ -153,6 +155,7 @@ jobs:
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-install\": \"$pyspark_install\",
+              \"pyspark-connect-old-client\": \"$pyspark_connect_old_client\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
@@ -638,6 +641,8 @@ jobs:
           - >-
             pyspark-connect
           - >-
+            pyspark-connect-old-client
+          - >-
             pyspark-install
           - >-
             pyspark-pandas
@@ -655,6 +660,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
@@ -749,6 +755,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
+      if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
@@ -765,6 +772,35 @@ jobs:
           # For branch-3.5 and below, it uses the default Python versions.
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
+    - name: Run tests for old client
+      env:
+        SPARK_TESTING: 1
+        SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
+        SPARK_CONNECT_TESTING_REMOTE: sc://localhost
+      if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
+      shell: 'script -q -e -c "bash {0}"'
+      run: |
+        # Make less noisy
+        cp conf/log4j2.properties.template conf/log4j2.properties
+        sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
+
+        # Start a Spark Connect server for local
+        PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
+          --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
+          --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`" \
+          --conf spark.sql.execution.arrow.pyspark.validateSchema.enabled=false \
+          --conf spark.sql.execution.pandas.convertToArrowArraySafely=false
+
+        # Checkout to branch-4.0 to use the tests in branch-4.0.
+        cd ..
+        git clone --single-branch --branch branch-4.0 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY spark-4.0
+        cd spark-4.0
+
+        # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
+        # Run branch-4.0 tests
+        ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
+        # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
+        ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-pandas-connect,pyspark-pandas-slow-connect
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
