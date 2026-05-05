@@ -158,7 +158,7 @@ private[spark] object Python {
         "while the main task thread reads output from the Python worker, allowing the two " +
         "directions to overlap for improved throughput. " +
         "This is particularly beneficial for compute-heavy UDFs (e.g., ML inference).")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -169,7 +169,7 @@ private[spark] object Python {
         "can pre-fetch ahead of UDF computation. A higher value allows more overlap between " +
         "input reading and UDF processing, at the cost of increased memory usage. " +
         "Only effective when spark.python.udf.pipelined.enabled is true.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "Queue depth must be positive.")
