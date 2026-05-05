@@ -248,6 +248,7 @@ __all__ = [  # noqa: F405
     "timestamp_micros",
     "timestamp_millis",
     "timestamp_seconds",
+    "time_bucket",
     "time_diff",
     "time_from_micros",
     "time_from_millis",
@@ -469,6 +470,7 @@ __all__ = [  # noqa: F405
     "schema_of_json",
     "to_json",
     # VARIANT Functions
+    "is_valid_variant",
     "is_variant_null",
     "parse_json",
     "schema_of_variant",

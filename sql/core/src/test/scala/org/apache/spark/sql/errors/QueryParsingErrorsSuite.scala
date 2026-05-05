@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
-class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQLHelper {
+class QueryParsingErrorsSuite extends SharedSparkSession with SQLHelper {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())

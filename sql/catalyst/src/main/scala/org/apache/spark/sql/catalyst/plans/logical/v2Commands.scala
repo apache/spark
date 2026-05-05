@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
@@ -130,7 +131,7 @@ trait V2WriteCommand
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName).toSeq
+      ResolveSchemaEvolution.computeSupportedSchemaChanges(table, query.schema, isByName)
     } else {
       Seq.empty
     }
@@ -156,7 +157,7 @@ case class AppendData(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
@@ -204,7 +205,7 @@ case class OverwriteByExpression(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
@@ -264,7 +265,7 @@ case class OverwritePartitionsDynamic(
     writeOptions: Map[String, String],
     isByName: Boolean,
     withSchemaEvolution: Boolean,
-    write: Option[Write] = None) extends V2WriteCommand {
+    write: Option[Write] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
@@ -424,6 +425,7 @@ case class ReplaceData(
  * @param query a query with a delta of records that should written
  * @param originalTable a plan for the original table for which the row-level command was triggered
  * @param projections projections for row ID, row, metadata attributes
+ * @param groupFilterCondition a condition that can be used to filter groups at runtime
  * @param write a logical write, if already constructed
  */
 case class WriteDelta(
@@ -432,6 +434,7 @@ case class WriteDelta(
     query: LogicalPlan,
     originalTable: NamedRelation,
     projections: WriteDeltaProjections,
+    groupFilterCondition: Option[Expression] = None,
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
@@ -520,8 +523,10 @@ case class WriteDelta(
 trait V2CreateTableAsSelectPlan
   extends V2CreateTablePlan
     with AnalysisOnlyCommand
-    with CTEInChildren {
+    with CTEInChildren
+    with TransactionalWrite {
   def query: LogicalPlan
+  override def table: LogicalPlan = name
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
@@ -909,7 +914,6 @@ case class SetNamespaceLocation(
  */
 case class DescribeRelation(
     relation: LogicalPlan,
-    partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
@@ -919,6 +923,19 @@ case class DescribeRelation(
 
 object DescribeRelation {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+/**
+ * The logical plan of the DESCRIBE relation_name PARTITION command.
+ */
+case class DescribeTablePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec,
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs)
+  extends V2PartitionCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): DescribeTablePartition =
+    copy(table = newChild)
 }
 
 /**
@@ -936,6 +953,36 @@ case class DescribeColumn(
 
 object DescribeColumn {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+
+  /**
+   * Extract the column nameParts from the (possibly resolved) column expression on a
+   * `DescribeColumn` command. Used by both the v1 rewrite in `ResolveSessionCatalog` and the
+   * v2 strategy case in `DataSourceV2Strategy` -- centralizing the unwrap means the two paths
+   * cannot drift.
+   *
+   * `ResolveReferences` typically resolves the column against the relation's `output`, so we
+   * see an `Attribute` here. The legacy `UnresolvedAttribute` form is also accepted (e.g. when
+   * the column name doesn't exist in the relation and resolution is skipped). `Alias`
+   * indicates a nested-column reference (`a.b`) which `ResolveReferences` rewrites to
+   * `Alias(GetStructField(...), b)` -- nested columns are unsupported on this command.
+   */
+  def extractColumnNameParts(column: org.apache.spark.sql.catalyst.expressions.Expression)
+      : Seq[String] = {
+    import org.apache.spark.SparkException
+    import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+    import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+    import org.apache.spark.sql.catalyst.util.toPrettySQL
+    import org.apache.spark.sql.errors.QueryCompilationErrors
+    column match {
+      case u: UnresolvedAttribute => u.nameParts
+      case a: Attribute => a.qualifier :+ a.name
+      case Alias(child, _) =>
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "DESC TABLE COLUMN", toPrettySQL(child))
+      case _ =>
+        throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
+    }
+  }
 }
 
 /**
@@ -943,7 +990,8 @@ object DescribeColumn {
  */
 case class DeleteFromTable(
     table: LogicalPlan,
-    condition: Expression) extends UnaryCommand with SupportsSubquery {
+    condition: Expression)
+  extends UnaryCommand with TransactionalWrite with SupportsSubquery {
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
@@ -965,7 +1013,8 @@ case class DeleteFromTableWithFilters(
 case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
-    condition: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+    condition: Option[Expression])
+  extends UnaryCommand with TransactionalWrite with SupportsSubquery {
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 
@@ -998,8 +1047,12 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with WriteWithSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand
+    with WriteWithSchemaEvolution
+    with SupportsSubquery
+    with TransactionalWrite {
 
+  // Implements WriteWithSchemaEvolution.table and TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1041,9 +1094,8 @@ case class MergeIntoTable(
 
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
-      val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(this)
-      ResolveSchemaEvolution.computeSupportedSchemaChanges(
-        table, referencedSourceSchema, isByName = true).toSeq
+      val candidateChanges = MergeIntoTable.computePendingSchemaChanges(this)
+      ResolveSchemaEvolution.filterSupportedChanges(table, candidateChanges)
     } else {
       Seq.empty
     }
@@ -1061,6 +1113,7 @@ case class MergeIntoTable(
     actions.forall {
       case a: UpdateAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
       case a: InsertAction => MergeIntoTable.areSchemaEvolutionReady(a.assignments, sourceTable)
+      case _: DeleteAction => true
       case _ => false
     }
   }
@@ -1097,112 +1150,101 @@ object MergeIntoTable {
       .toSet
   }
 
-  // A pruned version of source schema that only contains columns/nested fields
-  // explicitly and directly assigned to a target counterpart in MERGE INTO actions,
-  // which are relevant for schema evolution.
-  // Examples:
-  // * UPDATE SET target.a = source.a
-  // * UPDATE SET nested.a = source.nested.a
-  // * INSERT (a, nested.b) VALUES (source.a, source.nested.b)
-  // New columns/nested fields in this schema that are not existing in target schema
-  // will be added for schema evolution.
-  def sourceSchemaForSchemaEvolution(merge: MergeIntoTable): StructType = {
-    val actions = merge.matchedActions ++ merge.notMatchedActions
-    val assignments = actions.collect {
-      case a: UpdateAction => a.assignments
-      case a: InsertAction => a.assignments
-    }.flatten
+  private def computePendingSchemaChanges(merge: MergeIntoTable): Seq[TableChange] = {
+    schemaEvolutionTriggeringAssignments(merge).flatMap {
+      // New column: the key didn't resolve against the target, so the column is missing.
+      // Applies to top-level fields (e.g. SET new_col = source.new_col) and nested fields
+      // where the leaf is missing (e.g. SET addr.zip = source.addr.zip).
+      case a @ Assignment(UnresolvedAttribute(fieldPath), _)
+          if !containsColumn(merge.targetTable, fieldPath) =>
+        Seq(TableChange.addColumn(fieldPath.toArray, a.value.dataType.asNullable))
 
-    val containsStarAction = actions.exists {
-      case _: UpdateStarAction => true
-      case _: InsertStarAction => true
-      case _ => false
-    }
+      // Type mismatch on an existing column: the key is resolved but the source type differs.
+      // For atomic types this produces an updateColumnType; for structs this recurses to
+      // find nested additions or type changes (e.g. SET addr = source.addr where source.addr
+      // has an extra field or a widened child type).
+      case a if a.key.resolved && a.key.dataType != a.value.dataType =>
+        ResolveSchemaEvolution.computeSchemaChanges(
+          a.key.dataType,
+          a.value.dataType,
+          fieldPath = extractFieldPath(a.key, allowUnresolved = false),
+          isByName = true,
+          throwError = throwIncompatibleSchemasError(merge))
 
-    def filterSchema(sourceSchema: StructType, basePath: Seq[String]): StructType =
-      StructType(sourceSchema.flatMap { field =>
-        val fieldPath = basePath :+ field.name
-
-        field.dataType match {
-          // Specifically assigned to in one clause:
-          // always keep, including all nested attributes
-          case _ if assignments.exists(isEqual(_, fieldPath)) => Some(field)
-          // If this is a struct and one of the children is being assigned to in a merge clause,
-          // keep it and continue filtering children.
-          case struct: StructType if assignments.exists(assign =>
-            isPrefix(fieldPath, extractFieldPath(assign.key, allowUnresolved = true))) =>
-            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
-          // The field isn't assigned to directly or indirectly (i.e. its children) in any non-*
-          // clause. Check if it should be kept with any * action.
-          case struct: StructType if containsStarAction =>
-            Some(field.copy(dataType = filterSchema(struct, fieldPath)))
-          case _ if containsStarAction => Some(field)
-          // The field and its children are not assigned to in any * or non-* action, drop it.
-          case _ => None
-        }
-      })
-
-    filterSchema(merge.sourceTable.schema, Seq.empty)
+      // Types already match - no schema change needed.
+      case _ => Seq.empty
+    }.distinct
   }
 
-  // Helper method to extract field path from an Expression.
+  private def throwIncompatibleSchemasError(merge: MergeIntoTable): Nothing = {
+    throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(
+      merge.targetTable.schema,
+      merge.sourceTable.schema)
+  }
+
+  // Schema evolution affects only fields referenced in MERGE INTO assignments.
+  // Candidate assignments are those in which the key is a direct assignment from the value,
+  // where the key is a (potentially missing) field in the target and the value is the
+  // same-named field in the source.
+  //
+  // Explicit assignment examples:
+  //   UPDATE SET target.a = source.a
+  //   UPDATE SET target.nested.a = source.nested.a
+  //   INSERT (a, nested.b) VALUES (source.a, source.nested.b)
+  //
+  // Star actions (UPDATE SET * / INSERT *) also qualify because they will be resolved to
+  // per-column assignments, e.g.:
+  //   UPDATE SET * => UPDATE SET target.a = source.a, target.b = source.b, ...
+  //   INSERT *     => INSERT (a, b, ...) VALUES (source.a, source.b, ...)
+  private def schemaEvolutionTriggeringAssignments(
+      merge: MergeIntoTable): Seq[Assignment] = {
+    val actions = merge.matchedActions ++ merge.notMatchedActions
+    val assignments = actions.flatMap {
+      case a: UpdateAction => a.assignments
+      case a: InsertAction => a.assignments
+      case _ => Seq.empty
+    }
+    assignments.filter(isSchemaEvolutionTrigger(_, merge.sourceTable))
+  }
+
   private def extractFieldPath(expr: Expression, allowUnresolved: Boolean): Seq[String] = {
     expr match {
       case UnresolvedAttribute(nameParts) if allowUnresolved => nameParts
       case a: AttributeReference => Seq(a.name)
-      case Alias(child, _) => extractFieldPath(child, allowUnresolved)
       case GetStructField(child, ordinal, nameOpt) =>
         extractFieldPath(child, allowUnresolved) :+ nameOpt.getOrElse(s"col$ordinal")
       case _ => Seq.empty
     }
   }
 
-  // Helper method to check if a given field path is a prefix of another path.
-  private def isPrefix(prefix: Seq[String], path: Seq[String]): Boolean =
-    prefix.length <= path.length && prefix.zip(path).forall {
-      case (prefixNamePart, pathNamePart) =>
-        SQLConf.get.resolver(prefixNamePart, pathNamePart)
-    }
-
-  // Helper method to check if an assignment key is equal to a source column
-  // and if the assignment value is that same source column.
-  // Example: UPDATE SET target.a = source.a
-  private def isEqual(assignment: Assignment, sourceFieldPath: Seq[String]): Boolean = {
-    // key must be a non-qualified field path that may be added to target schema via evolution
-    val assignmentKeyExpr = extractFieldPath(assignment.key, allowUnresolved = true)
-    // value should always be resolved (from source)
-    val assignmentValueExpr = extractFieldPath(assignment.value, allowUnresolved = false)
-    assignmentKeyExpr == assignmentValueExpr && assignmentKeyExpr == sourceFieldPath
+  private def containsColumn(table: LogicalPlan, fieldPath: Seq[String]): Boolean = {
+    table.schema.findNestedField(fieldPath, resolver = SQLConf.get.resolver).isDefined
   }
 
   private def areSchemaEvolutionReady(
       assignments: Seq[Assignment],
       source: LogicalPlan): Boolean = {
-    assignments.forall(assign => assign.resolved || isSchemaEvolutionCandidate(assign, source))
+    assignments.forall(assign => assign.resolved || isSchemaEvolutionTrigger(assign, source))
   }
 
-  private def isSchemaEvolutionCandidate(assignment: Assignment, source: LogicalPlan): Boolean = {
-    assignment.value.resolved && isSameColumnAssignment(assignment, source)
-  }
-
-  // Helper method to check if an assignment key is equal to a source column
-  // and if the assignment value is that same source column.
+  // Checks if an assignment key maps to the same-named source column, meaning the
+  // assignment is a direct copy from source to target that may trigger schema evolution.
   //
   // Top-level example: UPDATE SET target.a = source.a
-  //   key:   AttributeReference("a", ...) -> path Seq("a")
-  //   value: AttributeReference("a", ...) from source
+  //   key:   AttributeReference("a") or UnresolvedAttribute("a")
+  //   value: AttributeReference("a") from source
   //
-  // Nested example: UPDATE SET addr.city = source.addr.city
-  //   key:   GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1)
-  //   value: GetStructField(GetStructField(AttributeReference("addr", ...), 0), 1) from source
+  // Nested example: UPDATE SET target.addr.city = source.addr.city
+  //   key:   GetStructField(AttributeReference("addr"), ..., "city")
+  //   value: GetStructField(AttributeReference("addr"), ..., "city") from source
   //
-  // references contains only root attributes, so subsetOf(source.outputSet) works for both.
-  private def isSameColumnAssignment(assignment: Assignment, source: LogicalPlan): Boolean = {
-    // key must be a non-qualified field path that may be added to target schema via evolution
-    val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)
-    // value should always be resolved (from source)
-    val valuePath = extractFieldPath(assignment.value, allowUnresolved = false)
-    keyPath == valuePath && assignment.value.references.subsetOf(source.outputSet)
+  // `references` contains only root attributes, so subsetOf(source.outputSet) works for both.
+  private def isSchemaEvolutionTrigger(assignment: Assignment, source: LogicalPlan): Boolean = {
+    assignment.value.resolved && {
+      val keyPath = extractFieldPath(assignment.key, allowUnresolved = true)
+      val valuePath = extractFieldPath(assignment.value, allowUnresolved = false)
+      keyPath == valuePath && assignment.value.references.subsetOf(source.outputSet)
+    }
   }
 }
 
@@ -1268,6 +1310,22 @@ case class Assignment(key: Expression, value: Expression) extends Expression
   override def sql: String = s"${key.sql} = ${value.sql}"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Assignment = copy(key = newLeft, value = newRight)
+}
+
+/**
+ * Marker trait for write operations that participate in a DSv2 transaction.
+ *
+ * Implementations are expected to target a DSv2 catalog backed by a
+ * [[org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin]].
+ */
+trait TransactionalWrite extends LogicalPlan {
+  def table: LogicalPlan
+}
+
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait StreamingV2WriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
 }
 
 /**
@@ -1361,8 +1419,12 @@ case class ShowTablePartition(
 /**
  * The logical plan of the SHOW VIEWS command.
  *
- * Notes: v2 catalogs do not support views API yet, the command will fallback to
- * v1 ShowViewsCommand during ResolveSessionCatalog.
+ * Session-catalog targets fall back to v1 `ShowViewsCommand` via `ResolveSessionCatalog`.
+ * v2 [[org.apache.spark.sql.connector.catalog.ViewCatalog]] catalogs are handled in
+ * `DataSourceV2Strategy` (enumerates via
+ * [[org.apache.spark.sql.connector.catalog.ViewCatalog#listViews]]). Non-ViewCatalog v2
+ * catalogs are rejected up front in `ResolveSessionCatalog` with
+ * `MISSING_CATALOG_ABILITY.VIEWS`.
  */
 case class ShowViews(
     namespace: LogicalPlan,
@@ -1712,19 +1774,42 @@ case class RepairTable(
 
 /**
  * The logical plan of the ALTER VIEW ... AS command.
+ *
+ * Extends [[AnalysisOnlyCommand]] so [[Analyzer.HandleSpecialCommand]] captures
+ * `referredTempFunctions` from [[AnalysisContext]]; this list is needed by
+ * [[CheckViewReferences]] and by the v2 execs when the target is a non-session catalog.
+ * Session-catalog targets are still rewritten to [[AlterViewAsCommand]] by
+ * `ResolveSessionCatalog` and the captured value is dropped there (the v1 command re-captures).
  */
 case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
-    query: LogicalPlan) extends BinaryCommand with CTEInChildren {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
+    query: LogicalPlan,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
+    isAnalyzed = true,
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(child = newLeft, query = newRight)
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newChild, newQuery) =>
+        copy(child = newChild, query = newQuery)
+      case others =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 
@@ -1741,6 +1826,11 @@ case class AlterViewSchemaBinding(
 
 /**
  * The logical plan of the CREATE VIEW ... command.
+ *
+ * Extends [[AnalysisOnlyCommand]] so that [[Analyzer.HandleSpecialCommand]] captures
+ * `referredTempFunctions` from the [[AnalysisContext]] after the child query is analyzed;
+ * this list is needed for `verifyTemporaryObjectsNotExists`-style checks on downstream
+ * execution paths.
  */
 case class CreateView(
     child: LogicalPlan,
@@ -1752,15 +1842,32 @@ case class CreateView(
     query: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewSchemaMode: ViewSchemaMode) extends BinaryCommand with CTEInChildren {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
+    viewSchemaMode: ViewSchemaMode,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
+    isAnalyzed = true,
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(child = newLeft, query = newRight)
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newChild, newQuery) =>
+        copy(child = newChild, query = newQuery)
+      case others =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 

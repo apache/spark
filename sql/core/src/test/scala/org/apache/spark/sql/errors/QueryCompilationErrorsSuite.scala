@@ -41,9 +41,8 @@ case class ComplexClass(a: Long, b: StringLongClass)
 case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
-  extends QueryTest
-  with QueryErrorsBase
-  with SharedSparkSession {
+  extends SharedSparkSession
+  with QueryErrorsBase {
   import testImplicits._
 
   test("CANNOT_UP_CAST_DATATYPE: invalid upcast data type") {

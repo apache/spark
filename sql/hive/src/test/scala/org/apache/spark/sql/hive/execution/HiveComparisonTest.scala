@@ -375,6 +375,7 @@ abstract class HiveComparisonTest extends SparkFunSuite {
                 (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTablePartition]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeColumn]) &&
                 preparedHive != catalyst) {
 

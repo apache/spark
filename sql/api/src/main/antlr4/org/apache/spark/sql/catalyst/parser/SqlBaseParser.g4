@@ -448,6 +448,7 @@ setResetStatement
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
+    | SET PATH EQ pathElement (COMMA pathElement)*                     #setPath
     | SET variable assignmentList                                      #setVariable
     | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
@@ -457,6 +458,15 @@ setResetStatement
     | SET .*?                                                          #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
     | RESET .*?                                                        #resetConfiguration
+    ;
+
+pathElement
+    : DEFAULT_PATH
+    | SYSTEM_PATH
+    | PATH
+    | CURRENT_DATABASE
+    | CURRENT_SCHEMA
+    | multipartIdentifier
     ;
 
 executeImmediate
@@ -799,6 +809,7 @@ fromStatementBody
       aggregationClause?
       havingClause?
       windowClause?
+      qualifyClause?
       queryOrganization
     ;
 
@@ -816,7 +827,8 @@ querySpecification
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #regularQuerySpecification
+      windowClause?
+      qualifyClause?                                                        #regularQuerySpecification
     ;
 
 transformClause
@@ -885,6 +897,10 @@ whereClause
 
 havingClause
     : HAVING booleanExpression
+    ;
+
+qualifyClause
+    : QUALIFY booleanExpression
     ;
 
 hint
@@ -1033,7 +1049,7 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
@@ -1050,6 +1066,10 @@ joinType
 joinCriteria
     : ON booleanExpression
     | USING identifierList
+    ;
+
+nearestByClause
+    : (APPROX | EXACT) NEAREST num=INTEGER_VALUE? BY (DISTANCE | SIMILARITY) expression
     ;
 
 sample
@@ -1914,6 +1934,7 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1990,6 +2011,7 @@ ansiNonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTRIBUTE
     | DIV
     | DO
@@ -1999,6 +2021,7 @@ ansiNonReserved
     | ENFORCED
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2096,6 +2119,7 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2125,6 +2149,7 @@ ansiNonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2170,6 +2195,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2286,6 +2312,7 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | AS
@@ -2381,6 +2408,7 @@ nonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTINCT
     | DISTRIBUTE
     | DIV
@@ -2394,6 +2422,7 @@ nonReserved
     | ESCAPE
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2506,6 +2535,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2544,6 +2574,7 @@ nonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2591,6 +2622,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT

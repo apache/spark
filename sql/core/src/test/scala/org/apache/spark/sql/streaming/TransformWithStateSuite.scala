@@ -720,6 +720,74 @@ class RunningCountStatefulProcessorWithMultipleTimers
   }
 }
 
+// SPARK-56566: Registers a processing-time timer at ts=0 on the second (and later) input
+// for each key. Used to guard the invariant that timers registered with an
+// expiry at or below the previous batch's timestamp (which registerTimer
+// does not currently forbid) still fire in the current batch. A bounded
+// range scan over `(prevBatchTimestampMs, batchTimestampMs]` in
+// `processTimers` would silently drop such timers; this test pins that
+// down until registerTimer grows an explicit validation.
+class RunningCountStatefulProcessorWithPastProcTimeTimer
+  extends RunningCountStatefulProcessor {
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = Option(_countState.get()).getOrElse(0L)
+
+    if (currCount >= 1) {
+      getHandle.registerTimer(0L)
+    }
+
+    val count = currCount + 1
+    _countState.update(count)
+    Iterator((key, count.toString))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+    Iterator((key, "-1"))
+  }
+}
+
+// SPARK-56566: Event-time counterpart of [[RunningCountStatefulProcessorWithPastProcTimeTimer]].
+// Registers an event-time timer at ts=0 on the second (and later) input for each key. A bounded
+// scan would silently drop the timer - the test pins the behavior of no-lower-bound guarantee
+// until registerTimer enforces `ts > watermark` itself.
+class MaxEventTimeWithPastEventTimeTimerStatefulProcessor
+  extends StatefulProcessor[String, (String, Long), (String, Int)]
+  with Logging {
+  @transient private var _hasInput: ValueState[Boolean] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    _hasInput = getHandle.getValueState[Boolean](
+      "hasInput", Encoders.scalaBoolean, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[(String, Int)] = {
+    val seen = Option(_hasInput.get()).getOrElse(false)
+    if (seen) {
+      getHandle.registerTimer(0L)
+    }
+    _hasInput.update(true)
+    val maxEventTimeSec = inputRows.map(_._2).max
+    Iterator((key, maxEventTimeSec.toInt))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
+    Iterator((key, -1))
+  }
+}
+
 class MaxEventTimeStatefulProcessor
   extends StatefulProcessor[String, (String, Long), (String, Int)]
   with Logging {
@@ -1323,6 +1391,84 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", -1), ("b", 31))
       )
     }
+  }
+
+  test("SPARK-56566: transformWithState - processing time timer registered at " +
+    "ts <= prevBatchTimestampMs must still fire") {
+    // registerTimer does not currently restrict the expiry timestamp, so a
+    // user can legally register a timer at ts=0 while the current batch's
+    // clock is 2000 and prevBatchTimestampMs is 1000. processTimers must
+    // still fire it in the current batch. This test pins that behavior so
+    // any future optimization that bounds the timer scan from below (e.g.
+    // via prevBatchTimestampMs) cannot silently drop such timers.
+    val clock = new StreamManualClock
+
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(
+        new RunningCountStatefulProcessorWithPastProcTimeTimer(),
+        TimeMode.ProcessingTime(),
+        OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      CheckNewAnswer(("a", "1")),
+      Execute { q =>
+        assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") === 0)
+        assert(q.lastProgress.stateOperators(0).customMetrics.get("numExpiredTimers") === 0)
+      },
+
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      CheckNewAnswer(("a", "2"), ("a", "-1")),
+      Execute { q =>
+        assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") === 1)
+        assert(q.lastProgress.stateOperators(0).customMetrics.get("numExpiredTimers") === 1)
+      },
+
+      StopStream
+    )
+  }
+
+  test("SPARK-56566: transformWithState - event time timer registered at " +
+    "ts <= watermark must still fire") {
+    // Event-time counterpart of the processing-time regression test above.
+    // registerTimer does not restrict the expiry timestamp, so a user can
+    // register an event-time timer at ts=0 while the current batch's
+    // eviction watermark is 20000 and the previous batch's was 5000.
+    // processTimers must still fire it in the current batch. This test
+    // pins that behavior so any future optimization that bounds the timer
+    // scan from below (e.g. via eventTimeWatermarkForLateEvents) cannot
+    // silently drop such timers.
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS()
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .transformWithState(
+          new MaxEventTimeWithPastEventTimeTimerStatefulProcessor(),
+          TimeMode.EventTime(),
+          OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(),
+
+      // Batch 1: eventTime=15s -> eviction watermark=5s. No past timer yet.
+      AddData(inputData, ("a", 15)),
+      CheckNewAnswer(("a", 15)),
+
+      // Batch 2: eventTime=30s -> eviction watermark=20s. The previous
+      // batch's eviction watermark (5s) is what a bounded scan would use as
+      // the exclusive lower bound. The processor registers a timer at ts=0,
+      // which is strictly below that. It must still fire here.
+      AddData(inputData, ("a", 30)),
+      CheckNewAnswer(("a", 30), ("a", -1))
+    )
   }
 
   test("transformWithState - timer duration should be reflected in metrics") {

@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
+class DatasetOptimizationSuite extends SharedSparkSession {
   import testImplicits._
 
   test("SPARK-26619: Prune the unused serializers from SerializeFromObject") {

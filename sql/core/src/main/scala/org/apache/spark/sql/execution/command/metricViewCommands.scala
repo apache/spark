@@ -51,10 +51,10 @@ case class CreateMetricViewCommand(
     if (userSpecifiedColumns.nonEmpty) {
       if (userSpecifiedColumns.length > analyzed.output.length) {
         throw QueryCompilationErrors.cannotCreateViewNotEnoughColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzed)
+          name.nameParts, userSpecifiedColumns.map(_._1), analyzed)
       } else if (userSpecifiedColumns.length < analyzed.output.length) {
         throw QueryCompilationErrors.cannotCreateViewTooManyColumnsError(
-          name, userSpecifiedColumns.map(_._1), analyzed)
+          name.nameParts, userSpecifiedColumns.map(_._1), analyzed)
       }
     }
     catalog.createTable(
@@ -90,7 +90,8 @@ object MetricViewHelper {
     val metricViewNode = MetricViewPlanner.planWrite(
       tableMeta, viewText, session.sessionState.sqlParser)
     val analyzed = analyzer.executeAndCheck(metricViewNode, new QueryPlanningTracker)
-    ViewHelper.verifyTemporaryObjectsNotExists(isTemporary = false, name, analyzed, Seq.empty)
+    ViewHelper.verifyTemporaryObjectsNotExists(
+      isTemporary = false, name.nameParts, analyzed, Seq.empty)
     analyzed
   }
 }

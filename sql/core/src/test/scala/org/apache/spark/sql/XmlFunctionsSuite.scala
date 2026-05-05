@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
+class XmlFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("from_xml") {

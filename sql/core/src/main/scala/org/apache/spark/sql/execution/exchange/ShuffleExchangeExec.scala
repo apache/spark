@@ -241,17 +241,22 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    val dep = ShuffleExchangeExec.prepareShuffleDependency(
-      inputRDD,
-      child.output,
-      outputPartitioning,
-      serializer,
-      writeMetrics)
-    metrics("numPartitions").set(dep.partitioner.numPartitions)
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(
-      sparkContext, executionId, metrics("numPartitions") :: Nil)
-    dep
+    // Wrap in the exchange's RDD scope so that any wrapper RDDs created during shuffle dependency
+    // preparation (e.g. by prepareShuffleDependency's mapPartitionsInternal calls) get this
+    // exchange's scope ID.
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true, rddScopeId) {
+      val dep = ShuffleExchangeExec.prepareShuffleDependency(
+        inputRDD,
+        child.output,
+        outputPartitioning,
+        serializer,
+        writeMetrics)
+      metrics("numPartitions").set(dep.partitioner.numPartitions)
+      val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+      SQLMetrics.postDriverMetricUpdates(
+        sparkContext, executionId, metrics("numPartitions") :: Nil)
+      dep
+    }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -402,7 +407,7 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _) =>
+      case KeyedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID

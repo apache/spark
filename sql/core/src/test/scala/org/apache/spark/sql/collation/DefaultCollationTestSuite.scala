@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
-abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSession {
+abstract class DefaultCollationTestSuite extends SharedSparkSession {
 
   protected def resetCatalog: Boolean = false
 
@@ -1552,6 +1552,29 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView"), Row(1))
         assertTableColumnCollation(testView, "c1", "UTF8_LCASE")
+      }
+    }
+  }
+
+  testString("ALTER VIEW AS picks up the namespace's default collation when the existing " +
+      "view has none") {
+    _ =>
+    // The view is created in a schema with no default collation, so the stored
+    // `CatalogTable.collation` is `None`. After the schema gains a default, the next
+    // `ALTER VIEW AS` must fold that default into both the analyzed plan's literal types
+    // (so `assertTableColumnCollation` sees it on read) and the persisted CatalogTable so
+    // the AnalysisContext fallback fires on every subsequent read.
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema")
+      sql(s"USE $testSchema")
+      withView(testView) {
+        sql(s"CREATE VIEW $testView AS SELECT 'a' AS c1")
+        assertTableColumnCollation(testView, "c1", "UTF8_BINARY")
+
+        sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION UTF8_LCASE")
+        sql(s"ALTER VIEW $testView AS SELECT 'x' AS c1, 'y' AS c2")
+        assertTableColumnCollation(testView, "c1", "UTF8_LCASE")
+        assertTableColumnCollation(testView, "c2", "UTF8_LCASE")
       }
     }
   }

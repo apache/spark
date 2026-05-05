@@ -25,11 +25,10 @@ import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Filter, Project, SubqueryAlias}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleton
-    with BeforeAndAfter with SQLTestUtils {
+    with BeforeAndAfter {
 
   import spark.implicits._
   import spark.toRichColumn

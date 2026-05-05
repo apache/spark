@@ -26,7 +26,7 @@ A SQL join is used to combine rows from two relations based on join criteria. Th
 ### Syntax
 
 ```sql
-relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria ] | NATURAL join_type JOIN [ LATERAL ] relation }
+relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_clause ] | NATURAL join_type JOIN [ LATERAL ] relation }
 ```
 
 ### Parameters
@@ -52,6 +52,30 @@ relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria ] | NATURAL j
     `boolean_expression`
 
     Specifies an expression with a return type of boolean.
+
+* **nearest_by_clause**
+
+    Specifies a nearest-by top-K ranking join. For each row on the left (query side), returns up to `num_results` rows from the right (base side), ranked by `ranking_expression`. Only `INNER` (the default) and `LEFT OUTER` join types are supported with this clause.
+
+    **Syntax:** `{ APPROX | EXACT } NEAREST [ num_results ] BY { DISTANCE | SIMILARITY } ranking_expression`
+
+    `APPROX | EXACT`
+
+    Controls the search algorithm contract. `APPROX` allows the optimizer to use faster approximate strategies (such as indexed nearest-neighbor search when available). `EXACT` forces brute-force evaluation and requires `ranking_expression` to be deterministic.
+
+    `num_results`
+
+    A positive integer literal between 1 and 100000 that limits the number of matches per left row. Defaults to 1 when omitted.
+
+    `DISTANCE | SIMILARITY`
+
+    `DISTANCE` ranks rows by smallest value of `ranking_expression` first. `SIMILARITY` ranks rows by largest value first. Matched right-side rows are emitted in best-first order: smallest ranking value first under `DISTANCE`, largest first under `SIMILARITY`. (Downstream operators may reorder; add an explicit `ORDER BY` if you need to lock in the ordering.)
+
+    `ranking_expression`
+
+    A scalar expression that returns an orderable type. Must be deterministic with `EXACT`; may be nondeterministic with `APPROX` (e.g., `rand()` for randomized tie-breaking). The expression is evaluated once per (left, right) pair on the brute-force path, so avoid expensive or side-effecting UDFs in ranking expressions.
+
+    **Performance note.** The current implementation evaluates the full cross-product of the left and right sides and bounds memory per left row by `num_results`. Per-query work is `O(|left| × |right| × log num_results)`. Index-backed approximate strategies (transparent to `APPROX` queries) are planned in a future release; until then, pre-filter the right side (e.g. via a subquery) when it is large.
 
 ### Join Types
 

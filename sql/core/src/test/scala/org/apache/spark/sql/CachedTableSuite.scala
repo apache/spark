@@ -64,8 +64,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 private case class BigData(s: String)
 
 @SlowSQLTest
-class CachedTableSuite extends QueryTest
-  with SharedSparkSession
+class CachedTableSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeographyDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray

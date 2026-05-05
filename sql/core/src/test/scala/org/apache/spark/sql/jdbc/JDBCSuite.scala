@@ -30,7 +30,7 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
@@ -47,7 +47,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest with SharedSparkSession {
+class JDBCSuite extends SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"

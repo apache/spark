@@ -114,7 +114,7 @@ object OptimizeMetadataOnlyDeleteFromTable extends Rule[LogicalPlan] with Predic
         val command = rd.operation.command
         Some(rd, command, cond, originalTable)
 
-      case wd @ WriteDelta(_, cond, _, originalTable, _, _) =>
+      case wd @ WriteDelta(_, cond, _, originalTable, _, _, _) =>
         val command = wd.operation.command
         Some(wd, command, cond, originalTable)
 

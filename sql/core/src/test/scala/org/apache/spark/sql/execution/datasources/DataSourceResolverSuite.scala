@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   MetadataResolver,
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-class DataSourceResolverSuite extends QueryTest with SharedSparkSession {
+class DataSourceResolverSuite extends SharedSparkSession {
   private val keyValueTableSchema = StructType(
     Seq(
       StructField("key", IntegerType, true),
