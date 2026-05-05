@@ -257,6 +257,17 @@ class Dataset[T] private[sql] (
     .getIsStreaming
     .getIsStreaming
 
+  /**
+   * Returns the number of partitions of this Dataset.
+   *
+   * @group basic
+   * @since 4.2.0
+   */
+  def getNumPartitions: Int = sparkSession
+    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.GET_NUM_PARTITIONS)
+    .getGetNumPartitions
+    .getNumPartitions
+
   /** @inheritdoc */
   // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = {
