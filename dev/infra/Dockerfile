@@ -33,11 +33,12 @@ RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/jav
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
 # Also ubuntu is under a DDoS so retry adding, and finally fallback to python.org 3.8 release
-RUN (add-apt-repository -y ppa:deadsnakes/ppa ||  add-apt-repository -y ppa:deadsnakes/ppa) && \
+RUN ((add-apt-repository -y ppa:deadsnakes/ppa ||  add-apt-repository -y ppa:deadsnakes/ppa) && \
     (apt-get update || apt-get update) && \
-    PKGS="python3.8 python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS) ||
+    PKGS="python3.8 python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS)) || \
     (curl -O https://www.python.org/ftp/python/3.8.20/Python-3.8.20.tgz && \
     tar -xzf Python-3.8.20.tgz && \
+    cd Python-3.8.20 && \
     ./configure --enable-shared --enable-optimizations --prefix=/usr/local LDFLAGS="-Wl,--rpath=/usr/local/lib" && \
     make altinstall)
 
