@@ -1633,25 +1633,20 @@ private[sql] object Dataset {
     if (numResults < 1 || numResults > MaxNumResults) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
-        messageParameters = Map(
-          "numResults" -> numResults.toString,
-          "min" -> "1",
-          "max" -> MaxNumResults.toString))
+        messageParameters =
+          Map("numResults" -> numResults.toString, "min" -> "1", "max" -> MaxNumResults.toString))
     }
     val canonicalJoinType = joinType.toLowerCase(java.util.Locale.ROOT).replace("_", "")
     if (!SupportedJoinTypes.contains(canonicalJoinType)) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
-        messageParameters = Map(
-          "joinType" -> joinType,
-          "supported" -> SupportedJoinTypeDisplay))
+        messageParameters = Map("joinType" -> joinType, "supported" -> SupportedJoinTypeDisplay))
     }
     if (!SupportedModes.contains(mode.toLowerCase(java.util.Locale.ROOT))) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_MODE",
-        messageParameters = Map(
-          "mode" -> mode,
-          "supported" -> SupportedModes.mkString("'", "', '", "'")))
+        messageParameters =
+          Map("mode" -> mode, "supported" -> SupportedModes.mkString("'", "', '", "'")))
     }
     if (!SupportedDirections.contains(direction.toLowerCase(java.util.Locale.ROOT))) {
       throw new AnalysisException(

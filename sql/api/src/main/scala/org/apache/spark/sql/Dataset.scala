@@ -924,8 +924,8 @@ abstract class Dataset[T] extends Serializable {
    *
    * The current implementation evaluates the full cross-product of left and right and bounds
    * memory per left row by `numResults`. Index-backed approximate strategies (transparent to
-   * `approx` mode) are planned for a future release; until then, pre-filter the right side
-   * when it is large. Tie-breaking among rows with equal ranking values is unspecified.
+   * `approx` mode) are planned for a future release; until then, pre-filter the right side when
+   * it is large. Tie-breaking among rows with equal ranking values is unspecified.
    *
    * @param right
    *   Right (base side) of the join - the candidate pool searched for each row of this Dataset.
@@ -954,8 +954,8 @@ abstract class Dataset[T] extends Serializable {
    *
    * The current implementation evaluates the full cross-product of left and right and bounds
    * memory per left row by `numResults`. Index-backed approximate strategies (transparent to
-   * `approx` mode) are planned for a future release; until then, pre-filter the right side
-   * when it is large. Tie-breaking among rows with equal ranking values is unspecified.
+   * `approx` mode) are planned for a future release; until then, pre-filter the right side when
+   * it is large. Tie-breaking among rows with equal ranking values is unspecified.
    *
    * @param right
    *   Right (base side) of the join - the candidate pool searched for each row of this Dataset.
