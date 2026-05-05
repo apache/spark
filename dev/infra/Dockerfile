@@ -32,7 +32,7 @@ RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjd
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
-RUN add-apt-repository ppa:deadsnakes/ppa
+RUN add-apt-repository ppa:deadsnakes/ppa ||  add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update || apt-get update
 RUN PKGS="python3.8 python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS)
 RUN ls /bin/python*
