@@ -657,6 +657,34 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 messageParameters = Map.empty)
             }
 
+          // Reject streaming inputs early. The optimizer rewrite is built around an
+          // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
+          // identifier (`__qid`). That shape doesn't compose cleanly with structured-streaming
+          // semantics: a stateful aggregate keyed by a freshly-generated identifier accumulates
+          // state indefinitely (every batch creates new keys, old keys never match again) and a
+          // cross-product against a streaming right side has no bounded state model today.
+          // Failing at analysis time is clearer than letting either fail at runtime. Streaming
+          // support is tracked as a follow-up; resolving it likely comes from a different
+          // grouping strategy or a dedicated physical operator.
+          case j: NearestByJoin if j.isStreaming =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+              messageParameters = Map.empty)
+
+          case j @ NearestByJoin(_, _, _, _, _, rankingExpression, _)
+              if !RowOrdering.isOrderable(rankingExpression.dataType) =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.NON_ORDERABLE_RANKING_EXPRESSION",
+              messageParameters = Map(
+                "expression" -> toSQLExpr(rankingExpression),
+                "type" -> toSQLType(rankingExpression.dataType)))
+
+          case j @ NearestByJoin(_, _, _, false, _, rankingExpression, _)
+              if !rankingExpression.deterministic =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
+              messageParameters = Map("expression" -> toSQLExpr(rankingExpression)))
+
           case a: Aggregate =>
             a.groupingExpressions.foreach(
               expression =>
@@ -939,6 +967,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
+
+          case j: NearestByJoin if !j.duplicateResolved =>
             val conflictingAttributes =
               j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
             throw SparkException.internalError(
