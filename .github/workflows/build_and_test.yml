@@ -542,6 +542,7 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        Rscript -e "library(testthat); library(knitr); library(rmarkdown); library(markdown)"
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
