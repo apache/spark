@@ -408,12 +408,12 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(KeyedPartitioning(clustering, _, _)), _) =>
+      case (Some(KeyedPartitioning(clustering, _, _, _)), _) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(KeyedPartitioning(clustering, _, _))) =>
+      case (_, Some(KeyedPartitioning(clustering, _, _, _))) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
@@ -512,7 +512,7 @@ case class EnsureRequirements(
       leftSpec.isCompatibleWith(rightSpec)
     if ((!isCompatible || conf.v2BucketingPartiallyClusteredDistributionEnabled) &&
         (conf.v2BucketingPushPartValuesEnabled ||
-          conf.v2BucketingAllowJoinKeysSubsetOfPartitionKeys)) {
+          conf.v2BucketingAllowKeysSubsetOfPartitionKeys)) {
       logInfo("Pushing common partition values for storage-partitioned join")
       isCompatible = leftSpec.areKeysCompatible(rightSpec)
 
