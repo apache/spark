@@ -114,8 +114,8 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
-    GetNumPartitions get_num_partitions = 17;
     JsonToDDL json_to_ddl = 18;
+    GetNumPartitions get_num_partitions = 19;
   }
 
   message Schema {
@@ -235,7 +235,7 @@ message AnalyzePlanRequest {
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
-// Next ID: 17
+// Next ID: 18
 message AnalyzePlanResponse {
   string session_id = 1;
   // Server-side generated idempotency key that the client can use to assert that the server side
@@ -256,8 +256,8 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
-    GetNumPartitions get_num_partitions = 15;
     JsonToDDL json_to_ddl = 16;
+    GetNumPartitions get_num_partitions = 17;
   }
 
   message Schema {
