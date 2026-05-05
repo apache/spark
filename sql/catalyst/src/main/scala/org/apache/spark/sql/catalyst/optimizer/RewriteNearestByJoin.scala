@@ -36,14 +36,15 @@ import org.apache.spark.sql.catalyst.rules._
  *
  * Rewritten Plan (SIMILARITY, INNER join type):
  * {{{
- *    Generate inline(_matches), [N], outer=false, [right.col1, right.col2, ...]
- *      +- Aggregate [__qid],
- *           [first(left.col0) AS left.col0, ..., first(left.colN-1) AS left.colN-1,
- *            max_by(struct(right.*), expr, k) AS _matches]
- *          +- Join LeftOuter
- *             :- Project [left.*, uuid() AS __qid]
- *             :  +- left
- *             +- right
+ *    Project [left.*, right.*]
+ *      +- Generate inline(_matches), [N], outer=false, [right.col1, right.col2, ...]
+ *         +- Aggregate [__qid],
+ *              [first(left.col0) AS left.col0, ..., first(left.colN-1) AS left.colN-1,
+ *               max_by(struct(right.*), expr, k) AS _matches]
+ *             +- Join LeftOuter
+ *                :- Project [left.*, uuid() AS __qid]
+ *                :  +- left
+ *                +- right
  * }}}
  *
  * For `DISTANCE`, `MIN_BY` is used instead of `MAX_BY`. For `LEFT OUTER`, the `Generate` is
@@ -139,12 +140,15 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
         AttributeReference(a.name, a.dataType, nullable = true, a.metadata)(
           exprId = a.exprId, qualifier = a.qualifier)
       }
-      Generate(
+      val generate = Generate(
         Inline(matchesAlias.toAttribute),
         unrequiredChildIndex = Seq(aggregate.output.indexOf(matchesAlias.toAttribute)),
         outer = joinType == LeftOuter,
         qualifier = None,
         generatorOutput = generatorOutput,
         child = aggregate)
+
+      // 5. Final `Project` pinning the output schema to `NearestByJoin.output`.
+      Project(j.output, generate)
   }
 }

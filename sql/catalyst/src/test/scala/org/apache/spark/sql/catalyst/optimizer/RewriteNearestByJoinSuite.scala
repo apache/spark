@@ -60,15 +60,21 @@ class RewriteNearestByJoinSuite extends PlanTest {
       Seq(qidAlias.toAttribute), firstLeftAggs :+ matchesAlias, join)
 
     val generatorOutput = right.output.map { a =>
-      AttributeReference(a.name, a.dataType, nullable = true)(qualifier = a.qualifier)
+      AttributeReference(a.name, a.dataType, nullable = true)(
+        exprId = a.exprId, qualifier = a.qualifier)
     }
-    Generate(
+    val generate = Generate(
       Inline(matchesAlias.toAttribute),
       unrequiredChildIndex = Seq(aggregate.output.indexOf(matchesAlias.toAttribute)),
       outer = outer,
       qualifier = None,
       generatorOutput = generatorOutput,
       child = aggregate)
+    // Mirror the rewrite's final Project that constrains the output schema to
+    // `NearestByJoin.output` (left and right widened to nullable).
+    val expectedOutput =
+      left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+    Project(expectedOutput, generate)
   }
 
   test("similarity, inner, k=5") {
