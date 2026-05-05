@@ -4435,6 +4435,7 @@ class SeriesGroupBy(GroupBy[Series]):
             column_labels=[(s,) for s in stats],
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
             data_fields=None,
+            column_label_names=None,
         )
 
         # Cast columns to "float64" to match pandas.SeriesGroupBy.describe().
