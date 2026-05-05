@@ -2094,7 +2094,12 @@ class DataFrame:
         ...
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame": ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> "DataFrame": ...
+
+    @overload
+    def sample(self, withReplacement: float, fraction: Optional[int] = ..., /) -> "DataFrame": ...
 
     @overload
     def sample(
@@ -2104,7 +2109,7 @@ class DataFrame:
         seed: Optional[int] = ...,
     ) -> "DataFrame": ...
 
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,

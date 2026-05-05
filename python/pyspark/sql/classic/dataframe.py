@@ -646,7 +646,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame: ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> "DataFrame": ...
+
+    @overload
+    def sample(self, withReplacement: float, fraction: Optional[int] = ..., /) -> "DataFrame": ...
 
     @overload
     def sample(
@@ -654,9 +659,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         withReplacement: Optional[bool],
         fraction: float,
         seed: Optional[int] = ...,
-    ) -> ParentDataFrame: ...
+    ) -> "DataFrame": ...
 
-    def sample(  # type: ignore[misc]
+    def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
         fraction: Optional[Union[int, float]] = None,
