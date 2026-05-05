@@ -576,6 +576,23 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["json_string", b"json_string"]
         ) -> None: ...
 
+    class GetNumPartitions(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
@@ -594,6 +611,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     JSON_TO_DDL_FIELD_NUMBER: builtins.int
+    GET_NUM_PARTITIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -644,6 +662,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
     @property
     def json_to_ddl(self) -> global___AnalyzePlanRequest.JsonToDDL: ...
+    @property
+    def get_num_partitions(self) -> global___AnalyzePlanRequest.GetNumPartitions: ...
     def __init__(
         self,
         *,
@@ -665,6 +685,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
         json_to_ddl: global___AnalyzePlanRequest.JsonToDDL | None = ...,
+        get_num_partitions: global___AnalyzePlanRequest.GetNumPartitions | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -683,6 +704,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_num_partitions",
+            b"get_num_partitions",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -728,6 +751,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_num_partitions",
+            b"get_num_partitions",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -788,6 +813,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "unpersist",
             "get_storage_level",
             "json_to_ddl",
+            "get_num_partitions",
         ]
         | None
     ): ...
@@ -999,6 +1025,21 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
         ) -> None: ...
 
+    class GetNumPartitions(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NUM_PARTITIONS_FIELD_NUMBER: builtins.int
+        num_partitions: builtins.int
+        """The number of partitions in the physical execution plan."""
+        def __init__(
+            self,
+            *,
+            num_partitions: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["num_partitions", b"num_partitions"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -1015,6 +1056,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     JSON_TO_DDL_FIELD_NUMBER: builtins.int
+    GET_NUM_PARTITIONS_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -1048,6 +1090,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
     @property
     def json_to_ddl(self) -> global___AnalyzePlanResponse.JsonToDDL: ...
+    @property
+    def get_num_partitions(self) -> global___AnalyzePlanResponse.GetNumPartitions: ...
     def __init__(
         self,
         *,
@@ -1067,6 +1111,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
         json_to_ddl: global___AnalyzePlanResponse.JsonToDDL | None = ...,
+        get_num_partitions: global___AnalyzePlanResponse.GetNumPartitions | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1075,6 +1120,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_num_partitions",
+            b"get_num_partitions",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -1110,6 +1157,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_num_partitions",
+            b"get_num_partitions",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -1160,6 +1209,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "unpersist",
             "get_storage_level",
             "json_to_ddl",
+            "get_num_partitions",
         ]
         | None
     ): ...
