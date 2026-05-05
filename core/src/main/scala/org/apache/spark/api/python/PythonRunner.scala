@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousCloseException, Channels, SelectionKey, ServerSocketChannel, SocketChannel}
 import java.nio.file.{Files => JavaFiles, Path}
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.{CancellationException, ConcurrentHashMap, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
@@ -419,8 +419,22 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val writerRunnable = new PipelinedWriterRunnable(worker, writer, bufferSize, context)
     val writerFuture = BasePythonRunner.pipelinedWriterThreadPool.submit(writerRunnable)
 
+    // Wait for the writer to actually exit before letting subsequent task completion listeners
+    // run. Subsequent listeners (registered earlier, executed later under LIFO) free off-heap
+    // memory backing the input rows; if the writer is still serializing such a row when free
+    // happens, we get a use-after-free segfault (SPARK-33277). cancel(true) is enough to unblock
+    // a writer stuck on channel.write (JDK closes the SocketChannel and throws
+    // ClosedByInterruptException on interrupt), so this get() returns promptly in normal cases;
+    // the worst case is a bounded wait for the writer to finish serializing the current row or
+    // batch and observe the interrupt flag at the top of its loop.
     context.addTaskCompletionListener[Unit] { _ =>
       writerFuture.cancel(true)
+      try {
+        writerFuture.get()
+      } catch {
+        case _: CancellationException | _: ExecutionException | _: InterruptedException =>
+          // Expected: cancel(true) raced ahead, or writer exited via _exception path.
+      }
     }
 
     // Set socket read timeout for idle timeout detection in pipelined mode.

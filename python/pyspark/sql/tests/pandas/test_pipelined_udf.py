@@ -245,6 +245,39 @@ class PipelinedUDFTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(Exception, "intentional error"):
             self.spark.range(10).select(bad_udf(col("id"))).collect()
 
+    def test_offheap_reader_with_head_does_not_segfault(self):
+        """Regression test: SPARK-33277 reproducer adapted for pipelined mode.
+
+        With the off-heap vectorized Parquet reader, head() triggers a
+        driver-side cancel of the still-running task. The task completion
+        listener for the writer thread must wait for the writer to actually
+        exit before subsequent listeners free off-heap memory backing the
+        rows the writer is still serializing. Otherwise the writer reads
+        invalidated off-heap memory and the executor segfaults.
+
+        The race is probabilistic (the SPARK-33277 PR reported ~3% failure
+        rate without the fix), so we repeat the head() many times to make
+        the test reliably crash without the fix while still finishing fast.
+        """
+        import shutil
+        import tempfile
+
+        path = tempfile.mkdtemp()
+        shutil.rmtree(path)
+        try:
+            self.spark.range(0, 200000, 1, 1).write.parquet(path)
+
+            @pandas_udf(LongType())
+            def to_zero(x: pd.Series) -> pd.Series:
+                return pd.Series([0] * len(x))
+
+            with self.sql_conf({"spark.sql.columnVector.offheap.enabled": "true"}):
+                for _ in range(100):
+                    row = self.spark.read.parquet(path).select(to_zero(col("id"))).head()
+                    self.assertEqual(row[0], 0)
+        finally:
+            shutil.rmtree(path, ignore_errors=True)
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
