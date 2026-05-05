@@ -5319,6 +5319,49 @@
     ],
     "sqlState" : "0A000"
   },
+  "NEAREST_BY_JOIN" : {
+    "message" : [
+      "Invalid nearest-by join."
+    ],
+    "subClass" : {
+      "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
+        "message" : [
+          "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
+        ]
+      },
+      "NON_ORDERABLE_RANKING_EXPRESSION" : {
+        "message" : [
+          "The ranking expression <expression> of type <type> is not orderable. Provide an expression that returns an orderable type, such as a numeric distance like abs(a.col - b.col) or a numeric similarity score."
+        ]
+      },
+      "NUM_RESULTS_OUT_OF_RANGE" : {
+        "message" : [
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
+        ]
+      },
+      "STREAMING_NOT_SUPPORTED" : {
+        "message" : [
+          "Nearest-by join is not supported with streaming DataFrames/Datasets."
+        ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported nearest-by join direction '<direction>'. Supported nearest-by join directions include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_JOIN_TYPE" : {
+        "message" : [
+          "Unsupported nearest-by join type <joinType>. Supported types: <supported>."
+        ]
+      },
+      "UNSUPPORTED_MODE" : {
+        "message" : [
+          "Unsupported nearest-by join mode '<mode>'. Supported modes include: <supported>."
+        ]
+      }
+    },
+    "sqlState" : "42604"
+  },
   "NEGATIVE_SCALE_DISALLOWED" : {
     "message" : [
       "Negative scale is not allowed: '<scale>'. Set the config <sqlConf> to \"true\" to allow it."
@@ -7841,6 +7884,11 @@
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
         "message" : [
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
+        ]
+      },
+      "LATERAL_JOIN_NEAREST_BY" : {
+        "message" : [
+          "LATERAL correlation with NEAREST BY clause."
         ]
       },
       "LATERAL_JOIN_USING" : {
