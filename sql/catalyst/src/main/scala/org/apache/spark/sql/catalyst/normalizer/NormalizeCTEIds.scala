@@ -28,6 +28,16 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
     val cteIdToNewId = mutable.Map.empty[Long, Long]
+    // Pre-collect all CTERelationRef.cteId in encounter order so that orphan refs
+    // (those without an enclosing WithCTE in the current sub-tree) also get a
+    // deterministic, parse-independent id. Without this pass, sameResult comparisons
+    // performed by CacheManager.lookupCachedData on partial CTE bodies fail to
+    // match across parses.
+    plan.foreachWithSubqueries {
+      case ref: CTERelationRef =>
+        cteIdToNewId.getOrElseUpdate(ref.cteId, curId.getAndIncrement())
+      case _ =>
+    }
     applyInternal(plan, curId, cteIdToNewId)
   }
 
@@ -47,6 +57,11 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
         }
         val normalizedPlan = canonicalizeCTE(plan, cteIdToNewId)
         withCTE.copy(plan = normalizedPlan, cteDefs = newCteDefs)
+
+      // Handle orphan CTERelationRef sub-trees not enclosed by WithCTE.
+      // The pre-pass in `apply` populates cteIdToNewId for all such refs.
+      case ref: CTERelationRef if cteIdToNewId.contains(ref.cteId) =>
+        ref.copy(cteId = cteIdToNewId(ref.cteId))
     }
   }
 
