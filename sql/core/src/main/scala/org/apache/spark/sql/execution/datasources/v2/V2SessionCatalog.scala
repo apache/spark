@@ -335,8 +335,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
     try {
       loadTable(ident) match {
         case V1Table(v1Table)
-            if (v1Table.tableType == CatalogTableType.VIEW ||
-              v1Table.tableType == CatalogTableType.METRIC_VIEW) &&
+            if v1Table.isViewLike &&
               !SQLConf.get.getConf(SQLConf.DROP_TABLE_VIEW_ENABLED) =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",

@@ -44,8 +44,8 @@ public sealed interface Dependency permits TableDependency, FunctionDependency {
    * the first element is typically the catalog name and subsequent elements are namespace
    * components followed by the table name.
    */
-  static TableDependency table(String... nameParts) {
-    return new TableDependency(List.of(nameParts));
+  static TableDependency table(List<String> nameParts) {
+    return new TableDependency(nameParts);
   }
 
   /**
@@ -54,7 +54,7 @@ public sealed interface Dependency permits TableDependency, FunctionDependency {
    * catalog-managed functions the first element is typically the catalog name and subsequent
    * elements are namespace components followed by the function name.
    */
-  static FunctionDependency function(String... nameParts) {
-    return new FunctionDependency(List.of(nameParts));
+  static FunctionDependency function(List<String> nameParts) {
+    return new FunctionDependency(nameParts);
   }
 }

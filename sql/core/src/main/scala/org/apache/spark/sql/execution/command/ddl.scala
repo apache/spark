@@ -233,7 +233,7 @@ case class DropTableCommand(
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
         // Both VIEW and METRIC_VIEW are conceptually views and must be dropped via DROP VIEW.
-        case CatalogTableType.VIEW | CatalogTableType.METRIC_VIEW if !isView =>
+        case t if CatalogTable.isViewLike(t) && !isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
@@ -241,7 +241,7 @@ case class DropTableCommand(
             foundType = catalog.getTableMetadata(tableName).tableType.name,
             alternative = "DROP VIEW"
           )
-        case o if o != CatalogTableType.VIEW && o != CatalogTableType.METRIC_VIEW && isView =>
+        case o if !CatalogTable.isViewLike(o) && isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP VIEW",
             requiredType =
@@ -1089,11 +1089,11 @@ object DDLUtils extends Logging {
       isView: Boolean): Unit = {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
-        case t if (t == CatalogTableType.VIEW || t == CatalogTableType.METRIC_VIEW) && !isView =>
+        case t if CatalogTable.isViewLike(t) && !isView =>
           throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
             viewName = tableMetadata.identifier.table
           )
-        case o if o != CatalogTableType.VIEW && o != CatalogTableType.METRIC_VIEW && isView =>
+        case o if !CatalogTable.isViewLike(o) && isView =>
           throw QueryCompilationErrors.cannotAlterTableWithAlterViewError(
             tableName = tableMetadata.identifier.table
           )

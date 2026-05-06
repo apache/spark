@@ -103,8 +103,7 @@ case class CreateTableLikeCommand(
       provider
     } else if (fileFormat.inputFormat.isDefined) {
       Some(DDLUtils.HIVE_PROVIDER)
-    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW ||
-        sourceTableDesc.tableType == CatalogTableType.METRIC_VIEW) {
+    } else if (sourceTableDesc.isViewLike) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
@@ -268,8 +267,7 @@ case class AlterTableAddColumnsCommand(
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
-    if (catalogTable.tableType == CatalogTableType.VIEW ||
-        catalogTable.tableType == CatalogTableType.METRIC_VIEW) {
+    if (catalogTable.isViewLike) {
       throw QueryCompilationErrors.alterAddColNotSupportViewError(table)
     }
 
@@ -732,8 +730,7 @@ case class DescribeTableCommand(
       catalog: SessionCatalog,
       metadata: CatalogTable,
       result: ArrayBuffer[Row]): Unit = {
-    if (metadata.tableType == CatalogTableType.VIEW ||
-        metadata.tableType == CatalogTableType.METRIC_VIEW) {
+    if (metadata.isViewLike) {
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")

@@ -46,7 +46,7 @@ public record DependencyList(List<Dependency> dependencies) {
     dependencies = List.copyOf(dependencies);
   }
 
-  public static DependencyList of(Dependency... dependencies) {
-    return new DependencyList(List.of(dependencies));
+  public static DependencyList of(List<Dependency> dependencies) {
+    return new DependencyList(dependencies);
   }
 }

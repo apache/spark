@@ -274,8 +274,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // Spark-created views do not have to be Hive compatible. If the data type is not
         // Hive compatible, we can set schema to empty so that Spark can still read this
         // view as the schema is also encoded in the table properties.
-        case schema if (tableDefinition.tableType == CatalogTableType.VIEW ||
-            tableDefinition.tableType == CatalogTableType.METRIC_VIEW) &&
+        case schema if tableDefinition.isViewLike &&
             schema.exists(f => !isHiveCompatibleDataType(f.dataType)) =>
           EMPTY_DATA_SCHEMA
         case other => other
@@ -295,8 +294,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       try {
         client.createTable(tableWithDataSourceProps, ignoreIfExists)
       } catch {
-        case NonFatal(e) if (tableDefinition.tableType == CatalogTableType.VIEW ||
-            tableDefinition.tableType == CatalogTableType.METRIC_VIEW) &&
+        case NonFatal(e) if tableDefinition.isViewLike &&
             hiveCompatibleSchema != EMPTY_DATA_SCHEMA =>
           // If for some reason we fail to store the schema we store it as empty there
           // since we already store the real schema in the table properties. This try-catch

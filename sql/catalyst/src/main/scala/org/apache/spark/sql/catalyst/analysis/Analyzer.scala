@@ -1226,8 +1226,7 @@ class Analyzer(
                 ) {
                   CatalogV2Util.loadTable(catalog, ident).map {
                     case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                      (v1Table.v1Table.tableType == CatalogTableType.VIEW ||
-                        v1Table.v1Table.tableType == CatalogTableType.METRIC_VIEW) =>
+                      v1Table.v1Table.isViewLike =>
                       val v1Ident = v1Table.catalogTable.identifier
                       val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                       ResolvedPersistentView(

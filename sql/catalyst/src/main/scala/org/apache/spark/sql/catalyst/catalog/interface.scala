@@ -462,6 +462,14 @@ case class CatalogTable(
   def fullIdent: Seq[String] = multipartIdentifier.getOrElse(identifier.nameParts)
 
   /**
+   * Returns whether this table behaves like a view at resolution / DDL time. Today: VIEW or
+   * METRIC_VIEW. Forks may extend this set (e.g. DBR also includes MATERIALIZED_VIEW and
+   * STREAMING_TABLE), so call sites that need a uniform "is this view-like?" check should
+   * prefer this helper over inline disjunctions on `tableType`.
+   */
+  def isViewLike: Boolean = CatalogTable.isViewLike(tableType)
+
+  /**
    * schema of this table's partition columns
    */
   def partitionSchema: StructType = {
@@ -667,7 +675,7 @@ case class CatalogTable(
     if (comment.isDefined) map += "Comment" -> JString(comment.get)
     if (collation.isDefined) map += "Collation" -> JString(collation.get)
 
-    if (tableType == CatalogTableType.VIEW || tableType == CatalogTableType.METRIC_VIEW) {
+    if (isViewLike) {
       if (viewText.isDefined) {
         map += "View Text" -> JString(viewText.get)
       }
@@ -756,6 +764,17 @@ object CatalogTable {
    */
   def isMetricView(table: CatalogTable): Boolean = {
     table.tableType == CatalogTableType.METRIC_VIEW
+  }
+
+  /**
+   * Type-only form of [[CatalogTable.isViewLike]]; returns whether the given table type
+   * behaves like a view at resolution / DDL time. Use this overload when you have a
+   * [[CatalogTableType]] but no surrounding [[CatalogTable]] (e.g. inside `match`/`case`
+   * patterns or [[org.apache.spark.sql.catalyst.catalog.SessionCatalog.isView]]). Body kept
+   * in sync with the instance method.
+   */
+  def isViewLike(tableType: CatalogTableType): Boolean = {
+    tableType == CatalogTableType.VIEW || tableType == CatalogTableType.METRIC_VIEW
   }
 
   // Convert the current catalog and namespace to properties.
