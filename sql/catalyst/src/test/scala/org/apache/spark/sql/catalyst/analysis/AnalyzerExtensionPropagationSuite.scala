@@ -69,7 +69,6 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
       s"If a new extension point was added, register it in Analyzer.withCatalogManager, " +
       s"add an assertion in this test, and update EXPECTED_FIELD_COUNT.")
 
-
     val analyzer = new Analyzer(newCatalogManager()) {
       override val hintResolutionRules: Seq[Rule[LogicalPlan]] = Seq(dummyRule)
       override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Seq(dummyRule)
