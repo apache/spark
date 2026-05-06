@@ -4371,6 +4371,76 @@ class SeriesGroupBy(GroupBy[Series]):
         else:
             return first_series(psdf).rename(self._psser.name)
 
+    def describe(self) -> DataFrame:
+        """
+        Generate descriptive statistics that summarize the central tendency,
+        dispersion and shape of a dataset's distribution, excluding
+        ``NaN`` values.
+
+        .. versionadded:: 4.3.0
+
+        .. note:: Unlike pandas, the percentiles in pandas-on-Spark are based upon
+            approximate percentile computation because computing percentiles
+            across a large dataset is extremely expensive.
+
+        Returns
+        -------
+        DataFrame
+            Summary statistics for each group and the series values.
+
+        See Also
+        --------
+        DataFrame.describe
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({'a': [1, 1, 3], 'b': [4, 5, 6]})
+        >>> df.groupby('a')['b'].describe().sort_index()  # doctest: +NORMALIZE_WHITESPACE
+           count  mean       std  min  25%  50%  75%  max
+        a
+        1    2.0   4.5  0.707107  4.0  4.0  4.0  5.0  5.0
+        3    1.0   6.0       NaN  6.0  6.0  6.0  6.0  6.0
+        """
+        # NOTE: keep in sync with GroupBy.describe
+        if isinstance(self._agg_columns[0].spark.data_type, StringType):
+            raise NotImplementedError(
+                "SeriesGroupBy.describe() doesn't support for string type for now"
+            )
+
+        # Use the base GroupBy.aggregate to bypass SeriesGroupBy's unsupported override.
+        psdf = GroupBy.aggregate(self, ["count", "mean", "std", "min", "quartiles", "max"])
+        sdf = psdf._internal.spark_frame
+        agg_column_labels = [col._column_label for col in self._agg_columns]
+        formatted_percentiles = ["25%", "50%", "75%"]
+
+        # Split "quartiles" columns into first, second, and third quartiles.
+        for label in agg_column_labels:
+            quartiles_col = name_like_string(tuple(list(label) + ["quartiles"]))
+            for i, percentile in enumerate(formatted_percentiles):
+                sdf = sdf.withColumn(
+                    name_like_string(tuple(list(label) + [percentile])),
+                    scol_for(sdf, quartiles_col)[i],
+                )
+            sdf = sdf.drop(quartiles_col)
+
+        # Build single-level column labels: ["count", "mean", "std", "min", "25%", ...]
+        stats = ["count", "mean", "std", "min"] + formatted_percentiles + ["max"]
+        # For SeriesGroupBy there is only one agg column label.
+        label = agg_column_labels[0]
+        multi_column_labels = [tuple(list(label) + [s]) for s in stats]
+        data_columns = [name_like_string(cl) for cl in multi_column_labels]
+
+        internal = psdf._internal.copy(
+            spark_frame=sdf,
+            column_labels=[(s,) for s in stats],
+            data_spark_columns=[scol_for(sdf, col) for col in data_columns],
+            data_fields=None,
+            column_label_names=None,
+        )
+
+        # Cast columns to "float64" to match pandas.SeriesGroupBy.describe().
+        return DataFrame(internal).astype("float64")
+
     def agg(self, *args: Any, **kwargs: Any) -> None:
         return MissingPandasLikeSeriesGroupBy.agg(self, *args, **kwargs)
 
