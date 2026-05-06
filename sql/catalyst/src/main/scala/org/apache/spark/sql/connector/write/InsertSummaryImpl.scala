@@ -20,5 +20,5 @@ package org.apache.spark.sql.connector.write
 /**
  * Implementation of [[InsertSummary]] that provides INSERT operation summary.
  */
-private[sql] case class InsertSummaryImpl(numOutputRows: Long) extends InsertSummary {
+private[sql] case class InsertSummaryImpl(numInsertedRows: Long) extends InsertSummary {
 }

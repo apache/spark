@@ -310,7 +310,7 @@ case class AppendDataExec(
           numTargetRowsNotMatchedBySourceUpdated = 0L,
           numTargetRowsNotMatchedBySourceDeleted = 0L))
       case _ =>
-        Some(InsertSummaryImpl(numOutputRows = numOutputRowsMetric.value))
+        Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
     }
   }
 }

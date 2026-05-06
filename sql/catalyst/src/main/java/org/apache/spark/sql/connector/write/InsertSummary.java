@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Evolving;
 public interface InsertSummary extends WriteSummary {
 
   /**
-   * Returns the number of output rows, or -1 if not found.
+   * Returns the number of inserted rows, or -1 if not found.
    */
-  long numOutputRows();
+  long numInsertedRows();
 }

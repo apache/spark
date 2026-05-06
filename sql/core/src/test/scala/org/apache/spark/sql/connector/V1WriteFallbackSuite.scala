@@ -254,7 +254,7 @@ class V1WriteFallbackSessionCatalogSuite
   with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
 
   // V1 fallback writes do not flow through V2TableWriteExec, so no InsertSummary is emitted.
-  override protected def checkInsertMetrics(tableName: String, numOutputRows: Long): Unit = ()
+  override protected def checkInsertMetrics(tableName: String, numInsertedRows: Long): Unit = ()
 
   override protected val v2Format = classOf[InMemoryV1Provider].getName
   override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName

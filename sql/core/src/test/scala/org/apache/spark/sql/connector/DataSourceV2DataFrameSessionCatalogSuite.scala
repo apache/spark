@@ -215,7 +215,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).saveAsTable(t1)
-    checkInsertMetrics(t1, numOutputRows = 3)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
@@ -223,7 +223,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).mode("append").saveAsTable(t1)
-    checkInsertMetrics(t1, numOutputRows = 3)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
@@ -247,12 +247,12 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
       df.select("id", "data").write.format(v2Format).saveAsTable(t1)
     }
     df.write.format(v2Format).mode("append").saveAsTable(t1)
-    checkInsertMetrics(t1, numOutputRows = 3)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
 
     // Check that appends are by name
     df.select($"data", $"id").write.format(v2Format).mode("append").saveAsTable(t1)
-    checkInsertMetrics(t1, numOutputRows = 3)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df.union(df))
   }
 
@@ -288,7 +288,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).mode("ignore").saveAsTable(t1)
-    checkInsertMetrics(t1, numOutputRows = 3)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
