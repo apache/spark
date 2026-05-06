@@ -53,17 +53,6 @@ Each class-bearing test base above pairs `SparkFunSuite` with a style-agnostic `
 | `SharedSparkSession` | `sql/core` | `QueryTest` -> `SparkFunSuite` | Classic in-process `SparkSession`. Default for tests under `sql/core`. |
 | `TestHiveSingleton` | `sql/hive` | `SparkFunSuite` | Hive-backed session (`TestHive`). Used by tests under `sql/hive`. |
 
-A handful of suites (e.g. `MapStatusEndToEndSuite`, `ExecutorSideSQLConfSuite`) override `spark` directly and manage the session lifecycle themselves; reach for that pattern only when none of the providers above fit (e.g. local-cluster mode, custom builder configs).
-
-Helper traits like `ParquetTest`, `OrcTest`, `FileBasedDataSourceTest`, `DDLCommandTestUtils` already extend `QueryTest` but do NOT supply a session. Combine them with one of the session providers above (e.g. `extends ParquetTest with SharedSparkSession`, `extends QueryTest with TestHiveSingleton`).
-
-Common mistakes in the `extends` clause:
-- `extends QueryTest with SharedSparkSession` — `QueryTest` is redundant (`SharedSparkSession` already extends it). Use `extends SharedSparkSession`.
-- `extends QueryTest with ParquetTest` / `with FileBasedDataSourceTest` / `with OrcTest` — `QueryTest` is redundant; these helper traits all extend `QueryTest`.
-- `extends OrcTest with QueryTestBase` — `OrcTest -> QueryTest -> QueryTestBase` already.
-- `extends QueryTest with CommandSuiteBase with DDLCommandTestUtils` — both `CommandSuiteBase` (via `SharedSparkSession`) and `DDLCommandTestUtils` extend `QueryTest`, so `QueryTest` is redundant.
-- `extends ParquetTest with SharedSparkSession` is NOT redundant — the format helper trait and the session trait bring different things.
-
 Linearization gotcha: the first item in the `extends` clause must transitively extend a class (i.e. carry a non-`Object` superclass). Of the bases above, `SparkFunSuite`, `PlanTest`, `QueryTest`, and `SharedSparkSession` all carry the `SparkFunSuite` -> `AnyFunSuite` chain. `SparkTestSuite` is a pure trait and does NOT — if you use it directly you must put a ScalaTest style class first (e.g. `class X extends AnyWordSpec with SparkTestSuite`). The same applies to other "pure helper" traits (`*ErrorsBase`, `*Helper`): if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
 
 ## Build and Test
