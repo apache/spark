@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.List;
-
 import org.apache.spark.annotation.Evolving;
 
 /**
@@ -29,7 +27,7 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * Note: today the only producer in Spark itself is metric-view dependency extraction, which
  * emits {@link TableDependency} only. {@link FunctionDependency} and the
- * {@link #function(String...)} factory are exposed as groundwork for future producers
+ * {@link #function(String[])} factory are exposed as groundwork for future producers
  * (e.g. SQL UDF dependency tracking); consumers iterating a {@link DependencyList} received
  * from Spark today should expect to see only {@link TableDependency} instances.
  *
@@ -44,7 +42,7 @@ public sealed interface Dependency permits TableDependency, FunctionDependency {
    * the first element is typically the catalog name and subsequent elements are namespace
    * components followed by the table name.
    */
-  static TableDependency table(List<String> nameParts) {
+  static TableDependency table(String[] nameParts) {
     return new TableDependency(nameParts);
   }
 
@@ -54,7 +52,7 @@ public sealed interface Dependency permits TableDependency, FunctionDependency {
    * catalog-managed functions the first element is typically the catalog name and subsequent
    * elements are namespace components followed by the function name.
    */
-  static FunctionDependency function(List<String> nameParts) {
+  static FunctionDependency function(String[] nameParts) {
     return new FunctionDependency(nameParts);
   }
 }

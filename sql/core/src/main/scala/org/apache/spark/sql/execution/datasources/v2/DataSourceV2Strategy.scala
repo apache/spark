@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -351,8 +350,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // "no dependency list was supplied" while an empty list means "supplied but the
       // object has none". Metric-view CREATE always *computes* deps, so the right empty
       // representation is `Some(empty list)`, not `None`.
-      val sparkDeps: Seq[Dependency] = depParts.map(parts => Dependency.table(parts.asJava))
-      val deps = Some(DependencyList.of(sparkDeps.asJava))
+      val sparkDeps: Array[Dependency] =
+        depParts.map(parts => Dependency.table(parts.toArray): Dependency).toArray
+      val deps = Some(DependencyList.of(sparkDeps))
       CreateV2MetricViewExec(viewCatalog, ident, userSpecifiedColumns, comment, mergedProps,
         originalText, analyzed, allowExisting, replace, deps) :: Nil
 

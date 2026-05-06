@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.List;
+import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
@@ -27,26 +27,47 @@ import org.apache.spark.annotation.Evolving;
  * <p>
  * <ul>
  *   <li>When {@code null}, the dependency information is not provided.</li>
- *   <li>When the list is empty, dependencies are provided but the object has none.</li>
- *   <li>When the list is non-empty, each entry describes one dependency.</li>
+ *   <li>When the array is empty, dependencies are provided but the object has none.</li>
+ *   <li>When the array is non-empty, each entry describes one dependency.</li>
  * </ul>
  * <p>
- * {@code dependencies} is held as an immutable {@link List} so the record's auto-generated
- * {@code equals}/{@code hashCode} delegate to per-element value semantics on the contained
- * {@link Dependency} entries.
+ * Records' auto-generated {@code equals}/{@code hashCode} on array fields fall through to
+ * {@link Object#equals} (reference equality), so this record overrides them to use
+ * {@link Arrays#equals(Object[], Object[])} / {@link Arrays#hashCode(Object[])} on
+ * {@code dependencies}; per-element equality delegates to the element's overridden
+ * {@code equals} ({@link TableDependency} / {@link FunctionDependency} both implement value
+ * semantics on their {@code nameParts} array). The defensive-copy accessor override clones
+ * on read so callers cannot mutate the record's internal array.
  *
- * @param dependencies list of dependencies (immutable copy made)
+ * @param dependencies array of dependencies (defensive copy made)
  * @since 4.2.0
  */
 @Evolving
-public record DependencyList(List<Dependency> dependencies) {
+public record DependencyList(Dependency[] dependencies) {
 
   public DependencyList {
     Objects.requireNonNull(dependencies, "dependencies must not be null");
-    dependencies = List.copyOf(dependencies);
+    dependencies = dependencies.clone();
   }
 
-  public static DependencyList of(List<Dependency> dependencies) {
+  /** Returns a defensive copy of the underlying dependencies array. */
+  @Override
+  public Dependency[] dependencies() { return dependencies.clone(); }
+
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof DependencyList that && Arrays.equals(dependencies, that.dependencies);
+  }
+
+  @Override
+  public int hashCode() { return Arrays.hashCode(dependencies); }
+
+  @Override
+  public String toString() {
+    return "DependencyList[dependencies=" + Arrays.toString(dependencies) + "]";
+  }
+
+  public static DependencyList of(Dependency[] dependencies) {
     return new DependencyList(dependencies);
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.List;
+import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
@@ -36,19 +36,39 @@ import org.apache.spark.annotation.Evolving;
  * string should join the parts themselves with a quoting scheme appropriate to their wire
  * format.
  * <p>
- * {@code nameParts} is held as an immutable {@link List} so the record's auto-generated
- * {@code equals}/{@code hashCode} delegate to per-element value semantics.
+ * Records' auto-generated {@code equals}/{@code hashCode} on array fields fall through to
+ * {@link Object#equals} (reference equality), so this record overrides them to use
+ * {@link Arrays#equals(Object[], Object[])} / {@link Arrays#hashCode(Object[])} on
+ * {@code nameParts} and give value-based semantics. The defensive-copy accessor override
+ * also clones on read so callers cannot mutate the record's internal array.
  *
- * @param nameParts structural multi-part identifier (immutable copy made; never empty)
+ * @param nameParts structural multi-part identifier (defensive copy made; never empty)
  * @since 4.2.0
  */
 @Evolving
-public record TableDependency(List<String> nameParts) implements Dependency {
+public record TableDependency(String[] nameParts) implements Dependency {
   public TableDependency {
     Objects.requireNonNull(nameParts, "nameParts must not be null");
-    if (nameParts.isEmpty()) {
+    if (nameParts.length == 0) {
       throw new IllegalArgumentException("nameParts must not be empty");
     }
-    nameParts = List.copyOf(nameParts);
+    nameParts = nameParts.clone();
+  }
+
+  /** Returns a defensive copy of the underlying parts array. */
+  @Override
+  public String[] nameParts() { return nameParts.clone(); }
+
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof TableDependency that && Arrays.equals(nameParts, that.nameParts);
+  }
+
+  @Override
+  public int hashCode() { return Arrays.hashCode(nameParts); }
+
+  @Override
+  public String toString() {
+    return "TableDependency[nameParts=" + Arrays.toString(nameParts) + "]";
   }
 }
