@@ -103,25 +103,31 @@ private[window] class WindowSegmentTree(
   private var rowArray: ExternalAppendOnlyUnsafeRowArray = _
   private var closed: Boolean = false
 
-  /** Always-resident per-block root aggregates: `blockAggregates(i)` =
-   *  merged buffer over all rows in block i. */
+  /**
+   * Always-resident per-block root aggregates: `blockAggregates(i)` =
+   *  merged buffer over all rows in block i.
+   */
   private var blockAggregates: Array[InternalRow] = Array.empty
 
-  /** Conservative byte width of one aggregate buffer row at 16 B/field:
+  /**
+   * Conservative byte width of one aggregate buffer row at 16 B/field:
    *  primitive `MutableValue` is 8 B, boxed references and object headers
    *  push the effective footprint higher. Tighter per-type sizing is out
-   *  of scope; TaskMemoryManager remains the hard backstop via spill / OOM. */
+   *  of scope; TaskMemoryManager remains the hard backstop via spill / OOM.
+   */
   private val bufferWidthBytes: Long = {
     val bytesPerField = 16L
     math.max(1L, bufferDataTypes.size.toLong * bytesPerField)
   }
 
-  /** Number of aggregate-buffer slots cached per block (see I5).
+  /**
+   * Number of aggregate-buffer slots cached per block (see I5).
    *
    *  Invariant: equals `sum over levels L of levels(L).length` for any block
    *  built by [[buildBlockLevels]]: level 0 holds `blockSize` leaves and each
    *  next level holds `ceil(prev / fanout)` parents until a single root
-   *  remains. For `blockSize == 1` this is 1 (single leaf, no parents). */
+   *  remains. For `blockSize == 1` this is 1 (single leaf, no parents).
+   */
   private val cachedSlotsPerBlock: Long = {
     var n = blockSize.toLong
     var sum = n
@@ -132,13 +138,17 @@ private[window] class WindowSegmentTree(
     sum
   }
 
-  /** Bytes accounted per cached block (see I5). Conservative: assumes every
-   *  block is full; tail block leaves a small headroom. */
+  /**
+   * Bytes accounted per cached block (see I5). Conservative: assumes every
+   *  block is full; tail block leaves a small headroom.
+   */
   private[this] val blockBytes: Long =
     math.max(1L, cachedSlotsPerBlock * bufferWidthBytes)
 
-  /** `spans(L)` = number of leaves covered by a single node at level L. Depends
-   *  only on fanout + blockSize, so precomputed once. */
+  /**
+   * `spans(L)` = number of leaves covered by a single node at level L. Depends
+   *  only on fanout + blockSize, so precomputed once.
+   */
   private val spans: Array[Int] = {
     val maxLevel = {
       var lvl = 0
@@ -157,12 +167,14 @@ private[window] class WindowSegmentTree(
     arr
   }
 
-  /** LRU cache of per-block internal node arrays. Key = blockIdx;
+  /**
+   * LRU cache of per-block internal node arrays. Key = blockIdx;
    *  value = `Array[Array[InternalRow]]` with levels(0..h). Auto-eviction
    *  via `removeEldestEntry` is disabled (I3) -- driven explicitly from
    *  [[ensureBlockLevels]] or [[SegTreeSpiller.spill]]. Each entry maps 1:1
    *  to one [[acquireBlockMemory]] accounting. Callers should pass a W-aware
-   *  `maxCachedBlocks` like `ceil(W / blockSize) + 2`. */
+   *  `maxCachedBlocks` like `ceil(W / blockSize) + 2`.
+   */
   private val blockLevelsCache: JLinkedHashMap[Integer, Array[Array[InternalRow]]] =
     new JLinkedHashMap[Integer, Array[Array[InternalRow]]](16, 0.75f, true) {
       override def removeEldestEntry(
@@ -369,9 +381,11 @@ private[window] class WindowSegmentTree(
     queryDescend(levels, blockRows, topLevel, 0, lo, hi, out)
   }
 
-  /** Descend the (per-block) segment tree merging any node fully contained
+  /**
+   * Descend the (per-block) segment tree merging any node fully contained
    *  in [queryLo, queryHi) into `out`. A node at (level L, index idx) covers
-   *  leaves `[idx * span, min((idx+1)*span, blockRows))` where span = F^L. */
+   *  leaves `[idx * span, min((idx+1)*span, blockRows))` where span = F^L.
+   */
   private def queryDescend(
       levels: Array[Array[InternalRow]],
       blockRows: Int,
@@ -400,9 +414,11 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  /** Build (or fetch from LRU) the full per-block levels array.
+  /**
+   * Build (or fetch from LRU) the full per-block levels array.
    *  Protocol: acquire memory -> build -> cache. Eviction on capacity
-   *  overflow or on TMM spill request. */
+   *  overflow or on TMM spill request.
+   */
   private def ensureBlockLevels(blockIdx: Int): Array[Array[InternalRow]] = {
     val cached = blockLevelsCache.get(Integer.valueOf(blockIdx))
     if (cached != null) return cached
@@ -414,8 +430,8 @@ private[window] class WindowSegmentTree(
     }
 
     // Acquire accounting; on partial grant, try one manual evict-and-retry.
-    if (!acquireBlockMemory(blockIdx)) {
-      if (!evictEldest() || !acquireBlockMemory(blockIdx)) {
+    if (!acquireBlockMemory()) {
+      if (!evictEldest() || !acquireBlockMemory()) {
         // scalastyle:off throwerror
         throw QueryExecutionErrors.cannotAcquireMemoryForWindowAggregateError(
           blockBytes, 0L)
@@ -484,10 +500,12 @@ private[window] class WindowSegmentTree(
 
   // ---------- Memory accounting helpers ----------
 
-  /** Try to acquire `blockBytes` for one cached block. Returns true on full
-   *  grant, false on partial (after rolling the partial grant back). Must
-   *  not be called from within [[SegTreeSpiller.spill]] (I1). */
-  private def acquireBlockMemory(blockIdx: Int): Boolean = {
+  /**
+   * Try to acquire `blockBytes` for one cached block. Returns true on full
+   * grant, false on partial (after rolling the partial grant back). Must
+   * not be called from within [[SegTreeSpiller.spill]] (I1).
+   */
+  private def acquireBlockMemory(): Boolean = {
     val granted = spiller.acquireMemory(blockBytes)
     if (granted < blockBytes) {
       if (granted > 0) spiller.freeMemory(granted)
@@ -497,14 +515,18 @@ private[window] class WindowSegmentTree(
     }
   }
 
-  /** Release the accounting for one block. Caller ensures pairing with a
-   *  prior successful [[acquireBlockMemory]] (I4). */
+  /**
+   * Release the accounting for one block. Caller ensures pairing with a
+   *  prior successful [[acquireBlockMemory]] (I4).
+   */
   private def releaseBlockMemory(): Unit = {
     spiller.freeMemory(blockBytes)
   }
 
-  /** Evict LRU blocks until `target` bytes have been freed (or cache is
-   *  empty). Returns freed bytes. Called from [[SegTreeSpiller.spill]]. */
+  /**
+   * Evict LRU blocks until `target` bytes have been freed (or cache is
+   *  empty). Returns freed bytes. Called from [[SegTreeSpiller.spill]].
+   */
   private def evictUntil(target: Long): Long = {
     var freed = 0L
     while (freed < target && !blockLevelsCache.isEmpty) {

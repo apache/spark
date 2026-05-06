@@ -60,9 +60,11 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   private[this] var fallback: SlidingWindowFunctionFrame = _
   private[this] var tree: WindowSegmentTree = _
 
-  /** Allocate a fresh fallback sliding-window frame. Called lazily from
-   *  `prepare()` on the small-partition path. Factored out for testability
-   *  (subclasses can inject a throwing fallback for prepare-failure tests). */
+  /**
+   * Allocate a fresh fallback sliding-window frame. Called lazily from
+   * `prepare()` on the small-partition path. Factored out for testability
+   * (subclasses can inject a throwing fallback for prepare-failure tests).
+   */
   private[window] def newFallback(): SlidingWindowFunctionFrame =
     new SlidingWindowFunctionFrame(target, processor, lbound, ubound)
 
