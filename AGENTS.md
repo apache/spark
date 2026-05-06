@@ -30,6 +30,14 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
           <- QueryTest = PlanTest + QueryTestBase                           (sql/core)
             <- SharedSparkSession = QueryTest + SharedSparkSessionBase      (sql/core)
 
+Each class-bearing test base above pairs `SparkFunSuite` with a style-agnostic `*Base` trait that actually holds the helpers. Those `*Base` traits form a parallel chain:
+
+    PlanTestBase                                                            (sql/catalyst; pure trait — plan-comparison helpers)
+      <- QueryTestBase                                                      (sql/core; adds SQL/DataFrame helpers + abstract `spark`)
+        <- SharedSparkSessionBase                                           (sql/core; provides the actual `TestSparkSession`)
+
+`PlanTest`, `QueryTest`, and `SharedSparkSession` are the FunSuite-flavored bundles built on top of these (analogous to how `SparkFunSuite` = `AnyFunSuite` + `SparkTestSuite`).
+
 | Test scope | Base | Notes |
 |------------|------|-------|
 | Non-FunSuite ScalaTest style (rare) | `SparkTestSuite` | Style-agnostic trait holding the common Spark test functionality (thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`, etc.). Mix with any ScalaTest style — see `core/src/test/scala/org/apache/spark/{WordSpec,FunSpec,FlatSpec,...}SparkTestSuite.scala` for examples. Real Spark tests should use `SparkFunSuite` instead. |
