@@ -24,14 +24,16 @@ Avoid introducing non-ASCII characters in code or comments. String literals may 
 
 When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. The chain is layered — each adds capability on top of the previous:
 
-    SparkFunSuite                                                           (core)
-      <- PlanTest = SparkFunSuite + PlanTestBase                            (sql/catalyst)
-      <- QueryTest = SparkFunSuite + QueryTestBase + PlanTest               (sql/core)
-        <- SharedSparkSession = QueryTest + SharedSparkSessionBase          (sql/core)
+    SparkTestSuite                                                          (core; style-agnostic foundation)
+      <- SparkFunSuite = AnyFunSuite + SparkTestSuite                       (core; pins the FunSuite style — the default)
+        <- PlanTest = SparkFunSuite + PlanTestBase                          (sql/catalyst)
+        <- QueryTest = SparkFunSuite + QueryTestBase + PlanTest             (sql/core)
+          <- SharedSparkSession = QueryTest + SharedSparkSessionBase        (sql/core)
 
 | Test scope | Base | Notes |
 |------------|------|-------|
-| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, retry, `gridTest`. |
+| Non-FunSuite ScalaTest style (rare) | `SparkTestSuite` | Style-agnostic trait holding the common Spark test functionality (thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`, etc.). Mix with any ScalaTest style — see `core/src/test/scala/org/apache/spark/{WordSpec,FunSpec,FlatSpec,...}SparkTestSuite.scala` for examples. Real Spark tests should use `SparkFunSuite` instead. |
+| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. = `AnyFunSuite + SparkTestSuite`. Adds per-test timeout, `testRetry`, `gridTest` on top of `SparkTestSuite`. |
 | Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
 | SQL/DataFrame helpers — abstract `spark` | `QueryTest` | Adds `checkAnswer`, codegen-on/off helpers. Cannot be instantiated alone — `spark` is abstract and must be supplied by a session-providing trait. |
 | SQL/DataFrame integration tests — provides a session | `SharedSparkSession` | The default for most SQL suites. Provides a shared classic `TestSparkSession`, `testImplicits`, plus `checkAnswer` from `QueryTest`. |
@@ -57,7 +59,7 @@ Common mistakes in the `extends` clause:
 - `extends QueryTest with CommandSuiteBase with DDLCommandTestUtils` — both `CommandSuiteBase` (via `SharedSparkSession`) and `DDLCommandTestUtils` extend `QueryTest`, so `QueryTest` is redundant.
 - `extends ParquetTest with SharedSparkSession` is NOT redundant — the format helper trait and the session trait bring different things.
 
-Linearization gotcha: the first item in the `extends` clause must transitively extend `SparkFunSuite` (an `abstract class`, not a trait). All four bases above carry that chain. A "pure helper" trait (e.g. `*ErrorsBase`, `*Helper`) does not — if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
+Linearization gotcha: the first item in the `extends` clause must transitively extend a class (i.e. carry a non-`Object` superclass). Of the bases above, `SparkFunSuite`, `PlanTest`, `QueryTest`, and `SharedSparkSession` all carry the `SparkFunSuite` -> `AnyFunSuite` chain. `SparkTestSuite` is a pure trait and does NOT — if you use it directly you must put a ScalaTest style class first (e.g. `class X extends AnyWordSpec with SparkTestSuite`). The same applies to other "pure helper" traits (`*ErrorsBase`, `*Helper`): if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
 
 ## Build and Test
 
