@@ -52,9 +52,11 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 public class ThriftHttpCLIService extends ThriftCLIService {
 
   protected org.eclipse.jetty.server.Server httpServer;
+  private final boolean sniHostCheckEnabled;
 
-  public ThriftHttpCLIService(CLIService cliService) {
+  public ThriftHttpCLIService(CLIService cliService, boolean sniHostCheckEnabled) {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
+    this.sniHostCheckEnabled = sniHostCheckEnabled;
   }
 
   @Override
@@ -93,11 +95,12 @@ public class ThriftHttpCLIService extends ThriftCLIService {
           Arrays.toString(sslContextFactoryServer.getExcludeProtocols()));
         sslContextFactoryServer.setKeyStorePath(keyStorePath);
         sslContextFactoryServer.setKeyStorePassword(keyStorePassword);
-        // SPARK-54293: Disable SNI host check, which defaults to true since Jetty 10.
-        // This is consistent with the fix in JettyUtils.scala (SPARK-45522).
+        // SPARK-54293: Configure SNI host check, which defaults to true since Jetty 10.
+        // Controlled by spark.sql.hive.thriftServer.http.sniHostCheckEnabled (default: false),
+        // consistent with the fix in JettyUtils.scala (SPARK-45522).
         HttpConfiguration httpConfig = new HttpConfiguration();
         SecureRequestCustomizer src = new SecureRequestCustomizer();
-        src.setSniHostCheck(false);
+        src.setSniHostCheck(sniHostCheckEnabled);
         httpConfig.addCustomizer(src);
         connectionFactories = AbstractConnectionFactory.getFactories(
             sslContextFactoryServer, new HttpConnectionFactory(httpConfig));

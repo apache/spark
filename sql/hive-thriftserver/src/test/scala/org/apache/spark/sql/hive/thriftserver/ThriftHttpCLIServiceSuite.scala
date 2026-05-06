@@ -24,33 +24,43 @@ import org.apache.spark.SparkFunSuite
 
 class ThriftHttpCLIServiceSuite extends SparkFunSuite {
 
-  test("SPARK-54293: SSL connection factories should disable SNI host check") {
-    // Reproduce the connection factory chain created by ThriftHttpCLIService
-    // when SSL is enabled. Without the fix, no SecureRequestCustomizer is added,
-    // and Jetty 10+ defaults sniHostCheck to true, causing SSL failures when
-    // the certificate CN doesn't match the hostname.
+  /**
+   * Helper that builds the SSL connection factory chain the same way
+   * ThriftHttpCLIService.initializeServer() does, using the given sniHostCheck value.
+   */
+  private def buildSslFactoriesAndGetCustomizer(
+      sniHostCheckEnabled: Boolean): SecureRequestCustomizer = {
     val sslContextFactory = new SslContextFactory.Server()
     val httpConfig = new HttpConfiguration()
     val src = new SecureRequestCustomizer()
-    src.setSniHostCheck(false)
+    src.setSniHostCheck(sniHostCheckEnabled)
     httpConfig.addCustomizer(src)
     val connectionFactories = AbstractConnectionFactory.getFactories(
       sslContextFactory, new HttpConnectionFactory(httpConfig))
 
-    // Find the HttpConnectionFactory and verify its SecureRequestCustomizer
     val httpFactory = connectionFactories
       .find(_.isInstanceOf[HttpConnectionFactory])
       .map(_.asInstanceOf[HttpConnectionFactory])
       .getOrElse(fail("HttpConnectionFactory not found in SSL connection factories"))
 
-    val customizers = httpFactory.getHttpConfiguration.getCustomizers
-    val secureCustomizer = customizers.toArray
+    httpFactory.getHttpConfiguration.getCustomizers.toArray
       .find(_.isInstanceOf[SecureRequestCustomizer])
       .map(_.asInstanceOf[SecureRequestCustomizer])
       .getOrElse(fail("SecureRequestCustomizer not found in HttpConfiguration"))
+  }
 
-    assert(!secureCustomizer.isSniHostCheck,
-      "SNI host check should be disabled for ThriftHttpCLIService SSL connections")
+  test("SPARK-54293: SNI host check disabled by default") {
+    // Default behavior: sniHostCheckEnabled = false
+    val customizer = buildSslFactoriesAndGetCustomizer(sniHostCheckEnabled = false)
+    assert(!customizer.isSniHostCheck,
+      "SNI host check should be disabled when sniHostCheckEnabled is false")
+  }
+
+  test("SPARK-54293: SNI host check enabled when configured") {
+    // Opt-in behavior: sniHostCheckEnabled = true
+    val customizer = buildSslFactoriesAndGetCustomizer(sniHostCheckEnabled = true)
+    assert(customizer.isSniHostCheck,
+      "SNI host check should be enabled when sniHostCheckEnabled is true")
   }
 
   test("SPARK-54293: SSL connection factories without fix have SNI host check enabled") {
