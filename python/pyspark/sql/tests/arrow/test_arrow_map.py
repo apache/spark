@@ -120,19 +120,19 @@ class MapInArrowTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "pyarrow.RecordBatch, but is int",
+            r"iterator of pyarrow\.RecordBatch.*\bint\b",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
-            "pyarrow.RecordBatch, but is iterator of int",
+            r"iterator of pyarrow\.RecordBatch.*iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
-            "pyarrow.RecordBatch, but is list",
+            r"iterator of pyarrow\.RecordBatch.*\blist\b",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(list_not_iter, "a int").count())
 
