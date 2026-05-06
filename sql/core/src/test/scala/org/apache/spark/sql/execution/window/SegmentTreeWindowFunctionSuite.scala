@@ -150,7 +150,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
 
     // Confirm the fallback flag actually flipped.
     withSQLConf(enabledConf.toSeq: _*) {
-      SegmentTreeWindowTestHelpers.withSmallPartitionFrame(
+      SegmentTreeWindowTestHelper.withSmallPartitionFrame(
         SQLConf.get, rows = 5) { frame =>
         assert(frame.fallbackUsed,
           "expected fallbackUsed=true for partition smaller than minPartitionRows")
@@ -783,7 +783,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   test("lifecycle: no fallback allocated on segtree-only partition") {
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "1")
-    SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
+    SegmentTreeWindowTestHelper.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
       val array = factory.newArray(rows = 10)
       frame.prepare(array)
@@ -796,7 +796,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   test("lifecycle: fallback lazily allocated on small partition") {
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "100")
-    SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
+    SegmentTreeWindowTestHelper.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
       assert(!frame.fallbackAllocated, "no allocation before prepare()")
       frame.prepare(factory.newArray(rows = 5))
@@ -808,7 +808,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   test("lifecycle: segtree then small partition reuses frame, allocates fallback once") {
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "10")
-    SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
+    SegmentTreeWindowTestHelper.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
       // Partition 1: segtree path (20 rows >= 10).
       frame.prepare(factory.newArray(rows = 20))
@@ -823,7 +823,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   test("lifecycle: small then segtree transition drops fallback reference") {
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "10")
-    SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
+    SegmentTreeWindowTestHelper.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
       // Partition 1: small -> fallback allocated.
       frame.prepare(factory.newArray(rows = 5))
@@ -844,7 +844,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
     // the happy path and documents the invariant.
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "100")
-    SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
+    SegmentTreeWindowTestHelper.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
       frame.prepare(factory.newArray(rows = 5))
       assert(frame.fallbackUsed, "happy-path post-condition")
@@ -854,7 +854,7 @@ class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
   test("lifecycle: close() after only small partition is a no-op") {
     val conf = new SQLConf
     conf.setConfString(SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key, "100")
-    SegmentTreeWindowTestHelpers.withFrameFactory(conf) { factory =>
+    SegmentTreeWindowTestHelper.withFrameFactory(conf) { factory =>
       val frame = factory.newFrame()
       frame.prepare(factory.newArray(rows = 5))
       assert(frame.fallbackUsed)

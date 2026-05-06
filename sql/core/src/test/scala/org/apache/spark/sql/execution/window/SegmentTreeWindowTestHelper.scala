@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.IntegerType
  * package so tests can reach `private[window]` hooks on
  * [[SegmentTreeWindowFunctionFrame]] (see contract Section 1.3).
  */
-private[window] object SegmentTreeWindowTestHelpers {
+private[window] object SegmentTreeWindowTestHelper {
 
   /**
    * Fake-TaskContext plumbing for lifecycle tests. Gives `body` a factory

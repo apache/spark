@@ -103,7 +103,7 @@ class WindowSegmentTreeMemorySuite extends SparkFunSuite with LocalSparkContext 
     val rows = values.iterator.map { v =>
       val r = new GenericInternalRow(1); r.update(0, v); r.asInstanceOf[InternalRow]
     }
-    SegmentTreeWindowTestHelpers.buildTreeFromIter(tree, rows, inputSchema)
+    SegmentTreeWindowTestHelper.buildTreeFromIter(tree, rows, inputSchema)
     tree
   }
 
