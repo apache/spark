@@ -157,11 +157,7 @@ case class AppendData(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None,
-    rowLevelCommand: Option[RowLevelOperation.Command] = None)
-  extends V2WriteCommand
-  with TransactionalWrite {
-
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
@@ -188,16 +184,34 @@ object AppendData {
       table: NamedRelation,
       query: LogicalPlan,
       writeOptions: Map[String, String] = Map.empty,
-      withSchemaEvolution: Boolean = false,
-      rowLevelCommand: Option[RowLevelOperation.Command] = None): AppendData = {
+      withSchemaEvolution: Boolean = false): AppendData = {
     new AppendData(
       table,
       query,
       writeOptions,
       isByName = false,
-      withSchemaEvolution,
-      rowLevelCommand = rowLevelCommand)
+      withSchemaEvolution)
   }
+}
+
+/**
+ * Append data to an existing table as the result of an insert-only MERGE rewrite.
+ *
+ * Functionally equivalent to [[AppendData]] but distinguishes the row-level MERGE rewrite path.
+ */
+case class InsertOnlyMerge(
+    table: NamedRelation,
+    query: LogicalPlan,
+    write: Option[Write] = None,
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
+  override val isByName: Boolean = false
+  override val withSchemaEvolution: Boolean = false
+  override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
+  override def withNewQuery(newQuery: LogicalPlan): InsertOnlyMerge = copy(query = newQuery)
+  override def withNewTable(newTable: NamedRelation): InsertOnlyMerge = copy(table = newTable)
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertOnlyMerge =
+    copy(query = newChild)
 }
 
 /**

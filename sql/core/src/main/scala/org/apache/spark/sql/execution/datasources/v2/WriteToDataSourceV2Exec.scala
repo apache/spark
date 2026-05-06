@@ -290,29 +290,41 @@ case class AppendDataExec(
     refreshCache: () => Unit,
     write: Write,
     tableName: String,
-    transaction: Option[Transaction] = None,
-    rowLevelCommand: Option[RowLevelOperation.Command] = None) extends V2ExistingTableWriteExec {
+    transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
   override def withTransaction(txn: Option[Transaction]): AppendDataExec = copy(transaction = txn)
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
     copy(query = newChild)
 
-  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
-    rowLevelCommand match {
-      case Some(MERGE) =>
-        val numInserted = numOutputRowsMetric.value
-        Some(MergeSummaryImpl(
-          numTargetRowsCopied = 0L,
-          numTargetRowsDeleted = 0L,
-          numTargetRowsUpdated = 0L,
-          numTargetRowsInserted = numInserted,
-          numTargetRowsMatchedUpdated = 0L,
-          numTargetRowsMatchedDeleted = 0L,
-          numTargetRowsNotMatchedBySourceUpdated = 0L,
-          numTargetRowsNotMatchedBySourceDeleted = 0L))
-      case _ =>
-        Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
-    }
-  }
+  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] =
+    Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
+}
+
+/**
+ * Physical plan for an insert-only MERGE rewrite. Behaves like [[AppendDataExec]] but emits a
+ * [[org.apache.spark.sql.connector.write.MergeSummary]] so commit metadata reports the operation
+ * as a MERGE, with all output rows accounted for as inserts.
+ */
+case class InsertOnlyMergeExec(
+    query: SparkPlan,
+    refreshCache: () => Unit,
+    write: Write,
+    tableName: String,
+    transaction: Option[Transaction] = None) extends V2ExistingTableWriteExec {
+  override def withTransaction(txn: Option[Transaction]): InsertOnlyMergeExec =
+    copy(transaction = txn)
+  override protected def withNewChildInternal(newChild: SparkPlan): InsertOnlyMergeExec =
+    copy(query = newChild)
+
+  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] =
+    Some(MergeSummaryImpl(
+      numTargetRowsCopied = 0L,
+      numTargetRowsDeleted = 0L,
+      numTargetRowsUpdated = 0L,
+      numTargetRowsInserted = numOutputRowsMetric.value,
+      numTargetRowsMatchedUpdated = 0L,
+      numTargetRowsMatchedDeleted = 0L,
+      numTargetRowsNotMatchedBySourceUpdated = 0L,
+      numTargetRowsNotMatchedBySourceDeleted = 0L))
 }
 
 /**
