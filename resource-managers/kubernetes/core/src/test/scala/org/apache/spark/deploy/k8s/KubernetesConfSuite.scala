@@ -298,6 +298,31 @@ class KubernetesConfSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-56736: sparkVersion returns the runtime Spark version for driver and executor") {
+    val sparkConf = new SparkConf(false)
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(driverConf.sparkVersion === SPARK_VERSION)
+    assert(execConf.sparkVersion === SPARK_VERSION)
+    assert(driverConf.labels(SPARK_VERSION_LABEL) === SPARK_VERSION)
+    assert(execConf.labels(SPARK_VERSION_LABEL) === SPARK_VERSION)
+  }
+
+  test("SPARK-56736: KubernetesDriverConf subclass can override sparkVersion") {
+    val customVersion = "9.9.9-custom"
+    val customConf = new KubernetesDriverConf(
+      new SparkConf(false),
+      KubernetesTestConf.APP_ID,
+      JavaMainAppResource(None),
+      KubernetesTestConf.MAIN_CLASS,
+      APP_ARGS,
+      None) {
+      override def sparkVersion: String = customVersion
+    }
+    assert(customConf.sparkVersion === customVersion)
+    assert(customConf.labels(SPARK_VERSION_LABEL) === customVersion)
+  }
+
   test("SPARK-52902: K8s image configs support {{SPARK_VERSION}} placeholder") {
     val sparkConf = new SparkConf(false)
     sparkConf.set(CONTAINER_IMAGE, "apache/spark:{{SPARK_VERSION}}")
