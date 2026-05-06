@@ -141,7 +141,6 @@ class AsyncCommitLog(
             case e: Throwable =>
               logError(log"Encountered error while writing batch " +
                 log"${MDC(LogKeys.BATCH_ID, batchId)} to commit log", e)
-              errorNotifier.markError(e)
               future.completeExceptionally(e)
           }
         }
