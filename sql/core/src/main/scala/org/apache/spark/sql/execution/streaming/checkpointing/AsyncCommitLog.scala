@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.streaming.checkpointing
 
 import java.io.OutputStream
 import java.util.concurrent.{CompletableFuture, ConcurrentLinkedDeque, ThreadPoolExecutor}
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.runtime.ErrorNotifier
 
 /**
  * Implementation of CommitLog to perform asynchronous writes to storage
@@ -34,7 +34,7 @@ class AsyncCommitLog(
     sparkSession: SparkSession,
     path: String,
     executorService: ThreadPoolExecutor,
-    asyncWriteError: AtomicReference[Throwable] = new AtomicReference[Throwable]())
+    errorNotifier: ErrorNotifier = new ErrorNotifier())
   extends CommitLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage
@@ -113,7 +113,7 @@ class AsyncCommitLog(
     } else {
       executorService.submit(new Runnable {
         override def run(): Unit = {
-          val priorError = asyncWriteError.get()
+          val priorError = errorNotifier.getError().orNull
           if (priorError != null) {
             logWarning(log"Skipping async commit write for batch " +
               log"${MDC(LogKeys.BATCH_ID, batchId)} because a previous async " +
@@ -141,7 +141,7 @@ class AsyncCommitLog(
             case e: Throwable =>
               logError(log"Encountered error while writing batch " +
                 log"${MDC(LogKeys.BATCH_ID, batchId)} to commit log", e)
-              asyncWriteError.compareAndSet(null, e)
+              errorNotifier.markError(e)
               future.completeExceptionally(e)
           }
         }

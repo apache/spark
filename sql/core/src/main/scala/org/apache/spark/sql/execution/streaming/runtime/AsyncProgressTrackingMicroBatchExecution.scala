@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.internal.LogKeys.{BATCH_ID, PRETTY_ID_STRING}
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
@@ -56,13 +56,6 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   // used to check during the first batch if the pipeline is stateful
   private var isFirstBatch: Boolean = true
-
-  // Records the first error seen by any async log write task. Subsequent async
-  // log writes short-circuit by failing with this error before touching storage.
-  // This prevents creating gaps on durable storage (e.g. offset N missing while
-  // offset N+1 is present, or commit N+1 written without offset N) when an
-  // earlier async write has already failed.
-  private val firstAsyncWriteError = new AtomicReference[Throwable]()
 
   // thread pool is only one thread because we want offset
   // writes to execute in order in a serialized fashion
@@ -102,7 +95,7 @@ class AsyncProgressTrackingMicroBatchExecution(
       asyncWritesExecutorService,
       asyncProgressTrackingCheckpointingIntervalMs,
       triggerClock,
-      firstAsyncWriteError
+      errorNotifier
     )
 
   override lazy val offsetLog: AsyncOffsetSeqLog = asyncCheckpointMetadata.offsetLog
@@ -184,7 +177,7 @@ class AsyncProgressTrackingMicroBatchExecution(
       .exceptionally((th: Throwable) => {
         logError(log"Encountered error while performing async offset write for batch " +
           log"${MDC(BATCH_ID, execCtx.batchId)}", th)
-        recordAsyncWriteError(th)
+        errorNotifier.markError(th)
         return
       })
 
@@ -216,7 +209,7 @@ class AsyncProgressTrackingMicroBatchExecution(
           .exceptionally((th: Throwable) => {
             logError(log"Got exception during async write to commit log for batch " +
               log"${MDC(BATCH_ID, execCtx.batchId)}", th)
-            recordAsyncWriteError(th)
+            errorNotifier.markError(th)
             return
           })
       } else {
@@ -301,11 +294,6 @@ class AsyncProgressTrackingMicroBatchExecution(
         )
       case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
     }
-  }
-
-  private def recordAsyncWriteError(th: Throwable): Unit = {
-    firstAsyncWriteError.compareAndSet(null, th)
-    errorNotifier.markError(th)
   }
 
   private def checkNotStatefulStreamingQuery: Unit = {

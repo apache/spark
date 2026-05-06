@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.streaming.checkpointing
 
 import java.io.OutputStream
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.runtime.ErrorNotifier
 import org.apache.spark.util.{Clock, SystemClock}
 
 /**
@@ -37,7 +38,7 @@ class AsyncOffsetSeqLog(
     executorService: ThreadPoolExecutor,
     offsetCommitIntervalMs: Long,
     clock: Clock = new SystemClock(),
-    asyncWriteError: AtomicReference[Throwable] = new AtomicReference[Throwable]())
+    errorNotifier: ErrorNotifier = new ErrorNotifier())
   extends OffsetSeqLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage
@@ -143,7 +144,7 @@ class AsyncOffsetSeqLog(
     } else {
       executorService.submit(new Runnable {
         override def run(): Unit = {
-          val priorError = asyncWriteError.get()
+          val priorError = errorNotifier.getError().orNull
           if (priorError != null) {
             logWarning(log"Skipping async offset write for batch " +
               log"${MDC(LogKeys.BATCH_ID, batchId)} because a previous async " +
@@ -171,7 +172,7 @@ class AsyncOffsetSeqLog(
             case e: Throwable =>
               logError(log"Encountered error while writing batch " +
                 log"${MDC(LogKeys.BATCH_ID, batchId)} to offset log", e)
-              asyncWriteError.compareAndSet(null, e)
+              errorNotifier.markError(e)
               future.completeExceptionally(e)
           }
         }

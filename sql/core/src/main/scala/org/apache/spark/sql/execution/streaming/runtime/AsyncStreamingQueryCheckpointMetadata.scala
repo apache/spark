@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.streaming.runtime
 
 import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog}
@@ -31,9 +30,9 @@ import org.apache.spark.util.Clock
  * @param asyncWritesExecutorService The executor service for async writes
  * @param asyncProgressTrackingCheckpointingIntervalMs The interval for async progress
  * @param triggerClock The clock to use for trigger time
- * @param asyncWriteError Shared first-error reference between the offset and commit logs.
- *                       Once set, any subsequent async write task short-circuits and
- *                       fails with the recorded error instead of writing to storage.
+ * @param errorNotifier Shared error sink between the offset and commit logs. Once a
+ *                      first error is recorded, subsequent async write tasks short-circuit
+ *                      with that error instead of writing to durable storage.
  */
 class AsyncStreamingQueryCheckpointMetadata(
     sparkSession: SparkSession,
@@ -41,7 +40,7 @@ class AsyncStreamingQueryCheckpointMetadata(
     asyncWritesExecutorService: ThreadPoolExecutor,
     asyncProgressTrackingCheckpointingIntervalMs: Long,
     triggerClock: Clock,
-    asyncWriteError: AtomicReference[Throwable])
+    errorNotifier: ErrorNotifier)
   extends StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot) {
 
   override lazy val offsetLog = new AsyncOffsetSeqLog(
@@ -50,14 +49,14 @@ class AsyncStreamingQueryCheckpointMetadata(
     asyncWritesExecutorService,
     asyncProgressTrackingCheckpointingIntervalMs,
     clock = triggerClock,
-    asyncWriteError = asyncWriteError
+    errorNotifier = errorNotifier
   )
 
   override lazy val commitLog = new AsyncCommitLog(
     sparkSession,
     checkpointFile(StreamingCheckpointConstants.DIR_NAME_COMMITS),
     asyncWritesExecutorService,
-    asyncWriteError = asyncWriteError
+    errorNotifier = errorNotifier
   )
 
 }
