@@ -172,7 +172,7 @@ case class CreateViewCommand(
       if (allowExisting) {
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
-      } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
+      } else if (!tableMetadata.isViewLike) {
         throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
           name.nameParts, replace)
       } else if (replace) {

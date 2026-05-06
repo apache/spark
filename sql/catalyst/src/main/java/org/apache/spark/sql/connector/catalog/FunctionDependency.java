@@ -34,7 +34,9 @@ import org.apache.spark.annotation.Evolving;
  * {@code nameParts} and give value-based semantics. The defensive-copy accessor override
  * also clones on read so callers cannot mutate the record's internal array.
  *
- * @param nameParts structural multi-part identifier (defensive copy made; never empty)
+ * @param nameParts structural multi-part identifier; must be non-empty and contain no
+ *                  null elements (defensive copy made; not validated element-wise --
+ *                  callers passing nulls will surface NPEs in downstream consumers)
  * @since 4.2.0
  */
 @Evolving

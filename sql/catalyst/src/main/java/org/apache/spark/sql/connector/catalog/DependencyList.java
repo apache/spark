@@ -39,7 +39,9 @@ import org.apache.spark.annotation.Evolving;
  * semantics on their {@code nameParts} array). The defensive-copy accessor override clones
  * on read so callers cannot mutate the record's internal array.
  *
- * @param dependencies array of dependencies (defensive copy made)
+ * @param dependencies array of dependencies; must contain no null elements (defensive
+ *                     copy made; not validated element-wise -- callers passing nulls will
+ *                     surface NPEs in downstream consumers)
  * @since 4.2.0
  */
 @Evolving

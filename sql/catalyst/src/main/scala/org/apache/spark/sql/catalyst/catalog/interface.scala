@@ -463,9 +463,9 @@ case class CatalogTable(
 
   /**
    * Returns whether this table behaves like a view at resolution / DDL time. Today: VIEW or
-   * METRIC_VIEW. Forks may extend this set (e.g. DBR also includes MATERIALIZED_VIEW and
-   * STREAMING_TABLE), so call sites that need a uniform "is this view-like?" check should
-   * prefer this helper over inline disjunctions on `tableType`.
+   * METRIC_VIEW. Forks may extend this set with additional view-like types, so call sites
+   * that need a uniform "is this view-like?" check should prefer this helper over inline
+   * disjunctions on `tableType`.
    */
   def isViewLike: Boolean = CatalogTable.isViewLike(tableType)
 
@@ -770,8 +770,7 @@ object CatalogTable {
    * Type-only form of [[CatalogTable.isViewLike]]; returns whether the given table type
    * behaves like a view at resolution / DDL time. Use this overload when you have a
    * [[CatalogTableType]] but no surrounding [[CatalogTable]] (e.g. inside `match`/`case`
-   * patterns or [[org.apache.spark.sql.catalyst.catalog.SessionCatalog.isView]]). Body kept
-   * in sync with the instance method.
+   * patterns or [[org.apache.spark.sql.catalyst.catalog.SessionCatalog.isView]]).
    */
   def isViewLike(tableType: CatalogTableType): Boolean = {
     tableType == CatalogTableType.VIEW || tableType == CatalogTableType.METRIC_VIEW
