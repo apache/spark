@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
@@ -1187,5 +1188,47 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Seq(
         Row(1, 100, "hr"),
         Row(2, 200, "software")))
+  }
+
+  test("UPDATE: metric values are stable across stage retries") {
+    // Force a shuffle in the UPDATE plan via an IN-subquery (and disable AQE/broadcast for a
+    // deterministic plan), then have the DAGScheduler corrupt the first attempt of every
+    // upstream shuffle map stage so the writer stage has to retry. With a plain SQLMetric the
+    // row counters would double up across attempts, but SQLLastAttemptMetric reports only the
+    // last attempt, so the values surfaced via `UpdateSummary` remain correct.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq(1, 2).toDF("pk")
+        sourceDF.createOrReplaceTempView("source")
+
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          sql(
+            s"""UPDATE $tableNameAsString
+               |SET salary = salary + 100
+               |WHERE pk IN (SELECT pk FROM source)
+               |""".stripMargin)
+        }
+
+        checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 2)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 200, "hr"),
+            Row(2, 300, "software"),
+            Row(3, 300, "hr"),
+            Row(4, 400, "software")))
+      }
+    }
   }
 }
