@@ -65,14 +65,14 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
     List<String> candidatePrincipals = new ArrayList<>();
     if (Utils.isBlank(userDNPattern)) {
       if (Utils.isNotBlank(baseDN)) {
-        String pattern = "uid=" + user + "," + baseDN;
+        String pattern = "uid=" + escapeLdapDN(user) + "," + baseDN;
         candidatePrincipals.add(pattern);
       }
     } else {
       String[] patterns = userDNPattern.split(":");
       for (String pattern : patterns) {
         if (pattern.contains(",") && pattern.contains("=")) {
-          candidatePrincipals.add(pattern.replaceAll("%s", user));
+          candidatePrincipals.add(pattern.replace("%s", escapeLdapDN(user)));
         }
       }
     }
@@ -107,5 +107,28 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
 
   private boolean hasDomain(String userName) {
     return (ServiceUtils.indexOfDomainMatch(userName) > 0);
+  }
+
+  /**
+   * Escapes special characters in an LDAP DN attribute value per RFC 4514
+   * to prevent LDAP injection attacks.
+   */
+  private static String escapeLdapDN(String value) {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      switch (c) {
+        case '\\': sb.append("\\\\"); break;
+        case ',':  sb.append("\\,");  break;
+        case '+':  sb.append("\\+");  break;
+        case '"':  sb.append("\\\""); break;
+        case '<':  sb.append("\\<");  break;
+        case '>':  sb.append("\\>");  break;
+        case ';':  sb.append("\\;");  break;
+        case '\0': sb.append("\\00"); break;
+        default:   sb.append(c);      break;
+      }
+    }
+    return sb.toString();
   }
 }
