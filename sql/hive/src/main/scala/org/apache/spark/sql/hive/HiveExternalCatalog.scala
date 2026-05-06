@@ -602,7 +602,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, tableDefinition.identifier.table)
     verifyTableProperties(tableDefinition)
 
-    if (tableDefinition.tableType == VIEW || tableDefinition.tableType == METRIC_VIEW) {
+    if (tableDefinition.isViewLike) {
       val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
       val schemaWithNoCollation = removeCollation(tableDefinition.schema)
       val hiveCompatibleSchema =
@@ -851,7 +851,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     table.properties.get(DATASOURCE_PROVIDER) match {
-      case None if table.tableType == VIEW || table.tableType == METRIC_VIEW =>
+      case None if table.isViewLike =>
         // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
         // from table properties.
         getSchemaFromTableProperties(table.properties).foreach { schemaFromTableProps =>
