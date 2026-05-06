@@ -21,9 +21,10 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{joins, SparkPlan}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode}
 
 /**
  * Strategy for plans containing [[LogicalQueryStage]] nodes:
@@ -36,28 +37,52 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
  */
 object LogicalQueryStageStrategy extends Strategy {
 
-  private def isBroadcastStage(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, _: BroadcastQueryStageExec) => true
+  private def isBroadcastStageWithHashedBroadcastMode(
+      plan: LogicalPlan,
+      isNullAware: Boolean): Boolean = plan match {
+    case LogicalQueryStage(_, bqs: BroadcastQueryStageExec) =>
+      bqs.broadcast.mode match {
+        case HashedRelationBroadcastMode(_, stageIsNullAware) =>
+          stageIsNullAware == isNullAware
+        case _ => false
+      }
+    case _ => false
+  }
+
+  private def isBroadcastStageWithIdentityBroadcastMode(plan: LogicalPlan): Boolean = plan match {
+    case LogicalQueryStage(_, bqs: BroadcastQueryStageExec) =>
+      bqs.broadcast.mode match {
+        case IdentityBroadcastMode => true
+        case _ => false
+      }
     case _ => false
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, otherCondition, _,
           left, right, hint)
-        if isBroadcastStage(left) || isBroadcastStage(right) =>
-      val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
+        if isBroadcastStageWithHashedBroadcastMode(left, isNullAware = false) ||
+            isBroadcastStageWithHashedBroadcastMode(right, isNullAware = false) =>
+      val buildSide =
+        if (isBroadcastStageWithHashedBroadcastMode(left, isNullAware = false)) {
+          BuildLeft
+        } else {
+          BuildRight
+        }
       Seq(BroadcastHashJoinExec(
         leftKeys, rightKeys, joinType, buildSide, otherCondition, planLater(left),
         planLater(right)))
 
     case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-        if isBroadcastStage(j.right) =>
+        if isBroadcastStageWithHashedBroadcastMode(j.right, isNullAware = true) =>
       Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
         None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
     case j @ Join(left, right, joinType, condition, _)
-        if isBroadcastStage(left) || isBroadcastStage(right) =>
-      val buildSide = if (isBroadcastStage(left)) BuildLeft else BuildRight
+        if isBroadcastStageWithIdentityBroadcastMode(left) ||
+            isBroadcastStageWithIdentityBroadcastMode(right) =>
+      val buildSide =
+        if (isBroadcastStageWithIdentityBroadcastMode(left)) BuildLeft else BuildRight
       BroadcastNestedLoopJoinExec(
         planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
