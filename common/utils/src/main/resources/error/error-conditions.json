@@ -6029,7 +6029,7 @@
   },
   "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE" : {
     "message" : [
-      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table or set partition-column options such as \"cloudFiles.partitionColumns\")."
+      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table)."
     ],
     "sqlState" : "0A000"
   },
