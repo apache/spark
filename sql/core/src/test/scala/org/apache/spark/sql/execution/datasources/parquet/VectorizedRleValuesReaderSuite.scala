@@ -158,8 +158,8 @@ private object VectorizedRleValuesReaderSuite {
     val valueReader = new VectorizedPlainValuesReader
     valueReader.initFromPage(
       nonNullCount, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainBytes)))
-    val state = ParquetReadStateTestAccess.newState(intColumnDescriptor(maxDef), maxDef == 0)
-    ParquetReadStateTestAccess.resetForNewPage(state, n, 0L)
+    val state = ParquetTestAccess.newState(intColumnDescriptor(maxDef), maxDef == 0)
+    ParquetTestAccess.resetForNewPage(state, n, 0L)
 
     var produced = 0
     var expectedValueIdx = 0
@@ -167,9 +167,9 @@ private object VectorizedRleValuesReaderSuite {
       val toRead = math.min(batchSize, n - produced)
       val values = new OnHeapColumnVector(toRead, IntegerType)
       val defLevelsVec = new OnHeapColumnVector(toRead, IntegerType)
-      ParquetReadStateTestAccess.resetForNewBatch(state, toRead)
+      ParquetTestAccess.resetForNewBatch(state, toRead)
       val defLevelsArg: WritableColumnVector = if (withDefLevels) defLevelsVec else null
-      ParquetReadStateTestAccess.readBatch(
+      ParquetTestAccess.readBatch(
         reader, state, values, defLevelsArg, valueReader, integerUpdater)
 
       var expectedNullsInBatch = 0
@@ -223,14 +223,14 @@ private object VectorizedRleValuesReaderSuite {
     val valueReader = new VectorizedPlainValuesReader
     valueReader.initFromPage(
       nonNullCount, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainBytes)))
-    val state = ParquetReadStateTestAccess.newState(
+    val state = ParquetTestAccess.newState(
       intColumnDescriptor(maxDef), maxDef == 0, longIterator(includedPositions))
-    ParquetReadStateTestAccess.resetForNewPage(state, n, 0L)
+    ParquetTestAccess.resetForNewPage(state, n, 0L)
 
     val size = includedPositions.length
     val values = new OnHeapColumnVector(size, IntegerType)
-    ParquetReadStateTestAccess.resetForNewBatch(state, size)
-    ParquetReadStateTestAccess.readBatch(reader, state, values, null, valueReader, integerUpdater)
+    ParquetTestAccess.resetForNewBatch(state, size)
+    ParquetTestAccess.readBatch(reader, state, values, null, valueReader, integerUpdater)
 
     val prefixNonNulls = defLevels.scanLeft(0) { (c, d) =>
       c + (if (d == maxDef) 1 else 0)
@@ -262,7 +262,7 @@ private object VectorizedRleValuesReaderSuite {
     val bitWidth = if (maxDef == 0) 0 else 32 - Integer.numberOfLeadingZeros(maxDef)
     val reader = new VectorizedRleValuesReader(bitWidth, false)
     val state =
-      ParquetReadStateTestAccess.newState(intColumnDescriptor(maxDef), maxDef == 0)
+      ParquetTestAccess.newState(intColumnDescriptor(maxDef), maxDef == 0)
 
     var pageFirstRow = 0L
     pages.foreach { pageDefLevels =>
@@ -275,15 +275,15 @@ private object VectorizedRleValuesReaderSuite {
       val valueReader = new VectorizedPlainValuesReader
       valueReader.initFromPage(
         nonNullCount, ByteBufferInputStream.wrap(ByteBuffer.wrap(plainBytes)))
-      ParquetReadStateTestAccess.resetForNewPage(state, pageN, pageFirstRow)
+      ParquetTestAccess.resetForNewPage(state, pageN, pageFirstRow)
 
       var produced = 0
       var expectedValueIdx = 0
       while (produced < pageN) {
         val toRead = math.min(batchSize, pageN - produced)
         val values = new OnHeapColumnVector(toRead, IntegerType)
-        ParquetReadStateTestAccess.resetForNewBatch(state, toRead)
-        ParquetReadStateTestAccess.readBatch(
+        ParquetTestAccess.resetForNewBatch(state, toRead)
+        ParquetTestAccess.readBatch(
           reader, state, values, null, valueReader, integerUpdater)
 
         var i = 0

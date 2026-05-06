@@ -29,9 +29,10 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, EqualTo, IsNull, Or}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -40,7 +41,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -1632,6 +1633,47 @@ class AdaptiveQueryExecSuite
       assert(join.isEmpty)
       checkNumLocalShuffleReads(adaptivePlan)
     }
+  }
+
+  test("LogicalQueryStageStrategy keeps hashed broadcast modes separate") {
+    val left = LocalRelation(AttributeReference("l", IntegerType)())
+    val right = LocalRelation(AttributeReference("r", IntegerType)())
+
+    def broadcastStage(plan: LocalRelation, isNullAware: Boolean): LogicalQueryStage = {
+      val scan = LocalTableScanExec(plan.output, Nil, None)
+      val exchange = BroadcastExchangeExec(
+        HashedRelationBroadcastMode(plan.output, isNullAware), scan)
+      LogicalQueryStage(plan, BroadcastQueryStageExec(0, exchange, exchange))
+    }
+
+    val equiJoin = Join(
+      broadcastStage(left, isNullAware = false),
+      right,
+      Inner,
+      Some(EqualTo(left.output.head, right.output.head)),
+      JoinHint.NONE)
+    assert(LogicalQueryStageStrategy(equiJoin).head.isInstanceOf[BroadcastHashJoinExec])
+
+    val equiJoinWithNullAwareStage = equiJoin.copy(
+      left = broadcastStage(left, isNullAware = true))
+    assert(LogicalQueryStageStrategy(equiJoinWithNullAwareStage).isEmpty)
+
+    val naajCondition = Or(
+      EqualTo(left.output.head, right.output.head),
+      IsNull(EqualTo(left.output.head, right.output.head)))
+    val nullAwareAntiJoin = Join(
+      left,
+      broadcastStage(right, isNullAware = true),
+      LeftAnti,
+      Some(naajCondition),
+      JoinHint.NONE)
+    val naaj = LogicalQueryStageStrategy(nullAwareAntiJoin).head
+      .asInstanceOf[BroadcastHashJoinExec]
+    assert(naaj.isNullAwareAntiJoin)
+
+    val nullAwareAntiJoinWithRegularStage = nullAwareAntiJoin.copy(
+      right = broadcastStage(right, isNullAware = false))
+    assert(LogicalQueryStageStrategy(nullAwareAntiJoinWithRegularStage).isEmpty)
   }
 
   test("SPARK-32717: AQEOptimizer should respect excludedRules configuration") {

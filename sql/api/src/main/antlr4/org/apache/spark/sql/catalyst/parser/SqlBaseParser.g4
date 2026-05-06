@@ -1049,7 +1049,7 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
@@ -1066,6 +1066,10 @@ joinType
 joinCriteria
     : ON booleanExpression
     | USING identifierList
+    ;
+
+nearestByClause
+    : (APPROX | EXACT) NEAREST num=INTEGER_VALUE? BY (DISTANCE | SIMILARITY) expression
     ;
 
 sample
@@ -1930,6 +1934,7 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
@@ -2006,6 +2011,7 @@ ansiNonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTRIBUTE
     | DIV
     | DO
@@ -2015,6 +2021,7 @@ ansiNonReserved
     | ENFORCED
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2112,6 +2119,7 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2187,6 +2195,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2303,6 +2312,7 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | AS
@@ -2398,6 +2408,7 @@ nonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTINCT
     | DISTRIBUTE
     | DIV
@@ -2411,6 +2422,7 @@ nonReserved
     | ESCAPE
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2523,6 +2535,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2609,6 +2622,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT

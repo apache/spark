@@ -131,25 +131,9 @@ class RelationResolution(
    * When PATH is disabled, legacy resolution rules apply.
    */
   private def relationResolutionEntries: Seq[Seq[String]] = {
-    val pinned = AnalysisContext.get.resolutionPathEntries
-    if (pinned.isDefined && conf.pathEnabled) {
-      pinned.get
-    } else {
-      val expandCatalog = catalogManager.currentCatalog.name
-      val expandNamespace = catalogManager.currentNamespace.toSeq
-      val (pathCatalog, pathNamespace) =
-        if (isResolvingView) {
-          val p = AnalysisContext.get.catalogAndNamespace
-          (p.head, p.tail.toSeq)
-        } else {
-          (expandCatalog, expandNamespace)
-        }
-      catalogManager.sqlResolutionPathEntries(
-        pathCatalog,
-        pathNamespace,
-        expandCatalog,
-        expandNamespace)
-    }
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
   }
 
   /**

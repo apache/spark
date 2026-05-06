@@ -155,6 +155,13 @@ object SQLConf {
     override def initialValue: SQLConf = null
   }
 
+  /**
+   * Returns the [[SQLConf]] installed by an outer [[withExistingConf]] scope, or [[None]] if
+   * there is no such scope. Unlike [[get]], this peeks directly at the threadlocal so callers
+   * can distinguish "no outer scope" from "outer scope happens to install the same conf".
+   */
+  def getExistingConfIfSet: Option[SQLConf] = Option(existingConf.get())
+
   def withExistingConf[T](conf: SQLConf)(f: => T): T = {
     val old = existingConf.get()
     existingConf.set(conf)
@@ -2142,15 +2149,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-   val V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS =
-    buildConf("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
-      .doc("Whether to allow storage-partition join in the case where join keys are " +
-        "a subset of the partition keys of the source tables. At planning time, " +
-        "Spark will group the partitions by only those keys that are in the join keys. " +
+   val V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS =
+    buildConf("spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled")
+      .withAlternative("spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled")
+      .doc("Whether to allow storage-partitioned operations (joins, aggregates, and windows) in " +
+        "the case where the operation's keys are a subset of the partition keys of the source " +
+        "tables. At  planning time, Spark will group the partitions by only those keys that are " +
+        "in the operation's keys. " +
         s"This is currently enabled only if ${REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key} " +
         "is false."
       )
       .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -6608,6 +6618,20 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val MERGE_SUBPLANS_FILTER_PROPAGATION_THROUGH_JOIN_ENABLED =
+    buildConf("spark.sql.optimizer.mergeSubplans.filterPropagation.throughJoin.enabled")
+      .doc("When set to true, filter attributes can propagate through Join nodes during subplan " +
+        "merging, allowing subplans that differ only in their filter conditions and share a " +
+        "common join to be merged into a single scan. A filter attribute is only propagated " +
+        "through a join when it originates from the non-nullable (preserved) side: the left side " +
+        "of LeftOuter/LeftSemi/LeftAnti, the right side of RightOuter, or either side of " +
+        "Inner/Cross. FullOuter joins are never eligible. " +
+        s"Has no effect when ${MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key} is false.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
       "message and query context. Stack traces are only shown for internal errors " +
@@ -7926,8 +7950,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def v2BucketingShuffleEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED)
 
-  def v2BucketingAllowJoinKeysSubsetOfPartitionKeys: Boolean =
-    getConf(SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS)
+  def v2BucketingAllowKeysSubsetOfPartitionKeys: Boolean =
+    getConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS)
 
   def v2BucketingAllowCompatibleTransforms: Boolean =
     getConf(SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS)

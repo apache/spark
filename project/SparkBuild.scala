@@ -299,6 +299,8 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home"))
       .map(file),
     publishMavenStyle := true,
+    packageDoc / publishArtifact := false,
+    packageSrc / publishArtifact := (if (sys.env.contains("PUBLISH_PACKAGE_SRC")) true else false),
     unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
@@ -1288,7 +1290,8 @@ object ExcludedDependencies {
       ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
       ExclusionRule("io.netty", "netty-codec-protobuf"),
-      ExclusionRule("io.netty", "netty-codec-marshalling"))
+      ExclusionRule("io.netty", "netty-codec-marshalling"),
+      ExclusionRule("junit", "junit"))
   )
 }
 

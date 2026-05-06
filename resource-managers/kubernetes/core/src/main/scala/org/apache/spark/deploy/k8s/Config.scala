@@ -264,11 +264,14 @@ private[spark] object Config extends Logging {
 
   val PVC_RESIZE_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.pvc.resizeInterval")
-      .doc("Interval between executor PVC resize operations. To disable, set 0 (default)")
+      .doc("Interval between executor PVC resize operations, in minutes. " +
+        "Defaults to 5 minutes. Set to 0 to disable. " +
+        "Must be 0 or a positive multiple of 5 minutes.")
       .version("4.2.0")
       .timeConf(TimeUnit.MINUTES)
-      .checkValue(_ >= 0, "Interval should be non-negative")
-      .createWithDefault(0)
+      .checkValue(v => v >= 0 && v % 5 == 0,
+        "Interval must be 0 or a positive multiple of 5 minutes")
+      .createWithDefault(5)
 
   val PVC_RESIZE_THRESHOLD =
     ConfigBuilder("spark.kubernetes.executor.pvc.resizeThreshold")

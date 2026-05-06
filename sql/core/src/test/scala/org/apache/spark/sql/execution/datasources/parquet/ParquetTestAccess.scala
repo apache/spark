@@ -18,24 +18,37 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.lang.reflect.{InvocationTargetException, Method}
+import java.time.ZoneId
 import java.util.PrimitiveIterator
 
 import org.apache.parquet.column.ColumnDescriptor
+import org.apache.parquet.schema.LogicalTypeAnnotation
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.util.SparkClassUtils
 
 /**
- * Reflective bridge to the package-private `ParquetReadState`. Under `spark-submit --jars`,
- * test and main classes load from different classloaders, blocking package-private access.
- * Reflection with `setAccessible` sidesteps the check without widening production visibility.
+ * Reflective bridge to package-private classes in
+ * `org.apache.spark.sql.execution.datasources.parquet`. Under `spark-submit --jars`, test
+ * and main classes load from different classloaders, blocking package-private access despite
+ * the matching package name. Reflection with `setAccessible(true)` sidesteps the check
+ * without widening production visibility.
+ *
+ * Currently bridges:
+ *   - `ParquetReadState` (constructor + `resetForNewBatch` + `resetForNewPage`)
+ *   - `VectorizedRleValuesReader.readBatch` (5-arg overload not exposed publicly)
+ *   - `ParquetVectorUpdaterFactory` (constructor)
+ *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
+ *   - `VectorizedDeltaLengthByteArrayReader` (no-arg constructor)
  */
-object ParquetReadStateTestAccess {
+object ParquetTestAccess {
+
+  // -------- ParquetReadState --------
 
   private val stateCls = SparkClassUtils.classForName[Any](
     "org.apache.spark.sql.execution.datasources.parquet.ParquetReadState")
 
-  private val ctor = {
+  private val stateCtor = {
     val c = stateCls.getDeclaredConstructor(
       classOf[ColumnDescriptor],
       java.lang.Boolean.TYPE,
@@ -71,7 +84,7 @@ object ParquetReadStateTestAccess {
       isRequired: Boolean,
       rowIndexes: PrimitiveIterator.OfLong = null): AnyRef = {
     try {
-      ctor.newInstance(
+      stateCtor.newInstance(
         descriptor,
         Boolean.box(isRequired),
         rowIndexes).asInstanceOf[AnyRef]
@@ -104,6 +117,63 @@ object ParquetReadStateTestAccess {
       readBatchMethod.invoke(
         reader, state, values, defLevels, valueReader, updater)
     } catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  // -------- ParquetVectorUpdaterFactory --------
+
+  private val factoryCtor = {
+    val cls = SparkClassUtils.classForName[Any](
+      "org.apache.spark.sql.execution.datasources.parquet.ParquetVectorUpdaterFactory")
+    val c = cls.getDeclaredConstructor(
+      classOf[LogicalTypeAnnotation],
+      classOf[ZoneId],
+      classOf[String],
+      classOf[String],
+      classOf[String],
+      classOf[String])
+    c.setAccessible(true)
+    c
+  }
+
+  def newFactory(
+      logicalTypeAnnotation: LogicalTypeAnnotation,
+      convertTz: ZoneId,
+      datetimeRebaseMode: String,
+      datetimeRebaseTz: String,
+      int96RebaseMode: String,
+      int96RebaseTz: String): ParquetVectorUpdaterFactory = {
+    try {
+      factoryCtor.newInstance(
+        logicalTypeAnnotation, convertTz,
+        datetimeRebaseMode, datetimeRebaseTz,
+        int96RebaseMode, int96RebaseTz).asInstanceOf[ParquetVectorUpdaterFactory]
+    } catch {
+      case e: ReflectiveOperationException => throw rethrow(e)
+    }
+  }
+
+  // -------- VectorizedDeltaByteArrayReader / VectorizedDeltaLengthByteArrayReader --------
+
+  private val deltaByteArrayCtor = {
+    val c = classOf[VectorizedDeltaByteArrayReader].getDeclaredConstructor()
+    c.setAccessible(true)
+    c
+  }
+
+  private val deltaLengthByteArrayCtor = {
+    val c = classOf[VectorizedDeltaLengthByteArrayReader].getDeclaredConstructor()
+    c.setAccessible(true)
+    c
+  }
+
+  def newDeltaByteArrayReader(): VectorizedDeltaByteArrayReader =
+    try { deltaByteArrayCtor.newInstance() }
+    catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  def newDeltaLengthByteArrayReader(): VectorizedDeltaLengthByteArrayReader =
+    try { deltaLengthByteArrayCtor.newInstance() }
+    catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  // -------- shared helper --------
 
   private def rethrow(e: ReflectiveOperationException): RuntimeException = {
     val cause = e match {

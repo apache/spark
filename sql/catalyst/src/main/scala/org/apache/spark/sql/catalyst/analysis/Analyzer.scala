@@ -337,10 +337,7 @@ class Analyzer(
         AnalysisContext.reset()
         try {
           AnalysisHelper.markInAnalyzer {
-            sessionConf match {
-              case Some(c) => SQLConf.withExistingConf(c) { runAnalysis() }
-              case None => runAnalysis()
-            }
+            runWithSessionConf(runAnalysis())
           }
         } finally {
           AnalysisContext.reset()
@@ -348,14 +345,27 @@ class Analyzer(
       } else {
         AnalysisContext.withNewAnalysisContext {
           AnalysisHelper.markInAnalyzer {
-            sessionConf match {
-              case Some(c) => SQLConf.withExistingConf(c) { runAnalysis() }
-              case None => runAnalysis()
-            }
+            runWithSessionConf(runAnalysis())
           }
         }
       }
     }
+  }
+
+  /**
+   * Runs `thunk` under the analyzer's [[sessionConf]] for analyzer isolation, but yields to any
+   * outer [[SQLConf.withExistingConf]] scope (e.g. a SQL UDF / view body that pinned the
+   * creation-time configs). Falls through unchanged when [[sessionConf]] is unset, or when the
+   * outer scope already installed a different conf -- otherwise the outer scope's conf would be
+   * silently clobbered.
+   */
+  private def runWithSessionConf[T](thunk: => T): T = sessionConf match {
+    case None => thunk
+    case Some(c) =>
+      SQLConf.getExistingConfIfSet match {
+        case Some(outer) if outer ne c => thunk
+        case _ => SQLConf.withExistingConf(c) { thunk }
+      }
   }
 
   /**
@@ -391,13 +401,8 @@ class Analyzer(
     }
   }
 
-  private def executeSameContext(plan: LogicalPlan): LogicalPlan = sessionConf match {
-    // Respect explicit nested SQLConf overrides (e.g. persisted SQL UDF/view configs).
-    // Otherwise, run analysis with the captured session conf for analyzer isolation.
-    case Some(c) if SQLConf.get ne c => super.execute(plan)
-    case Some(c) => SQLConf.withExistingConf(c) { super.execute(plan) }
-    case None => super.execute(plan)
-  }
+  private def executeSameContext(plan: LogicalPlan): LogicalPlan =
+    runWithSessionConf(super.execute(plan))
 
   def resolver: Resolver = conf.resolver
 
@@ -1935,12 +1940,25 @@ class Analyzer(
       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => expand(s, child)
+        case s: Star => expand(s, child).map(aliasIfOuterReference)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => expand(s, child)
+        case UnresolvedAlias(s: Star, _) => expand(s, child).map(aliasIfOuterReference)
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * Wrap an outer-scope star expansion result in [[Alias]] so that the [[OuterReference]]
+     * attribute gets a fresh ExprId in the subquery's scope. This prevents the outer ExprId from
+     * leaking through [[Project.output]] when the expansion goes through a derived table.
+     * Struct star expansion already produces [[Alias]] nodes, so those are left unchanged.
+     */
+    private def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
+      case _: Alias => e
+      case outerReference: OuterReference =>
+        Alias(outerReference, toPrettySQL(outerReference.e))()
+      case _ => e
     }
 
     /**

@@ -2,81 +2,153 @@
 Boolean decode
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
 AMD EPYC 7763 64-Core Processor
 RLE readBooleans decode:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cold reader, trueRatio=0.0                            0              0           0      60530.9           0.0       1.0X
-reused reader, trueRatio=0.0                          0              0           0      56821.1           0.0       0.9X
-cold reader, trueRatio=0.1                            1              1           0        709.0           1.4       0.0X
-reused reader, trueRatio=0.1                          1              1           0        708.2           1.4       0.0X
-cold reader, trueRatio=0.5                            1              1           0        747.9           1.3       0.0X
-reused reader, trueRatio=0.5                          1              1           0        746.5           1.3       0.0X
-cold reader, trueRatio=0.9                            1              1           0        709.0           1.4       0.0X
-reused reader, trueRatio=0.9                          1              2           0        705.6           1.4       0.0X
-cold reader, trueRatio=1.0                            0              0           0      59164.7           0.0       1.0X
-reused reader, trueRatio=1.0                          0              0           0      58832.7           0.0       1.0X
+cold reader, trueRatio=0.0                            0              0           0       5323.3           0.2       1.0X
+reused reader, trueRatio=0.0                          0              0           0       4464.5           0.2       0.8X
+cold reader, trueRatio=0.1                            2              2           0        669.3           1.5       0.1X
+reused reader, trueRatio=0.1                          2              2           0        672.6           1.5       0.1X
+cold reader, trueRatio=0.5                            1              1           0        722.5           1.4       0.1X
+reused reader, trueRatio=0.5                          1              1           0        724.3           1.4       0.1X
+cold reader, trueRatio=0.9                            2              2           0        669.6           1.5       0.1X
+reused reader, trueRatio=0.9                          2              2           0        674.0           1.5       0.1X
+cold reader, trueRatio=1.0                            0              0           0       4574.1           0.2       0.9X
+reused reader, trueRatio=1.0                          0              0           0       4460.9           0.2       0.8X
 
 
 ================================================================================================
 Integer decode
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
 AMD EPYC 7763 64-Core Processor
 RLE readIntegers dictionary-id decode:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-PACKED cold, bitWidth=4                               2              2           0        517.0           1.9       1.0X
-PACKED reused, bitWidth=4                             2              2           0        518.3           1.9       1.0X
-RLE, bitWidth=4                                       0              0           0      18145.5           0.1      35.1X
+PACKED cold, bitWidth=4                               2              2           0        516.7           1.9       1.0X
+PACKED reused, bitWidth=4                             2              2           0        516.1           1.9       1.0X
+RLE, bitWidth=4                                       0              0           0      18696.2           0.1      36.2X
 PACKED cold, bitWidth=8                               2              2           0        570.0           1.8       1.1X
-PACKED reused, bitWidth=8                             2              2           0        556.9           1.8       1.1X
-RLE, bitWidth=8                                       0              0           0      18098.2           0.1      35.0X
-PACKED cold, bitWidth=12                              2              2           0        454.5           2.2       0.9X
-PACKED reused, bitWidth=12                            2              2           0        453.0           2.2       0.9X
-RLE, bitWidth=12                                      0              0           0      18164.4           0.1      35.1X
-PACKED cold, bitWidth=20                              3              3           0        374.6           2.7       0.7X
-PACKED reused, bitWidth=20                            3              3           0        374.2           2.7       0.7X
-RLE, bitWidth=20                                      0              0           0      18462.1           0.1      35.7X
+PACKED reused, bitWidth=8                             2              2           0        567.0           1.8       1.1X
+RLE, bitWidth=8                                       0              0           0      18583.5           0.1      36.0X
+PACKED cold, bitWidth=12                              2              2           0        454.6           2.2       0.9X
+PACKED reused, bitWidth=12                            2              2           0        452.6           2.2       0.9X
+RLE, bitWidth=12                                      0              0           0      18696.2           0.1      36.2X
+PACKED cold, bitWidth=20                              3              3           0        373.2           2.7       0.7X
+PACKED reused, bitWidth=20                            3              3           0        369.4           2.7       0.7X
+RLE, bitWidth=20                                      0              0           0      15516.8           0.1      30.0X
 
 
 ================================================================================================
 Nullable batch decode with def-level materialization
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
 AMD EPYC 7763 64-Core Processor
 Nullable batch with def-levels:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-nullRatio=0.0, n/a                                    0              0           0       6625.9           0.2       1.0X
-nullRatio=0.1, random                                 9              9           0        121.8           8.2       0.0X
-nullRatio=0.1, clustered                              6              6           0        170.3           5.9       0.0X
-nullRatio=0.3, random                                13             13           0         83.8          11.9       0.0X
-nullRatio=0.3, clustered                              6              6           0        170.4           5.9       0.0X
-nullRatio=0.5, random                                14             14           0         75.8          13.2       0.0X
-nullRatio=0.5, clustered                              6              6           0        172.1           5.8       0.0X
-nullRatio=0.9, random                                 8              8           0        131.0           7.6       0.0X
-nullRatio=0.9, clustered                              6              6           0        181.7           5.5       0.0X
-nullRatio=1.0, random                                 0              0           0       8305.2           0.1       1.3X
+nullRatio=0.0, n/a                                    0              0           0       6608.2           0.2       1.0X
+nullRatio=0.1, random                                 9              9           0        119.1           8.4       0.0X
+nullRatio=0.1, clustered                              6              6           0        166.2           6.0       0.0X
+nullRatio=0.3, random                                13             13           0         81.2          12.3       0.0X
+nullRatio=0.3, clustered                              6              6           0        166.0           6.0       0.0X
+nullRatio=0.5, random                                15             15           1         71.3          14.0       0.0X
+nullRatio=0.5, clustered                              6              6           0        166.6           6.0       0.0X
+nullRatio=0.9, random                                 8              8           0        127.6           7.8       0.0X
+nullRatio=0.9, clustered                              6              6           0        175.5           5.7       0.0X
+nullRatio=1.0, random                                 0              0           0       8275.6           0.1       1.3X
 
 
 ================================================================================================
 Nullable batch decode without def-level materialization
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.17.0-1010-azure
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
 AMD EPYC 7763 64-Core Processor
 Nullable batch without def-levels:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-nullRatio=0.0, n/a                                    0              0           0      11869.8           0.1       1.0X
-nullRatio=0.1, random                                 7              7           0        149.1           6.7       0.0X
-nullRatio=0.1, clustered                              5              5           0        208.1           4.8       0.0X
-nullRatio=0.3, random                                10             10           0        101.1           9.9       0.0X
-nullRatio=0.3, clustered                              5              5           0        206.6           4.8       0.0X
-nullRatio=0.5, random                                12             12           0         90.7          11.0       0.0X
-nullRatio=0.5, clustered                              5              5           0        206.4           4.8       0.0X
-nullRatio=0.9, random                                 7              7           0        160.2           6.2       0.0X
-nullRatio=0.9, clustered                              5              5           0        213.5           4.7       0.0X
-nullRatio=1.0, random                                 0              0           0      11957.2           0.1       1.0X
+nullRatio=0.0, n/a                                    0              0           0      11464.6           0.1       1.0X
+nullRatio=0.1, random                                 7              7           0        148.7           6.7       0.0X
+nullRatio=0.1, clustered                              5              5           0        207.2           4.8       0.0X
+nullRatio=0.3, random                                10             10           0        100.6           9.9       0.0X
+nullRatio=0.3, clustered                              5              5           0        204.8           4.9       0.0X
+nullRatio=0.5, random                                12             12           0         90.6          11.0       0.0X
+nullRatio=0.5, clustered                              5              5           0        205.1           4.9       0.0X
+nullRatio=0.9, random                                 7              7           0        158.9           6.3       0.0X
+nullRatio=0.9, clustered                              5              5           0        212.4           4.7       0.0X
+nullRatio=1.0, random                                 0              0           0      11983.2           0.1       1.0X
+
+
+================================================================================================
+Nullable batch decode with row-index filtering (with def-levels)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+Nullable batch with def-levels, row-index filtered:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+nullRatio=0.0, contiguous 50%                                   1              1           0        762.9           1.3       1.0X
+nullRatio=0.3, contiguous 50%                                   9              9           0        116.5           8.6       0.2X
+nullRatio=0.9, contiguous 50%                                   7              7           0        156.2           6.4       0.2X
+nullRatio=0.0, alt 1000-row windows                             2              2           0        433.5           2.3       0.6X
+nullRatio=0.3, alt 1000-row windows                            10             10           0        103.5           9.7       0.1X
+nullRatio=0.9, alt 1000-row windows                             8              8           1        136.1           7.3       0.2X
+
+
+================================================================================================
+Nullable batch decode with row-index filtering (without def-levels)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+Nullable batch without def-levels, row-index filtered:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+nullRatio=0.0, contiguous 50%                                      1              2           0        732.5           1.4       1.0X
+nullRatio=0.3, contiguous 50%                                      8              8           0        131.7           7.6       0.2X
+nullRatio=0.9, contiguous 50%                                      6              6           0        173.9           5.8       0.2X
+nullRatio=0.0, alt 1000-row windows                                2              2           0        423.8           2.4       0.6X
+nullRatio=0.3, alt 1000-row windows                                9              9           0        115.8           8.6       0.2X
+nullRatio=0.9, alt 1000-row windows                                7              7           0        147.6           6.8       0.2X
+
+
+================================================================================================
+Single-value reads
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+Single-value reads:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+readBoolean                                           3              3           0        321.6           3.1       1.0X
+readInteger, bitWidth=4                               3              4           0        305.3           3.3       0.9X
+readValueDictionaryId, bitWidth=4                     3              4           0        305.0           3.3       0.9X
+readInteger, bitWidth=8                               3              3           0        322.7           3.1       1.0X
+readValueDictionaryId, bitWidth=8                     3              3           0        322.7           3.1       1.0X
+readInteger, bitWidth=12                              4              4           0        282.4           3.5       0.9X
+readValueDictionaryId, bitWidth=12                    4              4           0        282.4           3.5       0.9X
+readInteger, bitWidth=20                              4              4           0        248.5           4.0       0.8X
+readValueDictionaryId, bitWidth=20                    4              4           0        248.4           4.0       0.8X
+
+
+================================================================================================
+Skip
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+Skip:                                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+skipBooleans, trueRatio=0.0                           0              0           0   26214400.0           0.0       1.0X
+skipBooleans, trueRatio=0.5                           2              2           0        621.6           1.6       0.0X
+skipBooleans, trueRatio=1.0                           0              0           0   26214400.0           0.0       1.0X
+skipIntegers PACKED, bitWidth=4                       2              2           0        537.5           1.9       0.0X
+skipIntegers RLE, bitWidth=4                          0              0           0   26214400.0           0.0       1.0X
+skipIntegers PACKED, bitWidth=8                       2              2           0        599.4           1.7       0.0X
+skipIntegers RLE, bitWidth=8                          0              0           0   26214400.0           0.0       1.0X
+skipIntegers PACKED, bitWidth=12                      2              2           0        471.2           2.1       0.0X
+skipIntegers RLE, bitWidth=12                         0              0           0   21399510.2           0.0       0.8X
+skipIntegers PACKED, bitWidth=20                      3              3           0        384.7           2.6       0.0X
+skipIntegers RLE, bitWidth=20                         0              0           0   21399510.2           0.0       0.8X
 
 

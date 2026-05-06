@@ -146,17 +146,19 @@ case class ShowV2ViewColumnsExec(
 
 /**
  * Physical plan node for DESCRIBE TABLE on a v2 view. Schema rows first; when EXTENDED is
- * specified, an additional `# Detailed View Information` block emits the v2-native fields
- * (catalog, identifier, view text, captured creation context, schema-binding mode, query
- * column names, user TBLPROPERTIES). v2 views are unpartitioned by definition, so the
- * partition-spec branch from v1 `DescribeTableCommand` is unreachable here.
+ * specified, an additional `# Detailed View Information` block emits the v2-native fields:
+ * the resolved-identifier components via [[DescribeIdentifierRows#addIdentifierRows]] (which
+ * also surfaces a v1-compat `Database` row for single-segment namespaces), followed by view
+ * text, captured creation context, schema-binding mode, query column names, and user
+ * TBLPROPERTIES. v2 views are unpartitioned by definition, so the partition-spec branch from
+ * v1 `DescribeTableCommand` is unreachable here.
  */
 case class DescribeV2ViewExec(
     output: Seq[Attribute],
     catalogName: String,
     identifier: Identifier,
     viewInfo: ViewInfo,
-    isExtended: Boolean) extends LeafV2CommandExec with SQLConfHelper {
+    isExtended: Boolean) extends DescribeIdentifierRows with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val result = new ArrayBuffer[InternalRow]
@@ -166,10 +168,7 @@ case class DescribeV2ViewExec(
     if (isExtended) {
       result += toCatalystRow("", "", "")
       result += toCatalystRow("# Detailed View Information", "", "")
-      result += toCatalystRow("Catalog", catalogName, "")
-      val qualified = (identifier.namespace() :+ identifier.name())
-        .map(quoteIfNeeded).mkString(".")
-      result += toCatalystRow("Identifier", qualified, "")
+      addIdentifierRows(result, catalogName, identifier, entityLabel = "View")
       // Promote first-class reserved fields (Owner / Comment / Collation) to top-level rows
       // before the EXTENDED Properties block, mirroring v1 `CatalogTable.toJsonLinkedHashMap`
       // which renders these as their own rows rather than burying them in `Table Properties`.

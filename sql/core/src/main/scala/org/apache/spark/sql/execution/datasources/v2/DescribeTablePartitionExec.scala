@@ -32,14 +32,16 @@ case class DescribeTablePartitionExec(
     table: SupportsPartitionManagement,
     tableIdent: Identifier,
     partSpec: ResolvedPartitionSpec,
-    isExtended: Boolean) extends LeafV2CommandExec {
+    isExtended: Boolean) extends DescribeTableBaseRows {
 
   override protected def run(): Seq[InternalRow] = {
     val partitionRow = validateAndGetPartition()
 
-    // Delegate schema + partitioning + clustering to DescribeTableExec.
+    // Schema + partitioning + clustering rows come from the shared `DescribeTableBaseRows`
+    // trait, which is mixed in by both this exec and `DescribeTableExec` so each can call
+    // the helper directly off `this`.
     val rows = new ArrayBuffer[InternalRow]()
-    DescribeTableExec(output, table, isExtended = false).addBaseDescription(rows)
+    addBaseDescription(rows)
 
     if (isExtended) {
       addPartitionDetails(rows, partitionRow)

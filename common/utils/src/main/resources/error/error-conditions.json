@@ -666,6 +666,11 @@
       "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
     ],
     "subClass" : {
+      "NULL_COMMIT_TIMESTAMP" : {
+        "message" : [
+          "Connector emitted a row with a NULL `_commit_timestamp` on a streaming read engaging post-processing. The `Changelog` contract requires `_commit_timestamp` to be non-NULL for streaming reads, since post-processing uses it as event time to advance the watermark."
+        ]
+      },
       "UNEXPECTED_CHANGE_TYPE" : {
         "message" : [
           "Connector emitted a row with a `_change_type` value that is not one of the four supported types (`insert`, `delete`, `update_preimage`, `update_postimage`). The `Changelog` contract requires every emitted row to carry one of these four values."
@@ -3303,11 +3308,6 @@
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
         ]
       },
-      "STREAMING_POST_PROCESSING_NOT_SUPPORTED" : {
-        "message" : [
-          "Change Data Capture (CDC) streaming reads on connector `<changelogName>` do not yet support post-processing (carry-over removal, update detection, or net change computation). The requested combination of options would require post-processing, which is currently only available for batch reads. Use a batch read, or set `deduplicationMode = none` and `computeUpdates = false` to receive raw change rows in streaming."
-        ]
-      },
       "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
         "message" : [
           "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."
@@ -5318,6 +5318,54 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NEAREST_BY_JOIN" : {
+    "message" : [
+      "Invalid nearest-by join."
+    ],
+    "subClass" : {
+      "CROSS_JOIN_NOT_ENABLED" : {
+        "message" : [
+          "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
+        ]
+      },
+      "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
+        "message" : [
+          "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
+        ]
+      },
+      "NON_ORDERABLE_RANKING_EXPRESSION" : {
+        "message" : [
+          "The ranking expression <expression> of type <type> is not orderable. Provide an expression that returns an orderable type, such as a numeric distance like abs(a.col - b.col) or a numeric similarity score."
+        ]
+      },
+      "NUM_RESULTS_OUT_OF_RANGE" : {
+        "message" : [
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
+        ]
+      },
+      "STREAMING_NOT_SUPPORTED" : {
+        "message" : [
+          "Nearest-by join is not supported with streaming DataFrames/Datasets."
+        ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported nearest-by join direction '<direction>'. Supported nearest-by join directions include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_JOIN_TYPE" : {
+        "message" : [
+          "Unsupported nearest-by join type <joinType>. Supported types: <supported>."
+        ]
+      },
+      "UNSUPPORTED_MODE" : {
+        "message" : [
+          "Unsupported nearest-by join mode '<mode>'. Supported modes include: <supported>."
+        ]
+      }
+    },
+    "sqlState" : "42604"
   },
   "NEGATIVE_SCALE_DISALLOWED" : {
     "message" : [
@@ -7841,6 +7889,11 @@
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
         "message" : [
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
+        ]
+      },
+      "LATERAL_JOIN_NEAREST_BY" : {
+        "message" : [
+          "LATERAL correlation with NEAREST BY clause."
         ]
       },
       "LATERAL_JOIN_USING" : {

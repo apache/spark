@@ -353,16 +353,18 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  * `KeyedPartitioning` is used in two distinct forms:
  *
  * 1. '''As outputPartitioning''': When used as a node's output partitioning (e.g., in
- *    `BatchScanExec` or `GroupPartitionsExec`), the `partitionKeys` are always in sorted order.
- *    This is how leaf data source nodes produce partition keys originally, and this ordering is
- *    preserved through `GroupPartitionsExec`. The sorted order is critical for storage-partitioned
- *    join compatibility.
+ *    `BatchScanExec` or `GroupPartitionsExec`), the `partitionKeys` are typically in sorted order
+ *    because data sources produce them that way and `GroupPartitionsExec` sorts while grouping.
+ *    Sorted order is not a hard requirement, but it is a useful property: when both sides of a
+ *    storage-partitioned join report sorted keys, `EnsureRequirements` can often match them
+ *    without inserting an additional `GroupPartitionsExec`. After a narrowing projection through
+ *    `PartitioningPreservingUnaryExecNode`, the projected keys may no longer be sorted; this is
+ *    acceptable because `EnsureRequirements` can always reconcile both sides via
+ *    `GroupPartitionsExec` with `expectedPartitionKeys`.
  *
- * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not be
- *    in sorted order. This occurs because `KeyedShuffleSpec` can project the partition keys by join
- *    key positions. The `EnsureRequirements` rule ensures that either the unordered keys from both
- *    sides of a join match exactly, or it builds a common ordered set of keys and pushes them down
- *    to `GroupPartitionsExec` on both sides to establish a compatible ordering.
+ * 2. '''In KeyedShuffleSpec''': When used within `KeyedShuffleSpec`, the `partitionKeys` may not
+ *    be in sorted order. `EnsureRequirements` handles this by building a common ordered set of
+ *    keys and pushing them down to `GroupPartitionsExec` on both sides.
  *
  * == Partition Keys ==
  * - `partitionKeys`: The partition keys, one per partition. May contain duplicates initially
@@ -417,16 +419,23 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
  *
  * @param expressions Partition transform expressions (e.g., `years(col)`, `bucket(10, col)`).
  * @param partitionKeys Partition keys wrapped in InternalRowComparableWrapper for efficient
- *                      comparison and grouping. One per partition. When used as outputPartitioning,
- *                      always in sorted order. When used in `KeyedShuffleSpec`, may be unsorted
- *                      after projection. May contain duplicates when ungrouped.
+ *                      comparison and grouping. One per partition. Typically in sorted order when
+ *                      produced by a data source or `GroupPartitionsExec`, but this is not
+ *                      guaranteed after projection. May contain duplicates when ungrouped.
  * @param isGrouped Whether partition keys are unique (no duplicates). Computed on first
  *                  creation, then preserved through copy operations to avoid recomputation.
+ * @param isNarrowed Whether this partitioning was derived from a finer-grained one by dropping key
+ *                   positions (e.g. via `PartitioningPreservingUnaryExecNode`). When true,
+ *                   `GroupPartitionsExec` will merge partitions that shared distinct keys in the
+ *                   original partitioning, carrying the same skew risk as
+ *                   `allowKeysSubsetOfPartitionKeys`. Such a partitioning will not satisfy
+ *                   `ClusteredDistribution` unless that config is enabled.
  */
 case class KeyedPartitioning(
     expressions: Seq[Expression],
     @transient partitionKeys: Seq[InternalRowComparableWrapper],
-    isGrouped: Boolean) extends Expression with Partitioning with Unevaluable {
+    isGrouped: Boolean,
+    isNarrowed: Boolean = false) extends Expression with Partitioning with Unevaluable {
   override val numPartitions = partitionKeys.length
 
   override def children: Seq[Expression] = expressions
@@ -480,13 +489,19 @@ case class KeyedPartitioning(
           c.areAllClusterKeysMatched(expressions)
         } else {
           // We'll need to find leaf attributes from the partition expressions first.
-          val attributes = expressions.flatMap(_.collectLeaves())
+          lazy val attributes = expressions.flatMap(_.collectLeaves())
 
-          if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
-            // check that join keys (required clustering keys)
+          if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
+            // check that operation keys (required clustering keys)
             // overlap with partition keys (KeyedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
               expressions.forall(_.collectLeaves().size == 1)
+          } else if (isNarrowed && !isGrouped) {
+            // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
+            // partition keys for a join: GroupPartitionsExec will merge partitions that held
+            // distinct keys in the original finer-grained partitioning. Require the same config to
+            // opt in.
+            false
           } else {
             attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
           }
@@ -502,9 +517,9 @@ case class KeyedPartitioning(
 
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
     val result = KeyedShuffleSpec(this, distribution)
-    if (SQLConf.get.v2BucketingAllowJoinKeysSubsetOfPartitionKeys) {
-      // If allowing join keys to be subset of clustering keys, we should create a new
-      // `KeyedPartitioning` here that is grouped on the join keys instead, and use that as
+    if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
+      // If allowing operation keys to be a subset of partition keys, create a new
+      // `KeyedPartitioning` grouped on the operation keys, and use that as
       // the returned shuffle spec.
       val joinKeyPositions = result.keyPositions.map(_.nonEmpty).zipWithIndex.filter(_._1).map(_._2)
       val projectedExpressions = joinKeyPositions.map(expressions)

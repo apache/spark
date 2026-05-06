@@ -21225,6 +21225,35 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    """
+    Check if a variant value is valid. Returns true if the variant is valid, false if it is
+    malformed, and NULL if the input is NULL.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean column indicating whether the variant value is valid
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(is_valid_variant(parse_json(df.json)).alias("r")).collect()
+    [Row(r=True)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("is_valid_variant", _to_java_column(v))
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to

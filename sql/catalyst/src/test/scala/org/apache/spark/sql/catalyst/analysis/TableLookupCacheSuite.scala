@@ -83,6 +83,9 @@ class TableLookupCacheSuite extends AnalysisTest with Matchers {
       .thenReturn(defaultPath)
     when(catalogManager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
       .thenReturn(defaultPath)
+    when(catalogManager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
 
     new Analyzer(catalogManager)
   }
