@@ -4377,7 +4377,7 @@ class SeriesGroupBy(GroupBy[Series]):
         dispersion and shape of a dataset's distribution, excluding
         ``NaN`` values.
 
-        .. versionadded:: 4.2.0
+        .. versionadded:: 4.3.0
 
         .. note:: Unlike pandas, the percentiles in pandas-on-Spark are based upon
             approximate percentile computation because computing percentiles
