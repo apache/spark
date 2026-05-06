@@ -2664,50 +2664,13 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  test("SPARK-55074: imerge with type coercion from INT to STRING") {
-    // INT -> STRING is allowed in ANSI mode, merge should succeed via type coercion
-    // without requiring schema evolution
-    withTempView("source") {
-      createAndInitTable("pk INT NOT NULL, value STRING, dep STRING",
-        """{ "pk": 1, "value": "100", "dep": "hr" }
-          |{ "pk": 2, "value": "200", "dep": "finance" }
-          |{ "pk": 3, "value": "300", "dep": "engineering" }
-          |""".stripMargin)
-
-      // Source has INT type for 'value' column
-      Seq((2, 999, "finance"), (4, 400, "marketing"))
-        .toDF("pk", "value", "dep")
-        .createOrReplaceTempView("source")
-
-      sql(
-        s"""MERGE INTO $tableNameAsString t
-           |USING source s
-           |ON t.pk = s.pk
-           |WHEN MATCHED THEN
-           | UPDATE SET value = s.value, dep = s.dep
-           |WHEN NOT MATCHED THEN
-           | INSERT (pk, value, dep) VALUES (s.pk, s.value, s.dep)
-           |""".stripMargin)
-
-      checkAnswer(
-        sql(s"SELECT * FROM $tableNameAsString"),
-        Seq(
-          Row(1, "100", "hr"),
-          Row(2, "999", "finance"), // updated, INT 999 coerced to STRING "999"
-          Row(3, "300", "engineering"),
-          Row(4, "400", "marketing"))) // inserted, INT 400 coerced to STRING "400"
-    }
-  }
-
-  test("MERGE: metric values are stable across stage retries") {
-    // The join in the MERGE plan introduces a shuffle (with AQE/broadcast disabled for a
-    // deterministic plan). The DAGScheduler corrupts the first attempt of every upstream
-    // shuffle map stage, forcing the MergeRowsExec stage to retry. With plain SQLMetrics the
-    // row counters would double up across attempts, but SQLLastAttemptMetric reports only the
-    // last attempt, so the values surfaced via `MergeSummary` remain correct.
-    withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+  test("metric values are stable across stage retries") {
+    // The join in the MERGE plan introduces a shuffle (with broadcast disabled). The
+    // DAGScheduler corrupts the first attempt of every upstream shuffle map stage, forcing
+    // the MergeRowsExec stage to retry. With plain SQLMetrics the row counters would double
+    // up across attempts, but SQLLastAttemptMetric reports only the last attempt, so the
+    // values surfaced via `MergeSummary` remain correct.
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
           """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -2749,6 +2712,41 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
             Row(3, 300),
             Row(10, 999)))
       }
+    }
+  }
+
+  test("SPARK-55074: imerge with type coercion from INT to STRING") {
+    // INT -> STRING is allowed in ANSI mode, merge should succeed via type coercion
+    // without requiring schema evolution
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, value STRING, dep STRING",
+        """{ "pk": 1, "value": "100", "dep": "hr" }
+          |{ "pk": 2, "value": "200", "dep": "finance" }
+          |{ "pk": 3, "value": "300", "dep": "engineering" }
+          |""".stripMargin)
+
+      // Source has INT type for 'value' column
+      Seq((2, 999, "finance"), (4, 400, "marketing"))
+        .toDF("pk", "value", "dep")
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET value = s.value, dep = s.dep
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, value, dep) VALUES (s.pk, s.value, s.dep)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, "100", "hr"),
+          Row(2, "999", "finance"), // updated, INT 999 coerced to STRING "999"
+          Row(3, "300", "engineering"),
+          Row(4, "400", "marketing"))) // inserted, INT 400 coerced to STRING "400"
     }
   }
 
