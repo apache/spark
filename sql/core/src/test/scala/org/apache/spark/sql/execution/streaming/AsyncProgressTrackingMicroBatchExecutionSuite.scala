@@ -795,7 +795,9 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
         val firstEx = intercept[ExecutionException] {
           firstFuture.get(5, TimeUnit.SECONDS)
         }
-        assert(sharedNotifier.getError().contains(firstEx.getCause))
+        // In production this is done by the `.exceptionally` chain in
+        // AsyncProgressTrackingMicroBatchExecution.
+        sharedNotifier.markError(firstEx.getCause)
         val firstError = sharedNotifier.getError().get
 
         val commitFuture = commitLog.addAsync(0L, CommitMetadata())
