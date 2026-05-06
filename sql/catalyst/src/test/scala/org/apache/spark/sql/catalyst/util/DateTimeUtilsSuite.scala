@@ -695,6 +695,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       withDefaultTimeZone(zid) {
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("1769-10-17T17:10:02.123456"), defaultZoneId)
+        testTrunc(DateTimeUtils.TRUNC_TO_DAY, "1769-10-17T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "1769-10-17T17:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "1769-10-17T17:10:02", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "1769-10-17T17:10:02.123", inputTS.get, zid)
