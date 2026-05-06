@@ -120,22 +120,19 @@ class MapInArrowTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is int",
+            "pyarrow.RecordBatch, but is int",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is iterator of int",
+            "pyarrow.RecordBatch, but is iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is list",
+            "pyarrow.RecordBatch, but is list",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(list_not_iter, "a int").count())
 

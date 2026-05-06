@@ -248,7 +248,7 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def verify_return_type(result: Any, expected_type: Type[T]) -> T:
+def verify_return_type(result: T, expected_type: Type[T]) -> T:
     """
     Verify a UDF return value against an expected type.
 
@@ -2827,10 +2827,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     result = grouped_udf(key, value_batches)
 
                 # Verify, reorder, and wrap each output batch
-                for batch in verify_return_type(
-                    result,
-                    Iterator[pa.RecordBatch],  # type: ignore[type-abstract]
-                ):
+                for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
                     verify_arrow_result(
                         batch, runner_conf.assign_cols_by_name, expected_cols_and_types
                     )
