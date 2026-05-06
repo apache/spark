@@ -20,6 +20,9 @@ from pyspark.pandas.tests.window.test_rolling import RollingTestingFuncMixin
 
 
 class RollingAdvMixin(RollingTestingFuncMixin):
+    def test_rolling_median(self):
+        self._test_rolling_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_rolling_quantile(self):
         self._test_rolling_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
 
