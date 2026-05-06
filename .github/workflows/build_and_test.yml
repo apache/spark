@@ -779,6 +779,9 @@ jobs:
         SPARK_CONNECT_TESTING_REMOTE: sc://localhost
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
       run: |
+        # Build Spark
+        ./build/sbt -Phive Test/package
+
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
