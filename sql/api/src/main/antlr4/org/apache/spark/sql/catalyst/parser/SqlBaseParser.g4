@@ -217,6 +217,10 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singlePathElementList
+    : pathElement (COMMA pathElement)* EOF
+    ;
+
 singleRoutineParamList
     : colDefinitionList EOF
     ;

@@ -113,17 +113,34 @@ class SessionCatalog(
     identifier.copy(funcName = "") == SESSION_NAMESPACE_TEMPLATE
 
   /**
-   * Session function kinds in resolution order for unqualified lookups.
-   * Matches [[SQLConf.sessionFunctionResolutionOrder]]: "first" (session first),
-   * "second" (default), "last" (builtin only; session tried after persistent).
+   * Provider for the ordered `system.builtin` / `system.session` entries on the effective SQL
+   * PATH (mapped to [[SessionFunctionKind]]). Wired by
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager]] after construction so unqualified
+   * function lookups and the security check that blocks temp functions from shadowing builtins
+   * read the live PATH (post-`SET PATH`, with [[SQLConf.DEFAULT_PATH]] and
+   * [[SQLConf.defaultPathOrder]] fallbacks already applied) instead of the legacy
+   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
+   *
+   * The default reproduces the previous "second" behavior (builtin-then-session) for tests
+   * that construct a [[SessionCatalog]] directly without going through [[CatalogManager]].
    */
-  private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] = {
-    conf.sessionFunctionResolutionOrder match {
-      case "first" => Seq(Temp, Builtin)
-      case "last" => Seq(Builtin)
-      case _ => Seq(Builtin, Temp) // "second" (default)
-    }
-  }
+  private[sql] var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
+    () => Seq(Builtin, Temp)
+
+  /**
+   * Session function kinds in resolution order for unqualified lookups, derived from the
+   * effective SQL PATH via [[sessionFunctionKindsProvider]].
+   */
+  private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] =
+    sessionFunctionKindsProvider()
+
+  /**
+   * True iff the effective SQL PATH searches `system.session` before `system.builtin`. Used
+   * to gate the security check that blocks temporary functions from silently shadowing a
+   * builtin of the same name.
+   */
+  private def sessionFirstInPath: Boolean =
+    sessionFunctionKindsInResolutionOrder.headOption.contains(Temp)
 
   /**
    * Checks if a namespace represents temporary functions.
@@ -2080,12 +2097,11 @@ class SessionCatalog(
       qualifyIdentifier(func)
     }
 
-    // Security check: When legacy mode is enabled, block SQL-created temporary functions
-    // from shadowing builtin functions (to preserve master behavior)
-    // Scala UDFs are still allowed to shadow in legacy mode
-    // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
-    val sessionFirst = conf.sessionFunctionResolutionOrder == "first"
-    if (func.database.isEmpty && sessionFirst && !overrideIfExists) {
+    // Security check: when the effective SQL PATH searches `system.session` before
+    // `system.builtin`, block creating an unqualified temporary function whose name
+    // collides with a builtin so it cannot silently shadow that builtin via unqualified
+    // resolution. We throw ROUTINE_ALREADY_EXISTS to indicate the conflict.
+    if (func.database.isEmpty && sessionFirstInPath && !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
       val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
@@ -2195,10 +2211,11 @@ class SessionCatalog(
       // Use FunctionIdentifier with session namespace for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
 
-      // Security check: When legacy mode is enabled, block SQL-created temporary functions
-      // from shadowing builtin functions (including extensions) as a safeguard
-      // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
-      if ((conf.sessionFunctionResolutionOrder == "first") && !overrideIfExists) {
+      // Security check: when the effective SQL PATH searches `system.session` before
+      // `system.builtin`, block creating an unqualified temporary function whose name
+      // collides with a builtin (including extensions) so it cannot silently shadow that
+      // builtin via unqualified resolution.
+      if (sessionFirstInPath && !overrideIfExists) {
         val funcName = function.name.funcName
         // Check if function exists in builtin namespace (extensions are stored as builtins)
         val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)

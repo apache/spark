@@ -568,4 +568,157 @@ class SetPathSuite extends SharedSparkSession {
       }
     }
   }
+
+  // --- Workspace default path conf (SQLConf.DEFAULT_PATH) ---
+  // The conf carries the SET PATH grammar; sessionPathEntries falls back to it lazily
+  // when no `SET PATH` has been issued, mirroring how `currentCatalog` falls back to
+  // [[SQLConf.DEFAULT_CATALOG]].
+
+  test("DEFAULT_PATH conf: lazy fallback when no SET PATH issued") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "spark_catalog.default, system.builtin") {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      catalogManager.clearSessionPath()
+      try {
+        val entries = pathEntries(currentPath())
+        assert(entries == Seq("spark_catalog.default", "system.builtin"),
+          s"Expected DEFAULT_PATH conf to drive current_path(); got: $entries")
+        assert(catalogManager.storedSessionPathEntries.isEmpty,
+          "DEFAULT_PATH lookup must not write to the in-memory stored session path")
+      } finally {
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("DEFAULT_PATH conf: explicit SET PATH overrides the conf") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "system.builtin, system.session") {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      try {
+        sql("SET PATH = system.session, system.builtin")
+        val entries = pathEntries(currentPath())
+        assert(entries == Seq("system.session", "system.builtin"),
+          s"Expected SET PATH to win over DEFAULT_PATH conf; got: $entries")
+      } finally {
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("DEFAULT_PATH conf: SET PATH = DEFAULT_PATH expands to the conf value") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "system.session, system.builtin, current_schema") {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      try {
+        sql("SET PATH = DEFAULT_PATH")
+        val entries = pathEntries(currentPath())
+        assert(entries.head.contains("system.session"),
+          s"DEFAULT_PATH expansion should follow conf order (session first); got: $entries")
+        assert(catalogManager.storedSessionPathEntries.isDefined,
+          "After SET PATH the in-memory stored session path should be populated")
+      } finally {
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("DEFAULT_PATH conf: cycle break -- inner DEFAULT_PATH falls back to builtin order") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "DEFAULT_PATH",
+        // Pin order conf to "first" so the spark-builtin default ordering is observable.
+        SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "first") {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      catalogManager.clearSessionPath()
+      try {
+        val entries = pathEntries(currentPath())
+        assert(entries.head.contains("system.session"),
+          s"Inner DEFAULT_PATH should resolve to builtin order seeded by the order conf " +
+            s"('first' -> session leading); got: $entries")
+      } finally {
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("DEFAULT_PATH conf: rejected value surfaces a parse error") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "this is not a path") {
+      intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
+        currentPath()
+      }
+    }
+  }
+
+  test("DEFAULT_PATH conf: PATH disabled returns no fallback") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "false",
+        SQLConf.DEFAULT_PATH.key -> "system.session, system.builtin") {
+      val catalogManager = spark.sessionState.catalogManager
+      assert(catalogManager.sessionPathEntries.isEmpty,
+        "DEFAULT_PATH conf must not take effect when PATH is disabled")
+    }
+  }
+
+  // --- Path-driven security check (built on the lazy DEFAULT_PATH fallback) ---
+  // The "block temp function shadowing builtin" check is now driven by the live PATH, so
+  // changes via SET PATH or DEFAULT_PATH take effect even when the legacy order conf is
+  // left at its default.
+
+  test("path-driven security check: SET PATH putting session before builtin blocks temp " +
+      "function with a builtin name") {
+    withPathEnabled {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      try {
+        // Default `sessionFunctionResolutionOrder` is "second" (builtin first), but SET PATH
+        // overrides that to put session first. The security check must reflect the live path.
+        sql("SET PATH = system.session, system.builtin")
+        val e = intercept[AnalysisException] {
+          sql("CREATE TEMPORARY FUNCTION count() RETURNS INT RETURN 1")
+        }
+        assert(e.getCondition == "ROUTINE_ALREADY_EXISTS", e.getMessage)
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("path-driven security check: workspace DEFAULT_PATH putting session before builtin " +
+      "blocks temp function with a builtin name (no SET PATH issued)") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "system.session, system.builtin") {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      catalogManager.clearSessionPath()
+      try {
+        // Order conf is left at its default ("second"). The path-driven gate must read
+        // DEFAULT_PATH and fire the security check for unqualified temp/builtin collisions.
+        val e = intercept[AnalysisException] {
+          sql("CREATE TEMPORARY FUNCTION count() RETURNS INT RETURN 1")
+        }
+        assert(e.getCondition == "ROUTINE_ALREADY_EXISTS", e.getMessage)
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
 }

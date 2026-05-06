@@ -2471,6 +2471,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val DEFAULT_PATH =
+    buildConf("spark.sql.defaultPath")
+      .version("4.2.0")
+      .doc("Default SQL PATH used when no SET PATH has been issued in the session, and the " +
+        "value SET PATH = DEFAULT_PATH expands to. Accepts the full SET PATH grammar; an inner " +
+        "DEFAULT_PATH token resolves to the spark-builtin default ordering. When empty, the " +
+        "spark-builtin default ordering controlled by " +
+        "[[SESSION_FUNCTION_RESOLUTION_ORDER]] applies.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .stringConf
+      .createWithDefault("")
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .version("1.4.0")
@@ -8472,6 +8484,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def prioritizeSystemCatalog: Boolean = !getConf(SQLConf.PERSISTENT_CATALOG_FIRST)
 
   def pathEnabled: Boolean = getConf(SQLConf.PATH_ENABLED)
+
+  def defaultPath: String = getConf(SQLConf.DEFAULT_PATH)
 
   /**
    * Returns the resolution search path for error messages and resolution order.
