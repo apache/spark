@@ -190,11 +190,21 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "int")("value").alias("res")).collect()
 
-        with self.assertRaises(PythonException):
-            df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+        # Pandas 3 backs string Series with an Arrow string array, and
+        # `pa.Array.from_pandas(series, type=pa.decimal128(...))` then silently
+        # casts those strings to decimal instead of raising. Skip the
+        # string -> decimal assertions on Pandas >= 3.
+        import pandas as pd
+        from pyspark.loose_version import LooseVersion
 
-        with self.assertRaises(PythonException):
-            df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            with self.assertRaises(PythonException):
+                df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+
+            with self.assertRaises(PythonException):
+                df_floating_value.select(
+                    udf(lambda x: x, "decimal")("value").alias("res")
+                ).collect()
 
     def test_arrow_udf_int_to_decimal_coercion(self):
         with self.sql_conf(
