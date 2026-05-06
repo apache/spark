@@ -290,7 +290,7 @@ trait WindowEvaluatorFactoryBase {
 
           // Moving Frame.
           case ("AGGREGATE", frameType, lower, upper, _) =>
-            if (eligibleForSegTree(functions, aggFilters, frameType)) {
+            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
               val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
               target: InternalRow => {
@@ -359,7 +359,8 @@ trait WindowEvaluatorFactoryBase {
   private def eligibleForSegTree(
       functions: Array[Expression],
       filters: Array[Option[Expression]],
-      frameType: FrameType): Boolean = {
+      frameType: FrameType,
+      conf: SQLConf): Boolean = {
     // RANGE accepted only for single-column order specs. Multi-column RANGE
     // with non-zero offset is already rejected by `createBoundOrdering`, so
     // gating here on `orderSpec.size == 1` matches the Sliding-path invariant.
@@ -367,7 +368,7 @@ trait WindowEvaluatorFactoryBase {
       case RowFrame => true
       case RangeFrame => orderSpec.size == 1
     }
-    SQLConf.get.windowSegmentTreeEnabled &&
+    conf.windowSegmentTreeEnabled &&
       frameTypeOk &&
       filters.forall(_.isEmpty) &&
       functions.forall(WindowSegmentTree.isEligible)
