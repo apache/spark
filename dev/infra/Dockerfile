@@ -114,3 +114,7 @@ RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'p
 
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
+
+# Add generic dev reqs for reach
+RUN python3.9 -m pip install -r ./dev/requirements.txt
+RUN python3.3 -m pip install -r ./dev/requirements.txt
