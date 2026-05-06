@@ -1345,6 +1345,15 @@ class LateralJoin(LogicalPlan):
         """
 
 
+# Acceptance lists for `nearestByJoin`. Must stay aligned with `NearestByJoinValidation` in
+# `sql/api/.../catalyst/plans/NearestByJoinValidation.scala`.
+_NEAREST_BY_JOIN_MAX_NUM_RESULTS = 100000
+_NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPES = frozenset({"inner", "leftouter", "left"})
+_NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPE_DISPLAY = "'INNER', 'LEFT OUTER'"
+_NEAREST_BY_JOIN_SUPPORTED_MODES = ("approx", "exact")
+_NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS = ("distance", "similarity")
+
+
 class NearestByJoin(LogicalPlan):
     def __init__(
         self,
@@ -1360,6 +1369,44 @@ class NearestByJoin(LogicalPlan):
         self.left = cast(LogicalPlan, left)
         self.right = right
         self.ranking_expression = ranking_expression
+        # Mirror of the Scala `Dataset.validateNearestByJoinArgs` validator -- raises the same
+        # `NEAREST_BY_JOIN.*` error classes the server would, so the user sees a consistent
+        # error regardless of where the check fires.
+        if num_results < 1 or num_results > _NEAREST_BY_JOIN_MAX_NUM_RESULTS:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+                messageParameters={
+                    "numResults": str(num_results),
+                    "min": "1",
+                    "max": str(_NEAREST_BY_JOIN_MAX_NUM_RESULTS),
+                },
+            )
+        if join_type.lower().replace("_", "") not in _NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPES:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+                messageParameters={
+                    "joinType": join_type,
+                    "supported": _NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPE_DISPLAY,
+                },
+            )
+        if mode.lower() not in _NEAREST_BY_JOIN_SUPPORTED_MODES:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+                messageParameters={
+                    "mode": mode,
+                    "supported": "'" + "', '".join(_NEAREST_BY_JOIN_SUPPORTED_MODES) + "'",
+                },
+            )
+        if direction.lower() not in _NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
+                messageParameters={
+                    "direction": direction,
+                    "supported": "'"
+                    + "', '".join(_NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS)
+                    + "'",
+                },
+            )
         self.num_results = int(num_results)
         self.join_type = join_type
         self.mode = mode

@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.catalyst.plans.NearestByJoinValidation
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
@@ -1616,44 +1617,45 @@ class Dataset[T] private[sql] (
 }
 
 private[sql] object Dataset {
-  // Acceptance lists for `nearestByJoin`. Must stay aligned with `NearestByJoinType` /
-  // `NearestByJoinMode` / `NearestByDirection` in sql/catalyst, which `sql/connect/common`
-  // cannot import.
-  private val MaxNumResults: Int = 100000
-  private val SupportedJoinTypeDisplay = "'INNER', 'LEFT OUTER'"
-  private val SupportedJoinTypes = Set("inner", "leftouter", "left", "left_outer")
-  private val SupportedModes = Seq("approx", "exact")
-  private val SupportedDirections = Seq("distance", "similarity")
 
   private[connect] def validateNearestByJoinArgs(
       numResults: Int,
       joinType: String,
       mode: String,
       direction: String): Unit = {
-    if (numResults < 1 || numResults > MaxNumResults) {
+    if (numResults < 1 || numResults > NearestByJoinValidation.MaxNumResults) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
-        messageParameters =
-          Map("numResults" -> numResults.toString, "min" -> "1", "max" -> MaxNumResults.toString))
+        messageParameters = Map(
+          "numResults" -> numResults.toString,
+          "min" -> "1",
+          "max" -> NearestByJoinValidation.MaxNumResults.toString))
     }
     val canonicalJoinType = joinType.toLowerCase(java.util.Locale.ROOT).replace("_", "")
-    if (!SupportedJoinTypes.contains(canonicalJoinType)) {
+    if (!NearestByJoinValidation.SupportedJoinTypes.contains(canonicalJoinType)) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
-        messageParameters = Map("joinType" -> joinType, "supported" -> SupportedJoinTypeDisplay))
+        messageParameters = Map(
+          "joinType" -> joinType,
+          "supported" -> NearestByJoinValidation.SupportedJoinTypeDisplay))
     }
-    if (!SupportedModes.contains(mode.toLowerCase(java.util.Locale.ROOT))) {
+    if (!NearestByJoinValidation.SupportedModes.contains(
+        mode.toLowerCase(java.util.Locale.ROOT))) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_MODE",
-        messageParameters =
-          Map("mode" -> mode, "supported" -> SupportedModes.mkString("'", "', '", "'")))
+        messageParameters = Map(
+          "mode" -> mode,
+          "supported" ->
+            NearestByJoinValidation.SupportedModes.mkString("'", "', '", "'")))
     }
-    if (!SupportedDirections.contains(direction.toLowerCase(java.util.Locale.ROOT))) {
+    if (!NearestByJoinValidation.SupportedDirections.contains(
+        direction.toLowerCase(java.util.Locale.ROOT))) {
       throw new AnalysisException(
         errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
         messageParameters = Map(
           "direction" -> direction,
-          "supported" -> SupportedDirections.mkString("'", "', '", "'")))
+          "supported" ->
+            NearestByJoinValidation.SupportedDirections.mkString("'", "', '", "'")))
     }
   }
 }

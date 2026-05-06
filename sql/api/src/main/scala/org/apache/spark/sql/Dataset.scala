@@ -970,7 +970,7 @@ abstract class Dataset[T] extends Serializable {
    * @param direction
    *   `"distance"` (smallest value first) or `"similarity"` (largest value first).
    * @param joinType
-   *   Type of join to perform. Must be one of: `inner`, `left`, `leftouter`, `left_outer`.
+   *   Type of join to perform. Must be one of: `inner`, `leftouter`.
    * @group untypedrel
    * @since 4.2.0
    */

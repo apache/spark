@@ -2910,8 +2910,7 @@ class DataFrame:
         direction : str
             ``"distance"`` (smallest values first) or ``"similarity"`` (largest values first).
         joinType : str, keyword-only, optional
-            Default ``inner``. Must be one of: ``inner``, ``left``, ``leftouter``,
-            ``left_outer``.
+            Default ``inner``. Must be one of: ``inner``, ``leftouter``.
 
         Returns
         -------
