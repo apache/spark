@@ -455,17 +455,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
       // Strip catalog prefix if the identifier is catalog-qualified.
       val newNameParts = if (rawNewNameParts.length > 1 &&
-          SQLConf.get.resolver(rawNewNameParts.head, catalog.name())) {
+          session.sessionState.conf.resolver(rawNewNameParts.head, catalog.name())) {
         rawNewNameParts.tail
       } else {
         rawNewNameParts
       }
 
-      val newIdent = if (newNameParts.length == 1) {
-        Identifier.of(oldIdent.namespace(), newNameParts.last)
-      } else {
-        newNameParts.asIdentifier
-      }
+      val newIdent = newNameParts.asIdentifier
 
       RenameTableExec(
         catalog,
