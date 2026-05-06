@@ -38,11 +38,13 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
 
 `QueryTest` declares `spark: SparkSession` abstractly via `SparkSessionProvider`. To run a concrete suite, mix in a session-providing trait. The common providers in this repo are:
 
-| Session provider | Module / location | Use case |
-|---|---|---|
-| `SharedSparkSession` | `sql/core` | Classic in-process `SparkSession`. Default for tests under `sql/core`. |
-| `TestHiveSingleton` | `sql/hive` | Hive-backed session (`TestHive`). Used by tests under `sql/hive`. |
-| `RemoteSparkSession` | `sql/connect/client/jvm` | Spark Connect client session. Used by Connect client tests. |
+| Session provider | Module / location | Base chain | Use case |
+|---|---|---|---|
+| `SharedSparkSession` | `sql/core` | `QueryTest` -> `SparkFunSuite` | Classic in-process `SparkSession`. Default for tests under `sql/core`. |
+| `TestHiveSingleton` | `sql/hive` | `SparkFunSuite` | Hive-backed session (`TestHive`). Used by tests under `sql/hive`. |
+| `RemoteSparkSession` | `sql/connect/client/jvm` | `AnyFunSuite` (NOT `SparkFunSuite`) | Spark Connect client session. Used by Connect client tests. |
+
+`RemoteSparkSession` is the odd one out: it directly extends `AnyFunSuite` (with `// scalastyle:ignore funsuite`) instead of going through `SparkFunSuite`, so on its own it lacks SparkFunSuite-only features (per-test timeout, `gridTest`, `retry`, log-capture). Connect client suites therefore combine it with `QueryTest` (e.g. `class DataFrameSuite extends QueryTest with RemoteSparkSession`) to bring the `SparkFunSuite` chain back in.
 
 A handful of suites (e.g. `MapStatusEndToEndSuite`, `ExecutorSideSQLConfSuite`) override `spark` directly and manage the session lifecycle themselves; reach for that pattern only when none of the providers above fit (e.g. local-cluster mode, custom builder configs).
 
