@@ -496,6 +496,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * -07:52:58, see SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu
    * +05:45) are handled correctly by this path because the offset is applied as part of
    * the arithmetic; no offset-alignment guard is needed.
+   *
+   * `unitMicros` must evenly divide `MICROS_PER_DAY`; otherwise wall-clock unit
+   * boundaries do not align to multiples of `unitMicros` in the shifted-local frame
+   * and the `floorMod` truncation is unsafe.
    */
   private def truncToUnitFast(
       micros: Long, zoneId: ZoneId, unitMicros: Long, fallbackUnit: ChronoUnit): Long = {
