@@ -681,7 +681,7 @@ class Rolling(RollingLike[FrameLike]):
         """
         Calculate the rolling median.
 
-        .. versionadded:: 4.2.0
+        .. versionadded:: 4.3.0
 
         .. note:: the current implementation of this API uses Spark's Window without
             specifying partition specification. This leads to move all data into
@@ -1385,7 +1385,7 @@ class RollingGroupby(RollingLike[FrameLike]):
         """
         Calculate the rolling median.
 
-        .. versionadded:: 4.2.0
+        .. versionadded:: 4.3.0
 
         Returns
         -------
@@ -1853,7 +1853,7 @@ class Expanding(ExpandingLike[FrameLike]):
         """
         Calculate the expanding median.
 
-        .. versionadded:: 4.2.0
+        .. versionadded:: 4.3.0
 
         .. note:: the current implementation of this API uses Spark's Window without
             specifying partition specification. This leads to move all data into
@@ -2477,7 +2477,7 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         """
         Calculate the expanding median.
 
-        .. versionadded:: 4.2.0
+        .. versionadded:: 4.3.0
 
         Returns
         -------
