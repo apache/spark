@@ -3695,17 +3695,60 @@ case class ConvertTimezone(
       TimestampNTZType)
   override def dataType: DataType = TimestampNTZType
 
+  // Resolve foldable timezone arguments once to avoid per-row ZoneId.of lookups,
+  // which involve zone-id normalization plus a ZoneRulesProvider map lookup and are
+  // not free even when the resulting ZoneId is cached.
+  @transient private lazy val sourceZoneId: Option[ZoneId] = foldableZoneId(sourceTz)
+  @transient private lazy val targetZoneId: Option[ZoneId] = foldableZoneId(targetTz)
+
+  private def foldableZoneId(e: Expression): Option[ZoneId] = {
+    if (e.foldable) {
+      Option(e.eval()).map(v => DateTimeUtils.getZoneId(v.asInstanceOf[UTF8String].toString))
+    } else {
+      None
+    }
+  }
+
   override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
-    DateTimeUtils.convertTimestampNtzToAnotherTz(
-      srcTz.asInstanceOf[UTF8String].toString,
-      tgtTz.asInstanceOf[UTF8String].toString,
-      micros.asInstanceOf[Long])
+    val srcZone = sourceZoneId.getOrElse(
+      DateTimeUtils.getZoneId(srcTz.asInstanceOf[UTF8String].toString))
+    val tgtZone = targetZoneId.getOrElse(
+      DateTimeUtils.getZoneId(tgtTz.asInstanceOf[UTF8String].toString))
+    DateTimeUtils.convertTimestampNtzToAnotherTz(srcZone, tgtZone, micros.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
-      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    val tzClass = classOf[ZoneId].getName
+
+    // If a foldable timezone literal is null, the expression always returns null.
+    // (Constant folding usually catches this, but be defensive.)
+    def isFoldableNull(e: Expression): Boolean = e.foldable && e.eval() == null
+    if (isFoldableNull(sourceTz) || isFoldableNull(targetTz)) {
+      ev.copy(code = code"""
+         |boolean ${ev.isNull} = true;
+         |long ${ev.value} = 0L;
+       """.stripMargin)
+    } else {
+      // Cache foldable ZoneIds in mutable state; non-foldable ones are resolved per row.
+      def cachedZoneTerm(e: Expression): Option[String] = {
+        if (!e.foldable) None
+        else {
+          val tz = e.eval().asInstanceOf[UTF8String].toString
+          val escapedTz = StringEscapeUtils.escapeJava(tz)
+          Some(ctx.addMutableState(tzClass, "tz",
+            v => s"""$v = $dtu.getZoneId("$escapedTz");"""))
+        }
+      }
+      val srcZoneTermOpt = cachedZoneTerm(sourceTz)
+      val tgtZoneTermOpt = cachedZoneTerm(targetTz)
+
+      nullSafeCodeGen(ctx, ev, (srcTzCode, tgtTzCode, micros) => {
+        val srcZoneExpr = srcZoneTermOpt.getOrElse(s"$dtu.getZoneId($srcTzCode.toString())")
+        val tgtZoneExpr = tgtZoneTermOpt.getOrElse(s"$dtu.getZoneId($tgtTzCode.toString())")
+        s"${ev.value} = $dtu.convertTimestampNtzToAnotherTz($srcZoneExpr, $tgtZoneExpr, $micros);"
+      })
+    }
   }
 
   override def prettyName: String = "convert_timezone"

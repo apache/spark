@@ -1892,6 +1892,34 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-56745: convert_timezone with non-foldable timezone arguments") {
+    // Exercises the fallback path in ConvertTimezone where source/target timezones
+    // are not foldable and must be resolved per row, complementing the foldable-cache
+    // path covered by SPARK-37552.
+    checkEvaluation(
+      ConvertTimezone(
+        NonFoldableLiteral.create("Europe/Brussels", StringType),
+        NonFoldableLiteral.create("Europe/Moscow", StringType),
+        Literal(LocalDateTime.of(2022, 3, 27, 3, 0, 0))),
+      LocalDateTime.of(2022, 3, 27, 4, 0, 0))
+
+    // Mixed: foldable source, non-foldable target.
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("America/Los_Angeles"),
+        NonFoldableLiteral.create("UTC", StringType),
+        Literal(LocalDateTime.of(2022, 1, 1, 0, 0, 0))),
+      LocalDateTime.of(2022, 1, 1, 8, 0, 0))
+
+    // Non-foldable null timezone -- nullIntolerant must propagate null.
+    checkEvaluation(
+      ConvertTimezone(
+        NonFoldableLiteral.create(null, StringType),
+        Literal("UTC"),
+        Literal(LocalDateTime.of(2022, 1, 1, 0, 0, 0))),
+      null)
+  }
+
   test("SPARK-38195: add a quantity of interval units to a timestamp") {
     // Check case-insensitivity
     checkEvaluation(

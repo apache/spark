@@ -566,9 +566,22 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *         the input timestamp in the input time zone, but in the destination time zone.
    */
   def convertTimestampNtzToAnotherTz(sourceTz: String, targetTz: String, micros: Long): Long = {
+    convertTimestampNtzToAnotherTz(getZoneId(sourceTz), getZoneId(targetTz), micros)
+  }
+
+  /**
+   * Same as [[convertTimestampNtzToAnotherTz(String, String, Long)]] but accepts pre-resolved
+   * `ZoneId` objects. Useful when the timezone arguments are foldable and have been resolved
+   * once at expression construction time, avoiding per-row `ZoneId.of` lookups (zone-id
+   * normalization plus a `ZoneRulesProvider` map lookup) on every input row.
+   */
+  def convertTimestampNtzToAnotherTz(
+      sourceZoneId: ZoneId,
+      targetZoneId: ZoneId,
+      micros: Long): Long = {
     val ldt = microsToLocalDateTime(micros)
-      .atZone(getZoneId(sourceTz))
-      .withZoneSameInstant(getZoneId(targetTz))
+      .atZone(sourceZoneId)
+      .withZoneSameInstant(targetZoneId)
       .toLocalDateTime
     localDateTimeToMicros(ldt)
   }
