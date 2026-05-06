@@ -2966,6 +2966,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             split_index: int,
             data: Iterator[Tuple[list[pa.RecordBatch], list[pa.RecordBatch]]],
         ) -> Iterator[pa.RecordBatch]:
+            """Apply cogroupBy Arrow UDF."""
             for left_batches, right_batches in data:
                 left_keys = table_from_batches(left_batches, left_key_cols)
                 left_values = table_from_batches(left_batches, left_val_cols)
