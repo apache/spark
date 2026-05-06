@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.command
 
 /**
@@ -155,6 +156,21 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       checkAnswer(
         sql(s"SHOW PARTITIONS $t PARTITION (p1 = null) AS JSON"),
         Row("""{"partitions":["p1=__HIVE_DEFAULT_PARTITION__"]}"""))
+    }
+  }
+
+  test("non-partitioning columns AS JSON") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1) AS JSON")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`abcd`",
+          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`datetable`")
+      )
     }
   }
 }
