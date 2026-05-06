@@ -793,9 +793,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("truncTimestamp across DST transitions") {
     val la = getZoneId("America/Los_Angeles")
-    // Spring-forward in LA: 2024-03-10 02:00 PDT does not exist; 02:30 local maps to
-    // 2024-03-10 03:30 PDT in wall-clock terms. Use an instant just after the transition
-    // so HOUR/DAY truncation candidate falls into the pre-transition offset window.
+    // Spring-forward in LA: local 02:00-02:59 doesn't exist on 2024-03-10
+    // (01:59 PST jumps to 03:00 PDT). Pick 03:30 PDT just after the transition
+    // so the HOUR/DAY truncation candidate falls into the pre-transition window.
     val postSpring = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2024-03-10T03:30:00-07:00"), la).get
     val expectedHour = DateTimeUtils.stringToTimestamp(
