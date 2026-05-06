@@ -244,7 +244,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("SPARK-33904: null and empty string as partition values AS JSON") {
+  test("null and empty string as partition values AS JSON") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createNullPartTable(t, "parquet")
       checkAnswer(

@@ -78,16 +78,6 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
     }
   }
 
-  test("SPARK-33889, SPARK-33904: null and empty string as partition values AS JSON") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createNullPartTable(t, "parquet")
-      // V2 represents an empty-string partition as "part=" and a null partition as "part=null"
-      checkAnswer(
-        sql(s"SHOW PARTITIONS $t AS JSON"),
-        Row("""{"partitions":["part=","part=null"]}"""))
-    }
-  }
-
   test("SHOW PARTITIONS AS JSON is not supported for V2 tables") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)

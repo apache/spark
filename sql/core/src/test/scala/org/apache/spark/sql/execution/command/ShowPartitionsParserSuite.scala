@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
+import org.apache.spark.sql.execution.SparkSqlParser
 
 class ShowPartitionsParserSuite extends AnalysisTest {
   private def parsePlan(statement: String) = new SparkSqlParser().parsePlan(statement)
