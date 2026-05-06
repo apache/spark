@@ -1413,6 +1413,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
@@ -1424,7 +1425,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
-    def replace(  # type: ignore[misc]
+    def replace(
         self,
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]
