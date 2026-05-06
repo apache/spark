@@ -18,11 +18,14 @@
 package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -39,7 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 //       need to track current database at all.
 private[sql]
 class CatalogManager(
-    defaultSessionCatalog: CatalogPlugin,
+    val defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
@@ -56,6 +59,11 @@ class CatalogManager(
       catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
     }
   }
+
+  def transaction: Option[Transaction] = None
+
+  def withTransaction(transaction: Transaction): CatalogManager =
+    new TransactionAwareCatalogManager(this, transaction)
 
   def isCatalogRegistered(name: String): Boolean = {
     try {
@@ -164,6 +172,94 @@ class CatalogManager(
     }
   }
 
+  /**
+   * Ordered catalog/schema path entries for resolving unqualified SQL object names.
+   * When PATH is off or unset, applies [[SQLConf.defaultPathOrder]] (legacy).
+   * When PATH is explicitly set, uses the resolved stored path entries.
+   */
+  def sqlResolutionPathEntries(
+      pathDefaultCatalog: String,
+      pathDefaultNamespace: Seq[String],
+      expandCatalog: String,
+      expandNamespace: Seq[String]): Seq[Seq[String]] = synchronized {
+    val defaultEntry =
+      if (pathDefaultNamespace.isEmpty) Seq(pathDefaultCatalog)
+      else pathDefaultCatalog +: pathDefaultNamespace
+    val stored = if (conf.pathEnabled) _sessionPath else None
+    stored match {
+      case Some(entries) =>
+        CatalogManager.resolvePathEntries(entries, expandCatalog, expandNamespace)
+      case None =>
+        conf.defaultPathOrder(Seq(defaultEntry))
+    }
+  }
+
+  /** Session-catalog overload. */
+  def sqlResolutionPathEntries(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    sqlResolutionPathEntries(
+      currentCatalog, currentNamespace,
+      currentCatalog, currentNamespace)
+
+  /**
+   * True if `system.session` is on the SQL path. Only literal path entries can match: the
+   * [[CurrentSchemaEntry]] marker expands to `currentCatalog.name() +: currentNamespace`, and
+   * `system` is not a registered catalog (it is a synthetic namespace served via
+   * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,
+   * not loadable via [[catalog]]), so `currentCatalog.name()` cannot be `"system"`. If that
+   * invariant ever changes, this short-circuit must be revisited.
+   * Inspecting stored entries directly avoids loading the configured default catalog.
+   */
+  def isSystemSessionOnPath: Boolean = synchronized {
+    if (!conf.pathEnabled) return true
+    _sessionPath match {
+      case None => true
+      case Some(entries) => entries.exists {
+        case CatalogManager.LiteralPathEntry(parts) =>
+          CatalogManager.isSystemSessionPathEntry(parts)
+        case _ => false
+      }
+    }
+  }
+
+  /**
+   * Single source of truth for analysis-time resolution path entries used by relation, routine,
+   * and procedure resolution. When `pinnedEntries` are set (a view or SQL function body's
+   * persisted frozen path) and PATH is enabled, returns them as-is so unqualified lookups follow
+   * the creation-time path. Otherwise falls back to [[sqlResolutionPathEntries]] using the view's
+   * catalog/namespace as the path default (so unqualified names inside a view body see the view's
+   * home schema first), while always expanding markers like CURRENT_SCHEMA against the live
+   * session catalog/namespace.
+   *
+   * @param pinnedEntries persisted frozen path entries from view / SQL function metadata
+   *                      (typically `AnalysisContext.resolutionPathEntries`).
+   * @param viewCatalogAndNamespace the view's catalog and namespace
+   *                               (typically `AnalysisContext.catalogAndNamespace`); empty when
+   *                               not resolving a view body.
+   */
+  def resolutionPathEntriesForAnalysis(
+      pinnedEntries: Option[Seq[Seq[String]]],
+      viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] = {
+    pinnedEntries match {
+      case Some(entries) if conf.pathEnabled => entries
+      case _ =>
+        val expandCatalog = currentCatalog.name()
+        val expandNamespace = currentNamespace.toSeq
+        val (pathCatalog, pathNamespace) =
+          if (viewCatalogAndNamespace.nonEmpty) {
+            (viewCatalogAndNamespace.head, viewCatalogAndNamespace.tail.toSeq)
+          } else {
+            (expandCatalog, expandNamespace)
+          }
+        sqlResolutionPathEntries(
+          pathCatalog,
+          pathNamespace,
+          expandCatalog,
+          expandNamespace)
+    }
+  }
+
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
@@ -197,7 +293,7 @@ class CatalogManager(
   }
 }
 
-private[sql] object CatalogManager {
+private[sql] object CatalogManager extends Logging {
 
   val SESSION_CATALOG_NAME: String = "spark_catalog"
   val SYSTEM_CATALOG_NAME = "system"
@@ -311,5 +407,67 @@ private[sql] object CatalogManager {
     import org.json4s.jackson.JsonMethods.compact
     compact(JArray(entries.map(parts =>
       JArray(parts.map(JString(_)).toList)).toList))
+  }
+
+  private def parsePathEntries(storedPathStr: String): Either[String, Seq[Seq[String]]] = {
+    import org.json4s.JsonAST.{JArray, JString}
+    import org.json4s.jackson.JsonMethods.parse
+
+    Try(parse(storedPathStr)).toOption match {
+      case Some(JArray(entries)) =>
+        entries.foldLeft(Right(Seq.empty[Seq[String]]): Either[String, Seq[Seq[String]]]) {
+          (acc, entry) =>
+            acc.flatMap { collected =>
+              entry match {
+                case JArray(parts) =>
+                  val strings = parts.collect { case JString(s) => s }
+                  if (strings.size == parts.size) Right(collected :+ strings)
+                  else Left("expected all array entry parts to be JSON strings")
+                case _ =>
+                  Left("expected each top-level array entry to be a JSON array")
+              }
+            }
+        }
+      case Some(_) =>
+        Left("expected top-level JSON array")
+      case None =>
+        Left("failed to parse JSON payload")
+    }
+  }
+
+  /**
+   * Parse a stored frozen path string from view/function metadata.
+   * Returns None if the payload is malformed.
+   */
+  def deserializePathEntries(storedPathStr: String): Option[Seq[Seq[String]]] = {
+    parsePathEntries(storedPathStr) match {
+      case Right(entries) => Some(entries)
+      case Left(reason) =>
+        logWarning(
+          s"Invalid stored SQL path metadata: $reason. Raw payload: $storedPathStr")
+        None
+    }
+  }
+
+  /**
+   * Parse stored frozen path metadata and fail analysis if malformed.
+   */
+  def deserializePathEntriesOrFail(
+      storedPathStr: String,
+      objectType: String,
+      objectName: String): Seq[Seq[String]] = {
+    parsePathEntries(storedPathStr) match {
+      case Right(entries) => entries
+      case Left(reason) =>
+        throw new AnalysisException(
+          message = s"Invalid stored SQL path metadata for $objectType '$objectName': " +
+            s"$reason. Raw payload: $storedPathStr",
+          line = None,
+          startPosition = None,
+          cause = None,
+          errorClass = None,
+          messageParameters = Map.empty,
+          context = Array.empty)
+    }
   }
 }

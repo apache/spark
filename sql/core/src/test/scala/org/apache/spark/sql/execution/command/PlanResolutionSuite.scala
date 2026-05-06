@@ -146,6 +146,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.properties).thenReturn(Map.empty)
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
+    if (tableType == CatalogTableType.VIEW) {
+      // Stub the view-only fields that resolution reads through `V1ViewInfo.builderFrom`.
+      // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
+      // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
+      when(t.viewText).thenReturn(None)
+      when(t.viewCatalogAndNamespace).thenReturn(Seq.empty)
+      when(t.viewSQLConfigs).thenReturn(Map.empty)
+      when(t.viewQueryColumnNames).thenReturn(Seq.empty)
+    }
     V1Table(t)
   }
 
@@ -221,6 +230,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(testCat.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -230,6 +249,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
@@ -237,6 +258,17 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath2 = SQLConf.get.resolutionSearchPath(
+      (v2SessionCatalog.name() +: Array("default")).toSeq)
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath2)
     manager
   }
 
@@ -778,8 +810,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
     checkError(
       e,
-      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);

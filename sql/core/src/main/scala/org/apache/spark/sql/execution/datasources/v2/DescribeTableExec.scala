@@ -24,67 +24,74 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-case class DescribeTableExec(
-    output: Seq[Attribute],
-    table: Table,
-    isExtended: Boolean) extends LeafV2CommandExec {
-  override protected def run(): Seq[InternalRow] = {
-    val rows = new ArrayBuffer[InternalRow]()
-    addBaseDescription(rows)
-
-    if (isExtended) {
-      addMetadataColumns(rows)
-      addTableDetails(rows)
-      addTableStats(rows)
-      addTableConstraints(rows)
-    }
-    rows.toSeq
+/**
+ * Catalog / Namespace / Database / <entity> row formatting shared by
+ * `DescribeTableExec.addTableDetails` and `DescribeV2ViewExec.run`. Hosting it in one place
+ * keeps the row layout (including the v1-compat `Database` row) as a single source of truth
+ * so the table and view paths can't drift.
+ */
+private[v2] trait DescribeIdentifierRows extends LeafV2CommandExec {
+  /**
+   * Append the structured identifier rows (`Catalog`, `Namespace`, `Database`,
+   * `<entityLabel>`) to `rows`. `entityLabel` is `"Table"` for a v2 table and `"View"` for a
+   * v2 view -- the only divergence between the two paths.
+   *
+   * Row shapes:
+   *  - `Catalog` carries the catalog plugin name (always present for v2).
+   *  - `Namespace` is the canonical multi-segment representation, joined with `.` and with
+   *    `quoteIfNeeded` applied per segment (so segments containing dots round-trip). Always
+   *    emitted; for an empty namespace (root-level entity) the value is the empty string,
+   *    so the row's presence stays uniform across v2 outputs.
+   *  - `Database` is always emitted for v1 compatibility. Its value is the trailing
+   *    namespace segment (so multi-segment namespaces still surface their leaf segment),
+   *    or the empty string when the namespace is the catalog root. Consumers that need
+   *    the full namespace should read `Namespace`; `Database` alone is not round-trip-safe
+   *    for multi-segment cases.
+   *  - `<entityLabel>` is the unqualified entity name from `Identifier.name()`.
+   */
+  protected def addIdentifierRows(
+      rows: ArrayBuffer[InternalRow],
+      catalogName: String,
+      identifier: Identifier,
+      entityLabel: String): Unit = {
+    rows += toCatalystRow("Catalog", catalogName, "")
+    rows += toCatalystRow("Namespace", identifier.namespace().quoted, "")
+    rows += toCatalystRow("Database", identifier.namespace().lastOption.getOrElse(""), "")
+    rows += toCatalystRow(entityLabel, identifier.name(), "")
   }
+}
+
+/**
+ * Schema + partitioning + clustering row formatting shared by `DescribeTableExec.run()` (which
+ * uses it for the schema-row prefix) and `DescribeTablePartitionExec.run()` (which uses it as
+ * the entire pre-partition section). Mixing the helpers into a trait lets each exec invoke
+ * them directly off `this`, so the partition exec doesn't need to thread the table-only
+ * `catalogName` / `identifier` arguments that `DescribeTableExec` consumes for the EXTENDED
+ * `# Detailed Table Information` block.
+ *
+ * Kept orthogonal to [[DescribeIdentifierRows]] so `DescribeTablePartitionExec` (which only
+ * needs the schema/partitioning rows) doesn't inherit identifier-row helpers it never calls.
+ * `DescribeTableExec` mixes both traits in.
+ */
+private[v2] trait DescribeTableBaseRows extends LeafV2CommandExec {
+  def table: Table
+
+  /** A blank `("", "", "")` row used as a section separator in DESCRIBE output. */
+  protected def emptyRow(): InternalRow = toCatalystRow("", "", "")
 
   /** Schema + partitioning + clustering rows, shared with DescribeTablePartitionExec. */
-  private[v2] def addBaseDescription(rows: ArrayBuffer[InternalRow]): Unit = {
+  protected def addBaseDescription(rows: ArrayBuffer[InternalRow]): Unit = {
     addSchema(rows)
     addPartitioning(rows)
     addClustering(rows)
-  }
-
-  private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
-    rows += emptyRow()
-    rows += toCatalystRow("# Detailed Table Information", "", "")
-    rows += toCatalystRow("Name", table.name(), "")
-
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
-      CatalogTableType.EXTERNAL.name
-    } else {
-      CatalogTableType.MANAGED.name
-    }
-    rows += toCatalystRow("Type", tableType, "")
-    CatalogV2Util.TABLE_RESERVED_PROPERTIES
-      .filterNot(_ == TableCatalog.PROP_EXTERNAL)
-      .foreach(propKey => {
-        if (table.properties.containsKey(propKey)) {
-          rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
-        }
-      })
-    val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
-    rows += toCatalystRow("Table Properties", properties, "")
-
-    // If any columns have default values, append them to the result.
-    ResolveDefaultColumns.getDescribeMetadata(table.columns()).foreach { row =>
-      rows += toCatalystRow(row._1, row._2, row._3)
-    }
   }
 
   private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -92,29 +99,6 @@ case class DescribeTableExec(
       toCatalystRow(
         column.name, column.dataType.simpleString, column.comment)
     }
-  }
-
-  private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (table.constraints.nonEmpty) {
-      rows += emptyRow()
-      rows += toCatalystRow("# Constraints", "", "")
-      rows ++= table.constraints().map{ constraint =>
-        toCatalystRow(constraint.name(), constraint.toDescription, "")
-      }
-    }
-  }
-
-  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
-    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
-      rows += emptyRow()
-      rows += toCatalystRow("# Metadata Columns", "", "")
-      rows ++= hasMeta.metadataColumns.map { column =>
-        toCatalystRow(
-          column.name,
-          column.dataType.simpleString,
-          Option(column.comment()).getOrElse(""))
-      }
-    case _ =>
   }
 
   private def addClusteringToRows(
@@ -142,23 +126,6 @@ case class DescribeTableExec(
     ClusterBySpec.extractClusterBySpec(table.partitioning.toIndexedSeq).foreach { clusterBySpec =>
       addClusteringToRows(clusterBySpec, rows)
     }
-  }
-
-  private def addTableStats(rows: ArrayBuffer[InternalRow]): Unit = table match {
-    case read: SupportsRead =>
-      read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
-        case s: SupportsReportStatistics =>
-          val stats = s.estimateStatistics()
-          val statsComponents = Seq(
-            Option.when(stats.sizeInBytes().isPresent)(s"${stats.sizeInBytes().getAsLong} bytes"),
-            Option.when(stats.numRows().isPresent)(s"${stats.numRows().getAsLong} rows")
-          ).flatten
-          if (statsComponents.nonEmpty) {
-            rows += toCatalystRow("Statistics", statsComponents.mkString(", "), null)
-          }
-        case _ =>
-      }
-    case _ =>
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
@@ -196,6 +163,96 @@ case class DescribeTableExec(
       }
     }
   }
+}
 
-  private def emptyRow(): InternalRow = toCatalystRow("", "", "")
+case class DescribeTableExec(
+    output: Seq[Attribute],
+    catalogName: String,
+    identifier: Identifier,
+    table: Table,
+    isExtended: Boolean) extends DescribeTableBaseRows with DescribeIdentifierRows {
+  override protected def run(): Seq[InternalRow] = {
+    val rows = new ArrayBuffer[InternalRow]()
+    addBaseDescription(rows)
+
+    if (isExtended) {
+      addMetadataColumns(rows)
+      addTableDetails(rows)
+      addTableStats(rows)
+      addTableConstraints(rows)
+    }
+    rows.toSeq
+  }
+
+  private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
+    rows += emptyRow()
+    rows += toCatalystRow("# Detailed Table Information", "", "")
+    addIdentifierRows(rows, catalogName, identifier, entityLabel = "Table")
+
+    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+      CatalogTableType.EXTERNAL.name
+    } else {
+      CatalogTableType.MANAGED.name
+    }
+    rows += toCatalystRow("Type", tableType, "")
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES
+      .filterNot(_ == TableCatalog.PROP_EXTERNAL)
+      .foreach(propKey => {
+        if (table.properties.containsKey(propKey)) {
+          rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
+        }
+      })
+    val properties =
+      conf.redactOptions(table.properties.asScala.toMap).toList
+        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+        .sortBy(_._1).map {
+        case (key, value) => key + "=" + value
+      }.mkString("[", ",", "]")
+    rows += toCatalystRow("Table Properties", properties, "")
+
+    // If any columns have default values, append them to the result.
+    ResolveDefaultColumns.getDescribeMetadata(table.columns()).foreach { row =>
+      rows += toCatalystRow(row._1, row._2, row._3)
+    }
+  }
+
+  private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
+    if (table.constraints.nonEmpty) {
+      rows += emptyRow()
+      rows += toCatalystRow("# Constraints", "", "")
+      rows ++= table.constraints().map{ constraint =>
+        toCatalystRow(constraint.name(), constraint.toDescription, "")
+      }
+    }
+  }
+
+  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+      rows += emptyRow()
+      rows += toCatalystRow("# Metadata Columns", "", "")
+      rows ++= hasMeta.metadataColumns.map { column =>
+        toCatalystRow(
+          column.name,
+          column.dataType.simpleString,
+          Option(column.comment()).getOrElse(""))
+      }
+    case _ =>
+  }
+
+  private def addTableStats(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case read: SupportsRead =>
+      read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
+        case s: SupportsReportStatistics =>
+          val stats = s.estimateStatistics()
+          val statsComponents = Seq(
+            Option.when(stats.sizeInBytes().isPresent)(s"${stats.sizeInBytes().getAsLong} bytes"),
+            Option.when(stats.numRows().isPresent)(s"${stats.numRows().getAsLong} rows")
+          ).flatten
+          if (statsComponents.nonEmpty) {
+            rows += toCatalystRow("Statistics", statsComponents.mkString(", "), null)
+          }
+        case _ =>
+      }
+    case _ =>
+  }
 }

@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{TableCatalog, V1Table, V1ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.CommandExecutionMode
@@ -590,7 +590,9 @@ object ResolvedChildHelper {
     val catalog = sparkSession.sessionState.catalog
     child match {
       case ResolvedTempView(_, metadata) => metadata
-      case ResolvedPersistentView(_, _, metadata) => metadata
+      // v1 inspection commands always see a v1 (`V1ViewInfo`) view here -- the v2 strategy
+      // handles non-session views before this method is reached.
+      case ResolvedPersistentView(_, _, info: V1ViewInfo) => info.v1Table
       case ResolvedTable(_, _, t: V1Table, _) => t.v1Table
       case _ if (catalog.isTempView(table)) =>
           catalog.getTempViewOrPermanentTableMetadata(table)

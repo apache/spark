@@ -180,7 +180,7 @@ class ArtifactTestsMixin:
 
 
 @unittest.skipIf(is_remote_only(), "Requires JVM access")
-class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
+class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
     @classmethod
     def root(cls):
         from pyspark.core.files import SparkFiles

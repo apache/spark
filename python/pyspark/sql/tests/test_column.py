@@ -558,6 +558,33 @@ class ColumnTestsMixin:
             self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
             self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
 
+    def test_select_regular_column_with_reused_dataframe_hidden_in_natural_join(self):
+        # A DataFrame appears both as a direct join side and inside a natural/USING
+        # join that hides one of its columns into `metadataOutput`. When resolving
+        # `df2["id"]`, two candidates match the plan id: one from `p.output` (the
+        # direct join side) and one only visible via `p.metadataOutput` (the reused
+        # `df2` nested under the USING-join wrapper). We should prefer the regular
+        # candidate and not throw AMBIGUOUS_COLUMN_REFERENCE.
+        df1 = self.spark.createDataFrame([(10, "T1"), (20, "T2")], ["key", "val"])
+        df2 = self.spark.createDataFrame([(10,), (20,), (30,)], ["id"])
+        # The second row's id (99) does not match any df2 row, so the USING
+        # left-join in `enriched` produces NULL on the df2 side for val "T2".
+        # If `df2["id"]` were resolved to the hidden (USING-wrapper) candidate,
+        # the second row would yield NULL instead of 20, and the assertion below
+        # would fail. This pins resolution to the direct-side `id`.
+        df3 = self.spark.createDataFrame([(10, "T1"), (99, "T2")], ["id", "val"])
+        enriched = df3.join(df2, "id", "left")
+        result = (
+            df1.join(df2, df1["key"] == df2["id"], "left")
+            .join(enriched, "val", "full_outer")
+            .sort("val")
+            .select(df2["id"])
+        )
+        self.assertEqual(
+            [r["id"] for r in result.collect()],
+            [10, 20],
+        )
+
     def test_drop_notexistent_col(self):
         df1 = self.spark.createDataFrame(
             [("a", "b", "c")],

@@ -24,9 +24,11 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkDateTimeException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.Cast.{ordinalNumber, toSQLExpr, toSQLId, toSQLType, toSQLValue}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -3895,5 +3897,201 @@ case class TimestampDiff(
       newLeft: Expression,
       newRight: Expression): TimestampDiff = {
     copy(startTimestamp = newLeft, endTimestamp = newRight)
+  }
+}
+
+/**
+ * Aligns a timestamp to the start of a fixed-size interval bucket.
+ *
+ * Returns the start of the half-open bucket [start, start + bucketSize) containing ts.
+ * For TIMESTAMP_NTZ, bucketing is performed in UTC. For TIMESTAMP, year-month
+ * interval buckets and calendar-day components of day-time interval buckets align
+ * to the session time zone.
+ */
+case class TimeBucket(
+    bucketSize: Expression,
+    ts: Expression,
+    originTs: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression with ExpectsInputTypes with TimeZoneAwareExpression {
+
+  override def nullIntolerant: Boolean = true
+
+  override def first: Expression = bucketSize
+  override def second: Expression = ts
+  override def third: Expression = originTs
+
+  override def withTimeZone(timeZoneId: String): TimeBucket =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(ts.dataType)
+
+  def this(bucketSize: Expression, ts: Expression, originTs: Expression) =
+    this(bucketSize, ts, originTs, None)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(DayTimeIntervalType, YearMonthIntervalType),
+    AnyTimestampType,
+    AnyTimestampType)
+
+  override def dataType: DataType = ts.dataType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) return defaultCheck
+
+    if (!bucketSize.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("bucketSize"),
+          "inputType" -> toSQLType(bucketSize.dataType),
+          "inputExpr" -> toSQLExpr(bucketSize)))
+    }
+
+    val bucketSizeValue = bucketSize.eval()
+    if (bucketSizeValue != null) {
+      val isNonPositive = bucketSize.dataType match {
+        case _: DayTimeIntervalType => bucketSizeValue.asInstanceOf[Long] <= 0
+        case _: YearMonthIntervalType => bucketSizeValue.asInstanceOf[Int] <= 0
+        case other => throw SparkException.internalError(
+          s"Unexpected bucketSize type: $other")
+      }
+      if (isNonPositive) {
+        return DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("bucketSize"),
+            "valueRange" -> "(0, inf)",
+            "currentValue" -> toSQLValue(bucketSizeValue, bucketSize.dataType)))
+      }
+    }
+
+    if (!originTs.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("origin"),
+          "inputType" -> toSQLType(originTs.dataType),
+          "inputExpr" -> toSQLExpr(originTs)))
+    }
+
+    if (ts.dataType != originTs.dataType) {
+      return DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(2),
+          "requiredType" -> toSQLType(ts.dataType),
+          "inputSql" -> toSQLExpr(originTs),
+          "inputType" -> toSQLType(originTs.dataType)))
+    }
+
+    TypeCheckSuccess
+  }
+
+  override def nullSafeEval(bucketSizeVal: Any, tsVal: Any, originVal: Any): Any = {
+    first.dataType match {
+      case _: DayTimeIntervalType =>
+        DateTimeUtils.timeBucketDTInterval(
+          bucketSizeVal.asInstanceOf[Long], tsVal.asInstanceOf[Long],
+          originVal.asInstanceOf[Long], zoneIdInEval)
+      case _: YearMonthIntervalType =>
+        DateTimeUtils.timeBucketYMInterval(
+          bucketSizeVal.asInstanceOf[Int], tsVal.asInstanceOf[Long],
+          originVal.asInstanceOf[Long], zoneIdInEval)
+      case other => throw SparkException.internalError(
+        s"Unexpected bucketSize type: $other")
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    first.dataType match {
+      case _: DayTimeIntervalType =>
+        defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
+          s"$dtu.timeBucketDTInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
+      case _: YearMonthIntervalType =>
+        defineCodeGen(ctx, ev, (bucketSizeCode, tsCode, originCode) =>
+          s"$dtu.timeBucketYMInterval($bucketSizeCode, $tsCode, $originCode, $zid)")
+      case other => throw SparkException.internalError(
+        s"Unexpected bucketSize type: $other")
+    }
+  }
+
+  override def prettyName: String = "time_bucket"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): TimeBucket =
+    copy(bucketSize = newFirst, ts = newSecond, originTs = newThird)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bucketSize, ts[, origin]) - Returns the start of the bucket that `ts` falls into,
+      where buckets are defined by the given `bucketSize` interval aligned to optional `origin`.
+      For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`, year-month
+      interval buckets and calendar-day components of day-time interval buckets align
+      to the session time zone.
+  """,
+  arguments = """
+    Arguments:
+      * bucketSize - A day-time or year-month interval defining the bucket size. Must be positive and foldable.
+      * ts - A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+      * origin - Optional TIMESTAMP or TIMESTAMP_NTZ alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as ts and must be foldable.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-01 11:27:00', TIMESTAMP '1970-01-01 00:00:00');
+       2024-01-01 11:15:00
+      > SELECT _FUNC_(INTERVAL '1' HOUR, TIMESTAMP '2024-01-01 11:27:00');
+       2024-01-01 11:00:00
+      > SELECT _FUNC_(INTERVAL '1' MONTH, TIMESTAMP '2024-07-20 14:30:00', TIMESTAMP '2024-06-15 09:00:00');
+       2024-07-15 09:00:00
+  """,
+  since = "4.2.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+object TimeBucketExpressionBuilder extends ExpressionBuilder {
+  private def retypeNull(e: Expression, dt: DataType): Expression = e match {
+    case Literal(null, NullType) => Literal(null, dt)
+    case _ => e
+  }
+
+  // Default origin: 1970-01-01 00:00:00 in the session time zone for TIMESTAMP, and
+  // EPOCH (1970-01-01 00:00:00 UTC) for TIMESTAMP_NTZ.
+  private def defaultOrigin(tsType: DataType): Literal = tsType match {
+    case TimestampType =>
+      val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+      Literal(DateTimeUtils.daysToMicros(0, zoneId), TimestampType)
+    case _ => Literal(0L, tsType)
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    expressions match {
+      case Seq(rawBucketSize, rawTs) =>
+        val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
+        // Fall back to TimestampType for bad ts types; ExpectsInputTypes will report it.
+        val tsType = rawTs.dataType match {
+          case t if AnyTimestampType.acceptsType(t) => t
+          case _ => TimestampType
+        }
+        val ts = retypeNull(rawTs, tsType)
+        TimeBucket(bucketSize, ts, defaultOrigin(tsType))
+      case Seq(rawBucketSize, rawTs, rawOrigin) =>
+        val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
+        val tsType = (rawTs.dataType, rawOrigin.dataType) match {
+          case (NullType, t) if AnyTimestampType.acceptsType(t) => t
+          case (NullType, _) => TimestampType
+          case (t, _) => t
+        }
+        val ts = retypeNull(rawTs, tsType)
+        val originTs = retypeNull(rawOrigin, tsType)
+        TimeBucket(bucketSize, ts, originTs)
+      case _ =>
+        throw QueryCompilationErrors.wrongNumArgsError(
+          funcName, Seq(2, 3), expressions.length)
+    }
   }
 }

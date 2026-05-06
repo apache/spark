@@ -368,22 +368,9 @@ class ResolveChangelogTablePostProcessingSuite
       s"Expected ChangelogTable to be marked resolved by the rule. Plan:\n$plan")
   }
 
-  test("streaming with post-processing options is rejected") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsCarryoverRows = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.readStream
-          .option("startingVersion", "1")
-          .changes(s"$catalogName.$testTableName")
-          .queryExecution.analyzed
-      },
-      condition = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
-      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
-  }
+  // The streaming netChanges path is covered by
+  // ResolveChangelogTableStreamingPostProcessingSuite -- not duplicated here, since
+  // this suite focuses on the batch path.
 
   // ===========================================================================
   // Combined
@@ -585,45 +572,6 @@ class ResolveChangelogTablePostProcessingSuite
       },
       condition = "CHANGELOG_CONTRACT_VIOLATION.UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION",
       parameters = Map.empty)
-  }
-
-  // ===========================================================================
-  // Net changes deduplication: not yet supported
-  // ===========================================================================
-  //
-  // `deduplicationMode = netChanges` collapses multiple changes per row identity into the
-  // net effect. It is not yet implemented in [[ResolveChangelogTable]].
-
-  test("deduplicationMode=netChanges is rejected when connector emits intermediate changes") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsIntermediateChanges = true,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    checkError(
-      intercept[AnalysisException] {
-        sql(s"SELECT * FROM $catalogName.$testTableName " +
-          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
-          s"WITH (deduplicationMode = 'netChanges')")
-      },
-      condition = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
-  }
-
-  test("deduplicationMode=netChanges is rejected even when connector has no intermediate changes") {
-    catalog.setChangelogProperties(ident, ChangelogProperties(
-      containsIntermediateChanges = false,
-      rowIdNames = Seq("id"),
-      rowVersionName = Some("row_commit_version")))
-
-    checkError(
-      intercept[AnalysisException] {
-        sql(s"SELECT * FROM $catalogName.$testTableName " +
-          s"CHANGES FROM VERSION 1 TO VERSION 2 " +
-          s"WITH (deduplicationMode = 'netChanges')")
-      },
-      condition = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      parameters = Map("changelogName" -> s"$catalogName.${testTableName}_changelog"))
   }
 
   // ===========================================================================

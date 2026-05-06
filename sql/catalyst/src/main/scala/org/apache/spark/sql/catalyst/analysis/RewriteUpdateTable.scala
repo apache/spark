@@ -174,7 +174,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
     val projections = buildWriteDeltaProjections(rowDeltaPlan, rowAttrs, rowIdAttrs, metadataAttrs)
-    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections)
+    val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
+    WriteDelta(writeRelation, cond, rowDeltaPlan, relation, projections, groupFilterCond)
   }
 
   // this method assumes the assignments have been already aligned before

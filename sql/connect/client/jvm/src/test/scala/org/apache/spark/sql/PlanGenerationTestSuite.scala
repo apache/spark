@@ -403,7 +403,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   test("read changes with options") {
     session.read
       .option("startingTimestamp", "2026-01-01")
-      .option("deduplicationMode", "netChanges")
+      .option("deduplicationMode", "dropCarryovers")
       .option("computeUpdates", "true")
       .changes("myTable")
   }
@@ -2726,6 +2726,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("is_variant_null") {
     fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("is_valid_variant") {
+    fn.is_valid_variant(fn.parse_json(fn.col("g")))
   }
 
   functionTest("variant_get") {

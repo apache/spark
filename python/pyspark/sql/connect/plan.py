@@ -2002,6 +2002,7 @@ class WriteOperation(LogicalPlan):
         self.options: Dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
+        self.with_schema_evolution: bool = False
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
@@ -2013,6 +2014,7 @@ class WriteOperation(LogicalPlan):
         plan.write_operation.sort_column_names.extend(self.sort_cols)
         plan.write_operation.partitioning_columns.extend(self.partitioning_cols)
         plan.write_operation.clustering_columns.extend(self.clustering_cols)
+        plan.write_operation.with_schema_evolution = self.with_schema_evolution
 
         if self.num_buckets > 0:
             plan.write_operation.bucket_by.bucket_column_names.extend(self.bucket_cols)
@@ -2104,6 +2106,7 @@ class WriteOperationV2(LogicalPlan):
         self.table_properties: dict[str, Optional[str]] = {}
         self.mode: Optional[str] = None
         self.overwrite_condition: Optional[Column] = None
+        self.with_schema_evolution: bool = False
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
@@ -2118,6 +2121,7 @@ class WriteOperationV2(LogicalPlan):
             [c.to_plan(session) for c in self.partitioning_columns]
         )
         plan.write_operation_v2.clustering_columns.extend(self.clustering_columns)
+        plan.write_operation_v2.with_schema_evolution = self.with_schema_evolution
 
         for k in self.options:
             if self.options[k] is None:
