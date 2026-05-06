@@ -27,8 +27,8 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
     SparkTestSuite                                                          (core; style-agnostic foundation)
       <- SparkFunSuite = AnyFunSuite + SparkTestSuite                       (core; pins the FunSuite style — the default)
         <- PlanTest = SparkFunSuite + PlanTestBase                          (sql/catalyst)
-        <- QueryTest = SparkFunSuite + QueryTestBase + PlanTest             (sql/core)
-          <- SharedSparkSession = QueryTest + SharedSparkSessionBase        (sql/core)
+          <- QueryTest = PlanTest + QueryTestBase                           (sql/core)
+            <- SharedSparkSession = QueryTest + SharedSparkSessionBase      (sql/core)
 
 | Test scope | Base | Notes |
 |------------|------|-------|
