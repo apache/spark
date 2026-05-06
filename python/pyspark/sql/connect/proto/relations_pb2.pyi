@@ -4698,7 +4698,7 @@ class NearestByJoin(google.protobuf.message.Message):
     """The following three fields use `string` (not typed enums) for parity with `AsOfJoin`,
     which models analogous fields the same way. Validation happens server-side at planning time.
 
-    (Required) The join type. Must be one of: "inner", "left", "leftouter", "left_outer".
+    (Required) The join type. Must be one of: "inner", "leftouter".
     """
     mode: builtins.str
     """(Required) Search algorithm contract. Must be one of: "approx", "exact"."""

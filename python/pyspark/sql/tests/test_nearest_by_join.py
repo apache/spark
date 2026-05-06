@@ -200,6 +200,65 @@ class NearestByJoinTestsMixin:
             },
         )
 
+    def test_rejected_when_crossjoin_disabled(self):
+        users, products = self.users, self.products
+        with self.sql_conf({"spark.sql.crossJoin.enabled": "false"}):
+            with self.assertRaises(AnalysisException) as pe:
+                users.nearestByJoin(
+                    products,
+                    -sf.abs(users.score - products.pscore),
+                    numResults=1,
+                    mode="exact",
+                    direction="similarity",
+                ).collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+                messageParameters={},
+            )
+
+    def test_exact_with_nondeterministic_ranking_rejected(self):
+        users, products = self.users, self.products
+        # Use an explicit seed (`rand(0)`) so the rendered expression in the error message is
+        # byte-stable. Without it, Spark assigns a random seed at analysis and the message
+        # parameter becomes `"(rand(<random-long>) + pscore)"`, which can't be asserted on.
+        with self.assertRaises(AnalysisException) as pe:
+            users.nearestByJoin(
+                products,
+                sf.rand(0) + products.pscore,
+                numResults=1,
+                mode="exact",
+                direction="similarity",
+            ).collect()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
+            messageParameters={"expression": '"(rand(0) + pscore)"'},
+        )
+
+    def test_streaming_inputs_rejected(self):
+        streaming_users = (
+            self.spark.readStream.format("rate")
+            .option("rowsPerSecond", 1)
+            .load()
+            .selectExpr("CAST(value AS INT) AS user_id", "CAST(value AS DOUBLE) AS score")
+        )
+        products = self.products
+        with self.assertRaises(AnalysisException) as pe:
+            # `.schema` forces analysis without starting the streaming query.
+            _ = streaming_users.nearestByJoin(
+                products,
+                -sf.abs(streaming_users.score - products.pscore),
+                numResults=1,
+                mode="exact",
+                direction="similarity",
+            ).schema
+        self.check_error(
+            exception=pe.exception,
+            errorClass="NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+            messageParameters={},
+        )
+
 
 class NearestByJoinTests(NearestByJoinTestsMixin, ReusedSQLTestCase):
     pass

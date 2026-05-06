@@ -254,20 +254,22 @@ class DataFrameNearestByJoinSuite extends QueryTest with SharedSparkSession {
   test("rejected when spark.sql.crossJoin.enabled is false") {
     // The rewrite produces an unconditioned cross-product internally, so when the user has
     // opted out of cross-products via `spark.sql.crossJoin.enabled = false`, NEAREST BY
-    // queries are rejected by `CheckCartesianProducts` -- the rewrite does not bypass the
-    // user's choice.
+    // queries are rejected at analysis time with `NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED` --
+    // a NEAREST BY-specific error class added so the user does not see internal rewrite
+    // attributes in the error message.
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
       val (users, products) = prepareForNearestByJoin()
-      val result = users.nearestByJoin(
-        products,
-        -abs(users("score") - products("pscore")),
-        numResults = 1,
-        mode = "exact",
-        direction = "similarity")
-      val ex = intercept[AnalysisException] {
-        result.collect()
-      }
-      assert(ex.getMessage.contains("Detected implicit cartesian product"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          users.nearestByJoin(
+            products,
+            -abs(users("score") - products("pscore")),
+            numResults = 1,
+            mode = "exact",
+            direction = "similarity").queryExecution.analyzed
+        },
+        condition = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+        parameters = Map.empty)
     }
   }
 
