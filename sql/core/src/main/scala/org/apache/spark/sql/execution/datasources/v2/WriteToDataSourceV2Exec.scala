@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLLastAttemptMetric, SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLLastAttemptMetric, SQLLastAttemptMetrics, SQLMetric}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.{LongAccumulator, Utils}
@@ -486,8 +486,10 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
           SQLLastAttemptMetrics.createMetric(sparkContext, "number of copied rows"))
     case DELETE =>
       Map(
-        "numDeletedRows" -> SQLMetrics.createMetric(sparkContext, "number of deleted rows"),
-        "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
+        "numDeletedRows" ->
+          SQLLastAttemptMetrics.createMetric(sparkContext, "number of deleted rows"),
+        "numCopiedRows" ->
+          SQLLastAttemptMetrics.createMetric(sparkContext, "number of copied rows"))
     case _ => Map.empty
   }
 
