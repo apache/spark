@@ -84,10 +84,7 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
     }
     // When `PlanWithUnresolvedIdentifier` materializes into a `CTEInChildren` (e.g.
     // `InsertIntoStatement`) inside an outer `WithCTE`, push the CTE defs into the command's
-    // children — restoring the invariant from `CTESubstitution.withCTEDefs`. Without this,
-    // downstream re-analysis of a subtree below the command can't resolve `CTERelationRef`s
-    // that point to the now-detached `WithCTE`, throwing `NoSuchElementException` in
-    // `InlineCTE.buildCTEMap`.
+    // children - restoring the invariant from `CTESubstitution.withCTEDefs`.
     resolved.resolveOperatorsUpWithPruning(_.containsPattern(CTE)) {
       case WithCTE(c: CTEInChildren, cteDefs) => c.withCTEDefs(cteDefs)
     }
