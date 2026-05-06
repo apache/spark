@@ -436,10 +436,10 @@ jobs:
       with:
         distribution: temurin
         java-version: ${{ matrix.java }}
-    - name: List Python packages (Python 3.9, PyPy3)
+    - name: List Python packages (Python 3.9, Python3.8)
       run: |
         python3.9 -m pip list
-        pypy3 -m pip list
+        python3.8 -m pip list
     - name: Install Conda for pip packaging test
       if: ${{ matrix.modules == 'pyspark-errors' }}
       run: |
