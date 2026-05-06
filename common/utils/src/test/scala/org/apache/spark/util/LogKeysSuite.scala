@@ -38,7 +38,7 @@ import org.apache.spark.util.ArrayImplicits._
 class LogKeysSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with Logging
-    with SparkTestPaths {
+    with SparkTestEnvHelper {
 
   private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "java",
     "org", "apache", "spark", "internal", "LogKeys.java")

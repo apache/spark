@@ -24,7 +24,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
-import org.apache.spark.util.SparkTestPaths
+import org.apache.spark.util.SparkTestEnvHelper
 
 /**
  * The basic testsuite the client tests should extend from.
@@ -33,7 +33,7 @@ trait ConnectFunSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterAll
     with BeforeAndAfterEach
-    with SparkTestPaths {
+    with SparkTestEnvHelper {
 
   protected def baseResourcePath: Path = {
     getWorkspaceFilePath(

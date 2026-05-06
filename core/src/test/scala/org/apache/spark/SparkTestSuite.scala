@@ -36,7 +36,7 @@ import org.scalatest.concurrent.TimeLimits
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.util.{AccumulatorContext, SparkTestPaths, Utils}
+import org.apache.spark.util.{AccumulatorContext, SparkTestEnvHelper, Utils}
 
 /**
  * Base trait for all unit tests in Spark for handling common functionality.
@@ -71,7 +71,7 @@ trait SparkTestSuite
     with ThreadAudit
     with TimeLimits
     with Logging
-    with SparkTestPaths {
+    with SparkTestEnvHelper {
   // scalastyle:on
 
   // Initialize the logger forcibly to let the logger log timestamp

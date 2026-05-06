@@ -28,7 +28,7 @@ import org.scalatest.Assertions
  * direction prevents extending `SparkFunSuite` (e.g. `LogKeysSuite` in `common-utils`,
  * `ConnectFunSuite` in the shaded Spark Connect client).
  */
-trait SparkTestPaths extends Assertions {
+trait SparkTestEnvHelper extends Assertions {
 
   /**
    * Get a Path relative to the root project. It is assumed that a spark home is set.
