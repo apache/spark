@@ -739,6 +739,21 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("UnionExec.numOutputRows reports total row count under fusion") {
+    withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
+      val name = "demo_view"
+      withView(name) {
+        sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+        val union = spark.table(name).union(spark.table(name))
+        union.collect()
+        val unionExec = union.queryExecution.executedPlan.collectFirst {
+          case u: UnionExec => u
+        }.get
+        assert(unionExec.metrics("numOutputRows").value == 4L)
+      }
+    }
+  }
+
   test("writing data out metrics: parquet") {
     testMetricsNonDynamicPartition("parquet", "t1")
   }

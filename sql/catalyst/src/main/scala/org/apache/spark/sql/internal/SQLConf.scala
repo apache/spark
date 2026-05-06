@@ -2506,6 +2506,35 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_UNION_CODEGEN_ENABLED =
+    buildConf("spark.sql.codegen.wholeStage.union.enabled")
+      .internal()
+      .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, " +
+        "UnionExec participates in whole-stage codegen on its " +
+        "non-partitioning-aware path: the parent and all children fuse into " +
+        "a single WholeStageCodegenExec stage.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val WHOLESTAGE_UNION_MAX_CHILDREN =
+    buildConf("spark.sql.codegen.wholeStage.union.maxChildren")
+      .internal()
+      .doc("Maximum number of UnionExec children eligible for whole-stage " +
+        "codegen fusion. Each child is emitted as its own helper method, so " +
+        "this conf bounds class-level costs of the fused stage (total " +
+        "bytecode size, constant pool growth, JIT compilation time) rather " +
+        "than the JVM per-method bytecode limit. Unions with more children " +
+        "fall back to per-child codegen stages. Only effective when " +
+        s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(v => v >= 2,
+        "The value of spark.sql.codegen.wholeStage.union.maxChildren must be >= 2")
+      .createWithDefault(64)
+
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
