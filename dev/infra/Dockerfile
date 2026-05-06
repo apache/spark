@@ -83,6 +83,12 @@ RUN Rscript -e " \
     "
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
+RUN Rscript -e "remotes::install_version('pkgload',  version = '1.3.2', repos = 'https://cloud.r-project.org'); \
+    remotes::install_version('pkgbuild', version = '1.4.0', repos = 'https://cloud.r-project.org'); \
+    remotes::install_version('desc',     version = '1.4.2', repos = 'https://cloud.r-project.org'); \
+    remotes::install_version('rlang',    version = '1.1.1', repos = 'https://cloud.r-project.org'); \
+    remotes::install_version('cli',      version = '3.6.1', repos = 'https://cloud.r-project.org'); \
+    remotes::install_version('purrr',    version = '1.0.1', repos = 'https://cloud.r-project.org')"
 RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
 # Sanity check the R install
