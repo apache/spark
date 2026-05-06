@@ -47,14 +47,12 @@ case class BatchScanExec(
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
-  // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE,
-  // so that the driver-side derivation `numDeletedRows = numScannedRows - numCopiedRows` in
-  // `ReplaceDataExec.getWriteSummary` stays correct under stage retries (both inputs would
-  // otherwise overcount in lockstep on the retried writer stage). Other scans keep the regular
-  // SQLMetric since their consumers don't depend on retry-stable counts.
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
     val metric = table match {
+      // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE,
+      // so that the driver-side derivation `numDeletedRows = numScannedRows - numCopiedRows` in
+      // `ReplaceDataExec.getWriteSummary` stays correct under stage retries.
       case rlot: RowLevelOperationTable if rlot.operation.command() == DELETE =>
         SQLLastAttemptMetrics.createMetric(sparkContext, name)
       case _ =>
