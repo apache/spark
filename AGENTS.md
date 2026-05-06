@@ -33,10 +33,20 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
 |------------|------|-------|
 | Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, retry, `gridTest`. |
 | Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
-| DataFrame helpers — no session | `QueryTest` | Rarely used on its own; mostly a building block for other traits (e.g. `FileBasedDataSourceTest`). |
-| SQL/DataFrame integration tests — needs a session | `SharedSparkSession` | The default for most SQL suites. Provides a shared `TestSparkSession`, `testImplicits`, plus `checkAnswer` from `QueryTest`. |
+| SQL/DataFrame helpers — abstract `spark` | `QueryTest` | Adds `checkAnswer`, codegen-on/off helpers. Cannot be instantiated alone — `spark` is abstract and must be supplied by a session-providing trait. |
+| SQL/DataFrame integration tests — provides a session | `SharedSparkSession` | The default for most SQL suites. Provides a shared classic `TestSparkSession`, `testImplicits`, plus `checkAnswer` from `QueryTest`. |
 
-Helper traits like `ParquetTest`, `OrcTest`, `FileBasedDataSourceTest`, `DDLCommandTestUtils` already extend `QueryTest` but do NOT provide a `SparkSession`. Combine with `SharedSparkSession` when a session is needed (e.g. `extends ParquetTest with SharedSparkSession`).
+`QueryTest` declares `spark: SparkSession` abstractly via `SparkSessionProvider`. To run a concrete suite, mix in a session-providing trait. The common providers in this repo are:
+
+| Session provider | Module / location | Use case |
+|---|---|---|
+| `SharedSparkSession` | `sql/core` | Classic in-process `SparkSession`. Default for tests under `sql/core`. |
+| `TestHiveSingleton` | `sql/hive` | Hive-backed session (`TestHive`). Used by tests under `sql/hive`. |
+| `RemoteSparkSession` | `sql/connect/client/jvm` | Spark Connect client session. Used by Connect client tests. |
+
+A handful of suites (e.g. `MapStatusEndToEndSuite`, `ExecutorSideSQLConfSuite`) override `spark` directly and manage the session lifecycle themselves; reach for that pattern only when none of the providers above fit (e.g. local-cluster mode, custom builder configs).
+
+Helper traits like `ParquetTest`, `OrcTest`, `FileBasedDataSourceTest`, `DDLCommandTestUtils` already extend `QueryTest` but do NOT supply a session. Combine them with one of the session providers above (e.g. `extends ParquetTest with SharedSparkSession`, `extends QueryTest with TestHiveSingleton`).
 
 Common mistakes in the `extends` clause:
 - `extends QueryTest with SharedSparkSession` — `QueryTest` is redundant (`SharedSparkSession` already extends it). Use `extends SharedSparkSession`.
