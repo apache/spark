@@ -22,21 +22,21 @@ Avoid introducing non-ASCII characters in code or comments. String literals may 
 
 ## Test Base Classes
 
-When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. The chain is layered — each adds capability on top of the previous:
+When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs.
 
-    SparkTestSuite                                                          (core; style-agnostic foundation)
-      <- SparkFunSuite = AnyFunSuite + SparkTestSuite                       (core; pins the FunSuite style — the default)
-        <- PlanTest = SparkFunSuite + PlanTestBase                          (sql/catalyst)
-          <- QueryTest = PlanTest + QueryTestBase                           (sql/core)
-            <- SharedSparkSession = QueryTest + SharedSparkSessionBase      (sql/core)
+The actual test helpers live in style-agnostic traits that do not commit to a ScalaTest style:
 
-Each class-bearing test base above pairs `SparkFunSuite` with a style-agnostic `*Base` trait that actually holds the helpers. Those `*Base` traits form a parallel chain:
-
-    PlanTestBase                                                            (sql/catalyst; pure trait — plan-comparison helpers)
-      <- QueryTestBase                                                      (sql/core; adds SQL/DataFrame helpers + abstract `spark`)
+    SparkTestSuite                                                          (core; thread audit, fixed timezone/locale, withTempDir, withLogAppender, checkError)
+    PlanTestBase                                                            (sql/catalyst; plan-comparison helpers — comparePlans, normalizePlan)
+      <- QueryTestBase                                                      (sql/core; adds SQL/DataFrame helpers + abstract `spark` via `SparkSessionProvider`)
         <- SharedSparkSessionBase                                           (sql/core; provides the actual `TestSparkSession`)
 
-`PlanTest`, `QueryTest`, and `SharedSparkSession` are the FunSuite-flavored bundles built on top of these (analogous to how `SparkFunSuite` = `AnyFunSuite` + `SparkTestSuite`).
+The class-bearing test bases bundle each style-agnostic helper with `AnyFunSuite` (the default ScalaTest style) so concrete suites can extend them directly. They form a layered chain — each adds capability on top of the previous:
+
+    SparkFunSuite = AnyFunSuite + SparkTestSuite                            (core; pins the FunSuite style — the default)
+      <- PlanTest = SparkFunSuite + PlanTestBase                            (sql/catalyst)
+        <- QueryTest = PlanTest + QueryTestBase                             (sql/core)
+          <- SharedSparkSession = QueryTest + SharedSparkSessionBase        (sql/core)
 
 | Test scope | Base | Notes |
 |------------|------|-------|
