@@ -1402,9 +1402,7 @@ class NearestByJoin(LogicalPlan):
                 errorClass="NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
                 messageParameters={
                     "direction": direction,
-                    "supported": "'"
-                    + "', '".join(_NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS)
-                    + "'",
+                    "supported": "'" + "', '".join(_NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS) + "'",
                 },
             )
         self.num_results = int(num_results)

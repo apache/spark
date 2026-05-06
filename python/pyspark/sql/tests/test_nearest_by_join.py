@@ -29,9 +29,7 @@ class NearestByJoinTestsMixin:
 
     @property
     def users(self):
-        return self.spark.createDataFrame(
-            [(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"]
-        )
+        return self.spark.createDataFrame([(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"])
 
     @property
     def products(self):
@@ -41,13 +39,17 @@ class NearestByJoinTestsMixin:
 
     def test_inner_similarity_k1(self):
         users, products = self.users, self.products
-        result = users.nearestByJoin(
-            products,
-            -sf.abs(users.score - products.pscore),
-            numResults=1,
-            mode="approx",
-            direction="similarity",
-        ).select("user_id", "product").orderBy("user_id")
+        result = (
+            users.nearestByJoin(
+                products,
+                -sf.abs(users.score - products.pscore),
+                numResults=1,
+                mode="approx",
+                direction="similarity",
+            )
+            .select("user_id", "product")
+            .orderBy("user_id")
+        )
         assertDataFrameEqual(
             result,
             [Row(user_id=1, product="A"), Row(user_id=2, product="B"), Row(user_id=3, product="B")],
@@ -55,13 +57,17 @@ class NearestByJoinTestsMixin:
 
     def test_inner_distance_k2(self):
         users, products = self.users, self.products
-        result = users.nearestByJoin(
-            products,
-            sf.abs(users.score - products.pscore),
-            numResults=2,
-            mode="approx",
-            direction="distance",
-        ).select("user_id", "product").orderBy("user_id", "product")
+        result = (
+            users.nearestByJoin(
+                products,
+                sf.abs(users.score - products.pscore),
+                numResults=2,
+                mode="approx",
+                direction="distance",
+            )
+            .select("user_id", "product")
+            .orderBy("user_id", "product")
+        )
         assertDataFrameEqual(
             result,
             [
@@ -77,17 +83,25 @@ class NearestByJoinTestsMixin:
     def test_left_outer_with_empty_right(self):
         users, products = self.users, self.products
         empty = products.filter(sf.lit(False))
-        result = users.nearestByJoin(
-            empty,
-            -sf.abs(users.score - empty.pscore),
-            numResults=1,
-            mode="exact",
-            direction="similarity",
-            joinType="leftouter",
-        ).select("user_id", "product").orderBy("user_id")
+        result = (
+            users.nearestByJoin(
+                empty,
+                -sf.abs(users.score - empty.pscore),
+                numResults=1,
+                mode="exact",
+                direction="similarity",
+                joinType="leftouter",
+            )
+            .select("user_id", "product")
+            .orderBy("user_id")
+        )
         assertDataFrameEqual(
             result,
-            [Row(user_id=1, product=None), Row(user_id=2, product=None), Row(user_id=3, product=None)],
+            [
+                Row(user_id=1, product=None),
+                Row(user_id=2, product=None),
+                Row(user_id=3, product=None),
+            ],
         )
 
     def test_select_star_schema_has_no_internal_columns(self):
