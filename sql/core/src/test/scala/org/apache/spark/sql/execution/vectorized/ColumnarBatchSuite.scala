@@ -2104,9 +2104,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  // SPARK-55897: get() should resolve UDTs to their sqlType so the interpreted eval path
-  // (e.g. GetStructField.nullSafeEval) works on columnar vectors.
-
   testVector(
     "SPARK-55897: ColumnarRow.get with primitive-backed UDT",
     10,
