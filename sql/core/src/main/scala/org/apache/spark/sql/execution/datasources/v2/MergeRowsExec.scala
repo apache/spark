@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Context, Copy, Del
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric}
 import org.apache.spark.sql.types.BooleanType
 
 case class MergeRowsExec(
@@ -50,21 +50,21 @@ case class MergeRowsExec(
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
-    "numTargetRowsCopied" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsCopied" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows copied unmodified because they did not match any action"),
-    "numTargetRowsInserted" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsInserted" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows inserted"),
-    "numTargetRowsDeleted" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsDeleted" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows deleted"),
-    "numTargetRowsUpdated" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsUpdated" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows updated"),
-    "numTargetRowsMatchedUpdated" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsMatchedUpdated" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows updated by a matched clause"),
-    "numTargetRowsMatchedDeleted" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsMatchedDeleted" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows deleted by a matched clause"),
-    "numTargetRowsNotMatchedBySourceUpdated" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsNotMatchedBySourceUpdated" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows updated by a not matched by source clause"),
-    "numTargetRowsNotMatchedBySourceDeleted" -> SQLMetrics.createMetric(sparkContext,
+    "numTargetRowsNotMatchedBySourceDeleted" -> SQLLastAttemptMetrics.createMetric(sparkContext,
       "number of target rows deleted by a not matched by source clause"))
 
   @transient override lazy val producedAttributes: AttributeSet = {
