@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateView, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateView, CTEInChildren, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -59,8 +59,8 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
 
   private def apply0(
       plan: LogicalPlan,
-      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
-    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
+      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan = {
+    val resolved = plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
       UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
       case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
 
@@ -82,6 +82,16 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
               IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
         }
     }
+    // When `PlanWithUnresolvedIdentifier` materializes into a `CTEInChildren` (e.g.
+    // `InsertIntoStatement`) inside an outer `WithCTE`, push the CTE defs into the command's
+    // children — restoring the invariant from `CTESubstitution.withCTEDefs`. Without this,
+    // downstream re-analysis of a subtree below the command can't resolve `CTERelationRef`s
+    // that point to the now-detached `WithCTE`, throwing `NoSuchElementException` in
+    // `InlineCTE.buildCTEMap`.
+    resolved.resolveOperatorsUpWithPruning(_.containsPattern(CTE)) {
+      case WithCTE(c: CTEInChildren, cteDefs) => c.withCTEDefs(cteDefs)
+    }
+  }
 
   private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {
     def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {

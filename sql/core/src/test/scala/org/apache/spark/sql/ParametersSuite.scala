@@ -22,7 +22,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.Limit
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
@@ -2459,5 +2459,54 @@ class ParametersSuite extends SharedSparkSession {
     checkAnswer(
       spark.sql("SELECT 1", Array.empty[Any]),
       Row(1))
+  }
+
+  test("SPARK-XXXXX: WITH ... INSERT OVERWRITE TABLE IDENTIFIER(:p) SELECT ... FROM cte") {
+    withTable("t_es1887554") {
+      sql("CREATE TABLE t_es1887554 (a INT) USING PARQUET")
+      sql("INSERT INTO t_es1887554 VALUES (10)")
+      spark.sql(
+        """WITH transformation AS (SELECT 1 AS a)
+          |INSERT OVERWRITE TABLE IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_es1887554"))
+      checkAnswer(spark.table("t_es1887554"), Row(1))
+    }
+  }
+
+  test("SPARK-XXXXX: WITH ... INSERT INTO IDENTIFIER(:p) SELECT ... FROM cte") {
+    withTable("t_es1887554_into") {
+      sql("CREATE TABLE t_es1887554_into (a INT) USING PARQUET")
+      spark.sql(
+        """WITH transformation AS (SELECT 7 AS a)
+          |INSERT INTO IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_es1887554_into"))
+      checkAnswer(spark.table("t_es1887554_into"), Row(7))
+    }
+  }
+
+  test("SPARK-XXXXX: analyzed plan does not leave WithCTE wrapping a CTEInChildren " +
+       "when IDENTIFIER(:p) is the INSERT target") {
+    // After analysis, the WithCTE must be pushed into the InsertIntoStatement's query child
+    // (CTEInChildren placement), not left wrapping the command. The wrapped shape produces an
+    // orphan CTERelationRef whose CTERelationDef is in a now-detached WithCTE; downstream
+    // re-analysis of the subtree below the command (e.g. DBR's row-column-access-control
+    // rule) trips InlineCTE.buildCTEMap with `NoSuchElementException: key not found`.
+    withTable("t_es1887554_shape") {
+      sql("CREATE TABLE t_es1887554_shape (a INT) USING PARQUET")
+      val df = spark.sql(
+        """WITH transformation AS (SELECT 1 AS a)
+          |INSERT INTO IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_es1887554_shape"))
+      val analyzed = df.queryExecution.analyzed
+      analyzed match {
+        case WithCTE(_: CTEInChildren, _) =>
+          fail(s"WithCTE must be pushed into the CTEInChildren's children, not left " +
+            s"wrapping the command. Analyzed plan:\n$analyzed")
+        case _ => // expected
+      }
+    }
   }
 }
