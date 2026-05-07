@@ -20,49 +20,70 @@ package org.apache.spark.sql.kafka010
 import java.nio.file.Files
 import java.util.{Properties, Timer, TimerTask}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.concurrent.duration._
 
 import org.apache.kafka.clients.producer.{Callback, KafkaProducer, Producer, ProducerRecord, RecordMetadata}
-import org.scalatest.BeforeAndAfterEach
-import org.scalatest.matchers.should.Matchers
 
-import org.apache.spark.{SparkContext, ThreadAudit}
-import org.apache.spark.sql.Column
+import org.apache.spark.benchmark.BenchmarkBase
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.test.TestSparkSession
-import org.apache.spark.tags.ExcludedTest
 
 /**
  * Stateless Kafka-to-Kafka RTM benchmark. Reads from an input Kafka topic, applies a
  * stateless transformation, and writes results to an output Kafka topic using
  * [[RealTimeTrigger]]. After the run it reports e2e latency percentiles.
  *
- * This benchmark will only run when triggered explicitly
- *   build/sbt -Dtest.default.exclude.tags="" \
- *     "sql-kafka-0-10/testOnly *RTMKafkaKafkaBenchmarkSuite"
+ * The benchmark spins up a real local-cluster Spark context and a live embedded Kafka
+ * broker, so a single run takes several minutes.
+ *
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark sql test jar> <spark sql kafka 0-10 test jar>
+ *   2. build/sbt "sql-kafka-0-10/Test/runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql-kafka-0-10/Test/runMain <this class>"
+ *      Results will be written to:
+ *      "connector/kafka-0-10-sql/benchmarks/RTMKafkaKafkaBenchmark-results.txt".
+ * }}}
  */
-@ExcludedTest
-class RTMKafkaKafkaBenchmarkSuite
-  extends KafkaSourceTest
-    with ThreadAudit
-    with BeforeAndAfterEach
-    with Matchers {
+object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
-  override protected def createSparkSession = new TestSparkSession(
-    new SparkContext(
-      "local-cluster[3, 5, 1024]",
-      "microbatch-context",
-      sparkConf
-    ))
+  private val topicId = new AtomicInteger(0)
+  private var spark: SparkSession = _
+  private var testUtils: KafkaTestUtils = _
 
-  test("RTM stateless kafka-to-kafka benchmark") {
-    benchmark(60.seconds.toMillis, 4)
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    testUtils = new KafkaTestUtils(Map.empty)
+    testUtils.setup()
+
+    spark = SparkSession.builder()
+      .master("local-cluster[3, 5, 1024]")
+      .appName(this.getClass.getCanonicalName)
+      .getOrCreate()
+
+    runBenchmark("RTM stateless kafka-to-kafka") {
+      benchmark(60.seconds.toMillis, 4)
+    }
   }
+
+  override def afterAll(): Unit = {
+    if (spark != null) {
+      spark.stop()
+    }
+    if (testUtils != null) {
+      testUtils.teardown()
+    }
+  }
+
+  private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
   def benchmark(longRunningBatchDurationMs: Long, numBatches: Long): Unit = {
     val inputTopic = newTopic()
@@ -244,11 +265,13 @@ class RTMKafkaKafkaBenchmarkSuite
       .map(pair => pair._1 + ": " + pair._2)
       .mkString("\n")
 
-    logInfo(
-      s"\n======RTM Kafka-to-Kafka stateless query======\n" +
-        s"Kafka to kafka query ${colName} in milliseconds is\n" +
-        latenciesTable + "\n========================================\n"
-    )
+    val message =
+      s"Kafka to kafka query ${colName} in milliseconds is\n" + latenciesTable + "\n"
+
+    output match {
+      case Some(out) => out.write(message.getBytes)
+      case None => logInfo("\n" + message)
+    }
   }
 
   private def getLatencies(

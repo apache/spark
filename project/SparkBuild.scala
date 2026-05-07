@@ -1859,8 +1859,7 @@ object TestSettings {
   import BuildCommons._
   private val defaultExcludedTags = Seq("org.apache.spark.tags.ChromeUITest",
     "org.apache.spark.deploy.k8s.integrationtest.YuniKornTag",
-    "org.apache.spark.internal.io.cloud.IntegrationTestSuite",
-    "org.apache.spark.tags.ExcludedTest") ++
+    "org.apache.spark.internal.io.cloud.IntegrationTestSuite") ++
     (if (System.getProperty("os.name").startsWith("Mac OS X") &&
         System.getProperty("os.arch").equals("aarch64")) {
       Seq("org.apache.spark.tags.ExtendedLevelDBTest")
