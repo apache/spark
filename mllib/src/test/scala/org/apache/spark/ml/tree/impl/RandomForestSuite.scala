@@ -520,6 +520,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       categoricalFeaturesInfo = Map(0 -> 3),
       maxBins = 3)
 
+    strategy.pruneTree = false
     val model = RandomForest
       .run(
         input,
@@ -527,8 +528,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         numTrees = 1,
         featureSubsetStrategy = "all",
         seed = 42,
-        instr = None,
-        prune = false)
+        instr = None)
       .head
 
     model.rootNode match {
@@ -804,6 +804,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = numClasses,
       maxBins = 32)
 
+    strategy.pruneTree = true
     val prunedTree = RandomForest
       .run(
         rdd,
@@ -811,10 +812,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         numTrees = 1,
         featureSubsetStrategy = "auto",
         seed = 42,
-        instr = None,
-        prune = true)
+        instr = None)
       .head
 
+    strategy.pruneTree = false
     val unprunedTree = RandomForest
       .run(
         rdd,
@@ -822,8 +823,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         numTrees = 1,
         featureSubsetStrategy = "auto",
         seed = 42,
-        instr = None,
-        prune = false)
+        instr = None)
       .head
 
     val defaultBehaviorTree = RandomForest
@@ -860,6 +860,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 0,
       maxBins = 32)
 
+    strategy.pruneTree = true
     val prunedTree = RandomForest
       .run(
         rdd,
@@ -867,10 +868,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         numTrees = 1,
         featureSubsetStrategy = "auto",
         seed = 42,
-        instr = None,
-        prune = true)
+        instr = None)
       .head
 
+    strategy.pruneTree = false
     val unprunedTree = RandomForest
       .run(
         rdd,
@@ -878,8 +879,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         numTrees = 1,
         featureSubsetStrategy = "auto",
         seed = 42,
-        instr = None,
-        prune = false)
+        instr = None)
       .head
 
     val defaultBehaviorTree = RandomForest
