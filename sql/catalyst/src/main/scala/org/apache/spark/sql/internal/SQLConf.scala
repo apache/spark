@@ -2479,10 +2479,9 @@ object SQLConf {
         "also the value to which `SET PATH = DEFAULT_PATH` expands. Accepts the full SET PATH " +
         "grammar; an inner DEFAULT_PATH token resolves to the spark-builtin default ordering. " +
         "When empty, the spark-builtin default ordering controlled by " +
-        "`spark.sql.functionResolution.sessionOrder` applies. The value is validated only for " +
-        "syntactic correctness at set time; semantic duplicates -- including duplicates that " +
-        "appear later when USE SCHEMA collides with a literal entry -- surface at lookup time " +
-        "as DUPLICATE_SQL_PATH_ENTRY.")
+        "`spark.sql.functionResolution.sessionOrder` applies. Validated for syntax at set time; " +
+        "redundant entries are tolerated (lookup uses first-match resolution). The interactive " +
+        "SET PATH form still rejects static duplicates as a typo guard.")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .stringConf
       .checkValue(

@@ -41,15 +41,9 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
     }
     val conf = sparkSession.sessionState.conf
     val catalogManager = sparkSession.sessionState.catalogManager
-    val currentCatalog = catalogManager.currentCatalog.name
-    val currentNamespace = catalogManager.currentNamespace.toSeq
 
     val expanded0 = PathElement.expand(elements, conf, catalogManager)
-    val expanded = PathElement.validateNoDuplicateResolvedPath(
-      expanded0,
-      currentCatalog,
-      currentNamespace,
-      conf.caseSensitiveAnalysis)
+    val expanded = PathElement.validateNoStaticDuplicates(expanded0, conf.caseSensitiveAnalysis)
 
     if (expanded.isEmpty) {
       catalogManager.clearSessionPath()

@@ -103,26 +103,38 @@ private[sql] object PathElement {
   }
 
   /**
-   * Reject duplicate resolved PATH entries (same semantics as `SET PATH` run).
-   * Used for both interactive `SET PATH` and [[SQLConf.DEFAULT_PATH]] materialization.
+   * Reject *static* duplicates in a SET PATH entry list: identical [[LiteralPathEntry]] parts
+   * and repeated [[CurrentSchemaEntry]] markers (the `current_schema` / `current_database`
+   * cross-alias case). Used for the interactive `SET PATH` form to surface user typos at
+   * statement time.
+   *
+   * Deliberately does NOT compare a [[LiteralPathEntry]] against a [[CurrentSchemaEntry]]:
+   * such a "duplicate" depends on the live `USE SCHEMA` and is harmless at lookup (first-match
+   * resolution skips the dead literal). [[SQLConf.DEFAULT_PATH]] expansion skips this check
+   * entirely so transient `USE`-induced collisions don't wedge unqualified resolution.
    */
-  def validateNoDuplicateResolvedPath(
+  def validateNoStaticDuplicates(
       entries: Seq[SessionPathEntry],
-      currentCatalog: String,
-      currentNamespace: Seq[String],
       caseSensitive: Boolean): Seq[SessionPathEntry] = {
-    val seen = new mutable.HashSet[Seq[String]]
-    entries.foreach { entry =>
-      val concrete = entry.resolve(currentCatalog, currentNamespace)
-      def normalize(s: String): String = if (caseSensitive) s else s.toLowerCase(Locale.ROOT)
-      val key = concrete.map(normalize)
-      if (!seen.add(key)) {
-        throw new AnalysisException(
-          errorClass = "DUPLICATE_SQL_PATH_ENTRY",
-          messageParameters = Map(
-            "pathEntry" ->
-              concrete.map(p => if (p.contains(".")) s"`$p`" else p).mkString(".")))
-      }
+    val seenLiterals = new mutable.HashSet[Seq[String]]
+    var seenCurrentSchema = false
+    entries.foreach {
+      case CurrentSchemaEntry =>
+        if (seenCurrentSchema) {
+          throw new AnalysisException(
+            errorClass = "DUPLICATE_SQL_PATH_ENTRY",
+            messageParameters = Map("pathEntry" -> "current_schema"))
+        }
+        seenCurrentSchema = true
+      case LiteralPathEntry(parts) =>
+        val key = if (caseSensitive) parts else parts.map(_.toLowerCase(Locale.ROOT))
+        if (!seenLiterals.add(key)) {
+          throw new AnalysisException(
+            errorClass = "DUPLICATE_SQL_PATH_ENTRY",
+            messageParameters = Map(
+              "pathEntry" ->
+                parts.map(p => if (p.contains(".")) s"`$p`" else p).mkString(".")))
+        }
     }
     entries
   }

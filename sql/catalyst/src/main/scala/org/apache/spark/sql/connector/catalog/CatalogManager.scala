@@ -194,12 +194,14 @@ class CatalogManager(
   private var _sessionPath: Option[Seq[SessionPathEntry]] = None
 
   /**
-   * Cache parsed [[PathElement]]s for [[confDefaultPathEntries]] keyed on trimmed
-   * [[SQLConf.DEFAULT_PATH]] (ANTLR only). Expansion + duplicate checks still run on each use
-   * so `CURRENT_SCHEMA` markers and the live catalog stay consistent.
+   * Cache for [[confDefaultPathEntries]]: stores the expanded [[SessionPathEntry]] list keyed
+   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and the [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]]
+   * value (the only conf that affects the expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
+   * `CurrentSchemaEntry` markers are preserved unresolved so the cache stays valid across
+   * `USE SCHEMA`.
    */
-  private val confDefaultPathElementCache =
-    new AtomicReference[Option[(String, Seq[PathElement])]](None)
+  private val confDefaultPathCache =
+    new AtomicReference[Option[(String, String, Seq[SessionPathEntry])]](None)
 
   /**
    * Returns the effective session path entries: the explicit `SET PATH` value if stored,
@@ -216,36 +218,31 @@ class CatalogManager(
   def storedSessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized { _sessionPath }
 
   /**
-   * Parsed [[SQLConf.DEFAULT_PATH]] value, or `None` when the conf is empty / blank. Reuses
-   * the SET PATH grammar via [[CatalystSqlParser.parsePathElements]] so the conf default
-   * accepts the same syntax as `SET PATH = ...`.
+   * Parsed and expanded [[SQLConf.DEFAULT_PATH]] value, or `None` when the conf is empty.
+   * Reuses the SET PATH grammar via [[CatalystSqlParser.parsePathElements]]. An inner
+   * `DEFAULT_PATH` token resolves to the spark-builtin default ordering (cycle break).
    *
-   * An inner `DEFAULT_PATH` token inside the conf value resolves to the spark-builtin
-   * default ordering rather than recursing back into this method (cycle break).
-   *
-   * Results are cached by conf string to avoid re-parsing on every resolution call.
+   * Unlike `SET PATH`, this does NOT run a duplicate check: lookup uses first-match
+   * resolution, so any redundant entry (including ones that only collide after a later
+   * `USE SCHEMA`) is dead code rather than an error. Cached so the hot path is a single
+   * atomic load on conf-stable sessions.
    */
   def confDefaultPathEntries: Option[Seq[SessionPathEntry]] = {
     val confValue = conf.defaultPath
     if (confValue == null || confValue.trim.isEmpty) {
-      confDefaultPathElementCache.set(None)
+      confDefaultPathCache.set(None)
       None
     } else {
       val trimmed = confValue.trim
-      val elements = confDefaultPathElementCache.get() match {
-        case Some((k, els)) if k == trimmed => els
+      val sessionOrder = conf.sessionFunctionResolutionOrder
+      val expanded = confDefaultPathCache.get() match {
+        case Some((k, ord, cached)) if k == trimmed && ord == sessionOrder => cached
         case _ =>
-          val els = CatalystSqlParser.parsePathElements(trimmed)
-          confDefaultPathElementCache.set(Some((trimmed, els)))
-          els
+          val elements = CatalystSqlParser.parsePathElements(trimmed)
+          val computed = PathElement.expand(elements, conf, this, isConfDefaultExpansion = true)
+          confDefaultPathCache.set(Some((trimmed, sessionOrder, computed)))
+          computed
       }
-      val expanded0 =
-        PathElement.expand(elements, conf, this, isConfDefaultExpansion = true)
-      val expanded = PathElement.validateNoDuplicateResolvedPath(
-        expanded0,
-        currentCatalog.name(),
-        currentNamespace.toSeq,
-        conf.caseSensitiveAnalysis)
       if (expanded.isEmpty) None else Some(expanded)
     }
   }
@@ -413,7 +410,7 @@ class CatalogManager(
     _currentNamespace = None
     _currentCatalogName = None
     _sessionPath = None
-    confDefaultPathElementCache.set(None)
+    confDefaultPathCache.set(None)
     v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 }

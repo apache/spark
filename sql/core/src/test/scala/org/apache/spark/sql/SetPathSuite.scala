@@ -212,7 +212,7 @@ class SetPathSuite extends SharedSparkSession {
         },
         condition = "DUPLICATE_SQL_PATH_ENTRY",
         sqlState = Some("42732"),
-        parameters = Map("pathEntry" -> "spark_catalog.default"))
+        parameters = Map("pathEntry" -> "current_schema"))
     }
   }
 
@@ -232,16 +232,17 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("PATH enabled: duplicate after expanding CURRENT_SCHEMA") {
+  test("PATH enabled: literal + CURRENT_SCHEMA collision is tolerated (USE-state dependent)") {
+    // SET PATH only rejects static duplicates (literal-vs-literal, current_schema repeated).
+    // A literal that happens to match the live current_schema is not flagged: a later
+    // `USE SCHEMA` may make them diverge, and at lookup the first match wins anyway.
+    // `system.builtin` is included so `current_path()` itself remains resolvable.
     withPathEnabled {
       sql("USE spark_catalog.default")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SET PATH = spark_catalog.default, current_schema")
-        },
-        condition = "DUPLICATE_SQL_PATH_ENTRY",
-        sqlState = Some("42732"),
-        parameters = Map("pathEntry" -> "spark_catalog.default"))
+      sql("SET PATH = spark_catalog.default, current_schema, system.builtin")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("spark_catalog.default", "spark_catalog.default", "system.builtin"),
+        s"Expected literal + resolved CURRENT_SCHEMA preserved; got: $entries")
     }
   }
 
@@ -254,7 +255,7 @@ class SetPathSuite extends SharedSparkSession {
         },
         condition = "DUPLICATE_SQL_PATH_ENTRY",
         sqlState = Some("42732"),
-        parameters = Map("pathEntry" -> "spark_catalog.default"))
+        parameters = Map("pathEntry" -> "current_schema"))
     }
   }
 
@@ -753,7 +754,11 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("DEFAULT_PATH conf: duplicate system entries rejected when materialized") {
+  test("DEFAULT_PATH conf: duplicate entries are tolerated (first-match resolution)") {
+    // Lookup uses first-match resolution, so redundant entries on DEFAULT_PATH are dead code
+    // rather than an error. (Contrast with SET PATH, which still rejects static duplicates as
+    // a user-input typo guard.) This avoids a UX cliff where a USE SCHEMA could later wedge
+    // every unqualified function lookup with DUPLICATE_SQL_PATH_ENTRY.
     withSQLConf(
         SQLConf.PATH_ENABLED.key -> "true",
         SQLConf.DEFAULT_PATH.key -> "system.builtin, system.builtin") {
@@ -761,8 +766,11 @@ class SetPathSuite extends SharedSparkSession {
       val priorSessionPath = catalogManager.storedSessionPathEntries
       catalogManager.clearSessionPath()
       try {
-        val e = intercept[AnalysisException](currentPath())
-        assert(e.getCondition == "DUPLICATE_SQL_PATH_ENTRY", e.getMessage)
+        val entries = pathEntries(currentPath())
+        assert(entries == Seq("system.builtin", "system.builtin"),
+          s"DEFAULT_PATH duplicates should pass through to current_path(); got: $entries")
+        // Sanity: unqualified resolution still works (the second `system.builtin` is dead).
+        checkAnswer(sql("SELECT abs(-1)"), Row(1))
       } finally {
         catalogManager.clearSessionPath()
         priorSessionPath.foreach(catalogManager.setSessionPath)
