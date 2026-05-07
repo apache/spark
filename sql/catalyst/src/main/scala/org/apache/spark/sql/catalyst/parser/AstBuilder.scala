@@ -2362,41 +2362,83 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
 
-      // Resolve the join type and join condition
-      val (joinType, condition) = Option(ctx.joinCriteria) match {
-        case Some(c) if c.USING != null =>
-          if (ctx.LATERAL != null) {
-            throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
-          }
-          (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
-        case Some(c) if c.booleanExpression != null =>
-          (baseJoinType, Option(expression(c.booleanExpression)))
-        case Some(c) =>
-          throw SparkException.internalError(s"Unimplemented joinCriteria: $c")
-        case None if ctx.NATURAL != null =>
-          if (ctx.LATERAL != null) {
-            throw QueryParsingErrors.incompatibleJoinTypesError(
-              joinType1 = ctx.LATERAL.toString, joinType2 = ctx.NATURAL.toString, ctx = ctx
-            )
-          }
-          if (baseJoinType == Cross) {
-            throw QueryParsingErrors.incompatibleJoinTypesError(
-              joinType1 = ctx.NATURAL.toString, joinType2 = baseJoinType.toString, ctx = ctx
-            )
-          }
-          (NaturalJoin(baseJoinType), None)
-        case None =>
-          (baseJoinType, None)
-      }
-      if (ctx.LATERAL != null) {
-        if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
-          throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
-        }
-        LateralJoin(base, LateralSubquery(plan(ctx.right)), joinType, condition)
+      if (ctx.nearestByClause != null) {
+        withNearestByJoin(ctx, base, baseJoinType)
       } else {
-        Join(base, plan(ctx.right), joinType, condition, JoinHint.NONE)
+        // Resolve the join type and join condition
+        val (joinType, condition) = Option(ctx.joinCriteria) match {
+          case Some(c) if c.USING != null =>
+            if (ctx.LATERAL != null) {
+              throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
+            }
+            (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
+          case Some(c) if c.booleanExpression != null =>
+            (baseJoinType, Option(expression(c.booleanExpression)))
+          case Some(c) =>
+            throw SparkException.internalError(s"Unimplemented joinCriteria: $c")
+          case None if ctx.NATURAL != null =>
+            if (ctx.LATERAL != null) {
+              throw QueryParsingErrors.incompatibleJoinTypesError(
+                joinType1 = ctx.LATERAL.toString, joinType2 = ctx.NATURAL.toString, ctx = ctx
+              )
+            }
+            if (baseJoinType == Cross) {
+              throw QueryParsingErrors.incompatibleJoinTypesError(
+                joinType1 = ctx.NATURAL.toString, joinType2 = baseJoinType.toString, ctx = ctx
+              )
+            }
+            (NaturalJoin(baseJoinType), None)
+          case None =>
+            (baseJoinType, None)
+        }
+        if (ctx.LATERAL != null) {
+          if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
+            throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
+          }
+          LateralJoin(base, LateralSubquery(plan(ctx.right)), joinType, condition)
+        } else {
+          Join(base, plan(ctx.right), joinType, condition, JoinHint.NONE)
+        }
       }
     }
+  }
+
+  /**
+   * Build a [[NearestByJoin]] from the parsed `NEAREST BY` clause attached to a join relation.
+   * Validates that the clause is not combined with `LATERAL` and that the base join type is one
+   * of the supported types (`INNER` or `LEFT OUTER`), parses `num_results` (with bounds checks),
+   * the direction (`DISTANCE` / `SIMILARITY`), and the ranking expression.
+   */
+  private def withNearestByJoin(
+      ctx: JoinRelationContext,
+      base: LogicalPlan,
+      baseJoinType: JoinType): NearestByJoin = {
+    if (ctx.LATERAL != null) {
+      throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
+    }
+    if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
+      throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
+        ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
+    }
+    val clause = ctx.nearestByClause
+    val approx = clause.APPROX != null
+    val numResults = Option(clause.num).map { n =>
+      // Guard against literals that overflow Long.
+      val value = try n.getText.toLong catch {
+        case _: NumberFormatException =>
+          throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
+            ctx, n.getText, NearestByJoin.MaxNumResults)
+      }
+      if (value < 1 || value > NearestByJoin.MaxNumResults) {
+        throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
+          ctx, value.toString, NearestByJoin.MaxNumResults)
+      }
+      value.toInt
+    }.getOrElse(1)
+    val direction = if (clause.DISTANCE != null) NearestByDistance else NearestBySimilarity
+    val rankingExpr = expression(clause.expression)
+    NearestByJoin(
+      base, plan(ctx.right), baseJoinType, approx, numResults, rankingExpr, direction)
   }
 
   /**
