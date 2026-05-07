@@ -670,8 +670,7 @@ object WatermarkSupport {
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
         throw new AnalysisException(
-          // TODO: [SPARK-55731] Assign error class for _LEGACY_ERROR_TEMP_3077
-          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          errorClass = "MULTIPLE_EVENT_TIME_COLUMNS",
           messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
@@ -707,8 +706,7 @@ object WatermarkSupport {
       val eventTimeColsSet = eventTimeCols.map(_._1.exprId).toSet
       if (eventTimeColsSet.size > 1) {
         throw new AnalysisException(
-          // TODO: [SPARK-55731] Assign error class for _LEGACY_ERROR_TEMP_3077
-          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          errorClass = "MULTIPLE_EVENT_TIME_COLUMNS",
           messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
