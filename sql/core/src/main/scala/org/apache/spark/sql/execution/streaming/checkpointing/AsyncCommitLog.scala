@@ -113,15 +113,15 @@ class AsyncCommitLog(
     } else {
       executorService.submit(new Runnable {
         override def run(): Unit = {
-          val priorError = errorNotifier.getError().orNull
-          if (priorError != null) {
-            logWarning(log"Skipping async commit write for batch " +
-              log"${MDC(LogKeys.BATCH_ID, batchId)} because a previous async " +
-              log"write task already failed", priorError)
-            future.completeExceptionally(priorError)
-            return
-          }
           try {
+            val priorError = errorNotifier.getError().orNull
+            if (priorError != null) {
+              logWarning(log"Skipping async commit write for batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} because a previous async " +
+                log"write task already failed", priorError)
+              future.completeExceptionally(priorError)
+              return
+            }
             if (fileManager.exists(batchMetadataFile)) {
               future.complete(false)
             } else {
