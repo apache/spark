@@ -33,7 +33,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -112,8 +112,9 @@ private[sql] object JDBCRelation extends Logging {
       "Operation not allowed: the lower bound of partitioning column is larger than the upper " +
       s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
 
+    val dialect = JdbcDialects.get(jdbcOptions.url)
     val boundValueToString: Long => String =
-      toBoundValueInWhereClause(_, partitioning.columnType, timeZoneId)
+      toBoundValueInWhereClause(_, partitioning.columnType, timeZoneId, dialect)
     val numPartitions =
       if ((upperBound - lowerBound) >= partitioning.numPartitions || /* check for overflow */
           (upperBound - lowerBound) < 0) {
@@ -216,21 +217,18 @@ private[sql] object JDBCRelation extends Logging {
   private def toBoundValueInWhereClause(
       value: Long,
       columnType: DataType,
-      timeZoneId: String): String = {
-    def dateTimeToString(): String = {
-      val dateTimeStr = columnType match {
-        case DateType =>
-          DateFormatter().format(value.toInt)
-        case TimestampType =>
-          val timestampFormatter = TimestampFormatter.getFractionFormatter(
-            DateTimeUtils.getZoneId(timeZoneId))
-          timestampFormatter.format(value)
-      }
-      s"'$dateTimeStr'"
-    }
+      timeZoneId: String,
+      dialect: JdbcDialect): String = {
     columnType match {
       case _: NumericType => value.toString
-      case DateType | TimestampType => dateTimeToString()
+      case DateType =>
+        val date = DateFormatter().format(value.toInt)
+        dialect.compileValue(java.sql.Date.valueOf(date)).toString
+      case TimestampType =>
+        val timestampFormatter = TimestampFormatter.getFractionFormatter(
+          DateTimeUtils.getZoneId(timeZoneId))
+        val ts = timestampFormatter.format(value)
+        dialect.compileValue(java.sql.Timestamp.valueOf(ts)).toString
     }
   }
 

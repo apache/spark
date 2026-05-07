@@ -473,6 +473,66 @@ class JDBCSuite extends SharedSparkSession {
     assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
+  test("SPARK-28587: columnPartition should use dialect.compileValue for date/timestamp bounds") {
+    // Dialects for strict-typing engines (e.g. Athena, Phoenix) override compileValue to emit
+    // typed literals (DATE '...', TIMESTAMP '...') instead of bare quoted strings. Verify that
+    // toBoundValueInWhereClause routes through the dialect so the generated WHERE clauses are
+    // valid SQL for those engines.
+    //
+    // Use a unique URL prefix (jdbc:typed:) so no built-in dialect matches and our test dialect
+    // is the sole match — avoiding AggregatedDialect which does not delegate compileValue.
+    // Pass "driver" -> H2 driver class to suppress DriverManager.getDriver() lookup; columnPartition
+    // never opens a connection so the driver mismatch is harmless.
+    val typedLiteralDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:typed:")
+      override def compileValue(value: Any): Any = value match {
+        case d: java.sql.Date      => s"DATE '$d'"
+        case t: java.sql.Timestamp => s"TIMESTAMP '$t'"
+        case other                 => super.compileValue(other)
+      }
+    }
+    val typedUrl = "jdbc:typed:test"
+    val driverOpt = "driver" -> "org.h2.Driver"
+    JdbcDialects.registerDialect(typedLiteralDialect)
+    try {
+      val dateSchema = StructType(Seq(StructField("d", DateType)))
+      val dateParts = JDBCRelation.columnPartition(
+        dateSchema,
+        analysis.caseInsensitiveResolution,
+        TimeZone.getDefault.toZoneId.toString,
+        new JDBCOptions(typedUrl, "t", Map(
+          driverOpt,
+          "partitionColumn" -> "d",
+          "lowerBound"      -> "2024-01-01",
+          "upperBound"      -> "2024-03-31",
+          "numPartitions"   -> "2"
+        ))
+      )
+      val dateClauses = dateParts.map(_.asInstanceOf[JDBCPartition].whereClause)
+      assert(dateClauses.forall(c => c == null || c.contains("DATE '")),
+        s"Expected DATE '...' typed literals but got: ${dateClauses.mkString(", ")}")
+
+      val tsSchema = StructType(Seq(StructField("ts", TimestampType)))
+      val tsParts = JDBCRelation.columnPartition(
+        tsSchema,
+        analysis.caseInsensitiveResolution,
+        TimeZone.getDefault.toZoneId.toString,
+        new JDBCOptions(typedUrl, "t", Map(
+          driverOpt,
+          "partitionColumn" -> "ts",
+          "lowerBound"      -> "2024-01-01 00:00:00.0",
+          "upperBound"      -> "2024-03-31 00:00:00.0",
+          "numPartitions"   -> "2"
+        ))
+      )
+      val tsClauses = tsParts.map(_.asInstanceOf[JDBCPartition].whereClause)
+      assert(tsClauses.forall(c => c == null || c.contains("TIMESTAMP '")),
+        s"Expected TIMESTAMP '...' typed literals but got: ${tsClauses.mkString(", ")}")
+    } finally {
+      JdbcDialects.unregisterDialect(typedLiteralDialect)
+    }
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
