@@ -801,28 +801,6 @@ jobs:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
 
-  precompile-cleanup:
-    needs: [precompile, pyspark]
-    if: always() && needs.precompile.result == 'success'
-    name: "Delete precompile artifact"
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-    - name: Delete artifact
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        artifact_id=$(gh api \
-          repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts \
-          --jq '.artifacts[] | select(.name=="spark-compile-${{ github.run_id }}") | .id')
-        if [ -n "$artifact_id" ]; then
-          gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$artifact_id
-          echo "Deleted artifact $artifact_id"
-        else
-          echo "No precompile artifact found to delete"
-        fi
-
   sparkr:
     needs: [precondition, infra-image]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
