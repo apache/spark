@@ -72,7 +72,7 @@ ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y python3.9 python3.9-distutils \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
 
 RUN python3.9 -m pip install \
     'black==23.12.1' \
