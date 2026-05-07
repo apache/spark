@@ -481,14 +481,14 @@ class JDBCSuite extends SharedSparkSession {
     //
     // Use a unique URL prefix (jdbc:typed:) so no built-in dialect matches and our test dialect
     // is the sole match — avoiding AggregatedDialect which does not delegate compileValue.
-    // Pass "driver" -> H2 driver class to suppress DriverManager.getDriver() lookup; columnPartition
-    // never opens a connection so the driver mismatch is harmless.
+    // Pass "driver" -> H2 driver class to suppress DriverManager.getDriver() lookup;
+    // columnPartition never opens a connection so the driver mismatch is harmless.
     val typedLiteralDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:typed:")
       override def compileValue(value: Any): Any = value match {
-        case d: java.sql.Date      => s"DATE '$d'"
+        case d: java.sql.Date => s"DATE '$d'"
         case t: java.sql.Timestamp => s"TIMESTAMP '$t'"
-        case other                 => super.compileValue(other)
+        case other => super.compileValue(other)
       }
     }
     val typedUrl = "jdbc:typed:test"

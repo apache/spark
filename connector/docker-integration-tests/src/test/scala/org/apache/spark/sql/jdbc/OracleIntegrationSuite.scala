@@ -460,9 +460,9 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-11' or "D" is null""",
-          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
-          """"D" >= '2018-07-15'"""))
+          """"D" < {d '2018-07-11'} or "D" is null""",
+          """"D" >= {d '2018-07-11'} AND "D" < {d '2018-07-15'}""",
+          """"D" >= {d '2018-07-15'}"""))
     }
     assert(df1.collect().toSet === expectedResult)
 
@@ -483,8 +483,8 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
       case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
-          """"T" >= '2018-07-15 20:50:32.5'"""))
+          """"T" < {ts '2018-07-15 20:50:32.5'} or "T" is null""",
+          """"T" >= {ts '2018-07-15 20:50:32.5'}"""))
     }
     assert(df2.collect().toSet === expectedResult)
   }
