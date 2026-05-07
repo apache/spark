@@ -1727,6 +1727,21 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     def setUpClass(cls):
         super(BaseUDFTestsMixin, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+        # NOTE: an earlier attempt also flipped
+        # ``spark.sql.experimental.optimizer.transpilePyUDFS=true`` and
+        # ``spark.sql.ansi.enabled=true`` here so the entire UDF test
+        # surface ran under transpile-on. That surfaced ~9 real
+        # ``[INTERNAL_ERROR] Cannot generate code for expression:
+        # transpiledpythonudf(...)`` failures: the ``ConvertToCatalyst``
+        # optimizer rule doesn't reach into every plan shape these
+        # tests build (Project + alias + agg, SQL named arguments, the
+        # 256-arg case, decorator-style UDFs, etc.). Fixing the rule's
+        # reach is its own piece of work; until then the explicit
+        # ``test_udf_transpile_falls_back_for_unsupported_patterns``
+        # test in ``test_udf_transpile_unit`` still exercises the
+        # graceful-fallback contract, and the differential hypothesis
+        # suite in ``test_udf_transpile_hypothesis`` covers the
+        # supported subset under transpile-on.
 
     # We cannot check whether the batch size is effective or not. We just run the query with
     # various batch size and see whether the query runs successfully, and the output is

@@ -128,7 +128,9 @@ trait CoercesExpressionTypes extends SQLConfHelper with ResolverMetricTracker {
     withTypeCoercion.withNewChildren(newChildren)
   }
 
-  private def runCoercionTransformations(expression: Expression, ansiMode: Boolean): Expression = {
+  protected[spark] def runCoercionTransformations(expression: Expression,
+    ansiMode: Boolean): Expression = {
+
     val transformations = if (ansiMode) {
       ansiTransformations
     } else {

@@ -18,18 +18,22 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.{DataInputStream, DataOutputStream}
+import java.util.{List => JList}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.{Column, TableArg}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, TranspiledPythonUDF, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ColumnConversions
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, TableValuedFunctionArgument}
@@ -43,7 +47,9 @@ case class UserDefinedPythonFunction(
     func: PythonFunction,
     dataType: DataType,
     pythonEvalType: Int,
-    udfDeterministic: Boolean) {
+    udfDeterministic: Boolean,
+    // TODO: Add support for transpilation with Spark Connect and remove the default value.
+    transpiled: JList[Column] = Nil.asJava) {
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -63,14 +69,53 @@ case class UserDefinedPythonFunction(
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
+    val transpiledExprs: List[Expression] = transpiled.asScala.map(
+      column => ColumnConversions.expression(column)).toList
 
-    if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+
+    val udfExpr = if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+    }
+    // The ``_udf_param_N`` substitution below is positional, so a UDF
+    // call site that supplied named arguments (e.g. SQL ``name => val``
+    // or pyspark ``udf(b=col)``) would splice ``NamedArgumentExpression``
+    // wrappers into the rewritten Catalyst tree and confuse downstream
+    // function resolution (``isnotnull`` etc. reject named parameters).
+    // The Python ``__call__`` shim resolves kwargs to positional before
+    // they reach this builder; SQL named arguments don't go through that
+    // shim, so we conservatively skip transpilation here when any child
+    // is a ``NamedArgumentExpression`` and let the regular Python UDF
+    // path execute.
+    val transpiledExprsForUse =
+      if (e.exists(_.isInstanceOf[NamedArgumentExpression])) Nil else transpiledExprs
+    // If we have a possible transpiled expression insert that node so we can choose later
+    if (transpiledExprsForUse.nonEmpty) {
+      val tpu = TranspiledPythonUDF(name, udfExpr, transpiledExprsForUse)
+      // Resolve the UDF parameters to match the original UDF children
+      def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
+        expression match {
+          case UnresolvedAttribute(nameParts)
+              if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
+            val index = nameParts.head.stripPrefix("_udf_param_").toInt
+            if (index >= 0 && index < children.length) {
+              val result = children(index)
+              result
+            } else {
+              throw new Exception(f"Invalid UDF parameter index: $index")
+            }
+          case _ =>
+            val ec = expression.getClass
+            expression.mapChildren(resolveUDFParams(_, children))
+        }
+      }
+      resolveUDFParams(tpu, udfExpr.children.toArray)
+    } else {
+      udfExpr
     }
   }
 

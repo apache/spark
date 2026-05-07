@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -75,7 +76,8 @@ object PythonUDF {
 }
 
 
-trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression { self: Expression =>
+trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression
+    with Logging { self: Expression =>
   def name: String
   def func: PythonFunction
   def evalType: Int
@@ -87,6 +89,19 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
+}
+
+
+case class TranspiledPythonUDF(
+  name: String,
+  pythonUDFExpr: Expression,
+  transpiledOptions: List[Expression]) extends Expression with Unevaluable {
+  override def children: Seq[Expression] = pythonUDFExpr +: transpiledOptions
+  override def dataType: DataType = pythonUDFExpr.dataType
+  override def nullable: Boolean = pythonUDFExpr.nullable
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
+      TranspiledPythonUDF =
+    copy(pythonUDFExpr = newChildren.head, transpiledOptions = newChildren.tail.toList)
 }
 
 /**
