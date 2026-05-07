@@ -94,6 +94,11 @@ class CatalogManager(
       else None
     }
 
+  // Limitation: with system entries split across a user-catalog entry (e.g. `SET PATH =
+  // system.builtin, <user>, system.session`), only the prefix kinds are surfaced. Unqualified
+  // temp functions on such interleaved paths fail at `LookupFunctions` because the SC fast path
+  // does not see Temp and `FunctionResolution.lookupFunctionType` filters `system.session.*`
+  // from persistent candidates. Place `system.session` before any user catalog to avoid this.
   private def leadingSystemFunctionKinds(): Seq[SessionCatalog.SessionFunctionKind] = {
     val path = sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq)
     val prefix = pathPrefixBeforeFirstUserCatalog(path)

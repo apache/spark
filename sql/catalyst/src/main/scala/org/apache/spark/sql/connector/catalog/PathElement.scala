@@ -36,9 +36,9 @@ import org.apache.spark.sql.internal.SQLConf
  * AST node lives in catalyst beside [[CatalogManager]] rather than in the runtime
  * [[org.apache.spark.sql.execution.command.SetPathCommand]].
  */
-sealed trait PathElement
+private[sql] sealed trait PathElement
 
-object PathElement {
+private[sql] object PathElement {
   case object DefaultPath extends PathElement
   case object SystemPath extends PathElement
   case object PathRef extends PathElement

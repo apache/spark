@@ -737,6 +737,22 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("PATH enabled: SET PATH with user schema before system.builtin still resolves builtins") {
+    // Exercises the `leadingSystemFunctionKinds` else-branch in CatalogManager: prefix before
+    // the first user catalog entry has no system entries, so kinds are taken from the full path.
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_user_before_builtin")
+      try {
+        sql("SET PATH = spark_catalog.path_user_before_builtin, system.builtin")
+        // `abs` is a builtin; if the else-branch did not surface Builtin in the kinds,
+        // unqualified `abs(-1)` would fail with UNRESOLVED_ROUTINE.
+        checkAnswer(sql("SELECT abs(-1)"), Row(1))
+      } finally {
+        sql("DROP SCHEMA IF EXISTS path_user_before_builtin")
+      }
+    }
+  }
+
   test("DEFAULT_PATH conf: duplicate system entries rejected when materialized") {
     withSQLConf(
         SQLConf.PATH_ENABLED.key -> "true",
