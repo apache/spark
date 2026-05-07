@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
@@ -47,6 +48,7 @@ import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.catalyst.JavaTypeInferenceBeans;
 import org.apache.spark.util.LongAccumulator;
 
 import static org.apache.spark.sql.functions.*;
@@ -1918,6 +1920,120 @@ public class JavaDatasetSuite implements Serializable {
 
   }
 
+  /**
+   * Interface with JavaBean-style getters/setters for testing encoder with interface type.
+   */
+  public interface BeanInterface extends Serializable {
+    String getValue();
+    void setValue(String value);
+    int getId();
+    void setId(int id);
+  }
+
+  public static class BeanImplA implements BeanInterface {
+    private String value;
+    private int id;
+
+    @Override
+    public String getValue() { return value; }
+    @Override
+    public void setValue(String value) { this.value = value; }
+    @Override
+    public int getId() { return id; }
+    @Override
+    public void setId(int id) { this.id = id; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (!(o instanceof BeanImplA)) return false;
+      BeanImplA that = (BeanImplA) o;
+      return id == that.id && Objects.equals(value, that.value);
+    }
+    @Override
+    public int hashCode() { return Objects.hash(value, id); }
+  }
+
+  public static class BeanImplB implements BeanInterface {
+    private String value;
+    private int id;
+
+    @Override
+    public String getValue() { return value; }
+    @Override
+    public void setValue(String value) { this.value = value; }
+    @Override
+    public int getId() { return id; }
+    @Override
+    public void setId(int id) { this.id = id; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (!(o instanceof BeanImplB)) return false;
+      BeanImplB that = (BeanImplB) o;
+      return id == that.id && Objects.equals(value, that.value);
+    }
+    @Override
+    public int hashCode() { return Objects.hash(value, id); }
+  }
+
+  @Test
+  public void testBeanEncoderRejectsInterface() {
+    SparkUnsupportedOperationException e = Assertions.assertThrows(
+        SparkUnsupportedOperationException.class,
+        () -> Encoders.bean(BeanInterface.class));
+    Assertions.assertEquals("BEAN_ENCODER_INTERFACE_NOT_SUPPORTED", e.getCondition());
+    Assertions.assertEquals("0A000", e.getSqlState());
+    Assertions.assertEquals(
+        Collections.singletonMap("className", BeanInterface.class.getName()),
+        e.getMessageParameters());
+  }
+
+  @Test
+  public void testKryoEncoderWithInterface() {
+    BeanImplA a = new BeanImplA();
+    a.setValue("a");
+    a.setId(1);
+    BeanImplB b = new BeanImplB();
+    b.setValue("b");
+    b.setId(2);
+    List<BeanInterface> data = Arrays.asList(a, b);
+
+    Encoder<BeanInterface> kryoEncoder = Encoders.kryo(BeanInterface.class);
+    Dataset<BeanInterface> ds = spark.createDataset(data, kryoEncoder);
+    List<BeanInterface> collected = ds.collectAsList();
+    Assertions.assertEquals(2, collected.size());
+    Assertions.assertEquals("a", collected.get(0).getValue());
+    Assertions.assertEquals(1, collected.get(0).getId());
+    Assertions.assertEquals("b", collected.get(1).getValue());
+    Assertions.assertEquals(2, collected.get(1).getId());
+    Assertions.assertInstanceOf(BeanImplA.class, collected.get(0));
+    Assertions.assertInstanceOf(BeanImplB.class, collected.get(1));
+  }
+
+  @Test
+  public void testJavaSerializationEncoderWithInterface() {
+    BeanImplA a = new BeanImplA();
+    a.setValue("a");
+    a.setId(1);
+    BeanImplB b = new BeanImplB();
+    b.setValue("b");
+    b.setId(2);
+    List<BeanInterface> data = Arrays.asList(a, b);
+
+    Encoder<BeanInterface> javaEncoder = Encoders.javaSerialization(BeanInterface.class);
+    Dataset<BeanInterface> ds = spark.createDataset(data, javaEncoder);
+    List<BeanInterface> collected = ds.collectAsList();
+    Assertions.assertEquals(2, collected.size());
+    Assertions.assertEquals("a", collected.get(0).getValue());
+    Assertions.assertEquals(1, collected.get(0).getId());
+    Assertions.assertEquals("b", collected.get(1).getValue());
+    Assertions.assertEquals(2, collected.get(1).getId());
+    Assertions.assertInstanceOf(BeanImplA.class, collected.get(0));
+    Assertions.assertInstanceOf(BeanImplB.class, collected.get(1));
+  }
+
   public class CircularReference1Bean implements Serializable {
     private CircularReference2Bean child;
 
@@ -2108,6 +2224,40 @@ public class JavaDatasetSuite implements Serializable {
         .filter(col("a").geq(1));
     final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
     Assertions.assertEquals(expected, df.collectAsList());
+  }
+
+  @Test
+  public void testNestedEncoder() {
+    JavaTypeInferenceBeans.Foo<String> foo = new JavaTypeInferenceBeans.Foo<>();
+    foo.setT("test value");
+
+    JavaTypeInferenceBeans.StringFooWrapper wrapper = new JavaTypeInferenceBeans.StringFooWrapper();
+    wrapper.setFoo(foo);
+
+    List<JavaTypeInferenceBeans.StringFooWrapper> data = Arrays.asList(wrapper);
+    Dataset<JavaTypeInferenceBeans.StringFooWrapper> ds =
+      spark.createDataset(data, Encoders.bean(JavaTypeInferenceBeans.StringFooWrapper.class));
+
+    List<JavaTypeInferenceBeans.StringFooWrapper> result = ds.collectAsList();
+    Assertions.assertEquals(1, result.size());
+    Assertions.assertEquals("test value", result.get(0).getFoo().getT());
+  }
+
+  @Test
+  public void testNestedEncoder2() {
+    JavaTypeInferenceBeans.Bar<String> bar = new JavaTypeInferenceBeans.Bar<>();
+    bar.setT("test value");
+
+    JavaTypeInferenceBeans.StringBarWrapper wrapper = new JavaTypeInferenceBeans.StringBarWrapper();
+    wrapper.setBar(bar);
+
+    List<JavaTypeInferenceBeans.StringBarWrapper> data = Arrays.asList(wrapper);
+    Dataset<JavaTypeInferenceBeans.StringBarWrapper> ds =
+      spark.createDataset(data, Encoders.bean(JavaTypeInferenceBeans.StringBarWrapper.class));
+
+    List<JavaTypeInferenceBeans.StringBarWrapper> result = ds.collectAsList();
+    Assertions.assertEquals(1, result.size());
+    Assertions.assertEquals("test value", result.get(0).getBar().getT());
   }
 
   public static class BeanWithSet implements Serializable {

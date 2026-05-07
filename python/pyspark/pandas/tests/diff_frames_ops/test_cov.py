@@ -50,9 +50,7 @@ class DiffFramesCovMixin:
         psser1 = ps.from_pandas(pser1)
         with self.assertRaisesRegex(TypeError, "unsupported type: <class 'list'>"):
             psser1.cov([0.12528585, 0.26962463, 0.51111198])
-        with self.assertRaisesRegex(
-            TypeError, "unsupported type: <class 'pandas.core.series.Series'>"
-        ):
+        with self.assertRaisesRegex(TypeError, f"unsupported type: {pd.Series}"):
             psser1.cov(pser2)
 
     def _test_cov(self, pser1, pser2):

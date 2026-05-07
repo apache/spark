@@ -381,7 +381,7 @@ class VariantUtils:
     @classmethod
     def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> str:
         variant_type = cls._get_type(value, pos)
-        if variant_type == dict:
+        if variant_type is dict:
 
             def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> str:
                 key_value_list = [
@@ -391,7 +391,7 @@ class VariantUtils:
                 return "{" + ",".join(key_value_list) + "}"
 
             return cls._handle_object(value, metadata, pos, handle_object)
-        elif variant_type == array:
+        elif variant_type is array:
 
             def handle_array(value_pos_list: List[int]) -> str:
                 value_list = [
@@ -405,21 +405,21 @@ class VariantUtils:
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
                 return "null"
-            if type(value) == bool:
+            if isinstance(value, bool):
                 return "true" if value else "false"
-            if type(value) == str:
+            if isinstance(value, str):
                 return json.dumps(value)
-            if type(value) == bytes:
+            if isinstance(value, bytes):
                 # decoding simply converts byte array to string
                 return '"' + base64.b64encode(value).decode("utf-8") + '"'
-            if type(value) == datetime.date or type(value) == datetime.datetime:
+            if isinstance(value, (datetime.date, datetime.datetime)):
                 return '"' + str(value) + '"'
             return str(value)
 
     @classmethod
     def _to_python(cls, value: bytes, metadata: bytes, pos: int) -> Any:
         variant_type = cls._get_type(value, pos)
-        if variant_type == dict:
+        if variant_type is dict:
 
             def handle_object(key_value_pos_list: List[Tuple[str, int]]) -> Dict[str, Any]:
                 key_value_list = [
@@ -429,7 +429,7 @@ class VariantUtils:
                 return dict(key_value_list)
 
             return cls._handle_object(value, metadata, pos, handle_object)
-        elif variant_type == array:
+        elif variant_type is array:
 
             def handle_array(value_pos_list: List[int]) -> List[Any]:
                 value_list = [
@@ -447,21 +447,21 @@ class VariantUtils:
     ) -> Any:
         if isinstance(None, variant_type):
             return None
-        elif variant_type == bool:
+        elif variant_type is bool:
             return cls._get_boolean(value, pos)
-        elif variant_type == int:
+        elif variant_type is int:
             return cls._get_long(value, pos)
-        elif variant_type == str:
+        elif variant_type is str:
             return cls._get_string(value, pos)
-        elif variant_type == float:
+        elif variant_type is float:
             return cls._get_double(value, pos)
-        elif variant_type == decimal.Decimal:
+        elif variant_type is decimal.Decimal:
             return cls._get_decimal(value, pos)
-        elif variant_type == bytes:
+        elif variant_type is bytes:
             return cls._get_binary(value, pos)
-        elif variant_type == datetime.date:
+        elif variant_type is datetime.date:
             return cls._get_date(value, pos)
-        elif variant_type == datetime.datetime:
+        elif variant_type is datetime.datetime:
             return cls._get_timestamp(value, pos, zone_id)
         else:
             raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})

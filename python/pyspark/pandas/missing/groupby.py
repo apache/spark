@@ -84,7 +84,6 @@ class MissingPandasLikeSeriesGroupBy:
     # Functions
     agg = _unsupported_function("agg")
     aggregate = _unsupported_function("aggregate")
-    describe = _unsupported_function("describe")
     ngroup = _unsupported_function("ngroup")
     ohlc = _unsupported_function("ohlc")
     pct_change = _unsupported_function("pct_change")

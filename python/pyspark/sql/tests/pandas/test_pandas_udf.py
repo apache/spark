@@ -29,8 +29,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PythonException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -244,8 +244,12 @@ class PandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataType or str",
+                "arg_name": "returnType",
+                "arg_type": "int",
+            },
         )
 
     def test_stopiteration_in_udf(self):
@@ -322,9 +326,7 @@ class PandasUDFTestsMixin:
 
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 df.select(["A"]).withColumn("udf", udf("A")).collect()
 
         # Disabling Arrow safe type check.
@@ -342,9 +344,7 @@ class PandasUDFTestsMixin:
 
         # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegex(
-                Exception, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(Exception, "Failed to convert the value"):
                 df.withColumn("udf", udf("id")).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.
@@ -375,7 +375,7 @@ class PandasUDFTestsMixin:
         ):
             self.assertRaisesRegex(
                 PythonException,
-                "Exception thrown when converting pandas.Series",
+                "Failed to convert the value",
                 df.withColumn("decimal_val", int_to_decimal_udf("id")).collect,
             )
 
@@ -472,10 +472,11 @@ class PandasUDFTestsMixin:
             AS tab(a, b)
             """
 
-        df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
-        expected = df.select("a").collect()
-        results = df.select(identity("a").alias("a")).collect()
-        self.assertEqual(results, expected)
+        with self.sql_conf({"spark.sql.execution.pythonUDF.pandas.preferIntExtensionDtype": True}):
+            df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+            expected = df.select("a").collect()
+            results = df.select(identity("a").alias("a")).collect()
+            self.assertEqual(results, expected)
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

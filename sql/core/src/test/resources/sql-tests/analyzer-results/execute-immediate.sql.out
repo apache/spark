@@ -33,7 +33,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`x`, false
 -- !query
 DECLARE sql_string STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable default(null, sql='null'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.sql_string
 
 
@@ -126,7 +126,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 DECLARE a STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable default(null, sql='null'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.a
 
 
@@ -231,7 +231,7 @@ SetVariable [variablereference(system.session.sql_string='SELECT * from tbl_view
 -- !query
 DECLARE b INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable default(null, sql='null'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.b
 
 
@@ -327,7 +327,7 @@ Project [variablereference(system.session.sql_string='SELECT id from tbl_view wh
 -- !query
 DECLARE res_id INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable default(null, sql='null'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.res_id
 
 
@@ -507,7 +507,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE OR REPLACE testvarA INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
+CreateVariable default(null, sql='null'), true
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.testvarA
 
 
@@ -782,7 +782,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 DECLARE p = 10
 -- !query analysis
-CreateVariable defaultvalueexpression(10, 10), false
+CreateVariable default(10, sql='10'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.p
 
 
@@ -924,7 +924,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE int_var INT
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable default(null, sql='null'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.int_var
 
 
@@ -952,7 +952,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DECLARE null_var STRING
 -- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
+CreateVariable default(null, sql='null'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.null_var
 
 
@@ -1016,11 +1016,18 @@ EXECUTE IMMEDIATE (SELECT c FROM (VALUES(1)) AS T(c))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-  "sqlState" : "42K09",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "exprType" : "\"INT\""
-  }
+    "invalidExprSql" : "\"scalarsubquery()\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 53,
+    "fragment" : "(SELECT c FROM (VALUES(1)) AS T(c))"
+  } ]
 }
 
 

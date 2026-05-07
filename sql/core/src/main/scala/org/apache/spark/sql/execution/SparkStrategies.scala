@@ -328,7 +328,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .getOrElse(createJoinWithoutHint())
         }
 
-      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+          if canBroadcastBySize(j.right, conf) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
@@ -787,6 +788,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           outputAttr,
           stateInfo = None,
           batchTimestampMs = None,
+          prevBatchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           planLater(child),
@@ -815,6 +817,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
           batchTimestampMs = None,
+          prevBatchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           userFacingDataType,

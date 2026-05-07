@@ -22,7 +22,7 @@ import java.io.File
 import org.scalactic.Equality
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.expressions.Concat
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -36,8 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 abstract class SchemaPruningSuite
-  extends QueryTest
-  with FileBasedDataSourceTest
+  extends FileBasedDataSourceTest
   with SchemaPruningTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -593,6 +592,7 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("select nested field in Expand") {
     import org.apache.spark.sql.catalyst.dsl.expressions._
+    import testImplicits.castToImpl
 
     val query1 = Expand(
       Seq(

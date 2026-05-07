@@ -37,7 +37,7 @@ class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuite
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> catalog,
-        "namespace" -> "`ns1`.`ns2`"
+        "identifier" -> "`ns1`.`ns2`"
       )
     )
   }

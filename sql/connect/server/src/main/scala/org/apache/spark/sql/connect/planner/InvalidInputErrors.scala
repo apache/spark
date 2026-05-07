@@ -30,94 +30,115 @@ import org.apache.spark.sql.types.DataType
 
 object InvalidInputErrors {
 
-  def noHandlerFoundForExtension(extensionTypeUrl: String): InvalidPlanInput = {
-    InvalidPlanInput(s"No handler found for extension type: $extensionTypeUrl")
-  }
+  def noHandlerFoundForExtension(extensionTypeUrl: String): InvalidPlanInput =
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.NO_HANDLER_FOR_EXTENSION",
+      Map("extensionTypeUrl" -> extensionTypeUrl))
 
   def invalidSQLWithReferences(query: proto.WithRelations): InvalidPlanInput =
-    InvalidPlanInput(s"$query is not a valid relation for SQL with references")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.INVALID_SQL_WITH_REFERENCES",
+      Map("query" -> query.toString))
 
   def naFillValuesEmpty(): InvalidPlanInput =
-    InvalidPlanInput("values must contains at least 1 item!")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.NA_FILL_VALUES_EMPTY", Map.empty)
 
   def naFillValuesLengthMismatch(): InvalidPlanInput =
-    InvalidPlanInput(
-      "When values contains more than 1 items, values and cols should have the same length!")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.NA_FILL_VALUES_LENGTH_MISMATCH", Map.empty)
 
   def deduplicateNeedsInput(): InvalidPlanInput =
-    InvalidPlanInput("Deduplicate needs a plan input")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_NEEDS_INPUT", Map.empty)
 
   def deduplicateAllColumnsAndSubset(): InvalidPlanInput =
-    InvalidPlanInput("Cannot deduplicate on both all columns and a subset of columns")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_ALL_COLUMNS_AND_SUBSET", Map.empty)
 
   def deduplicateRequiresColumnsOrAll(): InvalidPlanInput =
-    InvalidPlanInput(
-      "Deduplicate requires to either deduplicate on all columns or a subset of columns")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.DEDUPLICATE_REQUIRES_COLUMNS_OR_ALL", Map.empty)
 
-  def invalidDeduplicateColumn(colName: String): InvalidPlanInput =
-    InvalidPlanInput(s"Invalid deduplicate column $colName")
+  def invalidDeduplicateColumn(colName: String, fieldNames: String): InvalidPlanInput =
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
+      Map("colName" -> colName, "fieldNames" -> fieldNames))
 
   def functionEvalTypeNotSupported(evalType: Int): InvalidPlanInput =
-    InvalidPlanInput(s"Function with EvalType: $evalType is not supported")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.FUNCTION_EVAL_TYPE_NOT_SUPPORTED",
+      Map("evalType" -> evalType.toString))
 
   def groupingExpressionAbsentForKeyValueGroupedDataset(): InvalidPlanInput =
-    InvalidPlanInput("The grouping expression cannot be absent for KeyValueGroupedDataset")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.GROUPING_EXPRESSION_ABSENT", Map.empty)
 
   def expectingScalaUdfButGot(exprType: proto.Expression.ExprTypeCase): InvalidPlanInput =
-    InvalidPlanInput(s"Expecting a Scala UDF, but get $exprType")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.EXPECTING_SCALA_UDF",
+      Map("exprType" -> exprType.toString))
 
   def rowNotSupportedForUdf(errorType: String): InvalidPlanInput =
-    InvalidPlanInput(s"Row is not a supported $errorType type for this UDF.")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.ROW_NOT_SUPPORTED_FOR_UDF",
+      Map("errorType" -> errorType))
 
   def notFoundCachedLocalRelation(hash: String, sessionUUID: String): InvalidPlanInput =
     InvalidPlanInput(
-      s"Not found any cached local relation with the hash: " +
-        s"$hash in the session with sessionUUID $sessionUUID.")
+      "CONNECT_INVALID_PLAN.NOT_FOUND_CACHED_LOCAL_RELATION",
+      Map("hash" -> hash, "sessionUUID" -> sessionUUID))
 
   def notFoundChunkedCachedLocalRelationBlock(
       hash: String,
       sessionUUID: String): InvalidPlanInput =
     InvalidPlanInput(
-      s"Not found chunked cached local relation block with the hash: " +
-        s"$hash in the session with sessionUUID $sessionUUID.")
+      "CONNECT_INVALID_PLAN.NOT_FOUND_CHUNKED_CACHED_LOCAL_RELATION",
+      Map("hash" -> hash, "sessionUUID" -> sessionUUID))
 
   def localRelationSizeLimitExceeded(actualSize: Long, limit: Long): InvalidPlanInput =
     InvalidPlanInput(
-      s"Cached local relation size ($actualSize bytes) exceeds the limit ($limit bytes).")
+      "CONNECT_INVALID_PLAN.LOCAL_RELATION_SIZE_LIMIT_EXCEEDED",
+      Map("actualSize" -> actualSize.toString, "limit" -> limit.toString))
 
   def localRelationChunkSizeLimitExceeded(limit: Long): InvalidPlanInput =
-    InvalidPlanInput(s"One of cached local relation chunks exceeded the limit of $limit bytes.")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.LOCAL_RELATION_CHUNK_SIZE_LIMIT_EXCEEDED",
+      Map("limit" -> limit.toString))
 
   def withColumnsRequireSingleNamePart(got: String): InvalidPlanInput =
-    InvalidPlanInput(s"WithColumns require column name only contains one name part, but got $got")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.WITH_COLUMNS_REQUIRE_SINGLE_NAME_PART",
+      Map("got" -> got))
 
   def inputDataForLocalRelationNoSchema(): InvalidPlanInput =
-    InvalidPlanInput("Input data for LocalRelation does not produce a schema.")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INPUT_DATA_NO_SCHEMA", Map.empty)
 
   def chunkedCachedLocalRelationWithoutData(): InvalidPlanInput =
-    InvalidPlanInput("ChunkedCachedLocalRelation should contain data.")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA", Map.empty)
 
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
-    InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.SCHEMA_REQUIRED_FOR_LOCAL_RELATION", Map.empty)
 
   def invalidSchemaStringNonStructType(schema: String, dataType: DataType): InvalidPlanInput =
     InvalidPlanInput(
-      "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      "CONNECT_INVALID_PLAN.INVALID_SCHEMA_NON_STRUCT_TYPE",
       Map("inputSchema" -> quoteByDefault(schema), "dataType" -> toSQLType(dataType)))
 
   def invalidJdbcParams(): InvalidPlanInput =
-    InvalidPlanInput("Invalid jdbc params, please specify jdbc url and table.")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INVALID_JDBC_PARAMS", Map.empty)
 
   def predicatesNotSupportedForDataSource(format: String): InvalidPlanInput =
-    InvalidPlanInput(s"Predicates are not supported for $format data sources.")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.PREDICATES_NOT_SUPPORTED_FOR_DATA_SOURCE",
+      Map("format" -> format))
 
   def multiplePathsNotSupportedForStreamingSource(): InvalidPlanInput =
-    InvalidPlanInput("Multiple paths are not supported for streaming source")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.MULTIPLE_PATHS_NOT_SUPPORTED_FOR_STREAMING_SOURCE",
+      Map.empty)
 
   def invalidEnum(protoEnum: Enum[_] with ProtocolMessageEnum): InvalidPlanInput =
     InvalidPlanInput(
-      s"This enum value of ${protoEnum.getDescriptorForType.getFullName}" +
-        s" is invalid: ${protoEnum.name()}(${protoEnum.getNumber})")
+      "CONNECT_INVALID_PLAN.INVALID_ENUM",
+      Map(
+        "fullName" -> protoEnum.getDescriptorForType.getFullName,
+        "name" -> protoEnum.name(),
+        "number" -> protoEnum.getNumber.toString))
 
   def invalidOneOfField(
       enumCase: Enum[_] with EnumLite,
@@ -125,90 +146,119 @@ object InvalidInputErrors {
     // If the oneOf field is not set, the enum number will be 0.
     if (enumCase.getNumber == 0) {
       InvalidPlanInput(
-        s"This oneOf field in ${descriptor.getFullName} is not set: ${enumCase.name()}")
+        "CONNECT_INVALID_PLAN.INVALID_ONE_OF_FIELD_NOT_SET",
+        Map("fullName" -> descriptor.getFullName, "name" -> enumCase.name()))
     } else {
       InvalidPlanInput(
-        s"This oneOf field message in ${descriptor.getFullName} is not supported: " +
-          s"${enumCase.name()}(${enumCase.getNumber})")
+        "CONNECT_INVALID_PLAN.INVALID_ONE_OF_FIELD_NOT_SUPPORTED",
+        Map(
+          "fullName" -> descriptor.getFullName,
+          "name" -> enumCase.name(),
+          "number" -> enumCase.getNumber.toString))
     }
   }
 
   def cannotBeEmpty(fieldName: String, descriptor: Descriptor): InvalidPlanInput =
-    InvalidPlanInput(s"$fieldName in ${descriptor.getFullName} cannot be empty")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.FIELD_CANNOT_BE_EMPTY",
+      Map("fieldName" -> fieldName, "fullName" -> descriptor.getFullName))
 
   def invalidSchemaTypeNonStruct(dataType: DataType): InvalidPlanInput =
     InvalidPlanInput("INVALID_SCHEMA_TYPE_NON_STRUCT", Map("dataType" -> toSQLType(dataType)))
 
   def lambdaFunctionArgumentCountInvalid(got: Int): InvalidPlanInput =
-    InvalidPlanInput(s"LambdaFunction requires 1 ~ 3 arguments, but got $got ones!")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.LAMBDA_FUNCTION_ARGUMENT_COUNT_INVALID",
+      Map("got" -> got.toString))
 
   def aliasWithMultipleIdentifiersAndMetadata(): InvalidPlanInput =
     InvalidPlanInput(
-      "Alias expressions with more than 1 identifier must not use optional metadata.")
+      "CONNECT_INVALID_PLAN.ALIAS_WITH_MULTIPLE_IDENTIFIERS_AND_METADATA",
+      Map.empty)
 
   def unresolvedStarTargetInvalid(target: String): InvalidPlanInput =
     InvalidPlanInput(
-      s"UnresolvedStar requires a unparsed target ending with '.*', but got $target.")
+      "CONNECT_INVALID_PLAN.UNRESOLVED_STAR_TARGET_INVALID",
+      Map("target" -> target))
 
   def unresolvedStarWithBothTargetAndPlanId(): InvalidPlanInput =
-    InvalidPlanInput("UnresolvedStar with both target and plan id is not supported.")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.UNRESOLVED_STAR_WITH_BOTH_TARGET_AND_PLAN_ID",
+      Map.empty)
 
   def windowFunctionRequired(): InvalidPlanInput =
-    InvalidPlanInput("WindowFunction is required in WindowExpression")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.WINDOW_FUNCTION_REQUIRED", Map.empty)
 
   def lowerBoundRequiredInWindowFrame(): InvalidPlanInput =
-    InvalidPlanInput("LowerBound is required in WindowFrame")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.LOWER_BOUND_REQUIRED_IN_WINDOW_FRAME", Map.empty)
 
   def upperBoundRequiredInWindowFrame(): InvalidPlanInput =
-    InvalidPlanInput("UpperBound is required in WindowFrame")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.UPPER_BOUND_REQUIRED_IN_WINDOW_FRAME", Map.empty)
 
   def setOperationMustHaveTwoInputs(): InvalidPlanInput =
-    InvalidPlanInput("Set operation must have 2 inputs")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.SET_OPERATION_MUST_HAVE_TWO_INPUTS", Map.empty)
 
   def exceptDoesNotSupportUnionByName(): InvalidPlanInput =
-    InvalidPlanInput("Except does not support union_by_name")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.EXCEPT_DOES_NOT_SUPPORT_UNION_BY_NAME", Map.empty)
 
   def intersectDoesNotSupportUnionByName(): InvalidPlanInput =
-    InvalidPlanInput("Intersect does not support union_by_name")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INTERSECT_DOES_NOT_SUPPORT_UNION_BY_NAME", Map.empty)
 
   def aggregateNeedsPlanInput(): InvalidPlanInput =
-    InvalidPlanInput("Aggregate needs a plan input")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.AGGREGATE_NEEDS_PLAN_INPUT", Map.empty)
 
   def aggregateWithPivotRequiresPivot(): InvalidPlanInput =
-    InvalidPlanInput("Aggregate with GROUP_TYPE_PIVOT requires a Pivot")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.AGGREGATE_WITH_PIVOT_REQUIRES_PIVOT", Map.empty)
 
   def invalidWithRelationReference(): InvalidPlanInput =
-    InvalidPlanInput("Invalid WithRelation reference")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.INVALID_WITH_RELATION_REFERENCE", Map.empty)
 
   def assertionFailure(message: String): InvalidPlanInput =
-    InvalidPlanInput(message)
+    InvalidPlanInput("CONNECT_INVALID_PLAN.ASSERTION_FAILURE", Map("message" -> message))
 
   def unresolvedNamedLambdaVariableRequiresNamePart(): InvalidPlanInput =
-    InvalidPlanInput("UnresolvedNamedLambdaVariable requires at least one name part!")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.UNRESOLVED_NAMED_LAMBDA_VARIABLE_REQUIRES_NAME_PART",
+      Map.empty)
 
   def usingColumnsOrJoinConditionSetInJoin(): InvalidPlanInput =
-    InvalidPlanInput("Using columns or join conditions cannot be set at the same time in Join")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.USING_COLUMNS_OR_JOIN_CONDITION_SET_IN_JOIN",
+      Map.empty)
 
   def sqlCommandExpectsSqlOrWithRelations(other: proto.Relation.RelTypeCase): InvalidPlanInput =
-    InvalidPlanInput(s"SQL command expects either a SQL or a WithRelations, but got $other")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.SQL_COMMAND_EXPECTS_SQL_OR_WITH_RELATIONS",
+      Map("other" -> other.toString))
 
   def reduceShouldCarryScalarScalaUdf(got: mutable.Buffer[proto.Expression]): InvalidPlanInput =
-    InvalidPlanInput(s"reduce should carry a scalar scala udf, but got $got")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.REDUCE_SHOULD_CARRY_SCALAR_SCALA_UDF",
+      Map("got" -> got.toString))
 
   def unionByNameAllowMissingColRequiresByName(): InvalidPlanInput =
-    InvalidPlanInput("UnionByName `allowMissingCol` can be true only if `byName` is true.")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.UNION_BY_NAME_ALLOW_MISSING_COL_REQUIRES_BY_NAME",
+      Map.empty)
 
   def unsupportedUserDefinedFunctionImplementation(clazz: Class[_]): InvalidPlanInput =
-    InvalidPlanInput(s"Unsupported UserDefinedFunction implementation: ${clazz}")
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.UNSUPPORTED_USER_DEFINED_FUNCTION_IMPLEMENTATION",
+      Map("clazz" -> clazz.toString))
 
   def streamingQueryRunIdMismatch(
       id: String,
       runId: String,
       serverRunId: String): InvalidPlanInput =
     InvalidPlanInput(
-      s"Run id mismatch for query id $id. Run id in the request $runId " +
-        s"does not match one on the server $serverRunId. The query might have restarted.")
+      "CONNECT_INVALID_PLAN.STREAMING_QUERY_RUN_ID_MISMATCH",
+      Map("id" -> id, "runId" -> runId, "serverRunId" -> serverRunId))
 
   def streamingQueryNotFound(id: String): InvalidPlanInput =
-    InvalidPlanInput(s"Streaming query $id is not found")
+    InvalidPlanInput("CONNECT_INVALID_PLAN.STREAMING_QUERY_NOT_FOUND", Map("id" -> id))
+
+  def cannotFindCachedLocalRelation(hash: String): InvalidPlanInput =
+    InvalidPlanInput(
+      "CONNECT_INVALID_PLAN.CANNOT_FIND_CACHED_LOCAL_RELATION",
+      Map("hash" -> hash))
 }

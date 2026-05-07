@@ -427,7 +427,7 @@ trait JoinSelectionHelper extends Logging {
       getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
         (noShufflePlannedBefore &&
           getBroadcastBuildSide(join, hintOnly = false, conf).isDefined)
-    case ExtractSingleColumnNullAwareAntiJoin(_, _) => true
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) => canBroadcastBySize(j.right, conf)
     case _ => false
   }
 
@@ -560,4 +560,3 @@ trait JoinSelectionHelper extends Logging {
       conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
 }
-

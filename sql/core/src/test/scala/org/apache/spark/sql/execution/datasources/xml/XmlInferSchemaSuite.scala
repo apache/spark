@@ -38,8 +38,7 @@ import org.apache.spark.sql.types.{
 }
 
 class XmlInferSchemaSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with TestXmlData
     with XmlSchemaInferenceCaseSensitivityTests {
 

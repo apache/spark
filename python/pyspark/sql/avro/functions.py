@@ -19,7 +19,6 @@
 A collections of builtin avro functions
 """
 
-
 from typing import Dict, Optional, TYPE_CHECKING, cast
 
 from pyspark.errors import PySparkTypeError
@@ -210,7 +209,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.avro.functions tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.avro.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

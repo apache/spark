@@ -335,9 +335,11 @@ private[spark] object JettyUtils extends Logging {
       val securePort = sslOptions.createJettySslContextFactoryServer().map { factory =>
 
         // SPARK-45522: SniHostCheck defaulted to true since Jetty 10,
-        // this will affect the standalone deployment.
+        // this will affect the standalone deployment. Exposed via
+        // spark.ui.jetty.sniHostCheckEnabled so operators can enable
+        // it when stricter host checking is desired.
         val src = new SecureRequestCustomizer()
-        src.setSniHostCheck(false)
+        src.setSniHostCheck(conf.get(UI_JETTY_SNI_HOST_CHECK))
         httpConfig.addCustomizer(src)
 
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)

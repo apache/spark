@@ -56,8 +56,8 @@ from pyspark.sql.pandas.types import (
     to_arrow_schema,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -666,7 +666,7 @@ class ArrowTestsMixin:
             self.assertEqual(len(exception.args), 1)
             self.assertRegex(
                 exception.args[0],
-                "with name '7_date_t' " "to Arrow Array \\(decimal128\\(38, 18\\)\\)",
+                "with name '7_date_t' to Arrow Array \\(decimal128\\(38, 18\\)\\)",
             )
 
             # the inner exception provides us with the incorrect types
@@ -1870,6 +1870,41 @@ class ArrowTestsMixin:
                     t = df.toArrow()
                     self.assertEqual(t.num_rows, 10000)
                     self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
+
+    def test_toPandas_double_nested_array_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(ArrayType(StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_array_of_map_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_triple_nested_array_empty_outer(self):
+        # SPARK-55056: This used to trigger SIGSEGV before the upstream arrow-java fix.
+        # When the outer array is empty, the second-level ArrayWriter is never
+        # invoked, so its count stays 0. Arrow format requires ListArray offset
+        # buffer to have N+1 entries even when N=0, but getBufferSizeFor(0)
+        # returns 0 and the buffer is omitted in IPC serialization.
+        schema = StructType([StructField("data", ArrayType(ArrayType(ArrayType(StringType()))))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_nested_array_with_map_empty_outer(self):
+        schema = StructType(
+            [StructField("data", ArrayType(ArrayType(MapType(StringType(), StringType()))))]
+        )
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
 
 
 @unittest.skipIf(

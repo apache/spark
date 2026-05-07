@@ -33,7 +33,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType}
 
 class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSparkSession {
 
@@ -63,6 +63,18 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
     assert(columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
       === TTypeId.INT_TYPE)
     assert(columns.getColumns.get(1).getComment == "")
+  }
+
+  test("GeometryType and GeographyType are mapped to STRING_TYPE in ThriftServer") {
+    val field1 = StructField("geom", GeometryType(4326))
+    val field2 = StructField("geog", GeographyType(4326))
+    val tableSchema = StructType(Seq(field1, field2))
+    val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+    assert(columns.getColumnsSize == 2)
+    val geomType = columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+    assert(geomType === TTypeId.STRING_TYPE)
+    val geogType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+    assert(geogType === TTypeId.STRING_TYPE)
   }
 
   Seq(

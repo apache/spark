@@ -41,22 +41,23 @@ object StreamStreamJoinStateHelper {
       operatorId: Int,
       side: JoinSide,
       oldSchemaFilePaths: List[Path],
-      excludeAuxColumns: Boolean = true): StructType = {
+      excludeAuxColumns: Boolean = true,
+      joinStateFormatVersion: Option[Int] = None): StructType = {
     val (keySchema, valueSchema) = readKeyValueSchema(session, stateCheckpointLocation,
-      operatorId, side, oldSchemaFilePaths, excludeAuxColumns)
+      operatorId, side, oldSchemaFilePaths, excludeAuxColumns, joinStateFormatVersion)
 
     new StructType()
       .add("key", keySchema)
       .add("value", valueSchema)
   }
 
-  // Returns whether the checkpoint uses stateFormatVersion 3 which uses VCF for the join.
+  // Returns whether the checkpoint uses VCF for the join (stateFormatVersion >= 3).
   def usesVirtualColumnFamilies(
     hadoopConf: Configuration,
     stateCheckpointLocation: String,
     operatorId: Int): Boolean = {
     // If the schema exists for operatorId/partitionId/left-keyToNumValues, it is not
-    // stateFormatVersion 3.
+    // stateFormatVersion >= 3 (which uses VCF).
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
     val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
       partitionId, SymmetricHashJoinStateManager.allStateStoreNames(LeftSide).toList.head)
@@ -72,16 +73,17 @@ object StreamStreamJoinStateHelper {
       operatorId: Int,
       side: JoinSide,
       oldSchemaFilePaths: List[Path],
-      excludeAuxColumns: Boolean = true): (StructType, StructType) = {
+      excludeAuxColumns: Boolean = true,
+      joinStateFormatVersion: Option[Int] = None): (StructType, StructType) = {
 
     val newHadoopConf = session.sessionState.newHadoopConf()
     val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
-    // KeyToNumValuesType, KeyWithIndexToValueType
-    val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
 
-    val (keySchema, valueSchema) =
-      if (!usesVirtualColumnFamilies(
-        newHadoopConf, stateCheckpointLocation, operatorId)) {
+    val (keySchema, valueSchema) = joinStateFormatVersion match {
+      case Some(1) | Some(2) | None =>
+        // v1/v2: separate state stores per store type.
+        // None handles old checkpoints without operator metadata (always v1/v2).
+        val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
         val storeIdForKeyToNumValues = new StateStoreId(stateCheckpointLocation, operatorId,
           partitionId, storeNames(0))
         val providerIdForKeyToNumValues = new StateStoreProviderId(storeIdForKeyToNumValues,
@@ -92,41 +94,64 @@ object StreamStreamJoinStateHelper {
         val providerIdForKeyWithIndexToValue = new StateStoreProviderId(
           storeIdForKeyWithIndexToValue, UUID.randomUUID())
 
-        // read the key schema from the keyToNumValues store for the join keys
         val manager = new StateSchemaCompatibilityChecker(
-          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths)
+          providerIdForKeyToNumValues, newHadoopConf, oldSchemaFilePaths,
+          createSchemaDir = false)
         val kSchema = manager.readSchemaFile().head.keySchema
 
-        // read the value schema from the keyWithIndexToValue store for the values
         val manager2 = new StateSchemaCompatibilityChecker(providerIdForKeyWithIndexToValue,
-          newHadoopConf, oldSchemaFilePaths)
+          newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
         val vSchema = manager2.readSchemaFile().head.valueSchema
 
         (kSchema, vSchema)
-      } else {
+
+      case Some(3) =>
+        // v3: single state store with virtual column families
+        val storeNames = SymmetricHashJoinStateManager.allStateStoreNames(side).toList
         val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
           partitionId, StateStoreId.DEFAULT_STORE_NAME)
         val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
 
         val manager = new StateSchemaCompatibilityChecker(
-          providerId, newHadoopConf, oldSchemaFilePaths)
-        val kSchema = manager.readSchemaFile().find { schema =>
-          schema.colFamilyName == storeNames(0)
-        }.map(_.keySchema).get
+          providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
+        val schemas = manager.readSchemaFile()
 
-        val vSchema = manager.readSchemaFile().find { schema =>
-          schema.colFamilyName == storeNames(1)
-        }.map(_.valueSchema).get
+        val kSchema = schemas.find(_.colFamilyName == storeNames(0)).map(_.keySchema).get
+        val vSchema = schemas.find(_.colFamilyName == storeNames(1)).map(_.valueSchema).get
 
         (kSchema, vSchema)
-      }
+
+      case Some(4) =>
+        // v4: single state store with virtual column families, timestamp-based keys
+        val v4Names = SymmetricHashJoinStateManager.allStateStoreNamesV4(side).toList
+        val storeId = new StateStoreId(stateCheckpointLocation, operatorId,
+          partitionId, StateStoreId.DEFAULT_STORE_NAME)
+        val providerId = new StateStoreProviderId(storeId, UUID.randomUUID())
+
+        val manager = new StateSchemaCompatibilityChecker(
+          providerId, newHadoopConf, oldSchemaFilePaths, createSchemaDir = false)
+        val schemas = manager.readSchemaFile()
+
+        // In v4, the primary CF (keyWithTsToValues) stores both the key and value schemas.
+        // This differs from v3 where keyToNumValues has the key schema and
+        // keyWithIndexToValue has the value schema.
+        val primaryCF = v4Names(0)
+        val kSchema = schemas.find(_.colFamilyName == primaryCF).map(_.keySchema).get
+        val vSchema = schemas.find(_.colFamilyName == primaryCF).map(_.valueSchema).get
+
+        (kSchema, vSchema)
+
+      case Some(v) =>
+        throw new IllegalArgumentException(
+          s"Unsupported join state format version: $v")
+    }
 
     val maybeMatchedColumn = valueSchema.last
 
+    // remove internal column `matched` for format version >= 2
     if (excludeAuxColumns
       && maybeMatchedColumn.name == "matched"
       && maybeMatchedColumn.dataType == BooleanType) {
-      // remove internal column `matched` for format version 2
       (keySchema, StructType(valueSchema.dropRight(1)))
     } else {
       (keySchema, valueSchema)

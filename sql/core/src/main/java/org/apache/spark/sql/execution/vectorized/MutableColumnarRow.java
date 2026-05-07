@@ -96,6 +96,8 @@ public final class MutableColumnarRow extends InternalRow {
           row.update(i, getArray(i).copy());
         } else if (dt instanceof MapType) {
           row.update(i, getMap(i).copy());
+        } else if (dt instanceof VariantType) {
+          row.update(i, getVariant(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -217,6 +219,8 @@ public final class MutableColumnarRow extends InternalRow {
       return getStruct(ordinal, structType.fields().length);
     } else if (dataType instanceof MapType) {
       return getMap(ordinal);
+    } else if (dataType instanceof VariantType) {
+      return getVariant(ordinal);
     } else {
       throw new SparkUnsupportedOperationException(
         "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dataType.toString()));

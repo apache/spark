@@ -39,7 +39,8 @@ import org.apache.spark.sql.types._
 private[sql] class ProtobufSerializer(
     rootCatalystType: DataType,
     rootDescriptor: Descriptor,
-    nullable: Boolean)
+    nullable: Boolean,
+    fullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty)
     extends Logging {
 
   def serialize(catalystData: Any): Any = {
@@ -54,7 +55,8 @@ private[sql] class ProtobufSerializer(
       try {
         rootCatalystType match {
           case st: StructType =>
-            newStructConverter(st, rootDescriptor, Nil, Nil).asInstanceOf[Any => Any]
+            newStructConverter(st, rootDescriptor, Nil, Nil, fullNamesToExtensions)
+              .asInstanceOf[Any => Any]
         }
       } catch {
         case ise: AnalysisException =>
@@ -80,7 +82,8 @@ private[sql] class ProtobufSerializer(
       catalystType: DataType,
       fieldDescriptor: FieldDescriptor,
       catalystPath: Seq[String],
-      protoPath: Seq[String]): Converter = {
+      protoPath: Seq[String],
+      protoFullNamesToExtensions: Map[String, Seq[FieldDescriptor]]): Converter = {
     (catalystType, fieldDescriptor.getJavaType) match {
       case (NullType, _) =>
         (getter, ordinal) => null
@@ -157,7 +160,12 @@ private[sql] class ProtobufSerializer(
 
       case (ArrayType(et, containsNull), _) =>
         val elementConverter =
-          newConverter(et, fieldDescriptor, catalystPath :+ "element", protoPath :+ "element")
+          newConverter(
+            et,
+            fieldDescriptor,
+            catalystPath :+ "element",
+            protoPath :+ "element",
+            protoFullNamesToExtensions)
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
           val len = arrayData.numElements()
@@ -224,7 +232,12 @@ private[sql] class ProtobufSerializer(
 
       case (st: StructType, MESSAGE) =>
         val structConverter =
-          newStructConverter(st, fieldDescriptor.getMessageType, catalystPath, protoPath)
+          newStructConverter(
+            st,
+            fieldDescriptor.getMessageType,
+            catalystPath,
+            protoPath,
+            protoFullNamesToExtensions)
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
@@ -240,9 +253,19 @@ private[sql] class ProtobufSerializer(
           }
         }
 
-        val keyConverter = newConverter(kt, keyField, catalystPath :+ "key", protoPath :+ "key")
+        val keyConverter = newConverter(
+          kt,
+          keyField,
+          catalystPath :+ "key",
+          protoPath :+ "key",
+          protoFullNamesToExtensions)
         val valueConverter =
-          newConverter(vt, valueField, catalystPath :+ "value", protoPath :+ "value")
+          newConverter(
+            vt,
+            valueField,
+            catalystPath :+ "value",
+            protoPath :+ "value",
+            protoFullNamesToExtensions)
 
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
@@ -301,10 +324,19 @@ private[sql] class ProtobufSerializer(
       catalystStruct: StructType,
       descriptor: Descriptor,
       catalystPath: Seq[String],
-      protoPath: Seq[String]): InternalRow => DynamicMessage = {
+      protoPath: Seq[String],
+      protoFullNamesToExtensions: Map[String, Seq[FieldDescriptor]])
+      : InternalRow => DynamicMessage = {
 
+    val protoExtensionFields =
+      protoFullNamesToExtensions.getOrElse(descriptor.getFullName, Seq.empty)
     val protoSchemaHelper =
-      new ProtobufUtils.ProtoSchemaHelper(descriptor, catalystStruct, protoPath, catalystPath)
+      new ProtobufUtils.ProtoSchemaHelper(
+        descriptor,
+        catalystStruct,
+        protoPath,
+        catalystPath,
+        protoExtensionFields)
 
     protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
     protoSchemaHelper.validateNoExtraRequiredProtoFields()
@@ -315,7 +347,8 @@ private[sql] class ProtobufSerializer(
           catalystField.dataType,
           protoField,
           catalystPath :+ catalystField.name,
-          protoPath :+ protoField.getName)
+          protoPath :+ protoField.getName,
+          protoFullNamesToExtensions)
         (protoField, converter)
       }
       .toArray

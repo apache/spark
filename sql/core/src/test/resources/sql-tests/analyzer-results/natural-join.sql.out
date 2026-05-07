@@ -678,3 +678,45 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x, k#x, v4#x]
                +- Project [k#x, v4#x]
                   +- SubqueryAlias nt4
                      +- LocalRelation [k#x, v4#x]
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS ID) t1 NATURAL JOIN (SELECT 1 AS id) t2
+-- !query analysis
+Project [ID#x]
++- Project [ID#x]
+   +- Join Inner, (ID#x = id#x)
+      :- SubqueryAlias t1
+      :  +- Project [1 AS ID#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias t2
+         +- Project [1 AS id#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS c1, 2 AS c1, 3 AS c2) NATURAL JOIN (SELECT 1 AS c1, 2 AS c1, 3 AS c2)
+-- !query analysis
+Project [c1#x, c1#x, c2#x, c1#x, c1#x]
++- Project [c1#x, c1#x, c2#x, c1#x, c1#x]
+   +- Join Inner, (((c1#x = c1#x) AND (c1#x = c1#x)) AND (c2#x = c2#x))
+      :- SubqueryAlias __auto_generated_subquery_name
+      :  +- Project [1 AS c1#x, 2 AS c1#x, 3 AS c2#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- Project [1 AS c1#x, 2 AS c1#x, 3 AS c2#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS c1, 2 AS c1, 3 AS c2) NATURAL JOIN (SELECT 1 AS c1, 3 AS c2)
+-- !query analysis
+Project [c1#x, c2#x, c1#x]
++- Project [c1#x, c2#x, c1#x]
+   +- Join Inner, ((c1#x = c1#x) AND (c2#x = c2#x))
+      :- SubqueryAlias __auto_generated_subquery_name
+      :  +- Project [1 AS c1#x, 2 AS c1#x, 3 AS c2#x]
+      :     +- OneRowRelation
+      +- SubqueryAlias __auto_generated_subquery_name
+         +- Project [1 AS c1#x, 3 AS c2#x]
+            +- OneRowRelation

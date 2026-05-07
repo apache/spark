@@ -57,15 +57,15 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
 
   test("catalog and identifier") {
     Seq(
-      // Session catalog with single-part namespace
       ("tbl", sessionCatalog, Seq("default"), "tbl"),
       ("db.tbl", sessionCatalog, Seq("db"), "tbl"),
       (s"$globalTempDB.tbl", sessionCatalog, Seq(globalTempDB), "tbl"),
+      (s"$globalTempDB.ns1.ns2.tbl", sessionCatalog, Seq(globalTempDB, "ns1", "ns2"), "tbl"),
+      ("ns1.ns2.tbl", sessionCatalog, Seq("ns1", "ns2"), "tbl"),
       ("`db.tbl`", sessionCatalog, Seq("default"), "db.tbl"),
       ("parquet.`file:/tmp/db.tbl`", sessionCatalog, Seq("parquet"), "file:/tmp/db.tbl"),
       ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", sessionCatalog,
         Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json"),
-      // Non-session catalogs (no namespace restriction)
       ("prod.func", catalogs("prod"), Seq.empty, "func"),
       ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
       ("test.db.tbl", catalogs("test"), Seq("db"), "tbl"),
@@ -76,21 +76,6 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
             catalog shouldEqual expectedCatalog
             ident shouldEqual Identifier.of(namespace.toArray, name)
         }
-    }
-  }
-
-  test("session catalog requires single-part namespace") {
-    // Multi-part namespaces are not allowed for session catalog
-    Seq(
-      "ns1.ns2.tbl",                  // two-part namespace
-      s"$globalTempDB.ns1.ns2.tbl"    // three-part namespace
-    ).foreach { sql =>
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        parseMultipartIdentifier(sql) match {
-          case CatalogAndIdentifier(_, _) =>
-        }
-      }
-      assert(e.getCondition === "REQUIRES_SINGLE_PART_NAMESPACE")
     }
   }
 

@@ -17,7 +17,6 @@
 import contextlib
 import io
 import os
-import platform
 import tempfile
 import unittest
 import logging
@@ -28,7 +27,7 @@ from decimal import Decimal
 from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.profiler import has_memory_profiler
+from pyspark.memory_profiler_ext import has_memory_profiler
 from pyspark.sql.datasource import (
     CaseInsensitiveDict,
     DataSource,
@@ -59,6 +58,8 @@ from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     SPARK_HOME,
     ReusedSQLTestCase,
+)
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
@@ -70,8 +71,7 @@ class BasePythonDataSourceTestsMixin:
     spark: SparkSession
 
     def test_basic_data_source_class(self):
-        class MyDataSource(DataSource):
-            ...
+        class MyDataSource(DataSource): ...
 
         options = dict(a=1, b=2)
         ds = MyDataSource(options=options)
@@ -87,7 +87,7 @@ class BasePythonDataSourceTestsMixin:
     def test_basic_data_source_reader_class(self):
         class MyDataSourceReader(DataSourceReader):
             def read(self, partition):
-                yield None,
+                yield (None,)
 
         reader = MyDataSourceReader()
         self.assertEqual(list(reader.read(None)), [(None,)])
@@ -160,7 +160,7 @@ class BasePythonDataSourceTestsMixin:
                 if partition_func is not None:
                     return partition_func()
                 else:
-                    raise NotImplementedError
+                    return [InputPartition(None)]
 
             def read(self, partition):
                 return read_func(self.schema, partition)
@@ -690,6 +690,40 @@ class BasePythonDataSourceTestsMixin:
         ):
             self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
 
+        # SPARK-55583: Validate Arrow schema types, not just column count/names.
+        # The data source declares "key string, value string" but read() yields
+        # a RecordBatch with (int32, string), causing an Arrow schema type mismatch.
+        class MismatchedTypeDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrowbatch_type_mismatch"
+
+            def schema(self):
+                return "key string, value string"
+
+            def reader(self, schema: str):
+                return MismatchedTypeReader()
+
+        class MismatchedTypeReader(DataSourceReader):
+            def read(self, partition):
+                keys = pa.array([1, 2], type=pa.int32())
+                values = pa.array(["a", "b"], type=pa.string())
+                batch = pa.RecordBatch.from_arrays(
+                    [keys, values],
+                    schema=pa.schema([("key", pa.int32()), ("value", pa.string())]),
+                )
+                yield batch
+
+            def partitions(self):
+                return [InputPartition(0)]
+
+        self.spark.dataSource.register(MismatchedTypeDataSource)
+        with self.assertRaisesRegex(
+            PythonException,
+            "DATA_SOURCE_RETURN_SCHEMA_MISMATCH",
+        ):
+            self.spark.read.format("arrowbatch_type_mismatch").load().show()
+
     def test_arrow_batch_sink(self):
         class TestDataSource(DataSource):
             @classmethod
@@ -789,9 +823,6 @@ class BasePythonDataSourceTestsMixin:
         rounded = df.select("d").first().d
         self.assertEqual(rounded, Decimal("1.233999999999999986"))
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_data_source_segfault(self):
         import ctypes
 
@@ -799,8 +830,9 @@ class BasePythonDataSourceTestsMixin:
             (True, "Segmentation fault"),
             (False, "Consider setting .* for the better Python traceback."),
         ]:
-            with self.subTest(enabled=enabled), self.sql_conf(
-                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            with (
+                self.subTest(enabled=enabled),
+                self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}),
             ):
                 with self.subTest(worker="pyspark.sql.worker.create_data_source"):
 
@@ -859,7 +891,7 @@ class BasePythonDataSourceTestsMixin:
                     class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
-                            yield "x",
+                            yield ("x",)
 
                     self.spark.dataSource.register(TestDataSource)
 
@@ -883,10 +915,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
                 with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
 
@@ -907,10 +938,9 @@ class BasePythonDataSourceTestsMixin:
 
                     self.spark.dataSource.register(TestDataSource)
 
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
-                            "test_table"
-                        )
+                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
+                        with self.assertRaisesRegex(Exception, expected):
+                            self.spark.range(10).write.format("test").mode("append").save(d)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_with_logging(self):
@@ -1004,7 +1034,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1115,7 +1145,7 @@ class BasePythonDataSourceTestsMixin:
                             {"class_name": "TestJsonReader", "func_name": "partitions"},
                         ),
                         (
-                            "TestJsonReader.read: None",
+                            "TestJsonReader.read: InputPartition(value=None)",
                             {"class_name": "TestJsonReader", "func_name": "read"},
                         ),
                     ]
@@ -1201,8 +1231,20 @@ class BasePythonDataSourceTestsMixin:
 
                 logs = self.spark.tvf.python_worker_logs()
 
+                # We could get either 1 or 2 "TestJsonWriter.write: abort test" logs because
+                # the operation is time sensitive. When the first partition gets aborted,
+                # the executor will cancel the rest of the tasks. Whether we are able to get
+                # the second log depends on whether the second partition starts before the
+                # cancellation. When we use simple worker, the second log is often missing
+                # because the spawn overhead is large.
+                non_abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                    "msg != 'TestJsonWriter.write: abort test'"
+                )
+                abort_logs = logs.select("level", "msg", "context", "logger").filter(
+                    "msg == 'TestJsonWriter.write: abort test'"
+                )
                 assertDataFrameEqual(
-                    logs.select("level", "msg", "context", "logger"),
+                    non_abort_logs,
                     [
                         Row(
                             level="WARNING",
@@ -1248,18 +1290,21 @@ class BasePythonDataSourceTestsMixin:
                                 {"class_name": "TestJsonDataSource", "func_name": "writer"},
                             ),
                             (
-                                "TestJsonWriter.write: abort test",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
-                                "TestJsonWriter.write: abort test",
-                                {"class_name": "TestJsonWriter", "func_name": "write"},
-                            ),
-                            (
                                 "TestJsonWriter.abort",
                                 {"class_name": "TestJsonWriter", "func_name": "abort"},
                             ),
                         ]
+                    ],
+                )
+                assertDataFrameEqual(
+                    abort_logs.dropDuplicates(["msg"]),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg="TestJsonWriter.write: abort test",
+                            context={"class_name": "TestJsonWriter", "func_name": "write"},
+                            logger="test_datasource_writer",
+                        )
                     ],
                 )
 
@@ -1305,8 +1350,25 @@ class BasePythonDataSourceTestsMixin:
             self.assertEqual(stdout, "")
 
 
-class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):
-    ...
+class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase): ...
+
+
+class PythonDataSourceTestsWithSimpleWorker(PythonDataSourceTests):
+    @classmethod
+    def conf(self):
+        return super().conf().set("spark.python.use.daemon", "false")
+
+    # Simple Worker is super slow because there's no reuse of workers
+    # so we skip some tests that create many workers
+
+    def test_filter_type(self):
+        pass
+
+    def test_unsupported_filter(self):
+        pass
+
+    def test_filter_value_type(self):
+        pass
 
 
 if __name__ == "__main__":

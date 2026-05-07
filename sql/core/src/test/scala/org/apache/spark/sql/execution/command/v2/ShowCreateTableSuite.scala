@@ -52,7 +52,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING)",
+        "b STRING COLLATE UTF8_BINARY)",
         defaultUsing,
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
@@ -135,7 +135,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING,",
+        "b STRING COLLATE UTF8_BINARY,",
         "ts TIMESTAMP)",
         defaultUsing,
         "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
@@ -174,7 +174,8 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(
         showDDL === Array(
           s"CREATE TABLE $fullName (",
-          "a STRUCT<b: BIGINT COMMENT 'comment', c: STRUCT<d: STRING NOT NULL, e: STRING>>)",
+          "a STRUCT<b: BIGINT COMMENT 'comment'," +
+            " c: STRUCT<d: STRING COLLATE UTF8_BINARY NOT NULL, e: STRING COLLATE UTF8_BINARY>>)",
           "USING parquet",
           "COMMENT 'This is a comment'"
         )
@@ -210,8 +211,8 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         val expectedDDLPrefix = Array(
           s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
           "a INT NOT NULL,",
-          "b STRING,",
-          "c STRING,",
+          "b STRING COLLATE UTF8_BINARY,",
+          "c STRING COLLATE UTF8_BINARY,",
           "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
           "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
           s"CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",

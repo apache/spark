@@ -25,12 +25,8 @@ from pyspark.errors import PythonException
 from pyspark.sql import Row, functions as sf
 from pyspark.sql.functions import array, col, explode, lit, mean, stddev
 from pyspark.sql.window import Window
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -146,14 +142,13 @@ class ApplyInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.Table, but is tuple",
+                r"pyarrow\.Table.*\btuple\b",
             ):
                 df.groupby("id").applyInArrow(stats, schema="id long, m double").collect()
 
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.RecordBatch, but is "
-                + "tuple",
+                r"iterator of pyarrow\.RecordBatch.*iterator of tuple",
             ):
                 df.groupby("id").applyInArrow(stats_iter, schema="id long, m double").collect()
 
@@ -175,7 +170,8 @@ class ApplyInArrowTestsMixin:
                     for func_variation in function_variations(lambda table: table):
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             df.groupby("id").applyInArrow(func_variation, schema=schema).collect()
 
@@ -200,7 +196,8 @@ class ApplyInArrowTestsMixin:
                         for func_variation in function_variations(lambda table: table):
                             with self.assertRaisesRegex(
                                 PythonException,
-                                f"Columns do not match in their data type: {expected}",
+                                "Column types of the returned data do not match specified schema. "
+                                f"Mismatch: {expected}",
                             ):
                                 df.groupby("id").applyInArrow(
                                     func_variation, schema=schema
@@ -223,7 +220,7 @@ class ApplyInArrowTestsMixin:
             for func_variation in function_variations(stats):
                 with self.assertRaisesRegex(
                     PythonException,
-                    "Column names of the returned pyarrow.Table do not match specified schema. "
+                    "Column names of the returned data do not match specified schema. "
                     "Missing: m. Unexpected: v, v2.",
                 ):
                     # stats returns three columns while here we set schema with two columns
@@ -264,8 +261,7 @@ class ApplyInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m.",
+                "Column names of the returned data do not match specified schema. Missing: m.",
             ):
                 # stats returns one column for even keys while here we set schema with two columns
                 df.groupby("id").applyInArrow(odd_means, schema="id long, m double").collect()
@@ -423,7 +419,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )
@@ -463,7 +459,7 @@ class ApplyInArrowTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"arrow grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"arrow grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_arrow_grouped_map",
                     )

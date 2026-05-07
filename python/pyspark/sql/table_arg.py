@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 from pyspark.sql.utils import dispatch_table_arg_method
 
-
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 

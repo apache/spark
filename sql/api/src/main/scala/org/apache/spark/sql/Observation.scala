@@ -25,6 +25,7 @@ import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.MapHasAsJava
 import scala.util.Try
 
+import org.apache.spark.SparkException
 import org.apache.spark.util.SparkThreadUtils
 
 /**
@@ -127,20 +128,16 @@ class Observation(val name: String) {
    * Get the observed metrics as a Row.
    *
    * @return
-   *   the observed metrics as a `Row`, or None if the metrics are not available.
-   */
-  private[sql] def getRowOrEmpty: Option[Row] = {
-    future.value.flatMap(_.toOption)
-  }
-
-  /**
-   * Get the observed metrics as a Row.
-   *
-   * @return
    *   the observed metrics as a `Row`.
    */
   private[sql] def getRow: Row = {
-    SparkThreadUtils.awaitResult(future, Duration.Inf)
+    try {
+      SparkThreadUtils.awaitResult(future, Duration.Inf)
+    } catch {
+      case e: SparkException =>
+        // Throw the root cause since awaitResult wraps it in a SparkException.
+        throw e.getCause
+    }
   }
 }
 

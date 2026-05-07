@@ -47,7 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    kubernetesClient: KubernetesClient,
+    private[k8s] val kubernetesClient: KubernetesClient,
     executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,
@@ -67,13 +67,21 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val minRegisteredExecutors = initialExecutors * minRegisteredRatio
 
+  private val appId: String =
+    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
+
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   private val PATCH_CONTEXT = PatchContext.of(PatchType.STRATEGIC_MERGE)
 
-  // Allow removeExecutor to be accessible by ExecutorPodsLifecycleManager
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     removeExecutor(executorId, reason)
+    podAllocator match {
+      case allocator: ExecutorPodsAllocator if reason.message.contains("OOM") =>
+        logWarning("OOM is detected.")
+        allocator.setRecoveryMode()
+      case _ => // no-op
+    }
   }
 
   private def setUpExecutorConfigMap(driverPod: Option[Pod]): Unit = {
@@ -93,13 +101,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
   /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
-   * the locally-generated ID.
+   * a generated Kubernetes app ID.
    *
    * @return The application ID
    */
-  override def applicationId(): String = {
-    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
-  }
+  override def applicationId(): String = appId
 
   override def start(): Unit = {
     super.start()

@@ -25,13 +25,15 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
-import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD, SQLPartitioningAwareUnionRDD}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD, SQLPartitioningAwareUnionRDD, UnionPartition, UnionRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -42,6 +44,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode
     with CodegenSupport
+    with SafeForKWayMerge
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
@@ -179,12 +182,18 @@ trait GeneratePredicateHelper extends PredicateHelper {
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
+    // NOTE: `FilterExec.doConsume`'s CSE branch inlines the same interleaving so it can
+    // emit CSE state precomputes between the IsNotNull checks and each otherPred body.
+    // Any change to this algorithm must be mirrored there (and vice versa).
     // TODO: revisit this. We can consider reordering predicates as well.
     val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
     val extraIsNotNullAttrs = mutable.Set[Attribute]()
     val generated = otherPreds.map { c =>
       val nullChecks = c.references.map { r =>
-        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        val idx = notNullPreds.indexWhere {
+          case IsNotNull(n) => n.semanticEquals(r)
+          case _ => false
+        }
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
           generatedIsNotNullChecks(idx) = true
           // Use the child's output. The nullability is what the child produced.
@@ -222,7 +231,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
 
 /** Physical plan for Filter. */
 case class FilterExec(condition: Expression, child: SparkPlan)
-  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper {
+  extends UnaryExecNode with CodegenSupport with GeneratePredicateHelper with SafeForKWayMerge {
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
@@ -253,8 +262,130 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    val predicateCode = generatePredicateCode(
-      ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes)
+    // Apply CSE to otherPreds, mirroring the non-CSE branch's ordering so we preserve
+    // short-circuit semantics. The non-CSE branch lives in `generatePredicateCode`
+    // above; any future change to that algorithm should be reflected here (and vice
+    // versa) -- the two paths must stay in lockstep on notNullPreds/otherPreds
+    // interleaving. Three invariants:
+    //   (a) Between otherPreds: emit each common subexpression's precompute *just
+    //       before* the first otherPred that references it, not at the top of the
+    //       `do { }` block. A later otherPred still reuses the cached value -- it just
+    //       doesn't pay the cost for rows an earlier otherPred rejected. See #55471.
+    //   (b) Between notNullPreds and otherPreds: `notNullPreds` may include
+    //       `IsNotNull(expensive_or_throwing)` inferred by `InferFiltersFromConstraints`,
+    //       so emitting all notNullPreds up front would evaluate the inner expression
+    //       on rows an earlier-ordered otherPred would have rejected -- same class of
+    //       bug as (a) but across the notNullPreds / otherPreds boundary. Per-otherPred,
+    //       for each reference `r`: if `notNullPreds` has a direct `IsNotNull(r)`, emit
+    //       it; else if `r` is covered by `notNullAttributes` through some complex
+    //       `IsNotNull(expr(r))` in `notNullPreds`, emit a synthetic `IsNotNull(r)` so
+    //       the tightened-output binding below is safe without evaluating the
+    //       throw-capable inner expression. Then emit the otherPred's CSE precompute
+    //       and body. Remaining notNullPreds (including complex-child forms whose refs
+    //       got synthetic coverage) emit after all otherPreds.
+    //   (c) CSE state materialization: binding otherPreds (and the CSE analysis)
+    //       against `output` (with `notNullAttributes` tightened to non-nullable)
+    //       requires that the matching IsNotNull has already short-circuited -- else
+    //       CSE's `value_X = isNull ? default : compute` materializes `null` into
+    //       `value_X` for non-primitive types, which downstream accessors may NPE on
+    //       without consulting `isNull_X`. The (b) interleaving gives us that ordering
+    //       for free, since the IsNotNull check fires before the CSE precompute keyed
+    //       off the same reference.
+    val (prologueCode, predicateCode) =
+      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+        // Pre-evaluate input variables before CSE analysis: CSE clears
+        // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
+        // fails when otherPreds reference the same input columns that CSE already
+        // consumed.
+        val otherPredInputAttrs = AttributeSet(otherPreds.flatMap(_.references))
+        val inputVarsEvalCode = evaluateRequiredVariables(
+          child.output, input, otherPredInputAttrs)
+
+        val boundOtherPreds = otherPreds.map(BindReferences.bindReference(_, output))
+        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundOtherPreds)
+
+        // Group CSE states by the index of the first otherPred that references them.
+        // `evaluateSubExprEliminationState` recursively emits each state's children
+        // before the state itself and marks emitted code as `EmptyBlock`, so emitting
+        // a later group whose states depend on an earlier group's states is a no-op
+        // for the already-emitted dependencies.
+        val statesByFirstUse: Map[Int, Seq[SubExprEliminationState]] =
+          subExprs.states.toSeq.groupBy { case (exprEq, _) =>
+            boundOtherPreds.indexWhere(_.exists(e => ExpressionEquals(e) == exprEq))
+          }.map { case (idx, kvs) => idx -> kvs.map(_._2) }
+
+        // Emit an IsNotNull check, binding against child.output so the inner expression
+        // is evaluated with its original nullability (the tightened-nullability `output`
+        // is only appropriate inside otherPreds, where the required checks have fired).
+        // The `bound.nullable` gate below is defensive -- `IsNotNull` always produces a
+        // non-nullable Boolean, so this branch is structurally unreachable today; it
+        // mirrors the non-CSE helper's shape to keep future refactors safe.
+        def genNotNull(pred: Expression): String = {
+          val bound = BindReferences.bindReference(pred, child.output)
+          val evaluated = evaluateRequiredVariables(child.output, input, pred.references)
+          val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+          val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
+          s"""
+             |$evaluated
+             |${ev.code}
+             |if (${nullCheck}!${ev.value}) continue;
+           """.stripMargin
+        }
+
+        val generatedIsNotNullChecks = new Array[Boolean](notNullPreds.length)
+        val extraIsNotNullAttrs = mutable.Set[Attribute]()
+
+        val predCode: String = {
+          val parts = new StringBuilder
+          ctx.withSubExprEliminationExprs(subExprs.states) {
+            otherPreds.zip(boundOtherPreds).zipWithIndex.foreach {
+              case ((orig, bound), idx) =>
+                orig.references.foreach { r =>
+                  val ni = notNullPreds.indexWhere {
+                    case IsNotNull(c) => c.semanticEquals(r)
+                    case _ => false
+                  }
+                  if (ni != -1 && !generatedIsNotNullChecks(ni)) {
+                    generatedIsNotNullChecks(ni) = true
+                    parts.append(genNotNull(notNullPreds(ni)))
+                    parts.append('\n')
+                  } else if (notNullAttributes.contains(r.exprId) &&
+                      !extraIsNotNullAttrs.contains(r)) {
+                    extraIsNotNullAttrs += r
+                    parts.append(genNotNull(IsNotNull(r)))
+                    parts.append('\n')
+                  }
+                }
+                statesByFirstUse.get(idx).foreach { states =>
+                  parts.append(ctx.evaluateSubExprEliminationState(states))
+                  parts.append('\n')
+                }
+                val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
+                val nullCheck = if (bound.nullable) s"${ev.isNull} || " else ""
+                parts.append(ev.code.toString)
+                parts.append(s"\nif (${nullCheck}!${ev.value}) continue;\n")
+            }
+            Seq.empty
+          }
+          parts.toString
+        }
+
+        // Leftover notNullPreds: any IsNotNull that no otherPred's reference matched by
+        // `semanticEquals`. These run after all otherPreds to match the non-CSE ordering.
+        // Note: a complex `IsNotNull(expr(r))` can still land here even when the (b) path
+        // already emitted a synthetic `IsNotNull(r)` ahead of some otherPred -- the
+        // synthetic check only guards the tightened-output binding; the inner expression
+        // itself may still need its null check (e.g. under non-ANSI `cast(s as int)` can
+        // return null for unparseable strings, so we must filter the resulting row).
+        val leftoverNotNull = notNullPreds.zipWithIndex.collect {
+          case (p, i) if !generatedIsNotNullChecks(i) => genNotNull(p)
+        }.mkString("\n")
+
+        (inputVarsEvalCode, predCode + "\n" + leftoverNotNull)
+      } else {
+        ("", generatePredicateCode(
+          ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes))
+      }
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
@@ -268,6 +399,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
+       |  $prologueCode
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
@@ -318,8 +450,11 @@ case class SampleExec(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
+    seed: Option[Long],
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+
+  val resolvedSeed: Long = seed.getOrElse((math.random() * 1000).toLong)
+
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -335,9 +470,9 @@ case class SampleExec(
         child.execute(),
         new PoissonSampler[InternalRow](upperBound - lowerBound, useGapSamplingIfPossible = false),
         preservesPartitioning = true,
-        seed)
+        resolvedSeed)
     } else {
-      child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
+      child.execute().randomSampleWithRange(lowerBound, upperBound, resolvedSeed)
     }
   }
 
@@ -371,10 +506,10 @@ case class SampleExec(
             s"""
               | private void $initSampler() {
               |   $v = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
-              |   java.util.Random random = new java.util.Random(${seed}L);
+              |   java.util.Random random = new java.util.Random(${resolvedSeed}L);
               |   long randomSeed = random.nextLong();
               |   int loopCount = 0;
-              |   while (loopCount < partitionIndex) {
+              |   while (loopCount < ${ctx.currentPartitionIndexVar}) {
               |     randomSeed = random.nextLong();
               |     loopCount += 1;
               |   }
@@ -397,7 +532,7 @@ case class SampleExec(
       val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampler",
         v => s"""
           | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
-          | $v.setSeed(${seed}L + partitionIndex);
+          | $v.setSeed(${resolvedSeed}L + ${ctx.currentPartitionIndexVar});
          """.stripMargin.trim)
 
       s"""
@@ -494,9 +629,10 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // The default size of a batch, which must be positive integer
     val batchSize = 1000
 
-    val initRangeFuncName = ctx.addNewFunction("initRange",
+    val initRangeName = ctx.freshName("initRange")
+    val initRangeFuncName = ctx.addNewFunction(initRangeName,
       s"""
-        | private void initRange(int idx) {
+        | private void $initRangeName(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
         |   $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
         |   $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
@@ -584,7 +720,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   $initRangeFuncName(partitionIndex);
+      |   $initRangeFuncName(${ctx.currentPartitionIndexVar});
       | }
       |
       | while ($loopCondition) {
@@ -687,7 +823,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
  * If we change how this is implemented physically, we'd need to update
  * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
-case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
+case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSupport {
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] = {
     children.map(_.output).transpose.map { attrs =>
@@ -765,6 +901,207 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
     }
   }
 
+  // `WidenSetOperationTypes` inserts a `Project(Cast)` above each child whose
+  // dataType differs from the widened set type, so on the codegen path
+  // `src.dataType == tgt.dataType` holds. The Alias only remaps each child
+  // attribute onto the union's output exprId/name/metadata. Mismatched cases
+  // are gated upstream by `allChildOutputDataTypesMatch`, so the assert is a
+  // defensive guard.
+  @transient private lazy val perChildProjections: IndexedSeq[Seq[NamedExpression]] =
+    children.toIndexedSeq.map { child =>
+      child.output.zip(output).map { case (src, tgt) =>
+        assert(src.dataType == tgt.dataType,
+          s"UnionExec child output dataType ${src.dataType} does not match " +
+            s"union output dataType ${tgt.dataType}; supportCodegen should " +
+            "have returned false via the 'type-mismatch' reason.")
+        Alias(src, tgt.name)(
+          exprId = tgt.exprId,
+          qualifier = tgt.qualifier,
+          explicitMetadata = Some(tgt.metadata))
+      }
+    }
+
+  // True iff every child output dataType matches the corresponding union
+  // output dataType, including all nested nullabilities.
+  // `Union.allChildrenCompatible` ignores nested nullability, so children
+  // differing only there bypass `WidenSetOperationTypes`; `UnionExec.output`
+  // then merges those flags via `StructType.unionLikeMerge`, leaving src/tgt
+  // mismatched.
+  @transient private lazy val allChildOutputDataTypesMatch: Boolean =
+    children.forall { c =>
+      c.output.zip(output).forall { case (src, tgt) => src.dataType == tgt.dataType }
+    }
+
+  // Memoized: `supportCodegen` is called multiple times during planning.
+  @transient private lazy val hasAnyPartitionIndexDependentDescendant: Boolean =
+    children.exists(UnionExec.hasPartitionIndexDependentCodegen)
+
+  // Memoized: consulted by `supportCodegen` (called multiple times by
+  // `CollapseCodegenStages`) and by `metrics`. Conf and children are stable
+  // for a given UnionExec instance; cross-plan staleness is impossible since
+  // UnionExec is a case class and `withNewChildren` produces a fresh instance.
+  @transient private lazy val supportCodegenFailureReason: Option[String] = {
+    if (!conf.getConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED)) {
+      Some("union-codegen-disabled")
+    } else if (!outputPartitioning.isInstanceOf[UnknownPartitioning]) {
+      Some("partitioning-aware")
+    } else if (children.exists(_.exists(_.isInstanceOf[UnionExec]))) {
+      Some("nested-union")
+    } else if (children.exists(_.exists(UnionExec.isKnownMultiInputRDDCodegen))) {
+      Some("multi-rdd-child")
+    } else if (hasAnyPartitionIndexDependentDescendant) {
+      Some("partition-index-dependent-child")
+    } else if (children.size > conf.getConf(SQLConf.WHOLESTAGE_UNION_MAX_CHILDREN)) {
+      Some("max-children-exceeded")
+    } else if (supportsColumnar) {
+      Some("columnar")
+    } else if (!allChildOutputDataTypesMatch) {
+      Some("type-mismatch")
+    } else {
+      None
+    }
+  }
+
+  override def supportCodegen: Boolean = {
+    val reason = supportCodegenFailureReason
+    if (reason.isEmpty) true
+    else {
+      logDebug(log"UnionExec codegen skipped: " +
+        log"reason=${MDC(LogKeys.REASON, reason.get)}, " +
+        log"numChildren=${MDC(LogKeys.NUM_CHILDREN, children.size)}\n" +
+        log"${MDC(LogKeys.TREE_NODE, treeString)}")
+      false
+    }
+  }
+
+  // Registered only when fusion will actually run, so plans that fall back
+  // to `doExecute` (which never updates the metric) do not surface a
+  // 0-valued row count in the SQL UI. `doConsume` is the sole incrementer.
+  override lazy val metrics: Map[String, SQLMetric] =
+    if (supportCodegenFailureReason.isEmpty) {
+      Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    } else {
+      Map.empty
+    }
+
+  // Builds a plain `UnionRDD` directly (not `SparkContext.union`) to preserve
+  // a 1:1 partition-to-child mapping via `UnionPartition.parentRddIndex`.
+  // The `require` below is a backstop: any multi-RDD `CodegenSupport`
+  // operator missing from `isKnownMultiInputRDDCodegen` will trip here
+  // instead of falling back gracefully.
+  @transient private lazy val unionedInputRDD: RDD[InternalRow] = {
+    val childRDDs: Seq[RDD[InternalRow]] = children.map { c =>
+      val cs = c.asInstanceOf[CodegenSupport]
+      val rdds = cs.inputRDDs()
+      require(rdds.size == 1,
+        s"UnionExec.inputRDDs: child ${c.nodeName} returned ${rdds.size} RDDs")
+      rdds.head
+    }
+    new UnionRDD(sparkContext, childRDDs)
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(unionedInputRDD)
+
+  // Driver-side cursor written by `doProduce` and read by `doConsume` during
+  // single-threaded code emission; resets to -1 once emission completes.
+  @transient private var currentEmittingChild: Int = -1
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    // For each partition of the unioned RDD, record its owning child and its
+    // index within that child's RDD. Read both fields directly off the
+    // `UnionPartition` so the lookup arrays do not assume `UnionRDD` lays
+    // partitions out in child order.
+    val (partitionToChild, partitionToLocalIdx) =
+      unionedInputRDD.partitions.map {
+        case up: UnionPartition[_] => (up.parentRddIndex, up.parentPartition.index)
+        case other =>
+          throw SparkException.internalError(
+            s"UnionExec: Unexpected partition type ${other.getClass.getName}")
+      }.unzip
+    val p2cRef = ctx.addReferenceObj("partitionToChild", partitionToChild)
+    val p2lRef = ctx.addReferenceObj("partitionToLocalIdx", partitionToLocalIdx)
+    val childIndexVar = ctx.freshName("unionChildIdx")
+
+    // Each child's produce output is wrapped in its own helper method. The
+    // outer `switch` in `doProduce`'s return value dispatches to the helper.
+    // Without this, the fused method's bytecode grows linearly with the
+    // number of children and quickly exceeds HotSpot's per-method limit,
+    // forcing the whole stage to run interpreted.
+    //
+    // `partitionIndex` is passed as a parameter (shadowing the superclass
+    // field) rather than read from the enclosing scope. `addNewFunction` may
+    // spill helpers into a nested class when the outer class fills up, and a
+    // nested class cannot access the protected
+    // `BufferedRowIterator.partitionIndex` field. Using the parameter name
+    // `partitionIndex` keeps any child-emitted reference to that identifier
+    // resolving locally.
+    val savedPartIdxVar = ctx.currentPartitionIndexVar
+    val cases = try {
+      children.zipWithIndex.map { case (c, i) =>
+        currentEmittingChild = i
+        ctx.currentPartitionIndexVar = s"((int[]) $p2lRef)[partitionIndex]"
+        val producedCode = c.asInstanceOf[CodegenSupport].produce(ctx, this)
+        val helper = ctx.freshName("unionChildProcess")
+        val qualifiedHelper = ctx.addNewFunction(helper,
+          s"""
+             |private void $helper(int partitionIndex) throws java.io.IOException {
+             |  $producedCode
+             |}
+           """.stripMargin)
+        s"""case $i: {
+           |  $qualifiedHelper(partitionIndex);
+           |  break;
+           |}""".stripMargin
+      }
+    } finally {
+      currentEmittingChild = -1
+      ctx.currentPartitionIndexVar = savedPartIdxVar
+    }
+
+    s"""
+       |int $childIndexVar = ((int[]) $p2cRef)[partitionIndex];
+       |switch ($childIndexVar) {
+       |  ${cases.mkString("\n")}
+       |  default:
+       |    throw new java.lang.IllegalStateException(
+       |      "UnionExec: Unexpected childIndex=" + $childIndexVar);
+       |}
+     """.stripMargin
+  }
+
+  override def doConsume(
+      ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    require(currentEmittingChild >= 0,
+      "UnionExec.doConsume invoked outside doProduce emission window")
+    val i = currentEmittingChild
+    // The wrapped child in each `perChildProjections(i)` element is always an
+    // `Attribute`, which is deterministic by definition; no
+    // `evaluateRequiredVariables` call is needed to force single-evaluation
+    // of non-deterministic expressions.
+    val bound = BindReferences.bindReferences(perChildProjections(i), children(i).output)
+
+    // Route BoundReference reads through `currentVars` (the incoming row is
+    // delivered as variables under WSCG, not via ctx.INPUT_ROW).
+    ctx.currentVars = input
+    ctx.INPUT_ROW = null
+    val projectedExprCodes = bound.map(_.genCode(ctx))
+
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    s"""
+       |$numOutput.add(1L);
+       |${consume(ctx, projectedExprCodes)}
+     """.stripMargin
+  }
+
+  // True if any child requires result copying; the default throws for
+  // multi-child operators and is unsuitable here.
+  override def needCopyResult: Boolean =
+    children.exists(_.asInstanceOf[CodegenSupport].needCopyResult)
+
+  // `doConsume` handles projection and emission; the parent's `consume` driver
+  // decides which output columns to materialize.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
   protected override def doExecute(): RDD[InternalRow] = {
     if (outputPartitioning.isInstanceOf[UnknownPartitioning]) {
       sparkContext.union(children.map(_.execute()))
@@ -787,6 +1124,28 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)
+}
+
+object UnionExec {
+  /**
+   * Codegen operators that return more than one RDD from `inputRDDs()`.
+   * `UnionExec`'s fusion assumes each direct child contributes one RDD.
+   */
+  def isKnownMultiInputRDDCodegen(p: SparkPlan): Boolean = p match {
+    case _: SortMergeJoinExec => true
+    case _: ShuffledHashJoinExec => true
+    case _ => false
+  }
+
+  /**
+   * True if any expression in the subtree is [[Nondeterministic]]. Such
+   * expressions may embed the raw `partitionIndex` field via
+   * `addPartitionInitializationStatement`, which would read the global
+   * UnionRDD index instead of the child-local one under fusion.
+   */
+  def hasPartitionIndexDependentCodegen(p: SparkPlan): Boolean = p.exists {
+    plan => plan.expressions.exists(_.exists(_.isInstanceOf[Nondeterministic]))
+  }
 }
 
 /**

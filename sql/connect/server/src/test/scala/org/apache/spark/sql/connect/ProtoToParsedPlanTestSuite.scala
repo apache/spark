@@ -28,14 +28,14 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, RelationCache, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.{ReplaceExpressions, RewriteWithExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -133,9 +133,24 @@ class ProtoToParsedPlanTestSuite
   protected val goldenFilePath: Path = suiteBaseResourcePath.resolve("explain-results")
   private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
-  private val analyzer = {
-    val inMemoryCatalog = new InMemoryCatalog
-    inMemoryCatalog.initialize("primary", CaseInsensitiveStringMap.empty())
+  /**
+   * Isolated from [[SharedSparkSession]] so PATH / session path settings do not affect catalog.
+   * Cloned from the test session's conf so all sparkConf overrides (ANSI, alias config, etc.) are
+   * preserved automatically; only the genuine isolation knob is overridden explicitly.
+   */
+  private lazy val analyzerIsolationConf: SQLConf = {
+    val c = spark.sessionState.conf.clone()
+    c.setConf(SQLConf.PATH_ENABLED, false)
+    c
+  }
+
+  private lazy val analyzer = {
+    val inMemoryCatalog = new InMemoryChangelogCatalog
+    // Name must match [[CatalogManager.SESSION_CATALOG_NAME]]: path entries use
+    // [[currentCatalog.name()]], then resolution calls [[catalogManager.catalog]] on that segment.
+    inMemoryCatalog.initialize(
+      CatalogManager.SESSION_CATALOG_NAME,
+      CaseInsensitiveStringMap.empty())
     inMemoryCatalog.createNamespace(Array("tempdb"), emptyProps)
     inMemoryCatalog.createTable(
       Identifier.of(Array("tempdb"), "myTable"),
@@ -154,10 +169,12 @@ class ProtoToParsedPlanTestSuite
         new catalog.InMemoryCatalog(),
         FunctionRegistry.builtin,
         TableFunctionRegistry.builtin))
-    catalogManager.setCurrentCatalog("primary")
+    // Do not call setCurrentCatalog("primary"): that loads a separate plugin via
+    // Catalogs.load("primary", conf) instead of using defaultSessionCatalog (inMemoryCatalog).
+    // Leave current catalog as default spark_catalog so v2SessionCatalog returns inMemoryCatalog.
     catalogManager.setCurrentNamespace(Array("tempdb"))
 
-    new Analyzer(catalogManager) {
+    new Analyzer(catalogManager, RelationCache.empty, Some(analyzerIsolationConf)) {
       override def resolver: Resolver = caseSensitiveResolution
     }
   }

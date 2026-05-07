@@ -20,7 +20,7 @@ package org.apache.spark.sql.classic
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.{Evolving, Experimental}
-import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogInfoUtils, NamedStreamingRelation, RelationChanges, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -67,15 +67,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
     this
   }
 
-  /**
-   * Specifies a name for the streaming source. This name is used to identify the source
-   * in checkpoint metadata and enables stable checkpoint locations for source evolution.
-   *
-   * @param sourceName the name to assign to this streaming source
-   * @since 4.2.0
-   */
+  /** @inheritdoc */
   @Experimental
-  private[sql] def name(sourceName: String): this.type = {
+  override def name(sourceName: String): this.type = {
     validateSourceName(sourceName)
     this.userProvidedSourceName = Option(sourceName)
     this
@@ -114,6 +108,20 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
       isStreaming = true)
     val plan = NamedStreamingRelation.withUserProvidedName(unresolved, userProvidedSourceName)
+    Dataset.ofRows(sparkSession, plan)
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val changelogInfo = ChangelogInfoUtils.fromOptions(
+      options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val unresolved = UnresolvedRelation(identifier, options, isStreaming = true)
+    val changes = RelationChanges(unresolved, changelogInfo)
+    val plan = NamedStreamingRelation.withUserProvidedName(changes, userProvidedSourceName)
     Dataset.ofRows(sparkSession, plan)
   }
 

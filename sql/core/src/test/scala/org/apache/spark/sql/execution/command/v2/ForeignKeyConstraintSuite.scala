@@ -85,6 +85,24 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
     }
   }
 
+  test("REPLACE table with foreign key constraint using atomic catalog") {
+    validConstraintCharacteristics.foreach { case (characteristic, expectedDDL) =>
+      withNamespaceAndTable("ns", "tbl", atomicCatalog) { t =>
+        sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+        sql(s"CREATE TABLE ${t}_ref (id bigint, data string) $defaultUsing")
+        val constraintStr = s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES ${t}_ref(id) $characteristic"
+        sql(s"REPLACE TABLE $t (id bigint, fk bigint, data string, $constraintStr) $defaultUsing")
+        val table = loadTable(atomicCatalog, "ns", "tbl")
+        assert(table.constraints.length == 1)
+        val constraint = table.constraints.head
+        assert(constraint.name() == "fk1")
+        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
+          s"REFERENCES $atomicCatalog.ns.tbl_ref (id) $expectedDDL")
+      }
+    }
+  }
+
   test("Add duplicated foreign key constraint") {
     withNamespaceAndTable("ns", "tbl", catalog) { t =>
       sql(s"CREATE TABLE $t (id bigint, fk bigint, data string) $defaultUsing")

@@ -35,6 +35,7 @@ from typing import (
 )
 import warnings
 
+import pyspark.memory_profiler_ext
 from pyspark.accumulators import (
     Accumulator,
     AccumulatorParam,
@@ -47,11 +48,10 @@ from pyspark.profiler import (
     MemoryProfiler,
     MemUsageParam,
     PStatsParam,
-    has_memory_profiler,
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ProfileResults
+    from pyspark.sql._typing import ProfileResults, ProfileResultsV2
 
 
 class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
@@ -88,15 +88,56 @@ class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
 ProfileResultsParam = _ProfileResultsParam()
 
 
+# _ProfileResultsParam uses (perf, memory) tuple which is very difficult
+# to extend. However, this is shared code between the server and the client
+# for spark connect. In order to gradually migrate to dict implementation,
+# we create a new AccumulatorParam on a new channel SQL_UDF_PROFIER_V2.
+# We started this in 4.2.0. When we drop support for all versions before 4.2.0,
+# we can remove _ProfileResultsParam and other old content.
+class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
+    """
+    AccumulatorParam for profilers.
+    """
+
+    @staticmethod
+    def zero(value: "ProfileResultsV2") -> "ProfileResultsV2":
+        return {}
+
+    @staticmethod
+    def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
+        for key, result in value2.items():
+            if key not in value1:
+                value1[key] = result
+            else:
+                perf = PStatsParam.addInPlace(
+                    value1[key].get("perf", None), result.get("perf", None)
+                )
+                if perf is not None:
+                    value1[key]["perf"] = perf
+                memory = MemUsageParam.addInPlace(
+                    value1[key].get("memory", None), result.get("memory", None)
+                )
+                if memory is not None:
+                    value1[key]["memory"] = memory
+        return value1
+
+
+ProfileResultsParamV2 = _ProfileResultsParamV2()
+
+
 class WorkerPerfProfiler:
     """
     PerfProfiler is a profiler for performance profiling.
     """
 
     def __init__(
-        self, accumulator: Accumulator[Optional["ProfileResults"]], result_key: Union[int, str]
+        self,
+        accumulator: Accumulator[Optional["ProfileResults"]],
+        accumulator_v2: Accumulator["ProfileResultsV2"],
+        result_key: Union[int, str],
     ) -> None:
         self._accumulator = accumulator
+        self._accumulator_v2 = accumulator_v2
         self._profiler = cProfile.Profile()
         self._result_key = result_key
 
@@ -112,6 +153,12 @@ class WorkerPerfProfiler:
         st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
         self._accumulator.add({self._result_key: (st, None)})
+
+        st = pstats.Stats(self._profiler, stream=None)
+        # make it picklable
+        st.stream = None  # type: ignore[attr-defined]
+        st.strip_dirs()
+        self._accumulator_v2.add({self._result_key: {"perf": st}})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -135,12 +182,14 @@ class WorkerMemoryProfiler:
     def __init__(
         self,
         accumulator: Accumulator[Optional["ProfileResults"]],
+        accumulator_v2: Accumulator["ProfileResultsV2"],
         result_key: Union[int, str],
         func_or_code: Union[Callable, CodeType],
     ) -> None:
-        from pyspark.profiler import UDFLineProfilerV2
+        from pyspark.memory_profiler_ext import UDFLineProfilerV2
 
         self._accumulator = accumulator
+        self._accumulator_v2 = accumulator_v2
         self._profiler = UDFLineProfilerV2()
         if isinstance(func_or_code, CodeType):
             self._profiler.add_code(func_or_code)
@@ -160,6 +209,7 @@ class WorkerMemoryProfiler:
             for filename, line_iterator in self._profiler.code_map.items()
         }
         self._accumulator.add({self._result_key: (None, codemap_dict)})
+        self._accumulator_v2.add({self._result_key: {"memory": codemap_dict}})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
@@ -226,9 +276,9 @@ class ProfilerCollector(ABC):
     def _perf_profile_results(self) -> Dict[Union[int, str], pstats.Stats]:
         with self._lock:
             return {
-                result_id: perf
-                for result_id, (perf, _, *_) in self._profile_results.items()
-                if perf is not None
+                result_id: result["perf"]
+                for result_id, result in self._profile_results.items()
+                if result.get("perf", None) is not None
             }
 
     def show_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
@@ -245,7 +295,7 @@ class ProfilerCollector(ABC):
         with self._lock:
             code_map = self._memory_profile_results
 
-        if not has_memory_profiler and not code_map:
+        if not pyspark.memory_profiler_ext.has_memory_profiler and not code_map:
             warnings.warn(
                 "Install the 'memory_profiler' library in the cluster to enable memory profiling",
                 UserWarning,
@@ -272,14 +322,14 @@ class ProfilerCollector(ABC):
     def _memory_profile_results(self) -> Dict[Union[int, str], CodeMapDict]:
         with self._lock:
             return {
-                result_id: mem
-                for result_id, (_, mem, *_) in self._profile_results.items()
-                if mem is not None
+                result_id: result["memory"]
+                for result_id, result in self._profile_results.items()
+                if result.get("memory", None) is not None
             }
 
     @property
     @abstractmethod
-    def _profile_results(self) -> "ProfileResults":
+    def _profile_results(self) -> "ProfileResultsV2":
         """
         Get the profile results.
         """
@@ -331,7 +381,7 @@ class ProfilerCollector(ABC):
         with self._lock:
             code_map = self._memory_profile_results
 
-        if not has_memory_profiler and not code_map:
+        if not pyspark.memory_profiler_ext.has_memory_profiler and not code_map:
             warnings.warn(
                 "Install the 'memory_profiler' library in the cluster to enable memory profiling",
                 UserWarning,
@@ -368,15 +418,14 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *_ = self._profile_results[id]
-                    self._profile_results[id] = (None, mem, *_)
-                    if mem is None:
-                        self._profile_results.pop(id, None)
+                    self._profile_results[id].pop("perf", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
             else:
-                for id, (perf, mem, *_) in list(self._profile_results.items()):
-                    self._profile_results[id] = (None, mem, *_)
-                    if mem is None:
-                        self._profile_results.pop(id, None)
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id].pop("perf", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
 
     def clear_memory_profiles(self, id: Optional[Union[int, str]] = None) -> None:
         """
@@ -393,29 +442,29 @@ class ProfilerCollector(ABC):
         with self._lock:
             if id is not None:
                 if id in self._profile_results:
-                    perf, mem, *_ = self._profile_results[id]
-                    self._profile_results[id] = (perf, None, *_)
-                    if perf is None:
-                        self._profile_results.pop(id, None)
+                    self._profile_results[id].pop("memory", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
             else:
-                for id, (perf, mem, *_) in list(self._profile_results.items()):
-                    self._profile_results[id] = (perf, None, *_)
-                    if perf is None:
-                        self._profile_results.pop(id, None)
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id].pop("memory", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
 
 
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
         super().__init__()
-        if SpecialAccumulatorIds.SQL_UDF_PROFIER in _accumulatorRegistry:
-            self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER]
+
+        if SpecialAccumulatorIds.SQL_UDF_PROFIER_V2 in _accumulatorRegistry:
+            self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER_V2]
         else:
             self._accumulator = Accumulator(
-                SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+                SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
             )
 
     @property
-    def _profile_results(self) -> "ProfileResults":
+    def _profile_results(self) -> "ProfileResultsV2":
         with self._lock:
             value = self._accumulator.value
             return value if value is not None else {}
@@ -500,8 +549,7 @@ class Profile:
     @overload
     def render(
         self, id: Union[int, str], *, type: Optional[str] = None, renderer: Optional[str] = None
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
     @overload
     def render(
@@ -510,8 +558,7 @@ class Profile:
         *,
         type: Optional[Literal["perf"]],
         renderer: Callable[[pstats.Stats], Any],
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
     @overload
     def render(
@@ -520,8 +567,7 @@ class Profile:
         *,
         type: Literal["memory"],
         renderer: Callable[[CodeMapDict], Any],
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
     def render(
         self,
@@ -584,7 +630,7 @@ class Profile:
             )
 
         if result is not None:
-            return render(result)  # type:ignore[arg-type]
+            return render(result)  # type: ignore[arg-type]
 
     def clear(self, id: Optional[Union[int, str]] = None, *, type: Optional[str] = None) -> None:
         """

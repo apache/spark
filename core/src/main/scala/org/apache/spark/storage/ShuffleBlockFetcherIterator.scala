@@ -309,8 +309,9 @@ final class ShuffleBlockFetcherIterator(
             buf.retain()
             remainingBlocks -= blockId
             blockOOMRetryCounts.remove(blockId)
-            updateMergedReqsDuration(BlockId(blockId).isShuffleChunk)
-            results.put(SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
+            val blkId = BlockId(blockId)
+            updateMergedReqsDuration(blkId.isShuffleChunk)
+            results.put(SuccessFetchResult(blkId, infoMap(blockId)._2,
               address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
             logDebug("remainingBlocks: " + remainingBlocks)
             enqueueDeferredFetchRequestIfNecessary()

@@ -148,6 +148,14 @@ case class FunctionIdentifier(funcName: String, database: Option[String], catalo
   def this(funcName: String) = this(funcName, None, None)
   def this(funcName: String, database: Option[String]) = this(funcName, database, None)
 
+  /**
+   * Returns the display name for SHOW FUNCTIONS: the simple function name for the system
+   * catalog, or the fully qualified name otherwise.
+   */
+  def displayNameForShowFunctions: String =
+    if (catalog.exists(_.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME))) funcName
+    else unquotedString
+
   override def toString: String = unquotedString
 }
 

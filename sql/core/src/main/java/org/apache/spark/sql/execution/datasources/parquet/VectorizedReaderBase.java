@@ -110,6 +110,16 @@ public class VectorizedReaderBase extends ValuesReader implements VectorizedValu
   }
 
   @Override
+  public void readGeometry(int total, WritableColumnVector c, int rowId) {
+    throw SparkUnsupportedOperationException.apply();
+  }
+
+  @Override
+  public void readGeography(int total, WritableColumnVector c, int rowId) {
+    throw SparkUnsupportedOperationException.apply();
+  }
+
+  @Override
   public void skipBooleans(int total) {
     throw SparkUnsupportedOperationException.apply();
   }

@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 import datetime
 import decimal
 import warnings
@@ -55,7 +51,6 @@ from pyspark.sql.connect.expressions import (
     DropField,
 )
 from pyspark.errors.utils import with_origin_to_class
-
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -121,8 +116,12 @@ class Column(ParentColumn):
     def __init__(self, expr: "Expression") -> None:
         if not isinstance(expr, Expression):
             raise PySparkTypeError(
-                errorClass="NOT_EXPRESSION",
-                messageParameters={"arg_name": "expr", "arg_type": type(expr).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Expression",
+                    "arg_name": "expr",
+                    "arg_type": type(expr).__name__,
+                },
             )
         self._expr = expr
 
@@ -306,8 +305,12 @@ class Column(ParentColumn):
     def when(self, condition: ParentColumn, value: Any) -> ParentColumn:
         if not isinstance(condition, Column):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN",
-                messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "condition",
+                    "arg_type": type(condition).__name__,
+                },
             )
 
         if not isinstance(self._expr, CaseWhen):
@@ -362,7 +365,7 @@ class Column(ParentColumn):
         startPos = enum_to_value(startPos)
         length = enum_to_value(length)
 
-        if type(startPos) != type(length):
+        if type(startPos) is not type(length):
             raise PySparkTypeError(
                 errorClass="NOT_SAME_TYPE",
                 messageParameters={
@@ -378,8 +381,12 @@ class Column(ParentColumn):
             start_expr = _to_expr(startPos)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_INT",
-                messageParameters={"arg_name": "startPos", "arg_type": type(length).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or int",
+                    "arg_name": "startPos",
+                    "arg_type": type(length).__name__,
+                },
             )
         return Column(UnresolvedFunction("substr", [self._expr, start_expr, length_expr]))
 
@@ -435,8 +442,12 @@ class Column(ParentColumn):
             return Column(CastExpression(expr=self._expr, data_type=dataType))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataType or str",
+                    "arg_name": "dataType",
+                    "arg_type": type(dataType).__name__,
+                },
             )
 
     astype = cast
@@ -452,8 +463,12 @@ class Column(ParentColumn):
             )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
-                messageParameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "DataType or str",
+                    "arg_name": "dataType",
+                    "arg_type": type(dataType).__name__,
+                },
             )
 
     def __repr__(self) -> str:
@@ -464,8 +479,12 @@ class Column(ParentColumn):
 
         if not isinstance(window, WindowSpec):
             raise PySparkTypeError(
-                errorClass="NOT_WINDOWSPEC",
-                messageParameters={"arg_name": "window", "arg_type": type(window).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "window",
+                    "expected_type": "WindowSpec",
+                    "arg_type": type(window).__name__,
+                },
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
@@ -526,14 +545,22 @@ class Column(ParentColumn):
     def withField(self, fieldName: str, col: ParentColumn) -> ParentColumn:
         if not isinstance(fieldName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "fieldName",
+                    "expected_type": "str",
+                    "arg_type": type(fieldName).__name__,
+                },
             )
 
         if not isinstance(col, Column):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN",
-                messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column",
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
             )
 
         return Column(WithField(self._expr, fieldName, col._expr))
@@ -543,9 +570,10 @@ class Column(ParentColumn):
         for fieldName in fieldNames:
             if not isinstance(fieldName, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "fieldName",
+                        "expected_type": "str",
                         "arg_type": type(fieldName).__name__,
                     },
                 )
@@ -616,7 +644,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.column,
         globs=globs,
         optionflags=doctest.ELLIPSIS

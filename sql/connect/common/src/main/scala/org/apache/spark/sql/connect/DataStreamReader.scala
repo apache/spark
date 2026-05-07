@@ -75,16 +75,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     this
   }
 
-  /**
-   * Specifies a name for the streaming source. This name is used to identify the source in
-   * checkpoint metadata and enables stable checkpoint locations for source evolution.
-   *
-   * @param sourceName
-   *   the name to assign to this streaming source
-   * @since 4.2.0
-   */
+  /** @inheritdoc */
   @Experimental
-  private[sql] def name(sourceName: String): this.type = {
+  override def name(sourceName: String): this.type = {
     validateSourceName(sourceName)
     sourceBuilder.setSourceName(sourceName)
     this
@@ -114,6 +107,18 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
         .setIsStreaming(true)
         .getNamedTableBuilder
         .setUnparsedIdentifier(tableName)
+        .putAllOptions(sourceBuilder.getOptionsMap)
+    }
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      builder.getRelationChangesBuilder
+        .setUnparsedIdentifier(tableName)
+        .setIsStreaming(true)
         .putAllOptions(sourceBuilder.getOptionsMap)
     }
   }

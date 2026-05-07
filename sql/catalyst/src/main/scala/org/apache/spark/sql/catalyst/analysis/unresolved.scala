@@ -125,7 +125,7 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
-  def requireWritePrivileges(privileges: Seq[TableWritePrivilege]): UnresolvedRelation = {
+  def requireWritePrivileges(privileges: Set[TableWritePrivilege]): UnresolvedRelation = {
     if (privileges.nonEmpty) {
       val newOptions = new java.util.HashMap[String, String]
       newOptions.putAll(options)
@@ -177,6 +177,8 @@ case class UnresolvedInlineTable(
     names: Seq[String],
     rows: Seq[Seq[Expression]])
   extends UnresolvedLeafNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(INLINE_TABLE_EVAL)
 
   lazy val expressionsResolved: Boolean = rows.forall(_.forall(_.resolved))
 }
@@ -1114,9 +1116,14 @@ case class UnresolvedOrdinal(ordinal: Int)
  * @param ordinal ordinal starts from 1, instead of 0
  */
 case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
-  extends LeafExpression with Unevaluable with NonSQLExpression {
-  override def dataType: DataType = throw new UnresolvedException("dataType")
+  extends LeafExpression with NamedExpression with Unevaluable with NonSQLExpression {
+  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def name: String = throw new UnresolvedException("name")
+  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
 }
 
@@ -1131,6 +1138,18 @@ case class UnresolvedHaving(
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedHaving =
     copy(child = newChild)
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_HAVING)
+}
+
+/**
+ * Represents an unresolved QUALIFY clause. It is resolved by the analyzer into a Filter
+ * placed after window functions have been materialized.
+ */
+case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedQualify =
+    copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_QUALIFY)
 }
 
 /**

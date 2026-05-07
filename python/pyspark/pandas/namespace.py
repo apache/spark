@@ -18,6 +18,7 @@
 """
 Wrappers around spark that correspond to common pandas functions.
 """
+
 from typing import (
     Any,
     Callable,
@@ -64,6 +65,7 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
     BooleanType,
+    NumericType,
     TimestampType,
     TimestampNTZType,
     DecimalType,
@@ -278,9 +280,9 @@ def read_csv(
     ----------
     path : str or list
         Path(s) of the CSV file(s) to be read.
-    sep : str, default ‘,’
+    sep : str, default ','
         Delimiter to use. Non empty string.
-    header : int, default ‘infer’
+    header : int, default 'infer'
         Whether to use the column names, and the start of the data.
         Default behavior is to infer the column names: if no names are passed
         the behavior is identical to `header=0` and column names are inferred from
@@ -302,7 +304,7 @@ def read_csv(
         If callable, the callable function will be evaluated against the column names,
         returning names where the callable function evaluates to `True`.
     dtype : Type name or dict of column -> type, default None
-        Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} Use str or object
+        Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32} Use str or object
         together with suitable na_values settings to preserve and not interpret dtype.
     nrows : int, default None
         Number of rows to read from the CSV file.
@@ -435,7 +437,7 @@ def read_csv(
                 )
             if len(missing) > 0:
                 raise ValueError(
-                    "Usecols do not match columns, columns expected but not " "found: %s" % missing
+                    "Usecols do not match columns, columns expected but not found: %s" % missing
                 )
 
             if len(column_labels) > 0:
@@ -1765,9 +1767,16 @@ def to_datetime(
                 "The 'infer_datetime_format' keyword is not supported in pandas 3.0.0 and later."
             )
 
+    ret_type: type
+    if LooseVersion(pd.__version__) < "3.0.0":
+        ret_type = Series[np.datetime64]
+    else:
+        # The unit is unpredictable.
+        ret_type = None
+
     def pandas_to_datetime(
         pser_or_pdf: Union[pd.DataFrame, pd.Series], cols: Optional[List[str]] = None
-    ) -> Series[np.datetime64]:
+    ) -> ret_type:
         if isinstance(pser_or_pdf, pd.DataFrame):
             pser_or_pdf = pser_or_pdf[cols]
         return pd.to_datetime(pser_or_pdf, **kwargs)
@@ -1775,7 +1784,7 @@ def to_datetime(
     if isinstance(arg, Series):
         return arg.pandas_on_spark.transform_batch(pandas_to_datetime)
     if isinstance(arg, DataFrame):
-        unit = {k: _unit_map[k.lower()] for k in arg.keys() if k.lower() in _unit_map}
+        unit = {k: _unit_map[k.lower()] for k in arg if k.lower() in _unit_map}
         unit_rev = {v: k for k, v in unit.items()}
         list_cols = [unit_rev["year"], unit_rev["month"], unit_rev["day"]]
         for u in ["h", "m", "s", "ms", "us"]:
@@ -2028,17 +2037,22 @@ def to_timedelta(
     TimedeltaIndex(['0 days', '1 days', '2 days', '3 days', '4 days'],
                    dtype='timedelta64[ns]', freq=None)
     """
-
-    def pandas_to_timedelta(pser: pd.Series) -> np.timedelta64:
-        return pd.to_timedelta(
-            arg=pser,
-            unit=unit,
-            errors=errors,
-        )
-
     if isinstance(arg, Series):
-        return arg.transform(pandas_to_timedelta)
+        ret_dtype: Union[type, Dtype]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            ret_dtype = np.timedelta64
+        else:
+            # The unit is unpredictable.
+            ret_dtype = None
 
+        def pandas_to_timedelta(pser: pd.Series) -> ret_dtype:
+            return pd.to_timedelta(
+                arg=pser,
+                unit=unit,
+                errors=errors,
+            )
+
+        return arg.transform(pandas_to_timedelta)
     else:
         return pd.to_timedelta(
             arg=arg,
@@ -2101,7 +2115,7 @@ def timedelta_range(
     TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
 
     The freq parameter specifies the frequency of the TimedeltaIndex.
-    Only fixed frequencies can be passed, non-fixed frequencies such as ‘M’ (month end) will raise.
+    Only fixed frequencies can be passed, non-fixed frequencies such as 'M' (month end) will raise.
 
     >>> ps.timedelta_range(start='1 day', end='2 days', freq='6h')
     ... # doctest: +NORMALIZE_WHITESPACE
@@ -2267,11 +2281,13 @@ def get_dummies(
                     raise KeyError(name_like_string(columns))
                 if prefix is None:
                     prefix = [
-                        str(label[len(columns) :])
-                        if len(label) > len(columns) + 1
-                        else label[len(columns)]
-                        if len(label) == len(columns) + 1
-                        else ""
+                        (
+                            str(label[len(columns) :])
+                            if len(label) > len(columns) + 1
+                            else label[len(columns)]
+                            if len(label) == len(columns) + 1
+                            else ""
+                        )
                         for label in column_labels
                     ]
             elif any(isinstance(col, tuple) for col in columns) and any(
@@ -2554,9 +2570,11 @@ def concat(
 
         level: int = min(psdf._internal.column_labels_level for psdf in psdfs)
         psdfs = [
-            DataFrame._index_normalized_frame(level, psdf)
-            if psdf._internal.column_labels_level > level
-            else psdf
+            (
+                DataFrame._index_normalized_frame(level, psdf)
+                if psdf._internal.column_labels_level > level
+                else psdf
+            )
             for psdf in psdfs
         ]
 
@@ -2638,6 +2656,10 @@ def concat(
             num_series += 1
             series_names.add(obj.name)
             if not ignore_index and not should_return_series:
+                new_objs.append(obj.to_frame())
+            elif LooseVersion(pd.__version__) >= "3.0.0" and not should_return_series:
+                # pandas 3 preserves a named Series as its own column during
+                # row-wise concat with ignore_index=True instead of renaming it to 0.
                 new_objs.append(obj.to_frame())
             else:
                 new_objs.append(obj.to_frame(DEFAULT_SERIES_NAME))
@@ -3651,6 +3673,8 @@ def to_numeric(arg, errors="raise"):
     1.0
     """
     if isinstance(arg, Series):
+        if isinstance(arg.spark.data_type, (NumericType, BooleanType)):
+            return arg.copy()
         if errors == "coerce":
             spark_session = arg._internal.spark_frame.sparkSession
             if is_ansi_mode_enabled(spark_session):
@@ -3926,7 +3950,7 @@ def _test() -> None:
     path = tempfile.mkdtemp()
     globs["path"] = path
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.namespace,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

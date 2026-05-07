@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 from pyspark.sql.connect.client.retries import Retrying, RetryException
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from threading import RLock
 import uuid
@@ -60,9 +57,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
     _lock: ClassVar[RLock] = RLock()
     _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
-    _instances: ClassVar[
-        weakref.WeakSet["ExecutePlanResponseReattachableIterator"]
-    ] = weakref.WeakSet()
+    _instances: ClassVar[weakref.WeakSet["ExecutePlanResponseReattachableIterator"]] = (
+        weakref.WeakSet()
+    )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> "ExecutePlanResponseReattachableIterator":
         instance = super().__new__(cls)

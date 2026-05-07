@@ -22,7 +22,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
@@ -443,6 +443,31 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       ),
       StopStream
     )
+  }
+
+  /**
+   * Runs one batch of a transformWithState query (using RunningCountStatefulProcessor)
+   * to create checkpoint structure with state. Uses RocksDBStateStoreProvider.
+   */
+  protected def runTransformWithStateQuery(checkpointRoot: String): Unit = {
+    withSQLConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString
+    ) {
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new org.apache.spark.sql.streaming.RunningCountStatefulProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+
+      testStream(result, OutputMode.Update())(
+        StartStream(checkpointLocation = checkpointRoot),
+        AddData(inputData, "a"),
+        CheckNewAnswer(("a", "1")),
+        StopStream
+      )
+    }
   }
 
   /**

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.functions.{array, avg, col, count, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
-class PythonUDFSuite extends QueryTest with SharedSparkSession {
+class PythonUDFSuite extends SharedSparkSession {
   import testImplicits._
 
   import IntegratedUDFTestUtils._

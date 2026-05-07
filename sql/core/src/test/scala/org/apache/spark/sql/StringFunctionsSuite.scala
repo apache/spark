@@ -25,7 +25,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class StringFunctionsSuite extends QueryTest with SharedSparkSession {
+class StringFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("string concat") {
@@ -1468,6 +1468,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       check(
         sql("SELECT * FROM test_table WHERE try_validate_utf8(b) = 'def'"),
         Seq(Row("abc", "def")))
+    }
+  }
+
+  test("SPARK-55747: GetArrayItem NPE on null array from split() with ANSI enabled") {
+    // GetArrayItem.nullable was incorrectly computed as false when the array type has
+    // containsNull=false (e.g., from StringSplit) but the array itself can be null.
+    // This caused codegen to skip null checks, leading to NPE when calling
+    // array.numElements() on a null array during bounds checking.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('a-b'), (null)")
+      checkAnswer(
+        sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
+        Seq(Row("b"), Row(null))
+      )
     }
   }
 }

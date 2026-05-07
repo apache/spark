@@ -198,7 +198,7 @@ private[spark] class SparkUpgradeException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     cause: Throwable,
@@ -243,7 +243,7 @@ private[spark] class SparkArithmeticException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext],
@@ -291,7 +291,7 @@ private[spark] class SparkUnsupportedOperationException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     sqlState: Option[String]) = {
@@ -417,7 +417,7 @@ private[spark] class SparkDateTimeException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext],
@@ -491,7 +491,7 @@ private[spark] class SparkNumberFormatException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext],
@@ -547,7 +547,7 @@ private[spark] class SparkIllegalArgumentException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext],
@@ -639,7 +639,7 @@ private[spark] class SparkRuntimeException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     cause: Throwable,
@@ -763,7 +763,7 @@ private[spark] class SparkArrayIndexOutOfBoundsException private(
     )
   }
 
-  def this(
+  private[spark] def this(
     errorClass: String,
     messageParameters: Map[String, String],
     context: Array[QueryContext],

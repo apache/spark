@@ -17,7 +17,7 @@
 import unittest
 from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, TaskResourceRequests
 from pyspark.sql import SparkSession
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

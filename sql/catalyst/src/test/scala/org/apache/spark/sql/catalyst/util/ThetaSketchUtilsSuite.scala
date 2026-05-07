@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.datasketches.theta.UpdateSketch
+import org.apache.datasketches.tuple.UpdatableSketchBuilder
+import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -101,12 +103,31 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("wrapCompactSketch: throws exception for invalid bytes") {
-    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    val invalidBytes = Array[Byte](50, 60, 70, 80, 90)
     checkError(
       exception = intercept[SparkRuntimeException] {
         ThetaSketchUtils.wrapCompactSketch(invalidBytes, "test_function")
       },
       condition = "THETA_INVALID_INPUT_SKETCH_BUFFER",
       parameters = Map("function" -> "`test_function`"))
+  }
+
+  test("wrapCompactSketch: throws detailed error when passing Tuple sketch") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val tupleSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+    tupleSketch.update("test1", 1.0)
+    tupleSketch.update("test2", 2.0)
+    val tupleBytes = tupleSketch.compact().toByteArray
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.wrapCompactSketch(tupleBytes, "test_function")
+      },
+      condition = "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY",
+      parameters = Map(
+        "function" -> "`test_function`",
+        "expectedFamily" -> "COMPACT",
+        "actualFamily" -> "TUPLE"))
   }
 }

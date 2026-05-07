@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 import uuid
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 import json
 import threading
@@ -132,12 +129,10 @@ class SparkSession:
             self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
-        def config(self, key: str, value: Any) -> "SparkSession.Builder":
-            ...
+        def config(self, key: str, value: Any) -> "SparkSession.Builder": ...
 
         @overload
-        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder":
-            ...
+        def config(self, *, map: Dict[str, "OptionalPrimitiveType"]) -> "SparkSession.Builder": ...
 
         def config(
             self,
@@ -380,8 +375,12 @@ class SparkSession:
     def table(self, tableName: str) -> ParentDataFrame:
         if not isinstance(tableName, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
             )
 
         return self.read.table(tableName)
@@ -507,9 +506,10 @@ class SparkSession:
 
         elif schema is not None:
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "list, None or StructType",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -611,19 +611,22 @@ class SparkSession:
             else:
                 # Any timestamps must be coerced to be compatible with Spark
                 spark_types = [
-                    TimestampType()
-                    if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                    else DayTimeIntervalType()
-                    if is_timedelta64_dtype(t)
-                    else None
+                    (
+                        TimestampType()
+                        if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
+                        else DayTimeIntervalType()
+                        if is_timedelta64_dtype(t)
+                        else None
+                    )
                     for t in data.dtypes
                 ]
 
             safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
             # Handle the 0-column case separately to preserve row count.
+            # pa.RecordBatch.from_pandas preserves num_rows via pandas index metadata.
             if len(data.columns) == 0:
-                _table = pa.Table.from_struct_array(pa.array([{}] * len(data), type=pa.struct([])))
+                _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
             else:
                 _table = pa.Table.from_batches(
                     [
@@ -792,6 +795,11 @@ class SparkSession:
         return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
+
+    def emptyDataFrame(self, schema: Union[StructType, str]) -> "ParentDataFrame":
+        return self.createDataFrame([], schema)
+
+    emptyDataFrame.__doc__ = PySparkSession.emptyDataFrame.__doc__
 
     def sql(
         self,
@@ -1329,7 +1337,7 @@ def _test() -> None:
     pyspark.sql.connect.session.SparkSession.__doc__ = None
     del pyspark.sql.connect.session.SparkSession.Builder.master.__doc__
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.session,
         globs=globs,
         optionflags=doctest.ELLIPSIS

@@ -1,5 +1,9 @@
 -- test cases for collation support
 
+-- Clean up any leftover tables from previous runs (e.g. shared warehouse across config dimensions)
+drop table if exists t2;
+drop table if exists t1;
+
 -- Create a test table with data
 create table t1(utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet;
 insert into t1 values('aaa', 'aaa');

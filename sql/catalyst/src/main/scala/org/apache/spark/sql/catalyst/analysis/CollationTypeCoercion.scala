@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit, Indeterminate}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -288,6 +288,16 @@ object CollationTypeCoercion extends SQLConfHelper {
             None
         }
 
+      case elementAt: ElementAt =>
+        findCollationContext(elementAt.left) match {
+          case Some(MapType(_, valueType, _)) =>
+            mergeWinner(elementAt.dataType, valueType)
+          case Some(ArrayType(elementType, _)) =>
+            mergeWinner(elementAt.dataType, elementType)
+          case _ =>
+            None
+        }
+
       case struct: CreateNamedStruct =>
         val childrenContexts = struct.valExprs.map(findCollationContext)
         if (childrenContexts.isEmpty) {
@@ -330,6 +340,11 @@ object CollationTypeCoercion extends SQLConfHelper {
     case expr if hasCollationContextTag(expr) =>
       Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
 
+    // WindowSpecDefinition and WindowFrame store metadata information so we don't need
+    // to check them. `partitionSpec` will be iterated separately.
+    case _: WindowSpecDefinition | _: WindowFrame =>
+      None
+
     // if `expr` doesn't have a string in its dataType then it doesn't
     // have the collation context either
     case expr if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
@@ -349,6 +364,9 @@ object CollationTypeCoercion extends SQLConfHelper {
 
     case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
+
+    case f: SQLFunctionExpression =>
+      Some(addContextToStringType(f.dataType, Implicit))
 
     case lit: Literal =>
       Some(addContextToStringType(lit.dataType, Default))
@@ -478,6 +496,30 @@ object CollationTypeCoercion extends SQLConfHelper {
          _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
          _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet => false
     case _ => true
+  }
+
+  /**
+   * Pre-tags [[CommonExpressionRef]]s in [[With]] expressions with the collation context of their
+   * definitions. This must be called before the bottom-up expression transformation, because that
+   * transformation processes inner expressions (like [[EqualTo]]) before reaching the [[With]]
+   * node. Without the enclosing [[With]], we have no context for what the refs point to, so we
+   * cannot correctly determine their collation strength.
+   */
+  private[analysis] def preTagCommonExpressionRefs(plan: LogicalPlan): LogicalPlan = {
+    plan.resolveExpressionsDown {
+      case withExpression: With =>
+        withExpression.child.foreach {
+          case ref: CommonExpressionRef =>
+            withExpression.defs.find(d => d.id == ref.id && d.child.resolved)
+              .foreach { definition =>
+                findCollationContext(definition.child).foreach { context =>
+                  ref.setTagValue(COLLATION_CONTEXT_TAG, context)
+                }
+              }
+          case _ =>
+        }
+        withExpression
+    }
   }
 }
 

@@ -567,7 +567,62 @@ abstract class UnionBase extends LogicalPlan {
 }
 
 /**
+ * Extractor and helper methods for Union and SequentialStreamingUnion.
+ * Does not match other UnionBase subtypes like UnionLoop.
+ */
+object SequentialOrSimpleUnion {
+  /**
+   * Extractor that matches Union and SequentialStreamingUnion for optimizer rules.
+   */
+  def unapply(plan: LogicalPlan): Option[UnionBase] = plan match {
+    case u: Union => Some(u)
+    case u: SequentialStreamingUnion => Some(u)
+    case _ => None
+  }
+
+  /**
+   * Returns true if both unions are the same concrete type.
+   * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
+   */
+  def isSameType(u1: UnionBase, u2: UnionBase): Boolean = (u1, u2) match {
+    case (_: Union, _: Union) => true
+    case (_: SequentialStreamingUnion, _: SequentialStreamingUnion) => true
+    case _ => false
+  }
+
+  /**
+   * Extracts byName flag from Union or SequentialStreamingUnion.
+   */
+  def byName(u: UnionBase): Boolean = u match {
+    case union: Union => union.byName
+    case ssu: SequentialStreamingUnion => ssu.byName
+  }
+
+  /**
+   * Extracts allowMissingCol flag from Union or SequentialStreamingUnion.
+   */
+  def allowMissingCol(u: UnionBase): Boolean = u match {
+    case union: Union => union.allowMissingCol
+    case ssu: SequentialStreamingUnion => ssu.allowMissingCol
+  }
+
+  /**
+   * Creates a new union of the same type with the specified children.
+   * This is needed when the number of children may change (e.g., flattening) and we need
+   * to preserve the UnionBase return type rather than getting back LogicalPlan.
+   */
+  def withNewChildren(u: UnionBase, newChildren: Seq[LogicalPlan]): UnionBase = u match {
+    case union: Union => union.copy(children = newChildren)
+    case ssu: SequentialStreamingUnion => ssu.copy(children = newChildren)
+  }
+}
+
+/**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * NOTE: Child ordering is NOT semantically significant. Children are processed in parallel
+ * and their order does not affect the result. This allows Union-specific optimizations to
+ * reorder children (e.g., for performance), unlike SequentialStreamingUnion where order matters.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -1365,13 +1420,64 @@ object Expand {
       }
     }
 
+    val taggedChildOutput =
+      if (SQLConf.get.getConf(SQLConf.EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED)) {
+        tagPassthroughDuplicates(childOutput, groupByAliases)
+      } else {
+        childOutput
+      }
+
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
     Expand(projections, output, Project(childOutput ++ groupByAliases, child))
+  }
+
+  /**
+   * Tags child output attributes that will be duplicated in the Expand output with
+   * `__is_duplicate` metadata.
+   *
+   * When a `groupByAlias` wraps a simple attribute (e.g., `Alias(c1#0, "c1")`), the
+   * Expand output contains both the pass-through child attribute (`c1#0`) and a new
+   * grouping instance created via `newInstance()` (e.g., `c1#5`). Both share the same
+   * name, which causes `AMBIGUOUS_REFERENCE` errors during name-based resolution.
+   *
+   * By tagging the pass-through copy with `__is_duplicate`,
+   * `AttributeSeq.getCandidatesForResolution` filters it out when multiple candidates
+   * match by name, allowing the produced grouping attribute to be resolved instead.
+   * ExprId-based resolution (used for already-resolved expressions like aggregate
+   * functions) is unaffected by this metadata.
+   *
+   * Only child attributes whose ExprId matches a `groupByAlias` child that is a simple
+   * `Attribute` are tagged. Complex grouping expressions (e.g., `c1 + 1`) produce
+   * aliases with different names than any child column, so no name conflict arises.
+   */
+  private def tagPassthroughDuplicates(
+      childOutput: Seq[Attribute],
+      groupByAliases: Seq[Alias]): Seq[Attribute] = {
+    val duplicatedExprIds = new java.util.HashSet[ExprId](groupByAliases.size)
+    groupByAliases.foreach {
+      case Alias(attr: Attribute, _) => duplicatedExprIds.add(attr.exprId)
+      case _ =>
+    }
+
+    if (!duplicatedExprIds.isEmpty) {
+      childOutput.map { attr =>
+        if (duplicatedExprIds.contains(attr.exprId)) {
+          attr.withMetadata(new MetadataBuilder()
+            .withMetadata(attr.metadata)
+            .putNull("__is_duplicate")
+            .build())
+        } else {
+          attr
+        }
+      }
+    } else {
+      childOutput
+    }
   }
 }
 
@@ -1806,6 +1912,22 @@ object SubqueryAlias {
   }
 }
 
+object Sample {
+  /**
+   * Convenience constructor that wraps a concrete seed in [[Some]].
+   * Use the case-class constructor directly with [[None]] when no seed
+   * was specified and a random seed should be generated at execution time.
+   */
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child)
+  }
+}
+
 /**
  * Sample the dataset.
  *
@@ -1813,14 +1935,16 @@ object SubqueryAlias {
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
- * @param seed the random seed
+ * @param seed the random seed. `Some(seed)` when the user explicitly specified a seed
+ *             (SQL `REPEATABLE` clause or programmatic API), `None` when no seed was
+ *             specified and a random seed should be generated at execution time.
  * @param child the LogicalPlan
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
+    seed: Option[Long],
     child: LogicalPlan) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon

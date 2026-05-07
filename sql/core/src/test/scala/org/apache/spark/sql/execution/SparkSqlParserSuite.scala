@@ -22,8 +22,13 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkConf, SparkThrowable}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias,
+  UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving,
+  UnresolvedQualify, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference,
+  Concat, EqualTo, GreaterThan, Literal, NullsFirst, SortOrder,
+  UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition,
+  WindowSpecReference}
 import org.apache.spark.sql.catalyst.parser.{AbstractParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -787,6 +792,25 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         stop = 264))
   }
 
+  test("QUALIFY clause") {
+    // QUALIFY with alias reference - SELECT list has window function
+    val plan1 = parser.parsePlan(
+      "SELECT a, RANK() OVER (ORDER BY b) AS rank " +
+      "FROM testData2 QUALIFY rank = 1")
+    assert(plan1.isInstanceOf[UnresolvedQualify])
+    val q1 = plan1.asInstanceOf[UnresolvedQualify]
+    assert(q1.child.isInstanceOf[Project])
+
+    // QUALIFY with window function in condition
+    val plan2 = parser.parsePlan(
+      "SELECT a FROM testData2 " +
+      "QUALIFY RANK() OVER (ORDER BY b) = 1")
+    assert(plan2.isInstanceOf[UnresolvedQualify])
+    val q2 = plan2.asInstanceOf[UnresolvedQualify]
+    assert(q2.condition.isInstanceOf[EqualTo])
+    assert(q2.child.isInstanceOf[Project])
+  }
+
   test("CLEAR CACHE") {
     assertEqual("CLEAR CACHE", ClearCacheCommand)
   }
@@ -1163,5 +1187,28 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-52709: STRUCT<> should not corrupt complex_type_level_counter") {
+    // STRUCT<> is tokenized as STRUCT + NEQ by the lexer. The parser must decrement
+    // the complex_type_level_counter so that subsequent >> is recognized as shift-right.
+    // Without the fix, this throws a parse error because >> is not recognized.
+    parser.parsePlan("SELECT CAST(null AS STRUCT<>), 2 >> 1")
+
+    // Multiple empty structs should not corrupt the counter
+    parser.parsePlan("SELECT CAST(null AS STRUCT<>), CAST(null AS STRUCT<>), 4 >> 2")
+
+    // Empty struct with unsigned shift right
+    parser.parsePlan("SELECT CAST(null AS STRUCT<>), 8 >>> 2")
+
+    // ARRAY with <> as not-equal operator should still work
+    parser.parsePlan("SELECT ARRAY(1 <> 2)")
+
+    // Nested complex types with >> should still work
+    parser.parsePlan("SELECT CAST(null AS MAP<STRING, ARRAY<INT>>)")
+
+    // Mix of empty struct and nested complex types
+    parser.parsePlan(
+      "SELECT CAST(null AS STRUCT<>), CAST(null AS MAP<STRING, ARRAY<INT>>), 2 >> 1")
   }
 }

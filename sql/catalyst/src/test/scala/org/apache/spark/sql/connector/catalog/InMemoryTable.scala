@@ -20,13 +20,16 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.{Objects, UUID}
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
+import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, SupportsOverwrite, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -213,6 +216,15 @@ class InMemoryTable(
 
 object InMemoryTable {
 
+  // Convert UTF8String to string to make sure equality checks between filters and partitions
+  // work correctly.
+  private def valuesEqual(filterValue: Any, partitionValue: Any): Boolean =
+    (filterValue, partitionValue) match {
+      case (s: String, u: UTF8String) => u.toString == s
+      case (u: UTF8String, s: String) => u.toString == s
+      case _ => filterValue == partitionValue
+    }
+
   def filtersToKeys(
       keys: Iterable[Seq[Any]],
       partitionNames: Seq[String],
@@ -220,7 +232,7 @@ object InMemoryTable {
     keys.filter { partValues =>
       filters.flatMap(splitAnd).forall {
         case EqualTo(attr, value) =>
-          value == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
+          valuesEqual(value, InMemoryBaseTable.extractValue(attr, partitionNames, partValues))
         case EqualNullSafe(attr, value) =>
           val attrVal = InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
           if (attrVal == null && value == null) {
@@ -228,7 +240,7 @@ object InMemoryTable {
           } else if (attrVal == null || value == null) {
             false
           } else {
-            value == attrVal
+            valuesEqual(value, attrVal)
           }
         case IsNull(attr) =>
           null == InMemoryBaseTable.extractValue(attr, partitionNames, partValues)
@@ -260,4 +272,72 @@ object InMemoryTable {
       case _ => filter :: Nil
     }
   }
+}
+
+/**
+ * A metadata table that returns snapshot (commit) information for a parent table.
+ * Simulates data source tables with multi-part identifiers, ex Iceberg's db.table.snapshots.
+ */
+class InMemorySnapshotsTable(parentTable: InMemoryTable) extends Table with SupportsRead {
+  override def name(): String = parentTable.name + ".snapshots"
+
+  override def schema(): StructType = StructType(Seq(
+    StructField("committed_at", LongType, nullable = false),
+    StructField("snapshot_id", LongType, nullable = false)
+  ))
+
+  override def capabilities(): util.Set[TableCapability] = {
+    util.EnumSet.of(TableCapability.BATCH_READ)
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new InMemorySnapshotsScanBuilder(parentTable)
+  }
+}
+
+class InMemorySnapshotsScanBuilder(parentTable: InMemoryTable) extends ScanBuilder {
+  override def build(): Scan = new InMemorySnapshotsScan(parentTable)
+}
+
+class InMemorySnapshotsScan(parentTable: InMemoryTable) extends Scan with Batch {
+  override def readSchema(): StructType = StructType(Seq(
+    StructField("committed_at", LongType, nullable = false),
+    StructField("snapshot_id", LongType, nullable = false)
+  ))
+
+  override def toBatch: Batch = this
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    Array(InMemorySnapshotsPartition(parentTable.commits.toSeq.map(c => (c.id, c.id))))
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    new InMemorySnapshotsReaderFactory()
+  }
+}
+
+case class InMemorySnapshotsPartition(snapshots: Seq[(Long, Long)]) extends InputPartition
+
+class InMemorySnapshotsReaderFactory extends PartitionReaderFactory {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    new InMemorySnapshotsReader(partition.asInstanceOf[InMemorySnapshotsPartition])
+  }
+}
+
+class InMemorySnapshotsReader(partition: InMemorySnapshotsPartition)
+    extends PartitionReader[InternalRow] {
+  private var index = -1
+  private val snapshots = partition.snapshots
+
+  override def next(): Boolean = {
+    index += 1
+    index < snapshots.size
+  }
+
+  override def get(): InternalRow = {
+    val (committedAt, snapshotId) = snapshots(index)
+    InternalRow(committedAt, snapshotId)
+  }
+
+  override def close(): Unit = {}
 }

@@ -21,12 +21,12 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, V1ViewInfo, ViewInfo}
 import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
 
 /**
@@ -42,7 +42,44 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
     fetchDefaultCollation(preprocessedPlan) match {
       case Some(collation) =>
-        transform(preprocessedPlan, collation)
+        val transformedPlan = transform(preprocessedPlan, collation)
+        if (preprocessedPlan fastEquals transformedPlan) {
+          preprocessedPlan
+        } else {
+          // Call CollationTypeCasts immediately to avoid cycle between ApplyDefaultCollation,
+          // ExtractWindowExpressions and CollationTypeCasts.
+          //
+          // Example: CREATE TABLE t (c1 STRING, c2 STRING);  -- c1 is UTF8_BINARY
+          //          CREATE TABLE t2 DEFAULT COLLATION UTF8_LCASE AS
+          //            SELECT c1 = 'HELLO', ROW_NUMBER() OVER (PARTITION BY c1 ORDER BY c2) FROM t;
+          //
+          // Analyzer runs rules in batches sequentially, and the rule order is:
+          // ApplyDefaultCollation -> ExtractWindowExpressions -> CollationTypeCasts.
+          //
+          // Iteration 1:
+          //  - ApplyDefaultCollation applies UTF8_LCASE collation to the literal 'HELLO'.
+          //    Expression EqualTo (c1 = 'HELLO') is not resolved after this because c1 and the
+          //    literal have different types.
+          //  - ExtractWindowExpressions tries to extract the window expressions, but it can't
+          //    because it expects the whole projectList to be resolved (both EqualTo and
+          //    ROW_NUMBER()). EqualTo is not resolved, so it can't apply the rule.
+          //  - CollationTypeCasts applies coercion rules, changing the type of the literal to
+          //    the default StringType again (because that's the type of the column). Now
+          //    EqualTo is resolved.
+          //
+          // Iteration 2:
+          //  - ApplyDefaultCollation again applies UTF8_LCASE collation to the literal, because
+          //    its type is default StringType again.
+          //  - ExtractWindowExpressions again can't extract the window expressions for the same
+          //    reason as before.
+          //  - CollationTypeCasts applies the same coercion rules again, changing the type of
+          //    the literal back to the default StringType.
+          //
+          // This cycle continues, and the plan never gets resolved. By calling CollationTypeCasts
+          // right after this rule, we ensure that other rules like ExtractWindowExpressions that
+          // expect resolved expressions can be applied.
+          CollationTypeCasts(transformedPlan)
+        }
       case None => preprocessedPlan
     }
   }
@@ -97,7 +134,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
       case alterViewAs: AlterViewAs =>
         alterViewAs.child match {
           case resolvedPersistentView: ResolvedPersistentView =>
-            resolvedPersistentView.metadata.collation
+            Option(resolvedPersistentView.info.properties.get(TableCatalog.PROP_COLLATION))
           case resolvedTempView: ResolvedTempView =>
             resolvedTempView.metadata.collation
           case _ => None
@@ -160,7 +197,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
             collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
 
         case createView@CreateView(ResolvedIdentifier(
-        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _)
+        catalog: SupportsNamespaces, identifier), _, _, _, _, _, _, _, _, _, _, _)
           if createView.collation.isEmpty =>
           val newCreateView = CurrentOrigin.withOrigin(createView.origin) {
             createView.copy(
@@ -170,18 +207,55 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView
 
         // We match against ResolvedPersistentView because temporary views don't have a
-        // schema/catalog.
-        case alterViewAs@AlterViewAs(resolvedPersistentView@ResolvedPersistentView(
-        catalog: SupportsNamespaces, identifier, _), _, _)
-          if resolvedPersistentView.metadata.collation.isEmpty =>
-          val newResolvedPersistentView = resolvedPersistentView.copy(
-            metadata = resolvedPersistentView.metadata.copy(
-              collation = getCollationFromSchemaMetadata(catalog, identifier.namespace())))
-          val newAlterViewAs = CurrentOrigin.withOrigin(alterViewAs.origin) {
-            alterViewAs.copy(child = newResolvedPersistentView)
+        // schema/catalog. The rewrite covers both v1 (session-catalog, [[V1ViewInfo]]) and
+        // non-session v2 views: when the existing view has no `PROP_COLLATION` and the
+        // namespace supplies a default, fold that default into the resolved `ViewInfo`. For
+        // v1, `V1ViewInfo` is rebuilt around a `CatalogTable` whose typed `collation` field
+        // holds the new value; `V1ViewInfo.builderFrom` bridges that into the v2
+        // `properties()` bag, so downstream consumers (`fetchDefaultCollation`,
+        // `AlterV2ViewExec`'s `existingProp(PROP_COLLATION)`) see it under either surface.
+        // For v2, we rebuild the existing `ViewInfo` with `PROP_COLLATION` set so the same
+        // downstream consumers see it on the regular `info.properties` path.
+        case alterViewAs @ AlterViewAs(rpv @ ResolvedPersistentView(
+        catalog: SupportsNamespaces, identifier, info), _, _, _, _)
+            if Option(info.properties.get(TableCatalog.PROP_COLLATION)).isEmpty =>
+          // Only rewrite when the namespace actually supplies a default. [[ViewInfo]] /
+          // [[V1ViewInfo]] are non-case classes, so a copy with structurally-identical fields
+          // still reads as a different reference -- if we rewrote unconditionally, the
+          // resolution batch would see the plan change every iteration and never reach
+          // fixed point. Looking up the namespace default takes one `loadNamespaceMetadata`
+          // round trip, so do it once here and bail out before rewriting if the namespace has
+          // no default.
+          getCollationFromSchemaMetadata(catalog, identifier.namespace()) match {
+            case Some(newCollation) =>
+              val newInfo: ViewInfo = info match {
+                case v1Info: V1ViewInfo =>
+                  new V1ViewInfo(v1Info.v1Table.copy(collation = Some(newCollation)))
+                case _ =>
+                  CatalogV2Util.viewInfoBuilderFrom(info)
+                    .withCollation(newCollation)
+                    .build()
+              }
+              val newRpv = rpv.copy(info = newInfo)
+              val newAlterViewAs = CurrentOrigin.withOrigin(alterViewAs.origin) {
+                alterViewAs.copy(child = newRpv)
+              }
+              newAlterViewAs.copyTagsFrom(alterViewAs)
+              newAlterViewAs
+            case None =>
+              alterViewAs
           }
-          newAlterViewAs.copyTagsFrom(alterViewAs)
-          newAlterViewAs
+
+        case createUserDefinedFunction@CreateUserDefinedFunction(
+        ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
+        _, _, _, _, _, collation, _, _, _, _, _, _) if collation.isEmpty =>
+          val newCreateUserDefinedFunction =
+            CurrentOrigin.withOrigin(createUserDefinedFunction.origin) {
+              createUserDefinedFunction.copy(
+                collation = getCollationFromSchemaMetadata(catalog, identifier.namespace()))
+            }
+          newCreateUserDefinedFunction.copyTagsFrom(createUserDefinedFunction)
+          newCreateUserDefinedFunction
 
         case other =>
           other

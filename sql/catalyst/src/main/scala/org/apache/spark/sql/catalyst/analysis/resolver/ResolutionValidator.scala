@@ -59,6 +59,8 @@ class ResolutionValidator {
    */
   def validate(operator: LogicalPlan): Unit = {
     operator match {
+      case window: Window =>
+        validateWindow(window)
       case withCte: WithCTE =>
         validateWith(withCte)
       case cteRelationDef: CTERelationDef =>
@@ -101,8 +103,14 @@ class ResolutionValidator {
         validateJoin(join)
       case repartition: Repartition =>
         validateRepartition(repartition)
+      case repartitionByExpression: RepartitionByExpression =>
+        validateRepartitionByExpression(repartitionByExpression)
       case sample: Sample =>
         validateSample(sample)
+      case generate: Generate =>
+        validateGenerate(generate)
+      case expand: Expand =>
+        validateExpand(expand)
       // [[LogicalRelation]], [[HiveTableRelation]] and other specific relations can't be imported
       // because of a potential circular dependency, so we match a generic Catalyst
       // [[MultiInstanceRelation]] instead.
@@ -136,6 +144,20 @@ class ResolutionValidator {
     }
 
     validate(withCte.plan)
+  }
+
+  private def validateWindow(window: Window): Unit = {
+    attributeScopeStack.pushScope()
+    try {
+      validate(window.child)
+      window.partitionSpec.foreach(expressionResolutionValidator.validate)
+      window.orderSpec.foreach(expressionResolutionValidator.validate)
+      expressionResolutionValidator.validateProjectList(window.windowExpressions)
+    } finally {
+      attributeScopeStack.popScope()
+    }
+
+    handleOperatorOutput(window)
   }
 
   private def validateCteRelationDef(cteRelationDef: CTERelationDef): Unit = {
@@ -271,8 +293,35 @@ class ResolutionValidator {
     validate(repartition.child)
   }
 
+  private def validateRepartitionByExpression(
+      repartitionByExpression: RepartitionByExpression): Unit = {
+    validate(repartitionByExpression.child)
+    repartitionByExpression.partitionExpressions.foreach(
+      expression => expressionResolutionValidator.validate(expression)
+    )
+  }
+
   private def validateSample(sample: Sample): Unit = {
     validate(sample.child)
+  }
+
+  private def validateGenerate(generate: Generate): Unit = {
+    validate(generate.child)
+    expressionResolutionValidator.validate(generate.generator)
+
+    handleOperatorOutput(generate)
+  }
+
+  private def validateExpand(expand: Expand): Unit = {
+    attributeScopeStack.pushScope()
+    try {
+      validate(expand.child)
+      expand.projections.foreach(_.foreach(expressionResolutionValidator.validate))
+    } finally {
+      attributeScopeStack.popScope()
+    }
+
+    handleOperatorOutput(expand)
   }
 
   private def validateJoin(join: Join) = {

@@ -78,7 +78,7 @@ private[hive] class SparkGetFunctionsOperation(
 
     try {
       matchingDbs.foreach { db =>
-        catalog.listFunctions(db, functionPattern).foreach {
+        catalog.listFunctions(db, functionPattern).toSeq.sortBy(_._1.funcName).foreach {
           case (funcIdentifier, _) =>
             val info = catalog.lookupFunctionInfo(funcIdentifier)
             val rowData = Array[AnyRef](

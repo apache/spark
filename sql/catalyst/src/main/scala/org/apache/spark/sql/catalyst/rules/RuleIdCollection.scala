@@ -63,6 +63,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveOutputRelation" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolvePivot" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveProcedures" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveQualify" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRelations" ::
@@ -157,6 +158,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
+      "org.apache.spark.sql.catalyst.optimizer.PushDownJoinThroughUnion" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushFoldableIntoBranches" ::
@@ -174,6 +176,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReplaceIntersectWithSemiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::

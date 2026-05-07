@@ -1,0 +1,93 @@
+================================================================================================
+DELTA_BINARY_PACKED INT32
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+DELTA_BINARY_PACKED INT32:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+readIntegers, constant                                2              2           0        451.8           2.2       1.0X
+skipIntegers, constant                                3              3           0        415.1           2.4       0.9X
+readIntegers, monotonic                               3              3           0        369.7           2.7       0.8X
+skipIntegers, monotonic                               3              3           0        415.6           2.4       0.9X
+readIntegers, small-delta random                      3              3           0        308.6           3.2       0.7X
+skipIntegers, small-delta random                      3              3           0        358.6           2.8       0.8X
+readIntegers, wide random                             4              4           0        249.2           4.0       0.6X
+skipIntegers, wide random                             4              4           0        281.4           3.6       0.6X
+
+
+================================================================================================
+DELTA_BINARY_PACKED INT64
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+DELTA_BINARY_PACKED INT64:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+readLongs, constant                                   5              6           0        195.2           5.1       1.0X
+skipLongs, constant                                   6              6           0        175.4           5.7       0.9X
+readLongs, monotonic                                  7              7           0        158.8           6.3       0.8X
+skipLongs, monotonic                                  6              6           0        175.6           5.7       0.9X
+readLongs, small-delta random                         8              8           0        139.4           7.2       0.7X
+skipLongs, small-delta random                         7              7           0        152.5           6.6       0.8X
+readLongs, wide random                               10             10           1        102.9           9.7       0.5X
+skipLongs, wide random                                6              9           2        185.5           5.4       1.0X
+
+
+================================================================================================
+DELTA_BYTE_ARRAY
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+DELTA_BYTE_ARRAY:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+readBinary, no overlap, len=16                       35             41           4         29.6          33.8       1.0X
+skipBinary, no overlap, len=16                       41             45           3         25.9          38.6       0.9X
+readBinary, half overlap, len=16                     41             44           3         25.4          39.3       0.9X
+skipBinary, half overlap, len=16                     47             50           5         22.3          44.8       0.8X
+readBinary, full overlap, len=16                     42             44           3         25.1          39.9       0.8X
+skipBinary, full overlap, len=16                     48             50           3         22.0          45.6       0.7X
+readBinary, half overlap, len=64                     42             42           1         25.2          39.6       0.9X
+skipBinary, half overlap, len=64                     47             50          14         22.4          44.6       0.8X
+
+
+================================================================================================
+DELTA_LENGTH_BYTE_ARRAY
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+DELTA_LENGTH_BYTE_ARRAY:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+readBinary, payloadLen=8                             20             21           0         51.7          19.3       1.0X
+skipBinary, payloadLen=8                             10             10           0        106.3           9.4       2.1X
+readBinary, payloadLen=32                            16             18           2         63.9          15.7       1.2X
+skipBinary, payloadLen=32                             6              6           0        175.9           5.7       3.4X
+readBinary, payloadLen=128                           19             19           0         56.0          17.8       1.1X
+skipBinary, payloadLen=128                            6              6           0        176.3           5.7       3.4X
+readBinary, payloadLen=512                           41             43           3         25.6          39.0       0.5X
+skipBinary, payloadLen=512                            6              6           1        176.4           5.7       3.4X
+
+
+================================================================================================
+Variant reads
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1011-azure
+AMD EPYC 7763 64-Core Processor
+Variant reads:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+readBytes (INT32)                                            7              7           0        142.3           7.0       1.0X
+readShorts (INT32)                                           7              8           0        143.0           7.0       1.0X
+readUnsignedIntegers (INT32 -> Long)                         7              7           0        147.1           6.8       1.0X
+readUnsignedLongs (INT64 -> Decimal(20,0))                 232            243          23          4.5         221.5       0.0X
+skipBytes                                                    4              4           0        285.4           3.5       2.0X
+skipShorts                                                   4              4           0        285.4           3.5       2.0X
+readByte (INT32 single-value)                               13             13           1         80.2          12.5       0.6X
+readShort (INT32 single-value)                              13             13           1         82.0          12.2       0.6X
+readInteger (INT32 single-value)                            13             13           0         80.2          12.5       0.6X
+readLong (INT64 single-value)                               14             14           0         74.9          13.3       0.5X
+readBinary(len) (DELTA_BYTE_ARRAY single-value)             64             67           3         16.5          60.6       0.1X
+
+

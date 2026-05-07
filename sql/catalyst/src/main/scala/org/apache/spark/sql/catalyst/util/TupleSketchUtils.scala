@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.Locale
 
+import org.apache.datasketches.common.Family
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
-import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, TupleSketchIterator}
+import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, SummaryDeserializer, TupleSketchIterator}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
 
@@ -200,6 +201,17 @@ trait SummaryAggregateMode extends Expression {
 
 object TupleSketchUtils {
   /**
+   * Extracts the Family ID from a DataSketches preamble.
+   * The Family ID is stored at byte offset 2 in all DataSketches preambles.
+   *
+   * @param memory The memory containing the sketch preamble
+   * @return The family ID as an unsigned byte value (0-255)
+   */
+  private def extractFamilyID(memory: Memory): Int = {
+    memory.getByte(2) & 0xFF
+  }
+
+  /**
    * Deserializes a binary tuple sketch representation into a Sketch with the
    * appropriate summary type.
    *
@@ -216,15 +228,30 @@ object TupleSketchUtils {
    */
   def heapifySketch[U <: Summary](
       bytes: Array[Byte],
-      deserializer: org.apache.datasketches.tuple.SummaryDeserializer[U],
+      deserializer: SummaryDeserializer[U],
       prettyName: String): Sketch[U] = {
     val memory =
       try {
         Memory.wrap(bytes)
       } catch {
         case _: NullPointerException | _: MemoryBoundsException =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
       }
+
+    val family = try {
+      val familyId = extractFamilyID(memory)
+      Family.idToFamily(familyId)
+    } catch {
+      case _: Exception =>
+        throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
+    }
+
+    if (family != Family.TUPLE) {
+      throw QueryExecutionErrors.tupleInvalidInputSketchBufferFamily(
+        prettyName,
+        expectedFamily = "TUPLE",
+        actualFamily = family.toString)
+    }
 
     try {
       Sketches.heapifySketch(memory, deserializer)

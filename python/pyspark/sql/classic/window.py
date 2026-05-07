@@ -32,7 +32,7 @@ __all__ = ["Window", "WindowSpec"]
 
 
 def _to_java_cols(
-    cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]
+    cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...],
 ) -> "JavaObject":
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
@@ -95,7 +95,6 @@ class Window(ParentWindow):
 class WindowSpec(ParentWindowSpec):
     def __new__(cls, jspec: "JavaObject") -> "WindowSpec":
         self = object.__new__(cls)
-        self.__init__(jspec)  # type: ignore[misc]
         return self
 
     def __init__(self, jspec: "JavaObject") -> None:
@@ -136,7 +135,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("sql.classic.window tests").getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.window,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

@@ -102,6 +102,10 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
+    // Merge write options into the job's configuration so that per-write options
+    // take precedence over session-level defaults set later in prepareWrite.
+    DataSourceUtils.mergeWriteOptionsIntoHadoopConf(options, job.getConfiguration)
+
     val partitionSet = AttributeSet(partitionColumns)
     // cleanup the internal metadata information of
     // the file source metadata attribute if any before write out

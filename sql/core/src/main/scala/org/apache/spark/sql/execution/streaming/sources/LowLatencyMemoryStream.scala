@@ -76,16 +76,19 @@ class LowLatencyMemoryStream[A: Encoder](
   private val records =
     Seq.fill(numPartitions)(new ListBuffer[(UnsafeRow, Long)]())
 
+  @GuardedBy("this")
+  private var numRecords: Long = 0L
+
   private val recordEndpoint = new LowLatencyMemoryStreamEndpoint(records, this)
   @volatile private var endpointRef: RpcEndpointRef = _
 
   override def addData(data: IterableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
     val timestamp = clock.getTimeMillis()
-    data.iterator.to(Seq).zipWithIndex.map {
-      case (item, index) =>
-        val partitionId = index % numPartitions
-        records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+    data.iterator.foreach { item =>
+      val partitionId: Int = (numRecords % numPartitions).toInt
+      records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+      numRecords += 1
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
@@ -102,6 +105,7 @@ class LowLatencyMemoryStream[A: Encoder](
     val timestamp = clock.getTimeMillis()
     data.iterator.foreach { item =>
       records(partitionId) += ((toRow(item).copy().asInstanceOf[UnsafeRow], timestamp))
+      numRecords += 1
     }
 
     // The new target offset is the offset where all records in all partitions have been processed.
@@ -277,18 +281,21 @@ class LowLatencyMemoryStreamPartitionReader(
   if (TaskContext.get() == null) {
     throw new IllegalStateException("Task context was not set!")
   }
-  override def nextWithTimeout(timeout: java.lang.Long): RecordStatus = {
-    val startReadTime = clock.nanoTime()
+  override def nextWithTimeout(
+      startTimeMs: java.lang.Long, timeoutMs: java.lang.Long): RecordStatus = {
+    // SPARK-55699: Use the reference time passed in by the caller instead of getting the latest
+    // time from LowLatencyClock, to avoid inconsistent reading when LowLatencyClock is a
+    // manual clock.
     var elapsedTimeMs = 0L
     current = getRecordWithTimestamp
     while (current.isEmpty) {
       val POLL_TIME = 10L
-      if (elapsedTimeMs >= timeout) {
+      if (elapsedTimeMs >= timeoutMs) {
         return RecordStatus.newStatusWithoutArrivalTime(false)
       }
       Thread.sleep(POLL_TIME)
       current = getRecordWithTimestamp
-      elapsedTimeMs = (clock.nanoTime() - startReadTime) / 1000 / 1000
+      elapsedTimeMs = clock.getTimeMillis() - startTimeMs
     }
     currentOffset += 1
     RecordStatus.newStatusWithArrivalTimeMs(current.get._2)

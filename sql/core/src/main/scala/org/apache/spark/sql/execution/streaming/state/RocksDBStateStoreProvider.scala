@@ -97,6 +97,13 @@ private[sql] class RocksDBStateStoreProvider
       (RELEASED, METRICS) -> RELEASED
     )
 
+    /**
+     * Returns the [[RocksDBStateStoreProvider]] that created this store instance.
+     * Keeping private within state and shouldn't be exposed outside.
+     */
+    private[state] def creatingProvider: RocksDBStateStoreProvider =
+      RocksDBStateStoreProvider.this
+
     override def id: StateStoreId = RocksDBStateStoreProvider.this.stateStoreId
 
     override def version: Long = lastVersion
@@ -458,6 +465,40 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    override def iteratorWithMultiValues(
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      // Note this verify function only verify on the colFamilyName being valid,
+      // we are actually doing prefix when useColumnFamilies,
+      // but pass "iteratorWithMultiValues" to throw correct error message
+      verifyColFamilyOperations("iteratorWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val rocksDbIter = rocksDB.iterator(colFamilyName)
+
+      val rowPair = new UnsafeRowPair()
+      val iter = rocksDbIter.flatMap { kv =>
+        val keyRow = kvEncoder._1.decodeKey(kv.key)
+        val valueRows = kvEncoder._2.decodeValues(kv.value)
+        valueRows.iterator.map { valueRow =>
+          rowPair.withRows(keyRow, valueRow)
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
     override def prefixScan(
         prefixKey: UnsafeRow,
         colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
@@ -476,6 +517,102 @@ private[sql] class RocksDBStateStoreProvider
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
         rowPair
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
+    override def prefixScanWithMultiValues(
+        prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("prefixScanWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(kvEncoder._1.supportPrefixKeyScan,
+        "prefixScanWithMultiValues requires encoder supporting prefix scan!")
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val prefix = kvEncoder._1.encodePrefixKey(prefixKey)
+      val rocksDbIter = rocksDB.prefixScan(prefix, colFamilyName)
+
+      val rowPair = new UnsafeRowPair()
+      val iter = rocksDbIter.flatMap { kv =>
+        val keyRow = kvEncoder._1.decodeKey(kv.key)
+        val valueRows = kvEncoder._2.decodeValues(kv.value)
+        valueRows.iterator.map { valueRow =>
+          rowPair.withRows(keyRow, valueRow)
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
+    override def rangeScan(
+        startKey: Option[UnsafeRow],
+        endKey: Option[UnsafeRow],
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("rangeScan", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportsRangeScan,
+        "Range scan requires an encoder that supports range scanning!")
+
+      val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
+      val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
+
+      val rowPair = new UnsafeRowPair()
+      val rocksDbIter = rocksDB.rangeScan(encodedStartKey, encodedEndKey, colFamilyName)
+      val iter = rocksDbIter.map { kv =>
+        rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
+        rowPair
+      }
+
+      new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+    }
+
+    override def rangeScanWithMultiValues(
+        startKey: Option[UnsafeRow],
+        endKey: Option[UnsafeRow],
+        colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("rangeScanWithMultiValues", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportsRangeScan,
+        "Range scan with multiple values requires an encoder that supports range scanning!")
+      verify(
+        kvEncoder._2.supportsMultipleValuesPerKey,
+        "Multi-value iterator operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+      val encodedStartKey = startKey.map(kvEncoder._1.encodeKey)
+      val encodedEndKey = endKey.map(kvEncoder._1.encodeKey)
+      val rocksDbIter = rocksDB.rangeScan(encodedStartKey, encodedEndKey, colFamilyName)
+
+      val rowPair = new UnsafeRowPair()
+      val iter = rocksDbIter.flatMap { kv =>
+        val keyRow = kvEncoder._1.decodeKey(kv.key)
+        val valueRows = kvEncoder._2.decodeValues(kv.value)
+        valueRows.iterator.map { valueRow =>
+          rowPair.withRows(keyRow, valueRow)
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
       }
 
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
@@ -606,9 +743,10 @@ private[sql] class RocksDBStateStoreProvider
           CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush"),
           CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE -> rocksDBMetrics.pinnedBlocksMemUsage,
           CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS -> rocksDBMetrics.numInternalKeys,
-          CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
-          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
+          CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES -> externalColFamilyCnt(),
+          CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES -> internalColFamilyCnt(),
           CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED -> rocksDBMetrics.numSnapshotsAutoRepaired,
+          CUSTOM_METRIC_LOADED_FROM_DFS -> rocksDBMetrics.loadedFromDfs,
           CUSTOM_METRIC_FORCE_SNAPSHOT -> (if (forceSnapshotOnCommit) 1L else 0L)
         ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
           Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
@@ -869,10 +1007,27 @@ private[sql] class RocksDBStateStoreProvider
       " the same stateStoreId")
     assert(readStore.isInstanceOf[RocksDBStateStore], "Can only upgrade state store if it is a " +
       "RocksDBStateStore")
+
+    val rocksDBReadStore = readStore.asInstanceOf[RocksDBStateStore]
+    // SPARK-56476: If the provider that created the read store is a different object than this
+    // provider, another thread removed the original provider from loadedProviders between the
+    // read and write phases (e.g. maintenance or task unload). This provider's state machine
+    // never issued the read store's stamp, so calling loadStateStore here would fail with
+    // StateStoreInvalidStamp. Delegate to the original provider instead.
+    // It is safe to call the original provider because we still have a read stamp on it.
+    if (rocksDBReadStore.creatingProvider ne this) {
+      logWarning(log"Provider " +
+        log"id=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, this.stateStoreProviderId)} " +
+        log"was replaced between read and write phases. Delegating upgradeReadStoreToWriteStore " +
+        log"to the original provider to avoid StateStoreInvalidStamp error.")
+      return rocksDBReadStore.creatingProvider.upgradeReadStoreToWriteStore(
+        readStore, version, uniqueId, forceSnapshotOnCommit)
+    }
+
     loadStateStore(version,
       uniqueId,
       readOnly = false,
-      existingStore = Some(readStore.asInstanceOf[RocksDBStateStore]),
+      existingStore = Some(rocksDBReadStore),
       forceSnapshotOnCommit = forceSnapshotOnCommit)
   }
 
@@ -1298,6 +1453,9 @@ object RocksDBStateStoreProvider {
   val CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES = StateStoreCustomSizeMetric(
     "rocksdbNumReplayChangelogFiles",
     "RocksDB: load - number of change log files replayed")
+  val CUSTOM_METRIC_LOADED_FROM_DFS = StateStoreCustomSumMetric(
+    "rocksdbNumLoadedFromDfs",
+    "RocksDB: load - number of state loads from external storage")
 
   val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
     "rocksdbReadBlockCacheMissCount",
@@ -1368,7 +1526,7 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES, CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES,
     CUSTOM_METRIC_LOAD_FROM_SNAPSHOT_TIME, CUSTOM_METRIC_LOAD_TIME, CUSTOM_METRIC_REPLAY_CHANGE_LOG,
     CUSTOM_METRIC_NUM_REPLAY_CHANGE_LOG_FILES, CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED,
-    CUSTOM_METRIC_FORCE_SNAPSHOT)
+    CUSTOM_METRIC_FORCE_SNAPSHOT, CUSTOM_METRIC_LOADED_FROM_DFS)
 
   val CUSTOM_INSTANCE_METRIC_SNAPSHOT_LAST_UPLOADED = StateStoreSnapshotLastUploadInstanceMetric()
 
@@ -1427,6 +1585,11 @@ class RocksDBStateStoreChangeDataReader(
         }
 
         val nextRecord = reader.next()
+        if (nextRecord._1 == RecordType.DELETE_RANGE_RECORD) {
+          throw new UnsupportedOperationException(
+            "DELETE_RANGE_RECORD is not supported in the state data source change feed. " +
+              "Range deletions cannot be expanded into individual key-value change records.")
+        }
         val keyBytes = if (storeConf.rowChecksumEnabled
           && nextRecord._1 == RecordType.DELETE_RECORD) {
           // remove checksum and decode to the original key

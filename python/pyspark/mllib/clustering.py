@@ -93,12 +93,10 @@ class BisectingKMeansModel(JavaModelWrapper):
         return self.call("k")
 
     @overload
-    def predict(self, x: "VectorLike") -> int:
-        ...
+    def predict(self, x: "VectorLike") -> int: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[int, RDD[int]]:
         """
@@ -221,7 +219,6 @@ class BisectingKMeans:
 
 @inherit_doc
 class KMeansModel(Saveable, Loader["KMeansModel"]):
-
     """A clustering model derived from the k-means method.
 
     .. versionadded:: 0.9.0
@@ -294,12 +291,10 @@ class KMeansModel(Saveable, Loader["KMeansModel"]):
         return len(self.centers)
 
     @overload
-    def predict(self, x: "VectorLike") -> int:
-        ...
+    def predict(self, x: "VectorLike") -> int: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[int, RDD[int]]:
         """
@@ -464,7 +459,6 @@ class KMeans:
 
 @inherit_doc
 class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianMixtureModel"]):
-
     """
     A clustering model derived from the Gaussian Mixture Model method.
 
@@ -559,12 +553,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
         return len(self.weights)
 
     @overload
-    def predict(self, x: "VectorLike") -> np.int64:
-        ...
+    def predict(self, x: "VectorLike") -> np.int64: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[int]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[int]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[np.int64, RDD[int]]:
         """
@@ -592,12 +584,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader["GaussianM
             return z.argmax()
 
     @overload
-    def predictSoft(self, x: "VectorLike") -> np.ndarray:
-        ...
+    def predictSoft(self, x: "VectorLike") -> np.ndarray: ...
 
     @overload
-    def predictSoft(self, x: RDD["VectorLike"]) -> RDD[pyarray.array]:
-        ...
+    def predictSoft(self, x: RDD["VectorLike"]) -> RDD[pyarray.array]: ...
 
     def predictSoft(
         self, x: Union["VectorLike", RDD["VectorLike"]]
@@ -724,7 +714,6 @@ class GaussianMixture:
 class PowerIterationClusteringModel(
     JavaModelWrapper, JavaSaveable, JavaLoader["PowerIterationClusteringModel"]
 ):
-
     """
     Model produced by :py:class:`PowerIterationClustering`.
 
@@ -1031,12 +1020,10 @@ class StreamingKMeans:
     def _validate(self, dstream: Any) -> None:
         if self._model is None:
             raise ValueError(
-                "Initial centers should be set either by setInitialCenters " "or setRandomCenters."
+                "Initial centers should be set either by setInitialCenters or setRandomCenters."
             )
         if not isinstance(dstream, DStream):
-            raise TypeError(
-                "Expected dstream to be of type DStream, " "got type %s" % type(dstream)
-            )
+            raise TypeError("Expected dstream to be of type DStream, got type %s" % type(dstream))
 
     @since("1.5.0")
     def setK(self, k: int) -> "StreamingKMeans":
@@ -1112,7 +1099,6 @@ class StreamingKMeans:
 
 
 class LDAModel(JavaModelWrapper, JavaSaveable, Loader["LDAModel"]):
-
     """A clustering model derived from the LDA method.
 
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
@@ -1308,7 +1294,7 @@ def _test() -> None:
         pass
     globs = pyspark.mllib.clustering.__dict__.copy()
     globs["sc"] = SparkContext("local[4]", "PythonTest", batchSize=2)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["sc"].stop()
     if failure_count:
         sys.exit(-1)

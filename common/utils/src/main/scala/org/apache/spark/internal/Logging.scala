@@ -95,6 +95,11 @@ class LogEntry(messageWithContext: => MessageWithContext) {
   def message: String = cachedMessageWithContext.message
 
   def context: java.util.Map[String, String] = cachedMessageWithContext.context
+
+  def +(other: LogEntry): LogEntry = {
+    val combined = cachedMessageWithContext + other.cachedMessageWithContext
+    new LogEntry(combined)
+  }
 }
 
 /**

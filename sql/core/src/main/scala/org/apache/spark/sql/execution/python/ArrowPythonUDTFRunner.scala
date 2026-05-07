@@ -53,21 +53,22 @@ class ArrowPythonUDTFRunner(
 
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    // For arrow-optimized Python UDTFs (@udtf(useArrow=True)), we need to write
-    // the schema to the worker to support UDT (user-defined type).
-    // Currently, UDT is not supported in PyArrow native UDTFs (arrow_udf)
+  override protected def evalConf: Map[String, String] = {
     if (evalType == PythonEvalType.SQL_ARROW_TABLE_UDF) {
-      PythonWorkerUtils.writeUTF(schema.json, dataOut)
-    }
-    // Write the table argument offsets for Arrow UDTFs.
-    else if (evalType == PythonEvalType.SQL_ARROW_UDTF) {
+      super.evalConf ++ Map(
+        "input_type" -> schema.json
+      )
+    } else {
       val tableArgOffsets = argMetas.collect {
         case ArgumentMetadata(offset, _, isTableArg) if isTableArg => offset
       }
-      dataOut.writeInt(tableArgOffsets.length)
-      tableArgOffsets.foreach(dataOut.writeInt(_))
+      super.evalConf ++ Map(
+        "table_arg_offsets" -> tableArgOffsets.mkString(",")
+      )
     }
+  }
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 

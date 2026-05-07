@@ -31,7 +31,7 @@ import org.mockito.Mockito.{mock, spy, when}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KryoData, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -62,8 +62,7 @@ import org.apache.spark.util.Utils
 
 
 class QueryExecutionErrorsSuite
-  extends QueryTest
-  with ParquetTest
+  extends ParquetTest
   with OrcTest
   with SharedSparkSession
   with DataTypeErrorsBase {
@@ -708,7 +707,7 @@ class QueryExecutionErrorsSuite
       ),
       condition = "ARITHMETIC_OVERFLOW",
       parameters = Map(
-        "message" -> "integer overflow",
+        "message" -> "overflow",
         "alternative" -> "",
         "config" -> s""""${SQLConf.ANSI_ENABLED.key}""""))
   }

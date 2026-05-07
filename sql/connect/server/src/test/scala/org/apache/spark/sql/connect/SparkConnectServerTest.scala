@@ -196,11 +196,13 @@ trait SparkConnectServerTest extends SharedSparkSession {
     }
   }
 
-  protected def assertEventuallyNoActiveRpcs(): Unit = {
+  protected def eventuallyWithTimeout[T](f: => T): T = {
     Eventually.eventually(timeout(eventuallyTimeout)) {
-      assertNoActiveRpcs()
+      f
     }
   }
+
+  protected def assertEventuallyNoActiveRpcs(): Unit = eventuallyWithTimeout(assertNoActiveRpcs())
 
   protected def assertNoActiveExecutions(): Unit = {
     SparkConnectService.executionManager.listActiveExecutions match {
@@ -209,11 +211,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
     }
   }
 
-  protected def assertEventuallyNoActiveExecutions(): Unit = {
-    Eventually.eventually(timeout(eventuallyTimeout)) {
-      assertNoActiveExecutions()
-    }
-  }
+  protected def assertEventuallyNoActiveExecutions(): Unit =
+    eventuallyWithTimeout(assertNoActiveExecutions())
 
   protected def assertExecutionReleased(operationId: String): Unit = {
     SparkConnectService.executionManager.listActiveExecutions match {
@@ -222,11 +221,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
     }
   }
 
-  protected def assertEventuallyExecutionReleased(operationId: String): Unit = {
-    Eventually.eventually(timeout(eventuallyTimeout)) {
-      assertExecutionReleased(operationId)
-    }
-  }
+  protected def assertEventuallyExecutionReleased(operationId: String): Unit =
+    eventuallyWithTimeout(assertExecutionReleased(operationId))
 
   // Get ExecutionHolder, assuming that only one execution is active
   protected def getExecutionHolder: ExecuteHolder = {
@@ -235,11 +231,14 @@ trait SparkConnectServerTest extends SharedSparkSession {
     executions.head
   }
 
-  protected def eventuallyGetExecutionHolder: ExecuteHolder = {
-    Eventually.eventually(timeout(eventuallyTimeout)) {
-      getExecutionHolder
-    }
-  }
+  protected def getExecutionHolderForOperation(opId: String): ExecuteHolder =
+    SparkConnectService.executionManager.listExecuteHolders.find(_.key.operationId == opId).get
+
+  protected def eventuallyGetExecutionHolderForOperation(opId: String): ExecuteHolder =
+    eventuallyWithTimeout(getExecutionHolderForOperation(opId))
+
+  protected def eventuallyGetExecutionHolder: ExecuteHolder =
+    eventuallyWithTimeout(getExecutionHolder)
 
   protected def withClient(sessionId: String = defaultSessionId, userId: String = defaultUserId)(
       f: SparkConnectClient => Unit): Unit = {

@@ -18,12 +18,13 @@
 """
 An internal immutable DataFrame with some metadata to manage indexes.
 """
+
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECKING, cast
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype  # noqa: F401
+from pandas.api.types import CategoricalDtype, is_integer_dtype  # noqa: F401
 
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import (
@@ -50,7 +51,7 @@ from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.typedef import (
     Dtype,
     as_spark_type,
-    extension_dtypes,
+    handle_dtype_as_extension_dtype,
     infer_pd_series_spark_type,
     spark_type_to_pandas_dtype,
 )
@@ -162,7 +163,7 @@ class InternalField:
     @property
     def is_extension_dtype(self) -> bool:
         """Return whether the dtype for the field is an extension type or not."""
-        return isinstance(self.dtype, extension_dtypes)
+        return handle_dtype_as_extension_dtype(self.dtype)
 
     def normalize_spark_type(self) -> "InternalField":
         """Return a new InternalField object with normalized Spark data type."""
@@ -673,9 +674,9 @@ class InternalFrame:
 
         # index_spark_columns
 
-        assert all(
-            isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns
-        ), index_spark_columns
+        assert all(isinstance(index_scol, PySparkColumn) for index_scol in index_spark_columns), (
+            index_spark_columns
+        )
 
         self._index_spark_columns: List[PySparkColumn] = index_spark_columns
 
@@ -715,11 +716,15 @@ class InternalFrame:
         ):
             schema = spark_frame.select(index_spark_columns + data_spark_columns).schema
             fields = [
-                InternalField.from_struct_field(struct_field)
-                if field is None
-                else InternalField(field.dtype, struct_field)
-                if field.struct_field is None
-                else field
+                (
+                    InternalField.from_struct_field(struct_field)
+                    if field is None
+                    else (
+                        InternalField(field.dtype, struct_field)
+                        if field.struct_field is None
+                        else field
+                    )
+                )
                 for field, struct_field in zip(index_fields + data_fields, schema.fields)
             ]
             index_fields = fields[: len(index_spark_columns)]
@@ -727,21 +732,29 @@ class InternalFrame:
         elif any(field is None or field.struct_field is None for field in index_fields):
             schema = spark_frame.select(index_spark_columns).schema
             index_fields = [
-                InternalField.from_struct_field(struct_field)
-                if field is None
-                else InternalField(field.dtype, struct_field)
-                if field.struct_field is None
-                else field
+                (
+                    InternalField.from_struct_field(struct_field)
+                    if field is None
+                    else (
+                        InternalField(field.dtype, struct_field)
+                        if field.struct_field is None
+                        else field
+                    )
+                )
                 for field, struct_field in zip(index_fields, schema.fields)
             ]
         elif any(field is None or field.struct_field is None for field in data_fields):
             schema = spark_frame.select(data_spark_columns).schema
             data_fields = [
-                InternalField.from_struct_field(struct_field)
-                if field is None
-                else InternalField(field.dtype, struct_field)
-                if field.struct_field is None
-                else field
+                (
+                    InternalField.from_struct_field(struct_field)
+                    if field is None
+                    else (
+                        InternalField(field.dtype, struct_field)
+                        if field.struct_field is None
+                        else field
+                    )
+                )
                 for field, struct_field in zip(data_fields, schema.fields)
             ]
 
@@ -809,9 +822,9 @@ class InternalFrame:
             len(index_spark_columns),
             len(index_names),
         )
-        assert all(
-            is_name_like_tuple(index_name, check_type=True) for index_name in index_names
-        ), index_names
+        assert all(is_name_like_tuple(index_name, check_type=True) for index_name in index_names), (
+            index_names
+        )
 
         self._index_names: List[Optional[Label]] = index_names
 
@@ -881,9 +894,9 @@ class InternalFrame:
         AssertionError: '__index_level_0__' already exists...
         """
         index_column = SPARK_DEFAULT_INDEX_NAME
-        assert (
-            index_column not in sdf.columns
-        ), "'%s' already exists in the Spark column names '%s'" % (index_column, sdf.columns)
+        assert index_column not in sdf.columns, (
+            "'%s' already exists in the Spark column names '%s'" % (index_column, sdf.columns)
+        )
 
         if default_index_type is None:
             default_index_type = ps.get_option("compute.default_index_type")
@@ -1109,7 +1122,7 @@ class InternalFrame:
         data_columns: List[str],
         column_labels: List[Label],
         column_label_names: List[Label],
-        fields: List[InternalField] = None,
+        fields: List[InternalField],
     ) -> pd.DataFrame:
         """
         Restore pandas DataFrame indices using the metadata.
@@ -1156,12 +1169,26 @@ class InternalFrame:
         for col, field in zip(pdf.columns, fields):
             pdf[col] = DataTypeOps(field.dtype, field.spark_type).restore(pdf[col])
 
+        if len(index_columns) == 1:
+            original_index_values = pdf[index_columns[0]].copy()
+
         append = False
         for index_field in index_columns:
             drop = index_field not in data_columns
             pdf = pdf.set_index(index_field, drop=drop, append=append)
             append = True
         pdf = pdf[data_columns]
+
+        # pandas can optimize sequential integer values into RangeIndex here, which drops the
+        # original narrower dtype such as int8 or int32 carried in the index metadata.
+        if len(index_columns) == 1 and isinstance(pdf.index, pd.RangeIndex):
+            internal_field = fields[0]
+            if is_integer_dtype(internal_field.dtype) and internal_field.dtype != np.dtype("int64"):
+                pdf.index = pd.Index(
+                    original_index_values,
+                    dtype=internal_field.dtype,
+                    name=pdf.index.name,
+                )
 
         pdf.index.names = [
             name if name is None or len(name) > 1 else name[0] for name in index_names
@@ -1618,7 +1645,7 @@ def _test() -> None:
         .appName("pyspark.pandas.internal tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.internal,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

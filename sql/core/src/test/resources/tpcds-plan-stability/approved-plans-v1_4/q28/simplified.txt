@@ -8,8 +8,8 @@ WholeStageCodegen (18)
               InputAdapter
                 Exchange #1
                   WholeStageCodegen (2)
-                    HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),sum,count,count,count,sum,count,count,count]
-                      HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count,sum,count,count]
+                    HashAggregate [sum,count,count,ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),count,sum,count,count,count]
+                      HashAggregate [ss_list_price,sum,count,count] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count]
                         InputAdapter
                           Exchange [ss_list_price] #2
                             WholeStageCodegen (1)
@@ -26,8 +26,8 @@ WholeStageCodegen (18)
                     InputAdapter
                       Exchange #4
                         WholeStageCodegen (4)
-                          HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),sum,count,count,count,sum,count,count,count]
-                            HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count,sum,count,count]
+                          HashAggregate [sum,count,count,ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),count,sum,count,count,count]
+                            HashAggregate [ss_list_price,sum,count,count] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count]
                               InputAdapter
                                 Exchange [ss_list_price] #5
                                   WholeStageCodegen (3)
@@ -44,8 +44,8 @@ WholeStageCodegen (18)
                   InputAdapter
                     Exchange #7
                       WholeStageCodegen (7)
-                        HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),sum,count,count,count,sum,count,count,count]
-                          HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count,sum,count,count]
+                        HashAggregate [sum,count,count,ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),count,sum,count,count,count]
+                          HashAggregate [ss_list_price,sum,count,count] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count]
                             InputAdapter
                               Exchange [ss_list_price] #8
                                 WholeStageCodegen (6)
@@ -62,8 +62,8 @@ WholeStageCodegen (18)
                 InputAdapter
                   Exchange #10
                     WholeStageCodegen (10)
-                      HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),sum,count,count,count,sum,count,count,count]
-                        HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count,sum,count,count]
+                      HashAggregate [sum,count,count,ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),count,sum,count,count,count]
+                        HashAggregate [ss_list_price,sum,count,count] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count]
                           InputAdapter
                             Exchange [ss_list_price] #11
                               WholeStageCodegen (9)
@@ -80,8 +80,8 @@ WholeStageCodegen (18)
               InputAdapter
                 Exchange #13
                   WholeStageCodegen (13)
-                    HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),sum,count,count,count,sum,count,count,count]
-                      HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count,sum,count,count]
+                    HashAggregate [sum,count,count,ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),count,sum,count,count,count]
+                      HashAggregate [ss_list_price,sum,count,count] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count]
                         InputAdapter
                           Exchange [ss_list_price] #14
                             WholeStageCodegen (12)
@@ -98,8 +98,8 @@ WholeStageCodegen (18)
             InputAdapter
               Exchange #16
                 WholeStageCodegen (16)
-                  HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),sum,count,count,count,sum,count,count,count]
-                    HashAggregate [ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count,sum,count,count]
+                  HashAggregate [sum,count,count,ss_list_price] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),count(ss_list_price),count,sum,count,count,count]
+                    HashAggregate [ss_list_price,sum,count,count] [avg(UnscaledValue(ss_list_price)),count(ss_list_price),sum,count,count]
                       InputAdapter
                         Exchange [ss_list_price] #17
                           WholeStageCodegen (15)

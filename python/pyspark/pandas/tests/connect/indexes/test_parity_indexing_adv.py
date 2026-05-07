@@ -29,7 +29,7 @@ class IndexingAdvParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.indexes.test_parity_indexing import *
+    from pyspark.pandas.tests.connect.indexes.test_parity_indexing import *  # noqa: F403
 
     from pyspark.testing import main
 

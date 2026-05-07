@@ -19,8 +19,8 @@ import unittest
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

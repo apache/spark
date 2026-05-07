@@ -846,6 +846,20 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       }
     }
   }
+
+  test("withWatermark fails for nested column") {
+    val df = spark.sql(
+      "SELECT 1 as id, struct(to_timestamp('2024-01-01 10:00:00') as timestamp, 'val1' as value) " +
+        "as nested_struct")
+    val e = intercept[AnalysisException] {
+      df.withWatermark("nested_struct.timestamp", "0 seconds").schema
+    }
+    checkError(
+      e,
+      condition = "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN",
+      parameters = Map("eventExpr" -> ".*nested_struct.*timestamp.*"),
+      matchPVals = true)
+  }
 }
 
 class TestForeachWriter[T] extends ForeachWriter[T] {

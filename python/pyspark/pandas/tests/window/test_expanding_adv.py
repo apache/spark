@@ -15,11 +15,17 @@
 # limitations under the License.
 #
 
+import pandas as pd
+
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_expanding import ExpandingTestingFuncMixin
 
 
 class ExpandingAdvMixin(ExpandingTestingFuncMixin):
+    def test_expanding_median(self):
+        self._test_expanding_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_expanding_quantile(self):
         self._test_expanding_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
 
@@ -27,13 +33,15 @@ class ExpandingAdvMixin(ExpandingTestingFuncMixin):
         self._test_expanding_func("std")
 
     def test_expanding_var(self):
-        self._test_expanding_func("var")
+        self._test_expanding_func("var", int_almost=True)
 
     def test_expanding_skew(self):
-        self._test_expanding_func("skew")
+        self._test_expanding_func("skew", int_almost=True)
 
     def test_expanding_kurt(self):
-        self._test_expanding_func("kurt")
+        self._test_expanding_func(
+            "kurt", int_almost=True, float_almost=LooseVersion(pd.__version__) >= "3.0.0"
+        )
 
 
 class ExpandingAdvTests(

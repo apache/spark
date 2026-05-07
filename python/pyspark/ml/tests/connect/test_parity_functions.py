@@ -22,7 +22,7 @@ from pyspark.ml.tests.test_functions import (
     PredictBatchUDFTestsMixin,
 )
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,

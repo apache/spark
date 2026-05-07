@@ -4,7 +4,6 @@ py4j>=0.10.9.9
 # PySpark dependencies (optional)
 numpy>=1.22
 pyarrow>=18.0.0
-six==1.16.0
 pandas>=2.2.0
 scipy>=1.8.0
 plotly<6.0.0
@@ -19,8 +18,14 @@ unittest-xml-reporting
 openpyxl
 
 # PySpark test dependencies (optional)
+asv
 coverage
 tabulate
+
+# Kafka streaming test dependencies (optional)
+# Required for running Kafka integration tests with Docker test containers
+testcontainers[kafka]>=3.7.0
+kafka-python-ng>=2.0.2
 
 # Linter
 ruff==0.14.8
@@ -28,7 +33,7 @@ mypy==1.19.1
 pytest-mypy-plugins==3.2.0
 # See SPARK-38680.
 pandas-stubs>=2.2.0
-scipy-stubs;
+scipy-stubs
 types-PyYAML
 
 # Documentation (SQL)
@@ -58,8 +63,7 @@ jira>=3.5.2
 PyGithub
 
 # pandas API on Spark Code formatter.
-black==23.12.1
-py
+black==26.3.1
 
 # Spark Connect (required)
 grpcio>=1.76.0

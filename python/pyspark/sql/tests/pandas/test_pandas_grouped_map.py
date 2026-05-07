@@ -46,14 +46,14 @@ from pyspark.sql.types import (
     YearMonthIntervalType,
 )
 from pyspark.errors import PythonException, PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pyarrow and have_pandas:
@@ -120,7 +120,11 @@ class ApplyInPandasTestsMixin:
                 float=pdf.float * 2,
                 double=pdf.double * 2,
                 decim=pdf.decim * 2,
-                bool=False if pdf.bool else True,
+                bool=(
+                    (False if pdf.bool else True)
+                    if LooseVersion(pd.__version__) < "3.0.0"
+                    else (~pdf.bool)
+                ),
                 str=pdf.str + "there",
                 array=pdf.array,
                 bin=pdf.bin,
@@ -139,7 +143,11 @@ class ApplyInPandasTestsMixin:
                 float=pdf.float * 2,
                 double=pdf.double * 2,
                 decim=pdf.decim * 2,
-                bool=False if pdf.bool else True,
+                bool=(
+                    (False if pdf.bool else True)
+                    if LooseVersion(pd.__version__) < "3.0.0"
+                    else (~pdf.bool)
+                ),
                 str=pdf.str + "there",
                 array=pdf.array,
                 bin=pdf.bin,
@@ -159,7 +167,11 @@ class ApplyInPandasTestsMixin:
                 float=pdf.float * 2,
                 double=pdf.double * 2,
                 decim=pdf.decim * 2,
-                bool=False if pdf.bool else True,
+                bool=(
+                    (False if pdf.bool else True)
+                    if LooseVersion(pd.__version__) < "3.0.0"
+                    else (~pdf.bool)
+                ),
                 str=pdf.str + "there",
                 array=pdf.array,
                 bin=pdf.bin,
@@ -170,7 +182,15 @@ class ApplyInPandasTestsMixin:
         )
 
         result1 = df.groupby("id").apply(udf1).sort("id").toPandas()
-        expected1 = df.toPandas().groupby("id").apply(udf1.func).reset_index(drop=True)
+
+        pdf = df.toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id")
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy())
+        expected1 = grouped_pdf.apply(udf1.func).reset_index(drop=True)
 
         result2 = df.groupby("id").apply(udf2).sort("id").toPandas()
         expected2 = expected1
@@ -196,7 +216,16 @@ class ApplyInPandasTestsMixin:
         udf = pandas_udf(lambda pdf: pdf, output_schema, PandasUDFType.GROUPED_MAP)
 
         result = df.groupby("id").apply(udf).sort("id").toPandas()
-        expected = df.toPandas().groupby("id").apply(udf.func).reset_index(drop=True)
+
+        pdf = df.toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id", as_index=False)
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy(), as_index=False)
+        expected = grouped_pdf.apply(udf.func).reset_index(drop=True)
+
         assert_frame_equal(expected, result)
 
     def test_register_grouped_map_udf(self):
@@ -226,7 +255,16 @@ class ApplyInPandasTestsMixin:
             return pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id)
 
         result = df.groupby("id").apply(foo).sort("id").toPandas()
-        expected = df.toPandas().groupby("id").apply(foo.func).reset_index(drop=True)
+
+        pdf = df.toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id")
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy())
+        expected = grouped_pdf.apply(foo.func).reset_index(drop=True)
+
         assert_frame_equal(expected, result)
 
     def test_coerce(self):
@@ -235,7 +273,15 @@ class ApplyInPandasTestsMixin:
         foo = pandas_udf(lambda pdf: pdf, "id long, v double", PandasUDFType.GROUPED_MAP)
 
         result = df.groupby("id").apply(foo).sort("id").toPandas()
-        expected = df.toPandas().groupby("id").apply(foo.func).reset_index(drop=True)
+
+        pdf = df.toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id")
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy())
+        expected = grouped_pdf.apply(foo.func).reset_index(drop=True)
         expected = expected.assign(v=expected.v.astype("float64"))
         assert_frame_equal(expected, result)
 
@@ -304,7 +350,7 @@ class ApplyInPandasTestsMixin:
     def check_apply_in_pandas_returning_wrong_column_names(self):
         with self.assertRaisesRegex(
             PythonException,
-            "Column names of the returned pandas.DataFrame do not match specified schema. "
+            "Column names of the returned data do not match specified schema. "
             "Missing: mean. Unexpected: median, std.",
         ):
             self._test_apply_in_pandas(
@@ -320,7 +366,7 @@ class ApplyInPandasTestsMixin:
     def check_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
         with self.assertRaisesRegex(
             PythonException,
-            "Number of columns of the returned pandas.DataFrame doesn't match "
+            "Number of columns of the returned data doesn't match "
             "specified schema. Expected: 2 Actual: 3",
         ):
             self._test_apply_in_pandas(
@@ -342,21 +388,22 @@ class ApplyInPandasTestsMixin:
 
     def check_apply_in_pandas_returning_incompatible_type(self):
         for safely in [True, False]:
-            with self.subTest(convertToArrowArraySafely=safely), self.sql_conf(
-                {"spark.sql.execution.pandas.convertToArrowArraySafely": safely}
+            with (
+                self.subTest(convertToArrowArraySafely=safely),
+                self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": safely}),
             ):
                 # sometimes we see ValueErrors
                 with self.subTest(convert="string to double"):
                     pandas_type_name = "object" if LooseVersion(pd.__version__) < "3.0.0" else "str"
                     expected = (
-                        rf"ValueError: Exception thrown when converting pandas.Series \({pandas_type_name}\) "
-                        r"with name 'mean' to Arrow Array \(double\)."
+                        rf"ValueError: Failed to convert the value of the column 'mean' "
+                        rf"with type '{pandas_type_name}' to Arrow type 'double'\."
                     )
                     if safely:
                         expected = expected + (
-                            " It can be caused by overflows or other "
-                            "unsafe conversions warned by Arrow. Arrow safe type check "
-                            "can be disabled by using SQL config "
+                            " It can be caused by overflows or other unsafe "
+                            "conversions warned by Arrow. Arrow safe type "
+                            "check can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
                     with self.assertRaisesRegex(PythonException, expected):
@@ -369,8 +416,9 @@ class ApplyInPandasTestsMixin:
                 with self.subTest(convert="double to string"):
                     with self.assertRaisesRegex(
                         PythonException,
-                        r"TypeError: Exception thrown when converting pandas.Series \(float64\) "
-                        r"with name 'mean' to Arrow Array \(string\).",
+                        r"TypeError: Cannot convert the output value of the column 'mean' "
+                        r"with type 'float64' to the specified return type of the column: "
+                        r"'string'\. Please check if the data types match and try again\.",
                     ):
                         self._test_apply_in_pandas(
                             lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]),
@@ -397,9 +445,7 @@ class ApplyInPandasTestsMixin:
         with self.sql_conf(
             {"spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled": False}
         ):
-            with self.assertRaisesRegex(
-                PythonException, "Exception thrown when converting pandas.Series"
-            ):
+            with self.assertRaisesRegex(PythonException, "Failed to convert the value"):
                 (
                     self.data.groupby("id")
                     .applyInPandas(
@@ -418,7 +464,16 @@ class ApplyInPandasTestsMixin:
         )
 
         result = df.groupby("id").apply(foo_udf).sort("id").toPandas()
-        expected = df.toPandas().groupby("id").apply(foo_udf.func).reset_index(drop=True)
+
+        pdf = df.toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id")
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy())
+        expected = grouped_pdf.apply(foo_udf.func).reset_index(drop=True)
+
         assert_frame_equal(expected, result)
 
     def test_wrong_return_type(self):
@@ -519,22 +574,22 @@ class ApplyInPandasTestsMixin:
         pdf = df.toPandas()
 
         def foo1(key, pdf):
-            assert type(key) == tuple
-            assert type(key[0]) == np.int64
+            assert isinstance(key, tuple)
+            assert isinstance(key[0], np.int64)
 
             return pdf.assign(
                 v1=key[0], v2=pdf.v * key[0], v3=pdf.v * pdf.id, v4=pdf.v * pdf.id.mean()
             )
 
         def foo2(key, pdf):
-            assert type(key) == tuple
-            assert type(key[0]) == np.int64
-            assert type(key[1]) == np.int32
+            assert isinstance(key, tuple)
+            assert isinstance(key[0], np.int64)
+            assert isinstance(key[1], np.int32)
 
             return pdf.assign(v1=key[0], v2=key[1], v3=pdf.v * key[0], v4=pdf.v + key[1])
 
         def foo3(key, pdf):
-            assert type(key) == tuple
+            assert isinstance(key, tuple)
             assert len(key) == 0
             return pdf.assign(v1=pdf.v * pdf.id)
 
@@ -552,9 +607,14 @@ class ApplyInPandasTestsMixin:
 
         # Test groupby column
         result1 = df.groupby("id").apply(udf1).sort("id", "v").toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id", as_index=False)
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy(), as_index=False)
         expected1 = (
-            pdf.groupby("id", as_index=False)
-            .apply(lambda x: udf1.func((x.id.iloc[0],), x))
+            grouped_pdf.apply(lambda x: udf1.func((x.id.iloc[0],), x))
             .sort_values(["id", "v"])
             .reset_index(drop=True)
         )
@@ -572,9 +632,14 @@ class ApplyInPandasTestsMixin:
 
         # Test complex groupby
         result3 = df.groupby(df.id, df.v % 2).apply(udf2).sort("id", "v").toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby([pdf.id, pdf.v % 2], as_index=False)
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so copy the id grouper instead.
+            grouped_pdf = pdf.groupby([pdf.id.copy(), pdf.v % 2], as_index=False)
         expected3 = (
-            pdf.groupby([pdf.id, pdf.v % 2], as_index=False)
-            .apply(
+            grouped_pdf.apply(
                 lambda x: udf2.func(
                     (
                         x.id.iloc[0],
@@ -606,7 +671,14 @@ class ApplyInPandasTestsMixin:
 
         df = self.data
         grouped_df = df.groupby("id")
-        grouped_pdf = df.toPandas().groupby("id", as_index=False)
+
+        pdf = df.toPandas()
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id", as_index=False)
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy(), as_index=False)
 
         # Function returns a pdf with required column names, but order could be arbitrary using dict
         def change_col_order(pdf):
@@ -666,7 +738,7 @@ class ApplyInPandasTestsMixin:
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pandas.DataFrame do not match "
+                "Column names of the returned data do not match "
                 "specified schema. Missing: id. Unexpected: iid.",
             ):
                 grouped_df.apply(column_name_typo).collect()
@@ -1009,7 +1081,7 @@ class ApplyInPandasTestsMixin:
                 [
                     Row(
                         level="WARNING",
-                        msg=f"pandas grouped map: {dict(id=lst, value=[v*10 for v in lst])}",
+                        msg=f"pandas grouped map: {dict(id=lst, value=[v * 10 for v in lst])}",
                         context={"func_name": func_with_logging.__name__},
                         logger="test_pandas_grouped_map",
                     )
@@ -1415,8 +1487,15 @@ class ApplyInPandasTestsMixin:
             return pdf.assign(v1=pdf.v * pdf.id * 1.0)
 
         df = self.data
+
         pdf = df.toPandas()
-        expected = pdf.groupby("id", as_index=False).apply(foo.func).reset_index(drop=True)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            grouped_pdf = pdf.groupby("id", as_index=False)
+        else:
+            # pandas 3+ GroupBy.apply drops grouping columns when grouped by
+            # the same DataFrame column, so use a copied Series instead.
+            grouped_pdf = pdf.groupby(pdf.id.copy(), as_index=False)
+        expected = grouped_pdf.apply(foo.func).reset_index(drop=True)
 
         for codec in ["none", "zstd", "lz4"]:
             with self.subTest(compressionCodec=codec):

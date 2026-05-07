@@ -24,13 +24,12 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, SparkSessionProvider, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
-trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
+trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
 
   /**
    * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
@@ -55,7 +54,9 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
     }
   }
 
-  def runAndFetchMetrics(func: => Unit): Map[String, String] = {
+  // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
+  // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
+  def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
     val statusStore = spark.sharedState.statusStore
     val oldCount = statusStore.executionsList().size
 
@@ -74,7 +75,9 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
     val exec = statusStore.executionsList().last
     val execId = exec.executionId
-    val sqlMetrics = exec.metrics.map { metric => metric.accumulatorId -> metric.name }.toMap
+    val sqlMetrics = statusStore.planGraph(execId).allNodes
+      .flatMap(n => n.metrics.map(m => (m.accumulatorId, (n.id, n.name, m.name))))
+      .toMap
     statusStore.executionMetrics(execId).map { case (k, v) => sqlMetrics(k) -> v }
   }
 }
@@ -83,7 +86,8 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
 trait SharedSparkSessionBase
-  extends SQLTestUtilsBase
+  extends QueryTestBase
+  with SparkSessionProvider
   with BeforeAndAfterEach
   with Eventually { self: Suite =>
 
@@ -121,7 +125,7 @@ trait SharedSparkSessionBase
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    */
-  protected implicit def spark: SparkSession = _spark
+  protected override def spark: classic.SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -129,7 +133,7 @@ trait SharedSparkSessionBase
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    SparkSession.cleanupAnyExistingSession()
+    classic.SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
 

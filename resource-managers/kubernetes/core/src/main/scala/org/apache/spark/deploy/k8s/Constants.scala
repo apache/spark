@@ -105,6 +105,7 @@ object Constants {
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
   val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
   val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
+  val DEFAULT_PVC_ACCESS_MODE = "ReadWriteOncePod"
   val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
   val CONNECT_GRPC_BINDING_PORT = "spark.connect.grpc.binding.port"
   val EXIT_EXCEPTION_ANNOTATION = "spark.exit-exception"

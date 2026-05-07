@@ -19,6 +19,7 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
+
 import datetime
 import itertools
 import functools
@@ -27,6 +28,7 @@ from decimal import Decimal
 from typing import Any, Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -114,38 +116,38 @@ def to_arrow_type(
     """
     import pyarrow as pa
 
-    if type(dt) == BooleanType:
+    if isinstance(dt, BooleanType):
         arrow_type = pa.bool_()
-    elif type(dt) == ByteType:
+    elif isinstance(dt, ByteType):
         arrow_type = pa.int8()
-    elif type(dt) == ShortType:
+    elif isinstance(dt, ShortType):
         arrow_type = pa.int16()
-    elif type(dt) == IntegerType:
+    elif isinstance(dt, IntegerType):
         arrow_type = pa.int32()
-    elif type(dt) == LongType:
+    elif isinstance(dt, LongType):
         arrow_type = pa.int64()
-    elif type(dt) == FloatType:
+    elif isinstance(dt, FloatType):
         arrow_type = pa.float32()
-    elif type(dt) == DoubleType:
+    elif isinstance(dt, DoubleType):
         arrow_type = pa.float64()
-    elif type(dt) == DecimalType:
+    elif isinstance(dt, DecimalType):
         arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif type(dt) == StringType:
+    elif isinstance(dt, StringType):
         arrow_type = pa.large_string() if prefers_large_types else pa.string()
-    elif type(dt) == BinaryType:
+    elif isinstance(dt, BinaryType):
         arrow_type = pa.large_binary() if prefers_large_types else pa.binary()
-    elif type(dt) == DateType:
+    elif isinstance(dt, DateType):
         arrow_type = pa.date32()
-    elif type(dt) == TimestampType:
+    elif isinstance(dt, TimestampType):
         assert timezone is not None
         arrow_type = pa.timestamp("us", tz=timezone)
-    elif type(dt) == TimestampNTZType:
+    elif isinstance(dt, TimestampNTZType):
         arrow_type = pa.timestamp("us", tz=None)
-    elif type(dt) == DayTimeIntervalType:
+    elif isinstance(dt, DayTimeIntervalType):
         arrow_type = pa.duration("us")
-    elif type(dt) == TimeType:
+    elif isinstance(dt, TimeType):
         arrow_type = pa.time64("ns")
-    elif type(dt) == ArrayType:
+    elif isinstance(dt, ArrayType):
         field = pa.field(
             "element",
             to_arrow_type(
@@ -157,7 +159,7 @@ def to_arrow_type(
             nullable=dt.containsNull,
         )
         arrow_type = pa.list_(field)
-    elif type(dt) == MapType:
+    elif isinstance(dt, MapType):
         key_field = pa.field(
             "key",
             to_arrow_type(
@@ -179,7 +181,7 @@ def to_arrow_type(
             nullable=dt.valueContainsNull,
         )
         arrow_type = pa.map_(key_field, value_field)
-    elif type(dt) == StructType:
+    elif isinstance(dt, StructType):
         field_names = dt.names
         if error_on_duplicated_field_names_in_struct and len(set(field_names)) != len(field_names):
             raise UnsupportedOperationException(
@@ -201,7 +203,7 @@ def to_arrow_type(
             for field in dt
         ]
         arrow_type = pa.struct(fields)
-    elif type(dt) == NullType:
+    elif isinstance(dt, NullType):
         arrow_type = pa.null()
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
@@ -210,7 +212,7 @@ def to_arrow_type(
             timezone=timezone,
             prefers_large_types=prefers_large_types,
         )
-    elif type(dt) == VariantType:
+    elif isinstance(dt, VariantType):
         fields = [
             pa.field("value", pa.binary(), nullable=False),
             # The metadata field is tagged so we can identify that the arrow struct actually
@@ -218,7 +220,7 @@ def to_arrow_type(
             pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
         arrow_type = pa.struct(fields)
-    elif type(dt) == GeometryType:
+    elif isinstance(dt, GeometryType):
         fields = [
             pa.field("srid", pa.int32(), nullable=False),
             pa.field(
@@ -229,7 +231,7 @@ def to_arrow_type(
             ),
         ]
         arrow_type = pa.struct(fields)
-    elif type(dt) == GeographyType:
+    elif isinstance(dt, GeographyType):
         fields = [
             pa.field("srid", pa.int32(), nullable=False),
             pa.field(
@@ -317,6 +319,7 @@ def is_geometry(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geometry" in field.metadata
             and field.metadata[b"geometry"] == b"true"
         )
@@ -333,6 +336,7 @@ def is_geography(at: "pa.DataType") -> bool:
     return any(
         (
             field.name == "wkb"
+            and field.metadata is not None
             and b"geography" in field.metadata
             and field.metadata[b"geography"] == b"true"
         )
@@ -541,7 +545,7 @@ def _check_arrow_array_timestamps_localize(
     if types.is_timestamp(a.type) and truncate and a.type.unit == "ns":
         a = pc.floor_temporal(a, unit="microsecond")
 
-    if types.is_timestamp(a.type) and a.type.tz is None and type(dt) == TimestampType:
+    if types.is_timestamp(a.type) and a.type.tz is None and isinstance(dt, TimestampType):
         assert timezone is not None
 
         # Only localize timestamps that will become Spark TimestampType columns.
@@ -784,11 +788,11 @@ def _check_series_convert_timestamps_localize(
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
         return s.apply(
-            lambda ts: ts.tz_localize(from_tz, ambiguous=False)  # type: ignore[arg-type, return-value]
-            .tz_convert(to_tz)
-            .tz_localize(None)
-            if ts is not pd.NaT
-            else pd.NaT
+            lambda ts: (  # type: ignore[arg-type]
+                ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)  # type: ignore[return-value]
+                if ts is not pd.NaT
+                else pd.NaT
+            )
         )
     else:
         return s
@@ -861,27 +865,42 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
     inferred incorrectly.
     """
     import numpy as np
+    import pandas as pd
 
-    if type(dt) == ByteType:
+    if isinstance(dt, ByteType):
         return np.int8
-    elif type(dt) == ShortType:
+    elif isinstance(dt, ShortType):
         return np.int16
-    elif type(dt) == IntegerType:
+    elif isinstance(dt, IntegerType):
         return np.int32
-    elif type(dt) == LongType:
+    elif isinstance(dt, LongType):
         return np.int64
-    elif type(dt) == FloatType:
+    elif isinstance(dt, FloatType):
         return np.float32
-    elif type(dt) == DoubleType:
+    elif isinstance(dt, DoubleType):
         return np.float64
-    elif type(dt) == BooleanType:
+    elif isinstance(dt, BooleanType):
         return bool
-    elif type(dt) == TimestampType:
-        return np.dtype("datetime64[ns]")
-    elif type(dt) == TimestampNTZType:
-        return np.dtype("datetime64[ns]")
-    elif type(dt) == DayTimeIntervalType:
-        return np.dtype("timedelta64[ns]")
+    elif isinstance(dt, TimestampType):
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
+    elif isinstance(dt, TimestampNTZType):
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("datetime64[ns]")
+        else:
+            return np.dtype("datetime64[us]")
+    elif isinstance(dt, DayTimeIntervalType):
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return np.dtype("timedelta64[ns]")
+        else:
+            return np.dtype("timedelta64[us]")
+    elif isinstance(dt, StringType):
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return None
+        else:
+            return pd.StringDtype(na_value=np.nan)
     else:
         return None
 
@@ -993,7 +1012,11 @@ def _create_converter_to_pandas(
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if not isinstance(pser.dtype, pd.DatetimeTZDtype):
                     pser = pser.astype(pandas_type, copy=False)
-                return _check_series_convert_timestamps_local_tz(pser, timezone=timezone)
+                pser = _check_series_convert_timestamps_local_tz(pser, timezone=timezone)
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    return pser
+                else:
+                    return pser.astype(pandas_type, copy=False)
 
         else:
 
@@ -1402,9 +1425,11 @@ def _create_converter_from_pandas(
                             return [
                                 (
                                     _key_conv(k) if _key_conv is not None and k is not None else k,
-                                    _value_conv(v)
-                                    if _value_conv is not None and v is not None
-                                    else v,
+                                    (
+                                        _value_conv(v)
+                                        if _value_conv is not None and v is not None
+                                        else v
+                                    ),
                                 )
                                 for k, v in value.items()
                             ]

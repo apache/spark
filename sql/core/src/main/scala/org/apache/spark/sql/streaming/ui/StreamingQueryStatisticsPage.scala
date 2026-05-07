@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreProvider
 import org.apache.spark.sql.internal.SQLConf.STATE_STORE_PROVIDER_CLASS
 import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.ui.UIUtils._
-import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 import org.apache.spark.util.ArrayImplicits._
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
@@ -79,7 +79,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
@@ -88,7 +88,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       s"timeTipStrings[$time] = 'batch $batchId ($formattedTime)';"
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateFormattedTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
@@ -97,7 +97,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       s"""formattedTimeTipStrings["$formattedTime"] = 'batch $batchId ($formattedTime)';"""
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateTimeToValues(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
@@ -108,7 +108,7 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
       s"""formattedTimeToValues["$formattedTime"] = $s;"""
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   def generateBasicInfo(uiData: StreamingQueryUIData): Seq[Node] = {

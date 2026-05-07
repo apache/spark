@@ -152,6 +152,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   private[sql] def createCommand(): LogicalPlan = {
+    if (_withSchemaEvolution) {
+      throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
+    }
     CreateTableAsSelect(
       UnresolvedIdentifier(tableName),
       partitioning.getOrElse(Seq.empty) ++ clustering,
@@ -194,8 +197,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def appendCommand(): LogicalPlan = {
     AppendData.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT)),
-      logicalPlan, options.toMap)
+      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT)),
+      logicalPlan, options.toMap, withSchemaEvolution = _withSchemaEvolution)
   }
 
   /** @inheritdoc */
@@ -206,8 +209,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def overwriteCommand(condition: Column): LogicalPlan = {
     OverwriteByExpression.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, expression(condition), options.toMap)
+      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
+      logicalPlan, expression(condition), options.toMap, _withSchemaEvolution)
   }
 
   /** @inheritdoc */
@@ -218,8 +221,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
 
   private[sql] def overwritePartitionsCommand(): LogicalPlan = {
     OverwritePartitionsDynamic.byName(
-      UnresolvedRelation(tableName).requireWritePrivileges(Seq(INSERT, DELETE)),
-      logicalPlan, options.toMap)
+      UnresolvedRelation(tableName).requireWritePrivileges(Set(INSERT, DELETE)),
+      logicalPlan, options.toMap, _withSchemaEvolution)
   }
 
   /**
@@ -238,6 +241,9 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
   }
 
   private[sql] def replaceCommand(orCreate: Boolean): LogicalPlan = {
+    if (_withSchemaEvolution) {
+      throw QueryCompilationErrors.schemaEvolutionNotSupportedForReplaceTableWriteError()
+    }
     ReplaceTableAsSelect(
       UnresolvedIdentifier(tableName),
       partitioning.getOrElse(Seq.empty) ++ clustering,

@@ -491,6 +491,12 @@ message ExecutePlanResponse {
     repeated Expression.Literal values = 2;
     repeated string keys = 3;
     int64 plan_id = 4;
+    // (Optional) The index of the root error in errors.
+    // The field will not be set if there are no errors.
+    optional int32 root_error_idx = 5;
+    // A list of errors that occurred while collecting the observed metrics.
+    // If the length is 0, it means no errors occurred.
+    repeated FetchErrorDetailsResponse.Error errors = 6;
   }
 
   message ResultComplete {

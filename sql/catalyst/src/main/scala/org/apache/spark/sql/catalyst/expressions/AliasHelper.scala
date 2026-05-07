@@ -66,6 +66,32 @@ trait AliasHelper {
   }
 
   /**
+   * Replace all attributes, that reference an alias, with the aliased expression.
+   * Tracks which aliases were replaced and returns them.
+   */
+  protected def replaceAliasWhileTracking(
+      expr: Expression,
+      aliasMap: AttributeMap[Alias]): (Expression, AttributeMap[Alias]) = {
+    // Use transformUp to prevent infinite recursion when the replacement expression
+    // redefines the same ExprId,
+    var replaced = AttributeMap.empty[Alias]
+    val newExpr = trimAliases(expr.transformUp {
+      case a: Attribute =>
+        // If we replace an alias add it to replaced
+        val newElem = aliasMap.get(a)
+        newElem match {
+          case None => a
+          case Some(b) =>
+            if (!replaced.contains(a)) {
+              replaced += (a, b)
+            }
+            b
+        }
+    })
+    (newExpr, replaced)
+  }
+
+  /**
    * Replace all attributes, that reference an alias, with the aliased expression,
    * but keep the name of the outermost attribute.
    */

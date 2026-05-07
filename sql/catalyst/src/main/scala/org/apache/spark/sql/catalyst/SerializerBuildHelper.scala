@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, Bo
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{externalDataTypeFor, isNativeEncoder, lenientExternalDataTypeFor}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, CheckOverflow, CreateNamedStruct, Expression, IsNull, KnownNotNull, Literal, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateTimeUtils, GenericArrayData, IntervalUtils, STUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -332,7 +333,15 @@ object SerializerBuildHelper {
    * representation. The mapping between the external and internal representations is described
    * by encoder `enc`.
    */
-  private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
+  private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression =
+    // Framework dispatch runs before encoder-type checks (AgnosticExpressionPathEncoder,
+    // isNativeEncoder) in the default path. This is safe because framework types use dedicated
+    // leaf encoders (e.g., LocalTimeEncoder), never migration shims or native primitives.
+    TypeOps(enc.dataType).flatMap(_.createSerializer(input))
+      .getOrElse(createSerializerDefault(enc, input))
+
+  private def createSerializerDefault(
+      enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
     case ae: AgnosticExpressionPathEncoder[_] => ae.toCatalyst(input)
     case _ if isNativeEncoder(enc) => input
     case BoxedBooleanEncoder => createSerializerForBoolean(input)

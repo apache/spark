@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -225,10 +226,42 @@ object ConstantPropagation extends Rule[LogicalPlan] {
       equalityPredicates: AttributeMap[(Literal, BinaryComparison)]): Expression = {
     val constantsMap = AttributeMap(equalityPredicates.map { case (attr, (lit, _)) => attr -> lit })
     val predicates = equalityPredicates.values.map(_._2).toSet
-    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
-      case b: BinaryComparison if !predicates.contains(b) => b transform {
-        case a: AttributeReference => constantsMap.getOrElse(a, a)
+    def replaceInComparison(b: BinaryComparison): Expression = {
+      lazy val collationSafeReplacement = isSameCollationAttrRefComparison(b)
+      b transform {
+        case a: AttributeReference
+          if isBinaryStable(a.dataType) || collationSafeReplacement =>
+          constantsMap.getOrElse(a, a)
       }
+    }
+    condition.transformWithPruning(_.containsPattern(BINARY_COMPARISON)) {
+      case b: BinaryComparison if !predicates.contains(b) => replaceInComparison(b)
+    }
+  }
+
+  /**
+   * Binary-stable `AttributeReference`s can always be replaced safely. Non-binary-stable
+   * `AttributeReference`s (i.e., those with a non-`UTF8_BINARY` `StringType`) are only replaced
+   * when both sides of the comparison are `AttributeReference`s (or `CollationKey`-wrapped
+   * `AttributeReference`s) with the same `StringType`, preventing substitution inside
+   * expressions that change the effective collation (e.g., a `Cast`). For example, given a
+   * column `c STRING COLLATE UTF8_LCASE`:
+   *
+   *   `c = 'hello' AND c = 'HELLO' COLLATE UNICODE`
+   *
+   * `c` is added to `constantsMap`. In the right-hand comparison, `c` is wrapped with a
+   * `Cast` to `UNICODE`, so we don't have an `AttributeReference` vs. `AttributeReference`
+   * comparison and `c` is not replaced inside the `Cast`, preserving correctness.
+   */
+  private def isSameCollationAttrRefComparison(b: BinaryComparison): Boolean = {
+    (b.left, b.right) match {
+      case (AttributeReference(_, st1: StringType, _, _),
+      AttributeReference(_, st2: StringType, _, _)) =>
+        st1 == st2
+      case (CollationKey(AttributeReference(_, st1: StringType, _, _)),
+      CollationKey(AttributeReference(_, st2: StringType, _, _))) =>
+        st1 == st2
+      case _ => false
     }
   }
 }
@@ -795,8 +828,10 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
           Some(EndsWith(input, Literal.create(postfix, input.dataType)))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) => Some(
-          And(GreaterThanOrEqual(Length(input), Literal.create(prefix.length + postfix.length)),
+        case startsAndEndsWith(prefix, postfix) =>
+          Some(And(GreaterThanOrEqual(Length(input),
+            Literal.create(prefix.codePointCount(0, prefix.length)
+              + postfix.codePointCount(0, postfix.length))),
           And(StartsWith(input, Literal.create(prefix, input.dataType)),
             EndsWith(input, Literal.create(postfix, input.dataType)))))
         case contains(infix) =>

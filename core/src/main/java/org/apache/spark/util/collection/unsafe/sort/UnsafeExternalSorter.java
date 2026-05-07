@@ -31,9 +31,9 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
-import org.apache.spark.internal.MDC;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -105,6 +105,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private long totalSortTimeNanos = 0L;
   private volatile SpillableIterator readingIterator = null;
 
+  private int spillMergeFactor;
+
+  @Nullable
+  private volatile UnsafeSorterBoundedSpillMerger boundedMerger;
+
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
       BlockManager blockManager,
@@ -116,12 +121,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long pageSizeBytes,
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
       UnsafeInMemorySorter inMemorySorter,
       long existingMemoryConsumption) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold,
-        inMemorySorter, false /* ignored */);
+        spillMergeFactor, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
     sorter.totalSpillBytes += existingMemoryConsumption;
@@ -141,10 +147,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long pageSizeBytes,
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
       boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
       taskContext, recordComparatorSupplier, prefixComparator, initialSize, pageSizeBytes,
-      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, null, canUseRadixSort);
+      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, spillMergeFactor,
+      null, canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -158,6 +166,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long pageSizeBytes,
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
+      int spillMergeFactor,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
       boolean canUseRadixSort) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
@@ -167,6 +176,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.taskContext = taskContext;
     this.recordComparatorSupplier = recordComparatorSupplier;
     this.prefixComparator = prefixComparator;
+    this.spillMergeFactor = spillMergeFactor;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024
     this.fileBufferSizeBytes = 32 * 1024;
@@ -365,6 +375,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     try {
       synchronized (this) {
         deleteSpillFiles();
+        if (boundedMerger != null) {
+          boundedMerger.cleanupIntermediateFiles();
+          boundedMerger = null;
+        }
         pagesToFree = clearAndGetAllocatedPagesToFree();
         if (inMemSorter != null) {
           inMemSorterToFree = inMemSorter;
@@ -571,10 +585,41 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public UnsafeSorterIterator getSortedIterator() throws IOException {
     assert(recordComparatorSupplier != null);
     if (spillWriters.isEmpty()) {
+      // No spills — return in-memory sorted iterator
       assert(inMemSorter != null);
       readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
       return readingIterator;
+    } else if (spillMergeFactor != -1 && spillWriters.size() > spillMergeFactor) {
+      // Bounded multi-round merge to avoid OOM from too many concurrent readers
+      logger.info("Merging {} spill files using bounded merge with factor {}",
+          MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()),
+          MDC.of(LogKeys.MERGE_FACTOR, spillMergeFactor));
+
+      // This assignment is not inside synchronized(this), unlike the read in
+      // cleanupResources(). That is safe because all callers of cleanupResources()
+      // (the task completion listener, iterator-end cleanup from wrappers like
+      // UnsafeExternalRowSorter / UnsafeKVExternalSorter / SortExec, etc.) run on
+      // the task thread, sequentially with getSortedIterator(). The volatile modifier
+      // on boundedMerger provides memory visibility across any intervening
+      // synchronized blocks.
+      boundedMerger = new UnsafeSorterBoundedSpillMerger(
+          spillMergeFactor,
+          recordComparatorSupplier.get(),
+          prefixComparator,
+          blockManager,
+          serializerManager,
+          fileBufferSizeBytes);
+
+      UnsafeSorterIterator inMemIter = null;
+      if (inMemSorter != null) {
+        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+        inMemIter = readingIterator;
+      }
+      return boundedMerger.merge(spillWriters, inMemIter);
     } else {
+      // Original single-round merge: open all spill readers at once
+      logger.info("Merging {} spill files in single round",
+          MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()));
       final UnsafeSorterSpillMerger spillMerger = new UnsafeSorterSpillMerger(
         recordComparatorSupplier.get(), prefixComparator, spillWriters.size());
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
@@ -590,6 +635,16 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
   @VisibleForTesting boolean hasSpaceForAnotherRecord() {
     return inMemSorter.hasSpaceForAnotherRecord();
+  }
+
+  @VisibleForTesting
+  void setSpillMergeFactor(int mergeFactor) {
+    this.spillMergeFactor = mergeFactor;
+  }
+
+  @VisibleForTesting
+  int getSpillMergeRounds() {
+    return boundedMerger == null ? 0 : boundedMerger.getIntermediateRoundsCompleted();
   }
 
   private static void spillIterator(UnsafeSorterIterator inMemIterator,

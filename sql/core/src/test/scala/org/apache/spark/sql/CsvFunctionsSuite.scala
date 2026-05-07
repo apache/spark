@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types._
 
-class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
+class CsvFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("from_csv with empty options") {
@@ -834,6 +834,20 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           Map("singleVariantColumn" -> "v")
         ).cast("string")),
       Seq(Row(s"""{null, $largeInput}""")))
+  }
+
+  test("from_csv with variant: extreme negative scale decimal does not hang") {
+    // A value like "1E99999" parses to a BigDecimal with scale=-99999.
+    // Calling setScale(0) on it would hang, so it should fall through to string.
+    val df = Seq("1E99999").toDF("value")
+    checkAnswer(
+      df.select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("a variant"),
+          Map.empty[String, String]
+        ).cast("string")),
+      Seq(Row("""{"1E99999"}""")))
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {

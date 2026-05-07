@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders}
 import org.apache.spark.sql.types.StructType
 
@@ -105,6 +105,17 @@ abstract class DataStreamReader {
   }
 
   /**
+   * Specifies a name for the streaming source. This name is used to identify the source in
+   * checkpoint metadata and enables stable checkpoint locations for source evolution.
+   *
+   * @param sourceName
+   *   the name to assign to this streaming source
+   * @since 4.2.0
+   */
+  @Experimental
+  def name(sourceName: String): this.type
+
+  /**
    * Loads input data stream in as a `DataFrame`, for data streams that don't require a path (e.g.
    * external key-value stores).
    *
@@ -118,6 +129,64 @@ abstract class DataStreamReader {
    * @since 2.0.0
    */
   def load(path: String): DataFrame
+
+  /**
+   * Returns the row-level changes (Change Data Capture) from the specified table as a streaming
+   * `DataFrame`. Currently this API is only supported for Data Source V2 tables whose catalog
+   * implements `TableCatalog.loadChangelog()`.
+   *
+   * Use `.option()` to specify the starting version/timestamp and processing options:
+   * {{{
+   *   spark.readStream
+   *     .option("startingVersion", "10")
+   *     .changes("my_table")
+   * }}}
+   *
+   * Streaming reads support all of the same post-processing as batch reads -- `computeUpdates`,
+   * `deduplicationMode = dropCarryovers`, and `deduplicationMode = netChanges`. The streaming
+   * netChanges path holds per-row-identity state in the state store and emits the SPIP collapse
+   * output once the global watermark advances past the last `_commit_timestamp` observed for that
+   * row identity. Row identities only touched in the latest observed commit are therefore not
+   * emitted until a later commit (with strictly greater `_commit_timestamp`) advances the
+   * watermark past them, or the source terminates.
+   *
+   * Streaming netChanges differs from batch netChanges in scope. Batch netChanges collapses all
+   * changes for a row identity over the entire requested version range. Streaming netChanges is
+   * incremental: it collapses changes that fall within a single watermark window for a row
+   * identity (i.e. up to the timer firing that emits its current net result). After a row
+   * identity's net result has been emitted, subsequent commits on the same identity start a fresh
+   * window and produce additional output rows -- streaming cannot retract previously emitted
+   * results to match the batch range-scoped collapse. For a query that observes id=1 inserted at
+   * v1 and deleted at v3 with another commit at v2 in between, batch netChanges over [v1..v3]
+   * cancels to no row, while streaming emits an `insert` (when v2 advances the watermark past v1)
+   * followed later by a `delete` (when end-of-stream or another commit advances the watermark
+   * past v3).
+   *
+   * Because the streaming netChanges path uses `transformWithState`, the state store provider
+   * must be RocksDB. Set `spark.sql.streaming.stateStore.providerClass` to
+   * `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider` before starting a
+   * streaming netChanges query; the default HDFS-backed provider is rejected at query start.
+   *
+   * When the requested options engage post-processing (carry-over removal, update detection, or
+   * netChanges), the rewrite injects an internal `EventTimeWatermark` on `_commit_timestamp` and
+   * a stateful streaming operator (an aggregate for the row-level passes, a `transformWithState`
+   * for netChanges). Two implications follow:
+   *   - A commit's events are emitted in the next micro-batch after the commit is read
+   *     (append-mode aggregate eviction is `eventTime &lt;= watermark`, and the watermark
+   *     advances to the max `_commit_timestamp` observed in the previous batch). A stream that
+   *     reads its last commit and stops will keep that commit's events in state until a
+   *     subsequent (no-data) micro-batch fires.
+   *   - The query is constrained to `Append` output mode; `Update` and `Complete` are rejected at
+   *     writer-start time with `STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION`. The internal
+   *     watermark metadata is stripped from the user-visible `_commit_timestamp` output, so
+   *     downstream user-supplied watermarks on other columns do not interact with it via the
+   *     global multi-watermark policy.
+   *
+   * @param tableName
+   *   a qualified or unqualified name that designates a table.
+   * @since 4.2.0
+   */
+  def changes(tableName: String): DataFrame
 
   /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.

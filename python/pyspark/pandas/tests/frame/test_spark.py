@@ -88,6 +88,19 @@ class FrameSparkMixin:
             psdf = ps.from_pandas(pdf)
             self.assert_eq(psdf, pdf)
 
+    def test_to_pandas_with_nullable_string_column(self):
+        pdf = pd.DataFrame({"a": ["x", None, "z"]})
+
+        psdf = ps.from_pandas(pdf)
+        actual = psdf.to_pandas()
+        self.assert_eq(actual, pdf)
+        self.assertEqual(actual["a"].dtype, pdf["a"].dtype)
+
+        with self.sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
+            actual = ps.from_pandas(pdf).to_pandas()
+            self.assert_eq(actual, pdf)
+            self.assertEqual(actual["a"].dtype, pdf["a"].dtype)
+
     def test_nullable_object(self):
         pdf = pd.DataFrame(
             {

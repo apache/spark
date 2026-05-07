@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{Schema, SchemaFormatter}
+import org.apache.avro.{Schema, SchemaFormatter, SchemaParseException}
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.OutputWriterFactory
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, OutputWriterFactory}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -47,6 +47,30 @@ private[sql] object AvroUtils extends Logging {
 
   val JSON_INLINE_FORMAT: String = "json/inline"
   val JSON_PRETTY_FORMAT: String = "json/pretty"
+
+  /**
+   * Parses an Avro schema from a JSON string with proper error handling.
+   *
+   * The Avro 1.12.x library's Schema.Parser can throw NullPointerException from
+   * ParseContext.resolve() when the schema references named types that cannot be
+   * resolved. This method wraps such NPEs in SchemaParseException so they are
+   * handled by the existing error handling in from_avro/to_avro (which catches
+   * NonFatal exceptions and reports them via the parseMode mechanism).
+   *
+   * @param jsonFormatSchema the Avro schema in JSON string format
+   * @return the parsed Avro Schema
+   * @throws SchemaParseException if the schema cannot be parsed
+   */
+  def parseAvroSchema(jsonFormatSchema: String): Schema = {
+    try {
+      new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
+    } catch {
+      case e: NullPointerException =>
+        val ex = new SchemaParseException(s"Failed to parse Avro schema: ${e.getMessage}")
+        ex.initCause(e)
+        throw ex
+    }
+  }
 
   def inferSchema(
       spark: SparkSession,
@@ -127,15 +151,17 @@ private[sql] object AvroUtils extends Logging {
                 case DEFLATE => Some(sqlConf.getConf(SQLConf.AVRO_DEFLATE_LEVEL), codecName)
                 case XZ => Some(sqlConf.getConf(SQLConf.AVRO_XZ_LEVEL), codecName)
                 case ZSTANDARD =>
-                  jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
-                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED))
+                  DataSourceUtils.setConfIfAbsent(jobConf,
+                    AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
+                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED).toString)
                   Some(sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_LEVEL), "zstd")
                 case _ => None
               }
               levelAndCodecName.foreach { case (level, mapredCodecName) =>
+                val levelKey = s"avro.mapred.$mapredCodecName.level"
+                DataSourceUtils.setConfIfAbsent(jobConf, levelKey, level.toString)
                 logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} " +
-                  log"codec at level ${MDC(CODEC_LEVEL, level)}")
-                jobConf.setInt(s"avro.mapred.$mapredCodecName.level", level.toInt)
+                  log"codec at level ${MDC(CODEC_LEVEL, jobConf.get(levelKey))}")
               }
             } else {
               logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec")

@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class V1WriteFallbackSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -370,6 +370,10 @@ class InMemoryV1Provider
   }
 }
 
+case class SupportedV1WriteMetric(name: String, description: String) extends CustomSumMetric {
+  def this() = this("dummy", "")
+}
+
 class InMemoryTableWithV1Fallback(
     override val name: String,
     override val schema: StructType,
@@ -425,8 +429,6 @@ class InMemoryTableWithV1Fallback(
     }
 
     override def build(): V1Write = new V1Write {
-      case class SupportedV1WriteMetric(name: String, description: String) extends CustomSumMetric
-
       override def supportedCustomMetrics(): Array[CustomMetric] =
         Array(SupportedV1WriteMetric("numOutputRows", "Number of output rows"))
 
