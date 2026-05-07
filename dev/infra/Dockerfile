@@ -106,8 +106,8 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 RUN python3.8 -m pip install setuptools virtualenv
 RUN python3.9 -m pip install setuptools virtualenv
 
-RUN python3.8 -m pip  install --only-binary=pandas numpy pandas 'scipy<1.9' coverage 'matplotlib==3.7.2'
-RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'scipy<=1.10' unittest-xml-reporting 'plotly>=4.8' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'blinker==1.4'
+RUN python3.8 -m pip  install --only-binary=pandas numpy pandas 'scipy<1.9' coverage 'matplotlib==3.7.2' 'mypy==0.991'
+RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'scipy<=1.10' unittest-xml-reporting 'plotly>=4.8' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'blinker==1.4' 'mypy==0.991'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
@@ -115,6 +115,6 @@ RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'p
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
 
-# Add generic dev reqs for reach
-RUN python3.9 -m pip install -r ./dev/requirements.txt
-RUN python3.8 -m pip install -r ./dev/requirements.txt
+# pyarrow
+RUN python3.9 -m pip install 'pyarrow<13.0.0'
+RUN python3.8 -m pip install 'pyarrow<13.0.0'
