@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.metric
 
 import scala.util.Random
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{Column, Dataset}
 import org.apache.spark.sql.execution.adaptive.{AQETestHelper, DisableAdaptiveExecutionSuite}
@@ -348,17 +349,243 @@ class MetricsFailureInjectionSuite
     runQueryWithMetrics() { finalDf =>
       if (injectFailure) {
         assert(stage1Metric.value > 300)
+        // The non-deterministic UDF in stage 1 makes mapper 0's recompute produce a different
+        // checksum from its corrupted first attempt, which fires rollbackSucceedingStages and
+        // re-runs stage 2 in full. The raw stage 2 accumulator therefore overcounts; SLAM
+        // remains stable.
+        assert(stage2Metric.value > 5, s"stage2Metric=${stage2Metric.value}")
       } else {
         assert(stage1Metric.value === 300)
+        assert(stage2Metric.value === 5)
       }
-      // Stage2 doesn't have a downstream shuffle stage we can fail.
-      assert(stage2Metric.value === 5)
 
       assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
       assert(stage2SLAMetric.lastAttemptValueForHighestRDDId() === Some(5))
 
       assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
       assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
+    }
+  }
+
+  test("Three stage metrics block failure injection") {
+    val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
+    val stage2Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 2 counter")
+    val stage3Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 3 counter")
+    val stage1SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 1 SLAM")
+    val stage2SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 2 SLAM")
+    val stage3SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 3 SLAM")
+
+    withTable("primary_table", "secondary_table") {
+      setUpTestTable("primary_table")
+      setUpTestTable("secondary_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+        val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
+        val stage1 = spark.read.table("primary_table")
+          .filter(Column(stage1MetricsExpr))
+        val stage2MetricsExpr = incrementMetrics(Seq(stage2Metric, stage2SLAMetric))
+        val stage2 = stage1.join(
+            spark.read.table("secondary_table"),
+            usingColumn = "id",
+            joinType = "fullOuter")
+          .filter(Column(stage2MetricsExpr))
+        val stage3MetricsExpr = incrementMetrics(Seq(stage3Metric, stage3SLAMetric))
+        val stage3 = stage2
+          .groupBy("primary_table.low_cardinality_col")
+          .count()
+          .filter(Column(stage3MetricsExpr))
+        val finalDf = stage3.as[(Int, Long)]
+        val result = finalDf.collect()
+        assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+        // Both stage1 (leaf) and stage2 (non-leaf) get corrupted on their first successful
+        // attempt and re-run. stage3 is a result stage with no shuffle output, so it isn't
+        // corrupted and runs only once successfully.
+        assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
+        assert(stage2Metric.value > 300, s"stage2Metric=${stage2Metric.value}")
+        assert(stage3Metric.value === 5)
+
+        // SLAM correctly reports each stage's last successful attempt's contribution only.
+        assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+        assert(stage2SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+        assert(stage3SLAMetric.lastAttemptValueForHighestRDDId() === Some(5))
+
+        assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+        assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+        assert(stage3SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
+      }
+    }
+  }
+
+  test("Three stage metrics force-checksum-mismatch on recompute") {
+    // INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE additionally flags the recompute of the
+    // partition-0 task as a checksum mismatch. The DAGScheduler then runs
+    // `rollbackSucceedingStages`, which (a) for downstream ShuffleMapStages clears their map
+    // outputs and forces a full retry of every previously-finished partition, and (b) for the
+    // ResultStage downstream is a no-op because the result stage hasn't started yet - it just
+    // runs once after the rollback completes.
+    //
+    // Without a timing guarantee the FetchFailed in stage 2 may fire before any stage 2 task
+    // finishes, in which case the rollback has nothing to clear and stage 2 metrics look the
+    // same as in the recompute-only mode. So we only assert `stage2Metric > 300`, which is the
+    // sum of partial-attempt-0 contributions (>=1 partition since rollback had something to
+    // roll back) plus a full attempt-1; the deterministic version of this scenario lives in
+    // the delayed-corruption test below.
+    val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
+    val stage2Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 2 counter")
+    val stage3Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 3 counter")
+    val stage1SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 1 SLAM")
+    val stage2SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 2 SLAM")
+    val stage3SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 3 SLAM")
+
+    withTable("primary_table", "secondary_table") {
+      setUpTestTable("primary_table")
+      setUpTestTable("secondary_table")
+      withSparkContextConf(
+          config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
+          config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true") {
+        val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
+        val stage1 = spark.read.table("primary_table")
+          .filter(Column(stage1MetricsExpr))
+        val stage2MetricsExpr = incrementMetrics(Seq(stage2Metric, stage2SLAMetric))
+        val stage2 = stage1.join(
+            spark.read.table("secondary_table"),
+            usingColumn = "id",
+            joinType = "fullOuter")
+          .filter(Column(stage2MetricsExpr))
+        val stage3MetricsExpr = incrementMetrics(Seq(stage3Metric, stage3SLAMetric))
+        val stage3 = stage2
+          .groupBy("primary_table.low_cardinality_col")
+          .count()
+          .filter(Column(stage3MetricsExpr))
+        val finalDf = stage3.as[(Int, Long)]
+        val result = finalDf.collect()
+        assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+        // The recompute-with-mismatch injection drives `rollbackSucceedingStages` against the
+        // checksum-mismatched producer. Stage 2 is a downstream ShuffleMapStage and gets its map
+        // outputs cleared and rerun. The total raw accumulator on stage 2 is
+        // (partial-attempt-0 contributions) + (full-attempt-1 = 300). In the recompute-only
+        // mode it would be exactly 300 because attempt 1 only re-runs the missing partitions;
+        // here it is strictly larger when the rollback had any partitions to clear.
+        assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
+        assert(stage2Metric.value > 300, s"stage2Metric=${stage2Metric.value}")
+        assert(stage3Metric.value === 5)
+
+        // SLAM still reports the last successful attempt's contribution per RDD.
+        assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+        assert(stage2SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+        assert(stage3SLAMetric.lastAttemptValueForHighestRDDId() === Some(5))
+
+        assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+        assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+        assert(stage3SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
+      }
+    }
+  }
+
+  test("Three stage metrics force-checksum-mismatch with delayed corruption") {
+    // Same setup as the previous test but with INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY=1
+    // and shuffle.partitions=20 (much greater than the test's local[2] cores). The DAGScheduler
+    // event loop is single-threaded for completion events, so deferring the producer's
+    // mapper-0 corruption until after one consumer success guarantees AT LEAST ONE consumer
+    // task fully completed before the FetchFailed cascade kicks in. With mode 3's rollback,
+    // those completed-then-cleared partitions all re-run during the rollback retry, giving a
+    // strict lower bound on the raw stage-2 accumulator that's not reachable in
+    // recompute-only mode.
+    val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
+    val stage2Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 2 counter")
+    val stage3Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 3 counter")
+    val stage1SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 1 SLAM")
+    val stage2SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 2 SLAM")
+    val stage3SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 3 SLAM")
+
+    withTable("primary_table", "secondary_table") {
+      setUpTestTable("primary_table")
+      setUpTestTable("secondary_table")
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY.key -> "1",
+            config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true") {
+          val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
+          val stage1 = spark.read.table("primary_table")
+            .filter(Column(stage1MetricsExpr))
+          val stage2MetricsExpr = incrementMetrics(Seq(stage2Metric, stage2SLAMetric))
+          val stage2 = stage1.join(
+              spark.read.table("secondary_table"),
+              usingColumn = "id",
+              joinType = "fullOuter")
+            .filter(Column(stage2MetricsExpr))
+          val stage3MetricsExpr = incrementMetrics(Seq(stage3Metric, stage3SLAMetric))
+          val stage3 = stage2
+            .groupBy("primary_table.low_cardinality_col")
+            .count()
+            .filter(Column(stage3MetricsExpr))
+          val finalDf = stage3.as[(Int, Long)]
+          val result = finalDf.collect()
+          assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+          // With delay=1 and 20 shuffle partitions on local[2], at least one stage-2 reducer
+          // task is guaranteed to fully process its rows before the corruption fires. Mode 3's
+          // rollback then re-runs all 20 stage-2 partitions, replaying those previously-
+          // completed ones. The recompute-only baseline is 300 (full coverage across attempts)
+          // + size(mapper 0) for the FetchFailed-driven retry; mode 3 adds at least one
+          // already-completed partition's worth on top of that. Partition sizes vary with the
+          // hash of `id`, so we just assert "strictly above the recompute-only baseline" rather
+          // than a tight numeric bound.
+          assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
+          assert(stage2Metric.value > 315,
+            s"stage2Metric should be above the mode-2 baseline (~315) because the rollback " +
+              s"re-played a partition that completed in attempt 0, got ${stage2Metric.value}")
+          assert(stage3Metric.value === 5)
+
+          assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+          assert(stage2SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+          assert(stage3SLAMetric.lastAttemptValueForHighestRDDId() === Some(5))
+
+          assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+          assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+          assert(stage3SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
+        }
+      }
+    }
+  }
+
+  test("Force checksum mismatch aborts a downstream ResultStage") {
+    // 2-stage query whose downstream is a ResultStage. With RESULT_STAGE_DELAY=1 the result
+    // stage gets at least one finished task before the FetchFailed cascade, so by the time
+    // mode 3's forced checksum mismatch on stage 1 mapper 0 fires `rollbackSucceedingStages`,
+    // the result stage's findMissingPartitions is strictly less than numTasks - which OSS
+    // Spark cannot roll back, so the job aborts. With the default RESULT_STAGE_DELAY=0 the
+    // result stage is corrupted before any task dispatches and the rollback path does not
+    // abort.
+    withTable("test_table") {
+      setUpTestTable("test_table")
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY.key -> "1",
+            config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true") {
+          val df = spark.read.table("test_table")
+            .groupBy("low_cardinality_col")
+            .count()
+          val ex = intercept[SparkException] {
+            df.collect()
+          }
+          assert(ex.getMessage.contains("indeterminate"),
+            s"expected an 'indeterminate'-stage abort, got: ${ex.getMessage}")
+        }
+      }
     }
   }
 }
