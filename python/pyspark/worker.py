@@ -26,7 +26,22 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, Optional, Tuple, TYPE_CHECKING, Union
+from collections.abc import Iterator
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    TYPE_CHECKING,
+    Union,
+    get_args,
+    get_origin,
+)
+
+T = TypeVar("T")
 
 if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import GroupedBatch
@@ -233,46 +248,48 @@ def chain(f, g):
     return lambda *a: g(f(*a))
 
 
-def verify_result(expected_type: type) -> Callable[[Any], Iterator]:
+def verify_return_type(result: T, expected_type: Type[T]) -> T:
     """
-    Create a result verifier that checks both iterability and element types.
+    Verify a UDF return value against an expected type.
 
-    Returns a function that takes a UDF result, verifies it is iterable,
-    and lazily type-checks each element via map.
-
-    Parameters
-    ----------
-    expected_type : type
-        The expected Python/PyArrow type for each element
-        (e.g. pa.RecordBatch, pa.Array).
+    Returns ``result`` unchanged if ``isinstance(result, expected_type)``.
+    For ``Iterator[T]``, returns a lazy iterator that checks each element
+    against ``T`` on consumption. Raises ``PySparkTypeError`` on mismatch.
     """
+    if get_origin(expected_type) is Iterator:
+        (element_type,) = get_args(expected_type)
+        package = getattr(inspect.getmodule(element_type), "__package__", "")
+        label = f"iterator of {package}.{element_type.__name__}"
 
-    package = getattr(inspect.getmodule(expected_type), "__package__", "")
-    label: str = f"{package}.{expected_type.__name__}"
-
-    def check_element(element: Any) -> Any:
-        if not isinstance(element, expected_type):
+        if not isinstance(result, Iterator):
             raise PySparkTypeError(
                 errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": f"iterator of {label}",
-                    "actual": f"iterator of {type(element).__name__}",
-                },
+                messageParameters={"expected": label, "actual": type(result).__name__},
             )
-        return element
 
-    def check(result: Any) -> Iterator:
-        if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": f"iterator of {label}",
-                    "actual": type(result).__name__,
-                },
-            )
-        return map(check_element, result)
+        def check_element(element: T) -> T:
+            if not isinstance(element, element_type):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": label,
+                        "actual": f"iterator of {type(element).__name__}",
+                    },
+                )
+            return element
 
-    return check
+        return map(check_element, result)  # type: ignore[return-value]
+
+    if not isinstance(result, expected_type):
+        package = getattr(inspect.getmodule(expected_type), "__package__", "")
+        raise PySparkTypeError(
+            errorClass="UDF_RETURN_TYPE",
+            messageParameters={
+                "expected": f"{package}.{expected_type.__name__}",
+                "actual": type(result).__name__,
+            },
+        )
+    return result
 
 
 def verify_result_row_count(result_length: int, expected: int) -> None:
@@ -511,6 +528,8 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
 
 
 def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
+    import pyarrow as pa
+
     if runner_conf.assign_cols_by_name:
         expected_cols_and_types = {
             col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
@@ -528,7 +547,8 @@ def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
             key = tuple(c[0] for c in key_table.columns)
             result = f(key, left_value_table, right_value_table)
 
-        verify_arrow_table(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
+        verify_return_type(result, pa.Table)
+        verify_arrow_result(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
 
         return result.to_batches()
 
@@ -619,36 +639,6 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
                     )
                 },
             )
-
-
-def verify_arrow_table(table, assign_cols_by_name, expected_cols_and_types):
-    import pyarrow as pa
-
-    if not isinstance(table, pa.Table):
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "pyarrow.Table",
-                "actual": type(table).__name__,
-            },
-        )
-
-    verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types)
-
-
-def verify_arrow_batch(batch, assign_cols_by_name, expected_cols_and_types):
-    import pyarrow as pa
-
-    if not isinstance(batch, pa.RecordBatch):
-        raise PySparkTypeError(
-            errorClass="UDF_RETURN_TYPE",
-            messageParameters={
-                "expected": "pyarrow.RecordBatch",
-                "actual": type(batch).__name__,
-            },
-        )
-
-    verify_arrow_result(batch, assign_cols_by_name, expected_cols_and_types)
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
@@ -2500,8 +2490,11 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             output_batches = udf_func(input_batches)
 
             # Post-processing
-            verified: Iterator[pa.RecordBatch] = verify_result(pa.RecordBatch)(output_batches)
-            yield from map(ArrowBatchTransformer.wrap_struct, verified)
+            verified_iter = verify_return_type(
+                output_batches,
+                Iterator[pa.RecordBatch],  # type: ignore[type-abstract]
+            )
+            yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
@@ -2565,7 +2558,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
             args_iter = map(extract_args, data)
 
             # Call UDF and verify result type (iterator of pa.Array)
-            verified_iter = verify_result(pa.Array)(udf_func(args_iter))
+            verified_iter = verify_return_type(
+                udf_func(args_iter),
+                Iterator[pa.Array],  # type: ignore[type-abstract]
+            )
 
             # Process results: enforce schema and assemble into RecordBatch
             target_schema = pa.schema([pa.field("_0", arrow_return_type)])
@@ -2794,7 +2790,10 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     key = tuple(c[0] for c in keys.columns)
                     result = grouped_udf(key, value_table)
 
-                verify_arrow_table(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
+                verify_return_type(result, pa.Table)
+                verify_arrow_result(
+                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                )
 
                 # Reorder columns if needed and wrap into struct
                 for batch in result.to_batches():
@@ -2864,8 +2863,8 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf, eval_conf):
                     result = grouped_udf(key, value_batches)
 
                 # Verify, reorder, and wrap each output batch
-                for batch in result:
-                    verify_arrow_batch(
+                for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
+                    verify_arrow_result(
                         batch, runner_conf.assign_cols_by_name, expected_cols_and_types
                     )
                     if runner_conf.assign_cols_by_name:
