@@ -1016,24 +1016,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   // TODO: Can we remove?
   val UDFTypeCoercesExpressionTypes = new resolver.UDFTypeCoercesExpressionTypes()
   def apply(plan: LogicalPlan): LogicalPlan = {
-    // Short circuit if we are not transpiling or there is no Python UDFs in the plan.
-    if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS) ||
-      !plan.containsPattern(PYTHON_UDF)) {
-      return plan
-    }
-    // Defense in depth: the Python construction-time gate skips
-    // transpilation when ANSI is off, but a UDF defined under ANSI=on
-    // can still be replayed against a session with ANSI=off, in which
-    // case the rewritten Catalyst expressions would silently diverge
-    // from the Python interpretation. Skip the rule and warn instead.
-    if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
-      logWarning(
-        "Skipping Python UDF transpilation: " +
-        s"${SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key} is enabled but " +
-        s"${SQLConf.ANSI_ENABLED.key} is disabled. The transpiler targets " +
-        "ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
-        "Enable ANSI or disable transpilation to silence this warning."
-      )
+    // Short circuit if there are no Transpiled Python UDFs in the plan.
+    if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
       return plan
     }
     plan.mapExpressions(applyExpr(_, false))
@@ -1042,21 +1026,29 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
   def applyExpr(expression: Expression, parent_is_udf: Boolean = false): Expression = {
     expression match {
       case s: TranspiledPythonUDF =>
-        // We should avoid converting a UDF node where that could break pipelining.
-        // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
-        // But if we can convert the first or the last in a chain we should.
-        if (!parent_is_udf ||
+        // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
+        // but if someone changed it while running we'll want to strip the nodes out.
+        if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
+          logWarning(
+            "Skipping Python UDF transpilation: " +
+              s"${SQLConf.ANSI_ENABLED.key} is disabled. The transpiler targets " +
+              "ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
+              "Enable ANSI or disable transpilation to silence this warning."
+          )
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parent_is_udf = true))
+        } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
+          logWarning(
+            "Skipping Python UDF transpilation: " +
+              s"${SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key} is disabled but " +
+              "we still got TranspiledPythonUDFs in our plan."
+          )
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parent_is_udf = true))
+        } else if (!parent_is_udf ||
           !s.children.forall { x => x.isInstanceOf[PythonUDF] }) {
           // Walk the full list of transpiled options and pick the first one
           // that's actually usable, falling back to the original Python UDF
-          // if nothing fits. "Evaluable" here is intentionally loose -- we
-          // just skip null entries (a transpiler may register a slot but
-          // fail to produce a Column for a given UDF). If you're plugging
-          // in your own transpilation, please add a separate ConvertToX
-          // rule earlier in the optimizer chain rather than registering
-          // another transpiler entry here: a dedicated rule lets you opt
-          // your rewrite in or out independently of this default fallback,
-          // and keeps the selection logic simple.
+          // if nothing fits. If you're plugging in your own transpilation, please add a
+          // separate ConvertToX so you can choose your desired transpiled nodes.
           val firstEvaluable = s.transpiledOptions.find(expr => expr != null)
           firstEvaluable match {
             case None =>
@@ -1072,6 +1064,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               catalystExprUpgraded
           }
         } else {
+          // We should avoid converting a UDF node where that could break pipelining.
+          // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
           s.pythonUDFExpr.mapChildren(applyExpr(_, parent_is_udf = true))
         }
       case _ =>
