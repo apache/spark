@@ -542,7 +542,8 @@ jobs:
     if: >-
       (!cancelled()) && (
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
-        fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
+        fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
+        fromJson(needs.precondition.outputs.required).pyspark-install == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
