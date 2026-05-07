@@ -1841,7 +1841,7 @@ class DecisionTreeClassifier(
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False\
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                   seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
         Sets params for the DecisionTreeClassifier.
@@ -2108,7 +2108,7 @@ class RandomForestClassifier(
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False\
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)

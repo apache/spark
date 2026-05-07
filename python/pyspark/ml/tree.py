@@ -416,12 +416,11 @@ class _TreeClassifierParams(Params):
     )
 
     pruneTree = Param(Params._dummy(), "pruneTree", "" +
-                      "If true, the trained tree will undergo a 'pruning' process after training in which nodes" +
-                      " that have the same class predictions will be merged.  This drawback means that the class" +
-                      " probabilities will be lost.  The benefit being that at prediction time the tree will be" +
-                      " smaller and have faster predictions" +
-                      " If false, the post-training tree will undergo no pruning.  The benefit being that you" +
-                      " maintain the class prediction probabilities", typeConverter=TypeConverters.toBoolean)
+                      "If true, the trained tree will undergo a pruning process after training, in which nodes" +
+                      " with the same class predictions are merged. The resulting tree will be smaller and have" +
+                      " faster predictions, but class probabilities will be lost." +
+                      " If false, no pruning is applied after training, and class probabilities are preserved.",
+                      typeConverter=TypeConverters.toBoolean)
 
     def __init__(self) -> None:
         super().__init__()
@@ -432,8 +431,8 @@ class _TreeClassifierParams(Params):
         Gets the value of impurity or its default value.
         """
         return self.getOrDefault(self.impurity)
-    @since("3.1.2")
-    def getPruneTree(self):
+    @since("5.0.0")
+    def getPruneTree(self) -> bool:
         """
         Gets the value of pruneTree or its default value.
         """

@@ -212,22 +212,18 @@ private[ml] trait TreeClassifierParams extends Params {
       TreeClassifierParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   /**
-   * If true, the trained tree will undergo a 'pruning' process after training in which nodes
-   * that have the same class predictions will be merged.  This drawback means that the class
-   * probabilities will be lost.  The benefit being that at prediction time the tree will be
-   * smaller and have faster predictions
-   * If false, the post-training tree will undergo no pruning.  The benefit being that you
-   * maintain the class prediction probabilities
+   * If true, the trained tree will undergo a pruning process after training, in which nodes
+   * with the same class predictions are merged. The resulting tree will be smaller and have
+   * faster predictions, but class probabilities will be lost.
+   * If false, no pruning is applied after training, and class probabilities are preserved.
    * (default = false)
    * @group param
    */
   final val pruneTree: BooleanParam = new BooleanParam(this, "pruneTree", "" +
-    "If true, the trained tree will undergo a 'pruning' process after training in which nodes" +
-    " that have the same class predictions will be merged.  This drawback means that the class" +
-    " probabilities will be lost.  The benefit being that at prediction time the tree will be" +
-    " smaller and have faster predictions" +
-    " If false, the post-training tree will undergo no pruning.  The benefit being that you" +
-    " maintain the class prediction probabilities"
+    "If true, the trained tree will undergo a pruning process after training, in which nodes" +
+    " with the same class predictions are merged. The resulting tree will be smaller and have" +
+    " faster predictions, but class probabilities will be lost." +
+    " If false, no pruning is applied after training, and class probabilities are preserved."
   )
 
   setDefault(impurity -> "gini", pruneTree -> false)

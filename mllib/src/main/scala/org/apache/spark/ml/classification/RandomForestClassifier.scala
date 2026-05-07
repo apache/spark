@@ -77,7 +77,7 @@ class RandomForestClassifier @Since("1.4.0") (
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group setParam */
-  @Since("3.1.2")
+  @Since("5.0.0")
   def setPruneTree(value: Boolean): this.type = set(pruneTree, value)
 
   /** @group expertSetParam */
