@@ -537,14 +537,14 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
 
 
-  precompile-pyspark:
+  precompile:
     needs: precondition
     if: >-
       (!cancelled()) && (
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
         fromJson(needs.precondition.outputs.required).sparkr == 'true')
-    name: "Precompile Spark for pyspark/sparkr"
+    name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -579,9 +579,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: precompile-pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          precompile-pyspark-coursier-
+          precompile-coursier-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -612,7 +612,7 @@ jobs:
         if-no-files-found: error
 
   pyspark:
-    needs: [precondition, infra-image, precompile-pyspark]
+    needs: [precondition, infra-image, precompile]
     # always run if pyspark == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Build modules: ${{ matrix.modules }}"
@@ -802,7 +802,7 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: [precondition, infra-image, precompile-pyspark]
+    needs: [precondition, infra-image, precompile]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
