@@ -35,15 +35,16 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Maps a path-based data source format name (e.g. `parquet`, `delta`) to the catalog that owns
- * its tables, when the format implements [[SupportsCatalogOptions]].
+ * Resolves a multipart SQL identifier whose head names a path-based data source format
+ * (e.g. `pathformat.\`/path/to/t\``) to the owning catalog and a connector-canonicalized
+ * identifier, when the format implements [[SupportsCatalogOptions]].
  */
 private[sql] trait DataSourceCatalogResolver {
-  def catalogFor(formatName: String): Option[String]
+  def resolve(nameParts: Seq[String]): Option[(String, Identifier)]
 }
 
 private[sql] object DataSourceCatalogResolver {
-  val NoOp: DataSourceCatalogResolver = (_: String) => None
+  val NoOp: DataSourceCatalogResolver = (_: Seq[String]) => None
 }
 
 /**
@@ -85,11 +86,12 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   }
 
   /**
-   * Returns the catalog name that owns path-based tables for the given data source format name.
-   * Returns None if the format is unknown or does not implement [[SupportsCatalogOptions]].
+   * Returns the catalog name and connector-canonicalized identifier for a multipart SQL name
+   * whose head is a [[SupportsCatalogOptions]] data source format. Returns None if the format
+   * head is unknown or does not implement [[SupportsCatalogOptions]].
    */
-  def catalogForDataSource(formatName: String): Option[String] =
-    dataSourceCatalogResolver.catalogFor(formatName)
+  def catalogAndIdentForDataSource(nameParts: Seq[String]): Option[(String, Identifier)] =
+    dataSourceCatalogResolver.resolve(nameParts)
 
   // ---- Transactions ----
   def transaction: Option[Transaction] = None

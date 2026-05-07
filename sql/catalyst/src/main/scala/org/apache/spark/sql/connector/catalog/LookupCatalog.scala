@@ -122,11 +122,11 @@ private[sql] trait LookupCatalog extends Logging {
         Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
       } else {
         // Path-based data sources (e.g. `pathformat2.'/path/to/t'`) whose format declares a
-        // catalog via SupportsCatalogOptions are routed to that catalog with the full nameParts
-        // as the identifier.
+        // catalog via SupportsCatalogOptions are routed to that catalog. Both the catalog and
+        // the canonical identifier come from the connector.
         val (catalogName, ident) =
-          Option(catalogManager.catalogForDataSource(nameParts.head)).flatten match {
-            case Some(catName) => (catName, nameParts.asIdentifier)
+          Option(catalogManager.catalogAndIdentForDataSource(nameParts)).flatten match {
+            case Some((catName, providerIdent)) => (catName, providerIdent)
             case None => (nameParts.head, nameParts.tail.asIdentifier)
           }
 
