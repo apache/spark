@@ -545,8 +545,7 @@ jobs:
     if: >-
       (!cancelled()) && (
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
-        fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
-        fromJson(needs.precondition.outputs.required).sparkr == 'true')
+        fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -805,7 +804,7 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: [precondition, infra-image, precompile]
+    needs: [precondition, infra-image]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
@@ -821,7 +820,6 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
-      SKIP_BUILD: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -865,14 +863,6 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
-    - name: Download precompiled artifact
-      uses: actions/download-artifact@v6
-      with:
-        name: spark-compile-${{ github.run_id }}
-    - name: Extract precompiled artifact
-      run: |
-        tar -xjf compile-artifact.tar.bz2
-        rm compile-artifact.tar.bz2
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
