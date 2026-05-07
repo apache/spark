@@ -213,11 +213,14 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
   }
 
   override def reducer(
-      thisNumBuckets: Int,
+      thisParams: ReducibleParameters,
       otherFunc: ReducibleFunction[_, _],
-      otherNumBuckets: Int): Reducer[Int, Int] = {
+      otherParams: ReducibleParameters): Reducer[Int, Int] = {
 
     if (otherFunc == BucketFunction) {
+      val thisNumBuckets = thisParams.getInt(0)
+      val otherNumBuckets = otherParams.getInt(0)
+
       val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
       if (gcd > 1 && gcd != thisNumBuckets) {
         return BucketReducer(gcd)
@@ -253,12 +256,35 @@ object StringSelfFunction extends ScalarFunction[UTF8String] {
 }
 
 object UnboundTruncateFunction extends UnboundFunction {
-  override def bind(inputType: StructType): BoundFunction = TruncateFunction
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size == 2) {
+      inputType.head.dataType match {
+        case StringType | BinaryType => TruncateFunction
+        case IntegerType | LongType => IntegerTruncateFunction
+        case _ =>
+          throw new UnsupportedOperationException(
+            s"'truncate' does not support data type: ${inputType.head.dataType}")
+      }
+    } else {
+      throw new UnsupportedOperationException(
+        "'truncate' requires exactly 2 arguments: (column, width)")
+    }
+  }
+
   override def description(): String = name()
   override def name(): String = "truncate"
 }
 
-object TruncateFunction extends ScalarFunction[UTF8String] {
+/**
+ * Truncate transform for String/Binary types.
+ * Follows Iceberg spec: truncate(str, L) = str[0:L]
+ *
+ * Implements ReducibleFunction: ANY two different widths are compatible.
+ * The reducer uses the smaller width.
+ */
+object TruncateFunction
+    extends ScalarFunction[UTF8String]
+    with ReducibleFunction[UTF8String, UTF8String] {
   override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
   override def resultType(): DataType = StringType
   override def name(): String = "truncate"
@@ -266,7 +292,52 @@ object TruncateFunction extends ScalarFunction[UTF8String] {
   override def toString: String = name()
   override def produceResult(input: InternalRow): UTF8String = {
     val str = input.getUTF8String(0)
-    val length = input.getInt(1)
-    str.substring(0, length)
+    val width = input.getInt(1)
+    str.substring(0, width)
+  }
+
+  override def reducer(
+      thisParams: ReducibleParameters,
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: ReducibleParameters): Reducer[UTF8String, UTF8String] = {
+
+    if (otherFunc == TruncateFunction) {
+      val thisWidth = thisParams.getInt(0)
+      val otherWidth = otherParams.getInt(0)
+      val smallerWidth = math.min(thisWidth, otherWidth)
+
+      if (smallerWidth != thisWidth) {
+        return TruncateReducer(smallerWidth)
+      }
+    }
+    null
+  }
+}
+
+case class TruncateReducer(width: Int) extends Reducer[UTF8String, UTF8String] {
+  override def reduce(value: UTF8String): UTF8String = {
+    value.substring(0, width)
+  }
+  override def resultType(): DataType = StringType
+  override def displayName(): String = s"truncate($width)"
+}
+
+/**
+ * Truncate transform for Integer/Long types.
+ * Follows Iceberg spec: truncate(value, W) = value - (((value % W) + W) % W)
+ *
+ * Does NOT implement ReducibleFunction because different integer truncate widths
+ * produce incompatible partition structures.
+ */
+object IntegerTruncateFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "truncate"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    val value = input.getInt(0)
+    val width = input.getInt(1)
+    value - (((value % width) + width) % width)
   }
 }

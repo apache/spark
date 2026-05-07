@@ -641,7 +641,9 @@ object KeyedPartitioning {
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
-      transform.children.size == 1 && isReference(transform.children.head)
+      // TransformExpression.collectLeaves() only returns column references, not literals.
+      // We need exactly one column reference per transform.
+      transform.collectLeaves().size == 1
     }
 
     @tailrec
@@ -1335,7 +1337,13 @@ case class KeyedShuffleSpec(
 
     val newExpressions = partitioning.expressions.zip(keyPositions).map {
       case (te: TransformExpression, positionSet) =>
-        te.copy(children = te.children.map(_ => clustering(positionSet.head)))
+        // Preserve literal parameters (e.g., numBuckets, truncate width)
+        // while replacing only column references with the new clustering expression
+        val newChildren = te.children.map {
+          case l: Literal => l  // Keep literals as-is
+          case _ => clustering(positionSet.head)  // Replace column references
+        }
+        te.copy(children = newChildren)
       case (_, positionSet) => clustering(positionSet.head)
     }
     KeyedPartitioning(newExpressions, partitioning.partitionKeys, partitioning.isGrouped)

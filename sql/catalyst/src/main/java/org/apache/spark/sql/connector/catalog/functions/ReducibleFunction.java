@@ -61,6 +61,53 @@ import org.apache.spark.annotation.Evolving;
 public interface ReducibleFunction<I, O> {
 
   /**
+   * Generic reducer for parameterized functions (bucket, truncate, etc.).
+   *
+   * If this function is 'reducible' on another function, return the {@link Reducer}.
+   * <p>
+   * This method supports functions with any number of parameters of any type.
+   * <p>
+   * Examples:
+   * <ul>
+   *     <li>bucket(4, x) and bucket(2, x):
+   *         <br>thisParams = [4], otherParams = [2]
+   *         <br>Extract with: thisParams.getInt(0), otherParams.getInt(0)
+   *     </li>
+   *     <li>truncate(x, 3) and truncate(x, 5):
+   *         <br>thisParams = [3], otherParams = [5]
+   *         <br>Extract with: thisParams.getInt(0), otherParams.getInt(0)
+   *     </li>
+   *     <li>hypothetical range_bucket(x, 0L, 100L, 4):
+   *         <br>thisParams = [0L, 100L, 4]
+   *         <br>Extract with: thisParams.getLong(0), thisParams.getLong(1), thisParams.getInt(2)
+   *     </li>
+   * </ul>
+   *
+   * @param thisParams parameters for this function
+   * @param otherFunction the other parameterized function
+   * @param otherParams parameters for the other function
+   * @return a reduction function if reducible, null otherwise
+   * @since 4.0.0
+   */
+  default Reducer<I, O> reducer(
+          ReducibleParameters thisParams,
+          ReducibleFunction<?, ?> otherFunction,
+          ReducibleParameters otherParams) {
+    // Default: try old Int-based API for backward compatibility
+    if (thisParams.count() == 1 && otherParams.count() == 1) {
+      try {
+        return reducer(
+                thisParams.getInt(0),
+                otherFunction,
+                otherParams.getInt(0));
+      } catch (ClassCastException ignored) {
+        // Not Int parameters, fall through
+      }
+    }
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * This method is for the bucket function.
    *
    * If this bucket function is 'reducible' on another bucket function,
@@ -78,8 +125,6 @@ public interface ReducibleFunction<I, O> {
    * @param otherBucketFunction the other parameterized function
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
-   * @deprecated Use {@link #reducer(ReducibleParameters, ReducibleFunction, ReducibleParameters)}
-   *             for generic parameterized transforms.
    */
   @Deprecated
   default Reducer<I, O> reducer(
@@ -105,45 +150,5 @@ public interface ReducibleFunction<I, O> {
    */
   default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
     throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Generic reducer for any parameterized transform function.
-   * <p>
-   * This extends SPJ support beyond bucket to transforms like truncate, which use
-   * non-integer parameters or multiple parameters.
-   * <p>
-   * Example of reducing f_source = truncate(x, 5) on f_target = truncate(x, 3):
-   * <ul>
-   *     <li>thisParams = ReducibleParameters([5])</li>
-   *     <li>otherFunction = truncate</li>
-   *     <li>otherParams = ReducibleParameters([3])</li>
-   *     <li>reducer truncates to min(5, 3) = 3</li>
-   * </ul>
-   * <p>
-   * Default implementation provides backward compatibility: if both parameter sets
-   * contain a single integer, delegates to {@link #reducer(int, ReducibleFunction, int)}.
-   *
-   * @param thisParams parameters for this function
-   * @param otherFunction the other reducible function
-   * @param otherParams parameters for the other function
-   * @return a reduction function if it is reducible
-   * @throws UnsupportedOperationException if not reducible
-   * @since 4.1.0
-   */
-  default Reducer<I, O> reducer(
-      ReducibleParameters thisParams,
-      ReducibleFunction<?, ?> otherFunction,
-      ReducibleParameters otherParams) {
-    // Backward compatibility: single-int params → delegate to old bucket API
-    if (thisParams.count() == 1 && otherParams.count() == 1) {
-      try {
-        return reducer(thisParams.getInt(0), otherFunction, otherParams.getInt(0));
-      } catch (ClassCastException | NumberFormatException ignored) {
-        // Not int parameters, fall through
-      }
-    }
-    throw new UnsupportedOperationException(
-        "reducer() with ReducibleParameters not implemented");
   }
 }

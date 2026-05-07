@@ -1191,11 +1191,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
-    TransformExpression(BucketFunction, Seq(expr), Some(numBuckets))
+    TransformExpression(BucketFunction, Seq(Literal(numBuckets), expr))
   }
 
   def buckets(numBuckets: Int, expr: Seq[Expression]): TransformExpression = {
-    TransformExpression(BucketFunction, expr, Some(numBuckets))
+    TransformExpression(BucketFunction, Seq(Literal(numBuckets)) ++ expr)
   }
 
   test("ShufflePartitionIdPassThrough - avoid unnecessary shuffle when children are compatible") {

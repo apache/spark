@@ -38,6 +38,7 @@ import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
   private val functions = Seq(
@@ -126,7 +127,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+      Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
 
     checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
   }
@@ -138,7 +139,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+      Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
 
     // Has exactly one partition.
     val partitionKeys = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
@@ -194,13 +195,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
       val df = sql(s"SELECT * FROM testcat.ns.$table")
       val distribution = physical.ClusteredDistribution(
-        Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+        Seq(TransformExpression(BucketFunction, Seq(Literal(32), attr("ts")))))
 
       checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
     }
   }
 
-  test("non-clustered distribution: V2 function with multiple args") {
+  test("clustered distribution: V2 function with multiple args") {
     val partitions: Array[Transform] = Array(
       Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(2))
     )
@@ -216,7 +217,11 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     val distribution = physical.ClusteredDistribution(
       Seq(TransformExpression(TruncateFunction, Seq(attr("data"), Literal(2)))))
 
-    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+    // With truncate transform support, KeyedPartitioning should now work
+    val partitionKeys = Seq("aa", "bb", "cc").map(v =>
+      InternalRow(UTF8String.fromString(v)))
+    checkQueryPlan(df, distribution,
+      physical.KeyedPartitioning(distribution.clustering, partitionKeys))
   }
 
   /**
@@ -4182,5 +4187,125 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
       }
     }
+  }
+
+  // === SPARK-50593: Truncate SPJ support tests ===
+
+  test("SPARK-50593: cross-function truncate vs bucket should NOT trigger SPJ") {
+    val partitions1 = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(3))
+    )
+    val partitions2 = Array(
+      Expressions.bucket(4, "data")
+    )
+
+    createTable("trunc_cross1", columns, partitions1)
+    sql("INSERT INTO testcat.ns.trunc_cross1 VALUES " +
+      "(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'bbb', CAST('2021-01-01' AS timestamp))")
+
+    createTable("trunc_cross2", columns2, partitions2)
+    sql("INSERT INTO testcat.ns.trunc_cross2 VALUES " +
+      "(1, 5, 'aaa'), " +
+      "(5, 10, 'bbb')")
+
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+
+      val df = sql(
+        selectWithMergeJoinHint("trunc_cross1", "trunc_cross2") +
+        "trunc_cross1.id, trunc_cross2.store_id " +
+        "FROM testcat.ns.trunc_cross1 JOIN testcat.ns.trunc_cross2 " +
+        "ON trunc_cross1.data = trunc_cross2.data " +
+        "ORDER BY trunc_cross1.id")
+
+      // Different functions (truncate vs bucket) should NEVER enable SPJ
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.nonEmpty,
+        "truncate vs bucket should not trigger SPJ, but no shuffles found")
+    }
+  }
+
+  test("SPARK-50593: TransformExpression.collectLeaves filters out literals") {
+    // bucket(4, col) has children = [Literal(4), col] but collectLeaves should return [col]
+    val col = attr("data")
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(4), col))
+    val leaves = bucketExpr.collectLeaves()
+    assert(leaves.size == 1, s"Expected 1 leaf (column ref), got ${leaves.size}: $leaves")
+    assert(leaves.head.semanticEquals(col),
+      s"Expected leaf to be the column reference, got ${leaves.head}")
+
+    // truncate(col, 3) has children = [col, Literal(3)] but collectLeaves should return [col]
+    val truncExpr = TransformExpression(TruncateFunction, Seq(col, Literal(3)))
+    val truncLeaves = truncExpr.collectLeaves()
+    assert(truncLeaves.size == 1,
+      s"Expected 1 leaf (column ref), got ${truncLeaves.size}: $truncLeaves")
+    assert(truncLeaves.head.semanticEquals(col),
+      s"Expected leaf to be the column reference, got ${truncLeaves.head}")
+
+    // years(col) has children = [col] with no literals
+    val yearsExpr = TransformExpression(YearsFunction, Seq(col))
+    val yearsLeaves = yearsExpr.collectLeaves()
+    assert(yearsLeaves.size == 1,
+      s"Expected 1 leaf for years(), got ${yearsLeaves.size}: $yearsLeaves")
+  }
+
+  test("SPARK-50593: existing bucket SPJ still works with ReducibleParameters API") {
+    // This test verifies that the migration from reducer(int, func, int)
+    // to reducer(ReducibleParameters, func, ReducibleParameters) is backward compatible.
+    // BucketFunction now implements the new API but bucket SPJ should still work.
+    val table1 = "bucket_compat1"
+    val table2 = "bucket_compat2"
+
+    val partitions1 = Array(Expressions.bucket(4, "id"))
+    val partitions2 = Array(Expressions.bucket(4, "store_id"))
+
+    createTable(table1, columns, partitions1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'ccc', CAST('2020-01-01' AS timestamp)), " +
+      "(3, 'ddd', CAST('2019-01-01' AS timestamp))")
+
+    createTable(table2, columns2, partitions2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(0, 5, 'aaa'), " +
+      "(1, 10, 'bbb'), " +
+      "(2, 15, 'ccc'), " +
+      "(3, 20, 'ddd')")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true") {
+      val df = sql(
+        selectWithMergeJoinHint(table1, table2) +
+        s"$table1.id, $table2.store_id " +
+        s"FROM testcat.ns.$table1 JOIN testcat.ns.$table2 " +
+        s"ON $table1.id = $table2.store_id " +
+        s"ORDER BY $table1.id")
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "Bucket SPJ should still work after ReducibleParameters migration")
+      checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
+    }
+  }
+
+  test("SPARK-50593: ReducibleParameters backward compat - old int API still works via default") {
+    // The new reducer(ReducibleParameters, func, ReducibleParameters) default implementation
+    // delegates to the old reducer(int, func, int) for single-int params.
+    // This verifies bucket(4) vs bucket(2) still produces a reducer via the fallback path.
+    val bucketExpr4 = TransformExpression(BucketFunction, Seq(Literal(4), attr("id")))
+    val bucketExpr2 = TransformExpression(BucketFunction, Seq(Literal(2), attr("id")))
+
+    // isCompatible should return true (4 and 2 share GCD > 1)
+    assert(bucketExpr4.isCompatible(bucketExpr2),
+      "bucket(4) and bucket(2) should be compatible via reducer")
+
+    // reducers() should return a Reducer
+    val reducer = bucketExpr4.reducers(bucketExpr2)
+    assert(reducer.isDefined, "Expected a reducer for bucket(4) on bucket(2)")
   }
 }

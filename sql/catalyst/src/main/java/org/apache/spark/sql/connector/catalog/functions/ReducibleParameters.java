@@ -16,69 +16,115 @@
  */
 package org.apache.spark.sql.connector.catalog.functions;
 
-import java.util.Collections;
+import org.apache.spark.annotation.Evolving;
+import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.annotation.Evolving;
-
 /**
- * Container for parameters of a {@link ReducibleFunction}.
- * <p>
- * Provides type-safe access to function parameters for generic reducer comparisons,
- * enabling SPJ support for any parameterized transform (not just bucket).
- * <p>
+ * Container for reducible function literal parameters.
+ * Provides type-safe access to parameters of various types.
+ *
  * Examples:
  * <ul>
- *   <li>bucket(4, x) → ReducibleParameters([4])</li>
- *   <li>truncate(x, 3) → ReducibleParameters([3])</li>
- *   <li>bucket(16, x) → ReducibleParameters([16])</li>
+ *   <li>bucket(4, col) → ReducibleParameters([4])</li>
+ *   <li>truncate(col, 3) → ReducibleParameters([3])</li>
+ *   <li>range_bucket(col, 0L, 100L, 10) → ReducibleParameters([0L, 100L, 10])</li>
+ *   <li>custom_transform(col, "param") → ReducibleParameters(["param"])</li>
  * </ul>
  *
- * @since 4.1.0
+ * @since 4.0.0
  */
 @Evolving
 public class ReducibleParameters {
     private final List<Object> values;
 
     public ReducibleParameters(List<Object> values) {
-        this.values = Collections.unmodifiableList(values);
+        this.values = values;
     }
 
-    /** Number of parameters. */
+    public ReducibleParameters(Object... values) {
+        this.values = Arrays.asList(values);
+    }
+
+    /**
+     * Get the number of parameters.
+     */
     public int count() {
         return values.size();
     }
 
-    /** Get raw parameter value at index. */
-    public Object get(int index) {
-        return values.get(index);
+    /**
+     * Check if this container has parameters.
+     */
+    public boolean isEmpty() {
+        return values.isEmpty();
     }
 
-    /** Get parameter as int. Throws ClassCastException if not numeric. */
+    /**
+     * Get parameter at index as Integer.
+     * @throws ClassCastException if parameter is not an Integer
+     * @throws IndexOutOfBoundsException if index is invalid
+     */
     public int getInt(int index) {
-        return ((Number) values.get(index)).intValue();
+        return (Integer) values.get(index);
     }
 
-    /** Get parameter as long. Throws ClassCastException if not numeric. */
+    /**
+     * Get parameter at index as Long.
+     * @throws ClassCastException if parameter is not a Long
+     * @throws IndexOutOfBoundsException if index is invalid
+     */
     public long getLong(int index) {
-        return ((Number) values.get(index)).longValue();
+        return (Long) values.get(index);
     }
 
-    /** Get parameter as String. */
+    /**
+     * Get parameter at index as String.
+     * @throws ClassCastException if parameter is not a String
+     * @throws IndexOutOfBoundsException if index is invalid
+     */
     public String getString(int index) {
         return (String) values.get(index);
     }
 
-    /** Get parameter as double. Throws ClassCastException if not numeric. */
+    /**
+     * Get parameter at index as Double.
+     * @throws ClassCastException if parameter is not a Double
+     * @throws IndexOutOfBoundsException if index is invalid
+     */
     public double getDouble(int index) {
-        return ((Number) values.get(index)).doubleValue();
+        return (Double) values.get(index);
+    }
+
+    /**
+     * Get parameter at index as Float.
+     * @throws ClassCastException if parameter is not a Float
+     * @throws IndexOutOfBoundsException if index is invalid
+     */
+    public float getFloat(int index) {
+        return (Float) values.get(index);
+    }
+
+    /**
+     * Get raw parameter value at index.
+     */
+    public Object get(int index) {
+        return values.get(index);
+    }
+
+    /**
+     * Get all parameter values as a list.
+     */
+    public List<Object> getAll() {
+        return values;
     }
 
     @Override
-    public boolean equals(Object other) {
-        if (this == other) return true;
-        if (!(other instanceof ReducibleParameters)) return false;
-        return values.equals(((ReducibleParameters) other).values);
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ReducibleParameters that = (ReducibleParameters) o;
+        return values.equals(that.values);
     }
 
     @Override

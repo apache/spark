@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -492,7 +492,7 @@ class ProjectedOrderingAndPartitioningSuite
     // KP([bucket(32, id)], keys1d) through Project(id as pk) should produce
     // KP([bucket(32, pk)], keys1d): the alias is pushed into the bucket's column argument.
     val id = AttributeReference("id", IntegerType)()
-    val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
     val keys1d = Seq(InternalRow(0), InternalRow(1), InternalRow(2))
     val child = DummyLeafExecWithPartitioning(
       output = Seq(id),
@@ -524,7 +524,7 @@ class ProjectedOrderingAndPartitioningSuite
     // Result: KP([bucket(32, id)], keys1d, isNarrowed=true, isGrouped=false).
     val id = AttributeReference("id", IntegerType)()
     val ts = AttributeReference("ts", IntegerType)()
-    val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
     val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
     // Projected to position [0] (bucket): (0),(1),(0) -- bucket value 0 appears twice.
     val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2020), InternalRow(0, 2021))
@@ -554,7 +554,7 @@ class ProjectedOrderingAndPartitioningSuite
     // Result: KP([bucket(32, id), years(ts_alias)], keys2d) -- not narrowed.
     val id = AttributeReference("id", IntegerType)()
     val ts = AttributeReference("ts", IntegerType)()
-    val bucketExpr = TransformExpression(BucketFunction, Seq(id), Some(32))
+    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(32), id))
     val yearsExpr = TransformExpression(YearsFunction, Seq(ts))
     val keys2d = Seq(InternalRow(0, 2020), InternalRow(1, 2020), InternalRow(0, 2021))
     val child = DummyLeafExecWithPartitioning(

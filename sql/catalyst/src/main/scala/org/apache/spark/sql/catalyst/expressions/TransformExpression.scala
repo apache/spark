@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ReducibleParameters, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
@@ -28,33 +28,85 @@ import org.apache.spark.sql.types.DataType
  *
  * @param function the transform function itself. Spark will use it to decide whether two
  *                 partition transform expressions are compatible.
- * @param numBucketsOpt the number of buckets if the transform is `bucket`. Unset otherwise.
  */
-case class TransformExpression(
-    function: BoundFunction,
-    children: Seq[Expression],
-    numBucketsOpt: Option[Int] = None) extends Expression {
+case class TransformExpression(function: BoundFunction, children: Seq[Expression])
+    extends Expression {
 
   override def nullable: Boolean = true
 
   /**
-   * Whether this [[TransformExpression]] has the same semantics as `other`.
-   * For instance, `bucket(32, c)` is equal to `bucket(32, d)`, but not to `bucket(16, d)` or
-   * `year(c)`.
+   * Extract literal children (constant parameters) from this transform. These are constant
+   * arguments like width in truncate(col, width). Literals are compared when checking if two
+   * transforms are the same.
+   */
+  private lazy val literalChildren: Seq[Literal] =
+    children.collect { case l: Literal => l }
+
+  /**
+   * Whether this [[TransformExpression]] has the same semantics as `other`. For instance,
+   * `bucket(32, c)` is equal to `bucket(32, d)`, but not to `bucket(16, d)` or `year(c)`.
+   * Similarly, `truncate(c, 2)` is equal to `truncate(d, 2)`, but may not to `truncate(c, 4)`.
    *
    * This will be used, for instance, by Spark to determine whether storage-partitioned join can
    * be triggered, by comparing partition transforms from both sides of the join and checking
    * whether they are compatible.
    *
-   * @param other the transform expression to compare to
-   * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
+   * Two transforms are considered the same if:
+   *   1. They have the same function name
+   *   2. They have the same literal arguments (e.g., numBuckets for bucket, width for truncate)
+   *
+   * @param other
+   *   the transform expression to compare to
+   * @return
+   *   true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
   def isSameFunction(other: TransformExpression): Boolean = other match {
-    case TransformExpression(otherFunction, _, otherNumBucketsOpt) =>
-      function.canonicalName() == otherFunction.canonicalName() &&
-        numBucketsOpt == otherNumBucketsOpt
+    case TransformExpression(otherFunction, _) =>
+      val sameFunctionName = function.canonicalName() == otherFunction.canonicalName()
+
+      // Compare literal arguments to ensure transforms with different parameters
+      // (e.g., bucket(32, col) vs bucket(16, col), truncate(col, 2) vs truncate(col, 4))
+      // are not considered the same
+      val otherLiterals = other.literalChildren
+      val sameLiterals = literalChildren.length == otherLiterals.length &&
+        literalChildren.zip(otherLiterals).forall { case (l1, l2) =>
+          l1.equals(l2)
+        }
+
+      sameFunctionName && sameLiterals
     case _ =>
       false
+  }
+
+  /**
+   * Override canonicalized to ensure transforms with the same function and literals are
+   * considered semantically equal, regardless of which specific column references they use.
+   *
+   * This is crucial for Storage Partitioned Joins - we need bucket(4, tableA.id) and bucket(4,
+   * tableB.id) to be semantically equal so SPJ can be triggered.
+   */
+  override lazy val canonicalized: Expression = {
+    // Canonicalize only the non-literal children (i.e., column references)
+    val canonicalizedReferenceChildren = children.map {
+      case l: Literal => l
+      case other => other.canonicalized
+    }
+    TransformExpression(function, canonicalizedReferenceChildren)
+  }
+
+  /**
+   * Override collectLeaves to only return reference children (columns), not literal parameters.
+   *
+   * For TransformExpression, literal children are metadata about the transform function (e.g.,
+   * numBuckets=4 in bucket(4, col), width=2 in truncate(col, 2)). All consumers of
+   * collectLeaves() expect only column references, not these metadata literals.
+   *
+   */
+  override def collectLeaves(): Seq[Expression] = {
+    children.flatMap {
+      case _: Literal => Seq.empty // Skip literal parameters (metadata)
+      case other => other.collectLeaves() // Include column references
+    }
   }
 
   /**
@@ -73,8 +125,8 @@ case class TransformExpression(
     } else {
       (function, other.function) match {
         case (f: ReducibleFunction[_, _], o: ReducibleFunction[_, _]) =>
-          val thisReducer = reducer(f, numBucketsOpt, o, other.numBucketsOpt)
-          val otherReducer = reducer(o, other.numBucketsOpt, f, numBucketsOpt)
+          val thisReducer = reducer(f, this, o, other)
+          val otherReducer = reducer(o, other, f, this)
           thisReducer.isDefined || otherReducer.isDefined
         case _ => false
       }
@@ -92,22 +144,47 @@ case class TransformExpression(
    */
   def reducers(other: TransformExpression): Option[Reducer[_, _]] = {
     (function, other.function) match {
-      case(e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
-        reducer(e1, numBucketsOpt, e2, other.numBucketsOpt)
+      case (e1: ReducibleFunction[_, _], e2: ReducibleFunction[_, _]) =>
+        reducer(e1, this, e2, other)
       case _ => None
     }
   }
 
-  // Return a Reducer for a reducible function on another reducible function
+  /**
+   * Extract all literal parameters from a transform expression.
+   * Returns ReducibleParameters containing the literal values in order.
+   *
+   * Examples:
+   *   bucket(4, col)        => ReducibleParameters([4])
+   *   truncate(col, 3)      => ReducibleParameters([3])
+   *   days(col)             => ReducibleParameters([])  (no literals)
+   */
+  private def extractParameters(expr: TransformExpression): ReducibleParameters = {
+    import scala.jdk.CollectionConverters._
+    val values = expr.literalChildren.map {
+      case Literal(value, _) => value.asInstanceOf[AnyRef]
+    }
+    new ReducibleParameters(values.asJava)
+  }
+
+  /**
+   * Return a Reducer for a reducible function on another reducible function
+   * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
+   */
   private def reducer(
       thisFunction: ReducibleFunction[_, _],
-      thisNumBucketsOpt: Option[Int],
+      thisExpr: TransformExpression,
       otherFunction: ReducibleFunction[_, _],
-      otherNumBucketsOpt: Option[Int]): Option[Reducer[_, _]] = {
-    val res = (thisNumBucketsOpt, otherNumBucketsOpt) match {
-      case (Some(numBuckets), Some(otherNumBuckets)) =>
-        thisFunction.reducer(numBuckets, otherFunction, otherNumBuckets)
-      case _ => thisFunction.reducer(otherFunction)
+      otherExpr: TransformExpression): Option[Reducer[_, _]] = {
+    val thisParams = extractParameters(thisExpr)
+    val otherParams = extractParameters(otherExpr)
+
+    val res = if (!thisParams.isEmpty && !otherParams.isEmpty) {
+      // Parameterized functions (bucket, truncate, etc.)
+      thisFunction.reducer(thisParams, otherFunction, otherParams)
+    } else {
+      // Non-parameterized functions (days, hours, etc.)
+      thisFunction.reducer(otherFunction)
     }
     Option(res)
   }
@@ -118,10 +195,7 @@ case class TransformExpression(
     copy(children = newChildren)
 
   private lazy val resolvedFunction: Option[Expression] = this match {
-    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, Some(numBuckets)) =>
-      Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc,
-        Seq(Literal(numBuckets)) ++ arguments))
-    case TransformExpression(scalarFunc: ScalarFunction[_], arguments, None) =>
+    case TransformExpression(scalarFunc: ScalarFunction[_], arguments) =>
       Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments))
     case _ => None
   }
