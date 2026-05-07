@@ -415,7 +415,6 @@ class _TreeClassifierParams(Params):
         typeConverter=TypeConverters.toString,
     )
 
-<<<<<<< HEAD
     pruneTree = Param(Params._dummy(), "pruneTree", "" +
                       "If true, the trained tree will undergo a 'pruning' process after training in which nodes" +
                       " that have the same class predictions will be merged.  This drawback means that the class" +
@@ -424,12 +423,8 @@ class _TreeClassifierParams(Params):
                       " If false, the post-training tree will undergo no pruning.  The benefit being that you" +
                       " maintain the class prediction probabilities", typeConverter=TypeConverters.toBoolean)
 
-    def __init__(self):
-        super(_TreeClassifierParams, self).__init__()
-=======
     def __init__(self) -> None:
         super().__init__()
->>>>>>> master
 
     @since("1.6.0")
     def getImpurity(self) -> str:

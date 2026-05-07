@@ -124,14 +124,9 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
-<<<<<<< HEAD
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
-=======
-      prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None,
       earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
     lastEarlyStoppedModelSize = 0
->>>>>>> master
     val timer = new TimeTracker()
     timer.start("total")
 
@@ -178,13 +173,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // At first, all the rows belong to the root nodes (node Id == 1).
       nodeIds = baggedInput.map { _ => Array.fill(numTrees)(1) }
       nodeIdCheckpointer = new PeriodicRDDCheckpointer[Array[Int]](
-<<<<<<< HEAD
-        strategy.getCheckpointInterval,
-        sc,
-        StorageLevel.MEMORY_AND_DISK)
-=======
         strategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
->>>>>>> master
       nodeIdCheckpointer.update(nodeIds)
     }
 
@@ -245,7 +234,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       timer.stop("findBestSplits")
 
       if (earlyStopModelSizeThresholdInBytes > 0) {
-        val nodes = topNodes.map(_.toNode(prune))
+        val nodes = topNodes.map(_.toNode(strategy.pruneTree))
         val estimatedSize = SizeEstimator.estimate(nodes)
         if (estimatedSize > earlyStopModelSizeThresholdInBytes){
           earlyStop = true
@@ -278,16 +267,11 @@ private[spark] object RandomForest extends Logging with Serializable {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-<<<<<<< HEAD
             new DecisionTreeClassificationModel(
               uid,
               rootNode.toNode(strategy.pruneTree),
               numFeatures,
               strategy.getNumClasses)
-=======
-            new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
-              strategy.getNumClasses())
->>>>>>> master
           }
         } else {
           topNodes.map { rootNode =>
@@ -297,15 +281,10 @@ private[spark] object RandomForest extends Logging with Serializable {
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-<<<<<<< HEAD
             new DecisionTreeClassificationModel(
               rootNode.toNode(strategy.pruneTree),
               numFeatures,
               strategy.getNumClasses)
-=======
-            new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
-              strategy.getNumClasses())
->>>>>>> master
           }
         } else {
           topNodes.map(rootNode =>
@@ -368,7 +347,6 @@ private[spark] object RandomForest extends Logging with Serializable {
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName("bagged tree points")
 
-<<<<<<< HEAD
     val trees = runBagged(
       baggedInput = baggedInput,
       metadata = metadata,
@@ -378,13 +356,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy = featureSubsetStrategy,
       seed = seed,
       instr = instr,
-      parentUID = parentUID)
-=======
-    val trees = runBagged(baggedInput = baggedInput, metadata = metadata, bcSplits = bcSplits,
-      strategy = strategy, numTrees = numTrees, featureSubsetStrategy = featureSubsetStrategy,
-      seed = seed, instr = instr, prune = prune, parentUID = parentUID,
+      parentUID = parentUID,
       earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
->>>>>>> master
 
     baggedInput.unpersist()
     bcSplits.destroy()
@@ -1460,17 +1433,10 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
     if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.
-<<<<<<< HEAD
-      logWarning(
-        s"Tree learning is using approximately $memUsage bytes per iteration, which" +
-          s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
-          s" $numNodesInGroup nodes in this iteration.")
-=======
       logWarning(log"Tree learning is using approximately ${MDC(MEMORY_SIZE, memUsage)} " +
         log"bytes per iteration, which exceeds requested limit " +
         log"maxMemoryUsage=${MDC(MAX_MEMORY_SIZE, maxMemoryUsage)}. This allows splitting " +
         log"${MDC(NUM_NODES, numNodesInGroup)} nodes in this iteration.")
->>>>>>> master
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =

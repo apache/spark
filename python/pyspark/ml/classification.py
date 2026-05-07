@@ -1671,13 +1671,6 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
     Params for :py:class:`DecisionTreeClassifier` and :py:class:`DecisionTreeClassificationModel`.
     """
 
-<<<<<<< HEAD
-    def __init__(self, *args):
-        super(_DecisionTreeClassifierParams, self).__init__(*args)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", leafCol="", minWeightFractionPerNode=0.0)
-=======
     def __init__(self, *args: Any):
         super().__init__(*args)
         self._setDefault(
@@ -1685,6 +1678,7 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
             maxBins=32,
             minInstancesPerNode=1,
             minInfoGain=0.0,
+            pruneTree=True,
             maxMemoryInMB=256,
             cacheNodeIds=False,
             checkpointInterval=10,
@@ -1692,7 +1686,6 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
             leafCol="",
             minWeightFractionPerNode=0.0,
         )
->>>>>>> master
 
 
 @inherit_doc
@@ -1785,13 +1778,6 @@ class DecisionTreeClassifier(
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-<<<<<<< HEAD
-    def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 probabilityCol="probability", rawPredictionCol="rawPrediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0):
-=======
     def __init__(
         self,
         *,
@@ -1804,6 +1790,7 @@ class DecisionTreeClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -1813,7 +1800,6 @@ class DecisionTreeClassifier(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ):
->>>>>>> master
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
@@ -1830,14 +1816,6 @@ class DecisionTreeClassifier(
 
     @keyword_only
     @since("1.4.0")
-<<<<<<< HEAD
-    def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  probabilityCol="probability", rawPredictionCol="rawPrediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini", seed=None, weightCol=None, leafCol="",
-                  minWeightFractionPerNode=0.0):
-=======
     def setParams(
         self,
         *,
@@ -1850,6 +1828,7 @@ class DecisionTreeClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -1859,7 +1838,6 @@ class DecisionTreeClassifier(
         leafCol: str = "",
         minWeightFractionPerNode: float = 0.0,
     ) -> "DecisionTreeClassifier":
->>>>>>> master
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
@@ -1886,17 +1864,13 @@ class DecisionTreeClassifier(
         """
         return self._set(maxBins=value)
 
-<<<<<<< HEAD
-    def setPruneTree(self, value):
+    def setPruneTree(self, value: bool) -> "DecisionTreeClassifier":
         """
         Sets the value of :py:attr:`pruneTree`.
         """
         return self._set(pruneTree=value)
 
-    def setMinInstancesPerNode(self, value):
-=======
     def setMinInstancesPerNode(self, value: int) -> "DecisionTreeClassifier":
->>>>>>> master
         """
         Sets the value of :py:attr:`minInstancesPerNode`.
         """
@@ -2000,15 +1974,6 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
     Params for :py:class:`RandomForestClassifier` and :py:class:`RandomForestClassificationModel`.
     """
 
-<<<<<<< HEAD
-    def __init__(self, *args):
-        super(_RandomForestClassifierParams, self).__init__(*args)
-        self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True,
-                         maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
-                         subsamplingRate=1.0, leafCol="", minWeightFractionPerNode=0.0,
-                         bootstrap=True)
-=======
     def __init__(self, *args: Any):
         super().__init__(*args)
         self._setDefault(
@@ -2016,6 +1981,7 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
             maxBins=32,
             minInstancesPerNode=1,
             minInfoGain=0.0,
+            pruneTree=True,
             maxMemoryInMB=256,
             cacheNodeIds=False,
             checkpointInterval=10,
@@ -2027,7 +1993,6 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
             minWeightFractionPerNode=0.0,
             bootstrap=True,
         )
->>>>>>> master
 
 
 @inherit_doc
@@ -2114,14 +2079,6 @@ class RandomForestClassifier(
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-<<<<<<< HEAD
-    def __init__(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 probabilityCol="probability", rawPredictionCol="rawPrediction",
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
-                 leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True):
-=======
     def __init__(
         self,
         *,
@@ -2134,6 +2091,7 @@ class RandomForestClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -2147,7 +2105,6 @@ class RandomForestClassifier(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ):
->>>>>>> master
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
@@ -2165,14 +2122,6 @@ class RandomForestClassifier(
 
     @keyword_only
     @since("1.4.0")
-<<<<<<< HEAD
-    def setParams(self, *, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  probabilityCol="probability", rawPredictionCol="rawPrediction",
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True,
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
-                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True):
-=======
     def setParams(
         self,
         *,
@@ -2185,6 +2134,7 @@ class RandomForestClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -2198,7 +2148,6 @@ class RandomForestClassifier(
         weightCol: Optional[str] = None,
         bootstrap: Optional[bool] = True,
     ) -> "RandomForestClassifier":
->>>>>>> master
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
@@ -2226,17 +2175,13 @@ class RandomForestClassifier(
         """
         return self._set(maxBins=value)
 
-<<<<<<< HEAD
-    def setPruneTree(self, value):
+    def setPruneTree(self, value: bool) -> "RandomForestClassifier":
         """
         Sets the value of :py:attr:`pruneTree`.
         """
         return self._set(pruneTree=value)
 
-    def setMinInstancesPerNode(self, value):
-=======
     def setMinInstancesPerNode(self, value: int) -> "RandomForestClassifier":
->>>>>>> master
         """
         Sets the value of :py:attr:`minInstancesPerNode`.
         """
