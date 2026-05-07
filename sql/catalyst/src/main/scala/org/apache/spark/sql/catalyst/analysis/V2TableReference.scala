@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.V2TableReference.Context
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TableInfo
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TemporaryViewContext
 import org.apache.spark.sql.catalyst.analysis.V2TableReference.TransactionContext
+import org.apache.spark.sql.catalyst.analysis.V2TableReference.WriteTargetContext
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -84,11 +85,24 @@ private[sql] object V2TableReference {
       columns: Seq[Column],
       metadataColumns: Seq[MetadataColumn])
 
-  sealed trait Context
+  sealed trait Context {
+    def cacheable: Boolean
+  }
+
   /** Context for relations that are re-resolved on access of a dataframe temp view. */
-  case class TemporaryViewContext(viewName: Seq[String]) extends Context
+  case class TemporaryViewContext(viewName: Seq[String]) extends Context {
+    val cacheable = true
+  }
+
   /** Context for relations that are re-resolved through a transaction catalog. */
-  case object TransactionContext extends Context
+  case object TransactionContext extends Context {
+    val cacheable = true
+  }
+
+  /** Context for write targets. */
+  case object WriteTargetContext extends Context {
+    val cacheable = false
+  }
 
   def createForTempView(relation: DataSourceV2Relation, viewName: Seq[String]): V2TableReference = {
     create(relation, TemporaryViewContext(viewName))
@@ -98,6 +112,10 @@ private[sql] object V2TableReference {
   // UnresolveRelationsInTransaction which unresolves already resolved relations.
   def createForTransaction(relation: DataSourceV2Relation): V2TableReference = {
     create(relation, TransactionContext)
+  }
+
+  def createForWriteTarget(relation: DataSourceV2Relation): V2TableReference = {
+    create(relation, WriteTargetContext)
   }
 
   private def create(relation: DataSourceV2Relation, context: Context): V2TableReference = {
@@ -122,14 +140,14 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     ref.context match {
       case ctx: TemporaryViewContext =>
         validateLoadedTableInTempView(table, ref, ctx)
-      case TransactionContext =>
-        validateLoadedTableInTransaction(table, ref)
+      case TransactionContext | WriteTargetContext =>
+        validateNoChanges(table, ref)
       case ctx =>
         throw SparkException.internalError(s"Unknown table ref context: ${ctx.getClass.getName}")
     }
   }
 
-  private def validateLoadedTableInTransaction(table: Table, ref: V2TableReference): Unit = {
+  private def validateNoChanges(table: Table, ref: V2TableReference): Unit = {
     // Make sure the table was not dropped and recreated.
     ref.info.tableId.foreach(V2TableUtil.validateTableId(ref.name, _, table))
 

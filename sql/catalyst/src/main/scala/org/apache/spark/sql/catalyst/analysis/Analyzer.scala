@@ -1124,7 +1124,16 @@ class Analyzer(
         }
 
       case write: V2StreamingWriteCommand =>
-        resolveWriteTarget(write, write.table, write.withNewTable)
+        write.table match {
+          case ref: V2TableReference =>
+            relationResolution.resolveReference(ref) match {
+              case r: NamedRelation => write.withNewTable(r)
+              case other => throw SparkException.internalError(
+                s"""Expected V2TableReference write target to resolve to a NamedRelation,
+                   |but got ${other.getClass.getName}""".stripMargin)
+            }
+          case _ => write
+        }
 
       case write: V2WriteCommand =>
         resolveWriteTarget(write, write.table, write.withNewTable)

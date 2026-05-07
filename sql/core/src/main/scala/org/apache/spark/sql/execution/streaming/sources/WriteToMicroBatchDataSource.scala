@@ -17,26 +17,23 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.catalyst.analysis.NamedRelation
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, V2TableReference}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode, V2StreamingWriteCommand}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * The logical plan for writing data to a micro-batch stream.
  *
- * Note that this logical plan does not have a corresponding physical plan, as it will be converted
- * to [[org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2 WriteToDataSourceV2]]
- * with [[MicroBatchWrite]] before execution.
+ * Note that this logical plan does not have a corresponding physical plan, as it will be
+ * converted to [[WriteToDataSourceV2]] with [[MicroBatchWrite]] before execution.
  *
- * [[relation]] starts as [[org.apache.spark.sql.catalyst.analysis.UnresolvedRelation]] when the
- * sink has a catalog+identifier (transactional catalogs), or as a resolved
- * [[org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation]] for non-transactional
- * catalog-backed sinks and format-based sinks.
- * [[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveRelations]]
- * resolves it to [[org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation]] during
- * each micro-batch analysis, going through the transaction-aware catalog when a transaction is
- * active.
+ * When the write target is backed by a transactional catalog, it is created as a
+ * [[V2TableReference]] with [[V2TableReference.WriteTargetContext]]. This is then resolved by
+ * ResolveRelations as a [[DataSourceV2Relation]] for each micro-batch.
+ *
+ * For non-transactional catalogs, the write target is pre-resolved as a [[DataSourceV2Relation]].
  */
 case class WriteToMicroBatchDataSource(
     relation: NamedRelation,
