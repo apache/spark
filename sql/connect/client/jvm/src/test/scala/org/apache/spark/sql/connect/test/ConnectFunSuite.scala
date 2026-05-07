@@ -24,6 +24,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
+import org.apache.spark.util.TestEnvHelper
 
 /**
  * The basic testsuite the client tests should extend from.
@@ -31,16 +32,8 @@ import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
 trait ConnectFunSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
     with BeforeAndAfterAll
-    with BeforeAndAfterEach {
-
-  // Borrowed from SparkFunSuite
-  protected def getWorkspaceFilePath(first: String, more: String*): Path = {
-    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
-      fail("spark.test.home or SPARK_HOME is not set.")
-    }
-    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-    java.nio.file.Paths.get(sparkHome, first +: more: _*)
-  }
+    with BeforeAndAfterEach
+    with TestEnvHelper {
 
   protected def baseResourcePath: Path = {
     getWorkspaceFilePath(

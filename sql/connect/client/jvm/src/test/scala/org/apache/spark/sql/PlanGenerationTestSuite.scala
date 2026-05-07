@@ -78,9 +78,6 @@ import org.apache.spark.util.SparkFileUtils
 // scalastyle:on
 class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
-  // Borrowed from SparkFunSuite
-  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
-
   private val cleanOrphanedGoldenFiles: Boolean =
     System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
 

@@ -59,6 +59,10 @@ object IntegrationTestUtils {
     s"$connectClientHomeDir/target/$scalaDir/test-classes"
   }
 
+  private[sql] lazy val commonUtilsTestClassDir = {
+    s"$sparkHome/common/utils/target/$scalaDir/test-classes"
+  }
+
   private[sql] def log4jConfigs: Seq[String] = {
     val log4j2 = s"$connectClientHomeDir/src/test/resources/log4j2.properties"
     Seq(
