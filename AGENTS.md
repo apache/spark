@@ -22,7 +22,7 @@ Avoid introducing non-ASCII characters in code or comments. String literals may 
 
 ## Build and Test
 
-Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
+Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
 
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 

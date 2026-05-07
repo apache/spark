@@ -104,6 +104,7 @@ The following methods are available only for `SeriesGroupBy` objects.
 .. autosummary::
    :toctree: api/
 
+   SeriesGroupBy.describe
    SeriesGroupBy.nsmallest
    SeriesGroupBy.nlargest
    SeriesGroupBy.value_counts

@@ -138,7 +138,7 @@ case class BatchScanExec(
       new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
     }
-    postDriverMetrics()
+    postDriverMetrics(scan.reportDriverMetrics())
     rdd
   }
 

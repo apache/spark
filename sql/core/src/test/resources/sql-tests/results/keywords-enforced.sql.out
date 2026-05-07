@@ -15,6 +15,7 @@ AND	true
 ANTI	false
 ANY	true
 ANY_VALUE	false
+APPROX	false
 ARCHIVE	false
 ARRAY	false
 AS	true
@@ -110,6 +111,7 @@ DETERMINISTIC	false
 DFS	false
 DIRECTORIES	false
 DIRECTORY	false
+DISTANCE	false
 DISTINCT	true
 DISTRIBUTE	false
 DIV	false
@@ -123,6 +125,7 @@ ENFORCED	false
 ESCAPE	true
 ESCAPED	false
 EVOLUTION	false
+EXACT	false
 EXCEPT	true
 EXCHANGE	false
 EXCLUDE	false
@@ -243,6 +246,7 @@ NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
 NATURAL	true
+NEAREST	false
 NEXT	false
 NO	false
 NONE	false
@@ -331,6 +335,7 @@ SET	false
 SETS	false
 SHORT	false
 SHOW	false
+SIMILARITY	false
 SINGLE	false
 SKEWED	false
 SMALLINT	false

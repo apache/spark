@@ -21,7 +21,7 @@ name: "Build / Unix Domain Socket (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 1 */3 * *'
+    - cron: '0 1 */6 * *'
   workflow_dispatch:
 
 jobs:

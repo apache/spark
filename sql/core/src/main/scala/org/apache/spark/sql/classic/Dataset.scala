@@ -2259,9 +2259,11 @@ class Dataset[T] private[sql](
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     SQLExecution.withNewExecutionId(qe, Some(name)) {
-      QueryExecution.withInternalError(s"""The "$name" action failed.""") {
-        qe.executedPlan.resetMetrics()
-        action(qe.executedPlan)
+      qe.withQueryExecutionId(sparkSession) {
+        QueryExecution.withInternalError(s"""The "$name" action failed.""") {
+          qe.executedPlan.resetMetrics()
+          action(qe.executedPlan)
+        }
       }
     }
   }

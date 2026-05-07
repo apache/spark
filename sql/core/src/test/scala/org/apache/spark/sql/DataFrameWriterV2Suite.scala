@@ -901,4 +901,94 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     insertDF.cache()
     checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
   }
+
+  test("withSchemaEvolution: append evolves the table schema to add a new column") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint) USING foo")
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    // Without withSchemaEvolution the extra column is rejected.
+    checkError(
+      exception = intercept[AnalysisException](df.writeTo("testcat.table_name").append()),
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "tableColumns" -> "`id`",
+        "dataColumns" -> "`id`, `data`"))
+
+    df.writeTo("testcat.table_name").withSchemaEvolution().append()
+
+    assert(spark.table("testcat.table_name").schema ===
+      new StructType().add("id", LongType).add("data", StringType))
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a")))
+  }
+
+  test("withSchemaEvolution: overwrite evolves the table schema to add a new column") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint) USING foo")
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    df.writeTo("testcat.table_name").withSchemaEvolution().overwrite(lit(true))
+
+    assert(spark.table("testcat.table_name").schema ===
+      new StructType().add("id", LongType).add("data", StringType))
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a")))
+  }
+
+  test("withSchemaEvolution: overwritePartitions evolves the table schema to add a new column") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint) USING foo PARTITIONED BY (id)")
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    df.writeTo("testcat.table_name").withSchemaEvolution().overwritePartitions()
+
+    assert(spark.table("testcat.table_name").schema ===
+      new StructType().add("id", LongType).add("data", StringType))
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a")))
+  }
+
+  test("withSchemaEvolution: fails if the table does not support automatic schema evolution") {
+    spark.sql(
+      """CREATE TABLE testcat.table_name (id bigint) USING foo
+        |TBLPROPERTIES ('auto-schema-evolution' = 'false')""".stripMargin)
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    // With auto-schema-evolution disabled the extra column still fails.
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.writeTo("testcat.table_name").withSchemaEvolution().append()
+      },
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "tableColumns" -> "`id`",
+        "dataColumns" -> "`id`, `data`"))
+  }
+
+  test("withSchemaEvolution: create fails with CREATE_TABLE sub-error") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("testcat.new_table").using("foo")
+          .withSchemaEvolution().create()
+      },
+      condition = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
+      parameters = Map.empty)
+  }
+
+  test("withSchemaEvolution: replace/createOrReplace fail with REPLACE_TABLE sub-error") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("testcat.table_name").using("foo")
+          .withSchemaEvolution().replace()
+      },
+      condition = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+      parameters = Map.empty)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("testcat.table_name").using("foo")
+          .withSchemaEvolution().createOrReplace()
+      },
+      condition = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+      parameters = Map.empty)
+  }
 }

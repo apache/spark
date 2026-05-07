@@ -1053,4 +1053,151 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("is_valid_variant") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    // The row cannot be converted to string because the `VariantVal` may be malformed (toString
+    // will throw an exception).
+    class NoDisplayGenericInternalRow(values: Array[Any]) extends GenericInternalRow(values) {
+      override def toString: String = "NoDisplayGenericInternalRow"
+    }
+
+    def valid(value: Array[Byte], metadata: Array[Byte] = emptyMetadata): Unit = {
+      val row = new NoDisplayGenericInternalRow(Array(new VariantVal(value, metadata)))
+      val v = BoundReference(0, VariantType, nullable = true)
+      checkEvaluation(IsValidVariant(v), true, row)
+    }
+
+    def invalid(value: Array[Byte], metadata: Array[Byte] = emptyMetadata): Unit = {
+      val row = new NoDisplayGenericInternalRow(Array(new VariantVal(value, metadata)))
+      val v = BoundReference(0, VariantType, nullable = true)
+      checkEvaluation(IsValidVariant(v), false, row)
+    }
+
+    // Valid primitives.
+    valid(Array(primitiveHeader(NULL)))
+    valid(Array(primitiveHeader(TRUE)))
+    valid(Array(primitiveHeader(FALSE)))
+    valid(Array(primitiveHeader(INT1), 1))
+    valid(Array(primitiveHeader(INT2), 1, 0))
+    valid(Array(primitiveHeader(INT4), 1, 0, 0, 0))
+    valid(Array(primitiveHeader(INT8), 1, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(primitiveHeader(DOUBLE), 0, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(primitiveHeader(DECIMAL4), 0, 1, 0, 0, 0))
+    valid(Array(primitiveHeader(FLOAT), 0, 0, 0, 0))
+    valid(Array(primitiveHeader(DATE), 0, 0, 0, 0))
+    valid(Array(primitiveHeader(TIMESTAMP), 0, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(primitiveHeader(TIMESTAMP_NTZ), 0, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(shortStrHeader(3), 'a', 'b', 'c'))
+    valid(Array(primitiveHeader(LONG_STR), 2, 0, 0, 0, 'a', 'b'))
+    valid(Array(primitiveHeader(BINARY), 2, 0, 0, 0, 1, 2))
+    valid(Array(primitiveHeader(UUID)) ++ createArray[Byte](16, 0.toByte))
+
+    // Malformed primitives: truncated content.
+    invalid(Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0))
+    invalid(Array(primitiveHeader(DECIMAL4)))
+    invalid(Array(primitiveHeader(DECIMAL8)))
+    invalid(Array(primitiveHeader(DECIMAL16)))
+    invalid(Array(primitiveHeader(DECIMAL16)) ++ createArray[Byte](16, 0.toByte))
+    invalid(Array(shortStrHeader(2), 'x'))
+    invalid(Array(primitiveHeader(LONG_STR), 0, 0, 0))
+    invalid(Array(primitiveHeader(LONG_STR), 1, 0, 0, 0))
+
+    // Valid array.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 2,
+      /* offset list */ 0, 1, 2,
+      /* element data */ primitiveHeader(TRUE), primitiveHeader(FALSE)))
+
+    // Valid empty array.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 0))
+
+    // Malformed array: size is 1 but no content.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0))
+
+    // Malformed array: requires 4-byte size but only one byte given.
+    invalid(Array(arrayHeader(true, 1),
+      /* size */ 0,
+      /* offset list */ 0))
+
+    // Malformed array: offset out of bound.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 1, 1))
+
+    // Malformed array: nested element is malformed.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 2,
+      /* element data: INT8 with only 1 byte */ primitiveHeader(INT8), 0))
+
+    // Valid object.
+    val metadata = Array[Byte](VERSION, 2, 0, 1, 2) ++ Array[Byte]('a', 'b')
+    valid(Array(objectHeader(false, 1, 1),
+      /* size */ 2,
+      /* id list */ 0, 1,
+      /* offset list */ 0, 2, 4,
+      /* field data */ primitiveHeader(INT1), 1, primitiveHeader(INT1), 2), metadata)
+
+    // Valid empty object.
+    valid(Array(objectHeader(false, 1, 1),
+      /* size */ 0,
+      /* offset list */ 0))
+
+    // Malformed object: id out of bound.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1))
+
+    // Malformed object: offset out of bound.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 5, 0,
+      /* field data */ primitiveHeader(INT1), 1), metadata)
+
+    // Malformed object: nested value is malformed.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data: INT8 with only 1 byte */ primitiveHeader(INT8), 0), metadata)
+
+    // Unknown primitive type (type info 17 is not defined).
+    invalid(Array(primitiveHeader(17)))
+
+    // Malformed metadata: version is not 1.
+    invalid(Array(primitiveHeader(INT1), 0), Array[Byte](3, 0, 0))
+    invalid(Array(primitiveHeader(INT1), 0), Array[Byte](2, 0, 0))
+
+    // Malformed metadata: offset > nextOffset for key id 0.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 1, 2, 1) ++ Array[Byte]('a', 'b'))
+
+    // Malformed metadata: truncated offset list (declares dict size 1 but is missing nextOffset).
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 1, 0))
+
+    // Valid metadata formats: extra bits are ignored.
+    valid(Array(primitiveHeader(TRUE)), Array[Byte](VERSION | 1 << 4, 0, 0))
+    valid(Array(primitiveHeader(TRUE)), Array[Byte](VERSION | 1 << 5, 0, 0))
+
+    // Null input.
+    checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
+  }
 }

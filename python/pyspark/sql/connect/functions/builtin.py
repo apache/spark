@@ -2189,6 +2189,13 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
 
 
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    return _invoke_function("is_valid_variant", _to_col(v))
+
+
+is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
@@ -3726,6 +3733,19 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 
 timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
+
+
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+time_bucket.__doc__ = pysparkfuncs.time_bucket.__doc__
 
 
 def window(

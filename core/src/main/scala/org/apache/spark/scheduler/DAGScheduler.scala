@@ -325,6 +325,16 @@ private[spark] class DAGScheduler(
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
+  private def scheduleResubmit(): Unit = {
+    messageScheduler.schedule(
+      new Runnable {
+        override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+      },
+      DAGScheduler.RESUBMIT_TIMEOUT,
+      TimeUnit.MILLISECONDS
+    )
+  }
+
   private[spark] var eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   // Used for test only. Some tests uses the same thread of the event poster to
   // process the events to ensure the deterministic behavior during the test.
@@ -1858,6 +1868,11 @@ private[spark] class DAGScheduler(
             throw SparkCoreErrors.accessNonExistentAccumulatorError(id)
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
+        if (acc.isInstanceOf[LastAttemptAccumulator[_, _, _]]) {
+          acc.asInstanceOf[LastAttemptAccumulator[_, _, _]].mergeLastAttempt(
+            updates, stage.rdd, event.taskInfo,
+            task.stageId, task.stageAttemptId, task.localProperties)
+        }
         // To avoid UI cruft, ignore cases where value wasn't updated
         if (acc.name.isDefined && !updates.isZero) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
@@ -2174,13 +2189,7 @@ private[spark] class DAGScheduler(
       if (noResubmitEnqueued) {
         logInfo(log"Resubmitting ${MDC(FAILED_STAGE, stage)} " +
           log"(${MDC(FAILED_STAGE_NAME, stage.name)}) due to rollback.")
-        messageScheduler.schedule(
-          new Runnable {
-            override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-          },
-          DAGScheduler.RESUBMIT_TIMEOUT,
-          TimeUnit.MILLISECONDS
-        )
+        scheduleResubmit()
       }
     }
 
@@ -2333,6 +2342,19 @@ private[spark] class DAGScheduler(
                 // The epoch of the task is acceptable (i.e., the task was launched after the most
                 // recent failure we're aware of for the executor), so mark the task's output as
                 // available.
+                // For testing purposes, inject fetch failures controlled from the driver-side by
+                // supplying an invalid location.
+                if (Utils.isTesting &&
+                    sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES) &&
+                    task.stageAttemptId == 0) {
+                  val currentLocation = status.location
+                  val invalidLocation = BlockManagerId(
+                    execId = BlockManagerId.INVALID_EXECUTOR_ID,
+                    host = currentLocation.host,
+                    port = currentLocation.port,
+                    topologyInfo = currentLocation.topologyInfo)
+                  status.updateLocation(invalidLocation)
+                }
                 val isChecksumMismatched = mapOutputTracker.registerMapOutput(
                   shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
                 if (isChecksumMismatched) {
@@ -2492,13 +2514,7 @@ private[spark] class DAGScheduler(
                 log"Resubmitting ${MDC(STAGE, mapStage)} " +
                 log"(${MDC(STAGE_NAME, mapStage.name)}) and ${MDC(FAILED_STAGE, failedStage)} " +
                 log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to fetch failure")
-              messageScheduler.schedule(
-                new Runnable {
-                  override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-                },
-                DAGScheduler.RESUBMIT_TIMEOUT,
-                TimeUnit.MILLISECONDS
-              )
+              scheduleResubmit()
             }
           }
 
@@ -2605,9 +2621,7 @@ private[spark] class DAGScheduler(
             if (noResubmitEnqueued) {
               logInfo(log"Resubmitting ${MDC(FAILED_STAGE, failedStage)} " +
                 log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) due to barrier stage failure.")
-              messageScheduler.schedule(new Runnable {
-                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-              }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+              scheduleResubmit()
             }
           }
         }

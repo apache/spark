@@ -21,7 +21,7 @@ name: "Build / Python-only (master, Python 3.14, no GIL)"
 
 on:
   schedule:
-    - cron: '0 20 */3 * *'
+    - cron: '0 20 */6 * *'
   workflow_dispatch:
 
 jobs:

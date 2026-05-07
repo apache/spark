@@ -146,7 +146,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   test("SPARK-55715: sorted merge config enabled but child not SafeForKWayMerge falls back " +
       "to key-expression ordering") {
     // DummySparkPlan does not extend SafeForKWayMerge, so childIsSafeForKWayMerge = false and
-    // canUseSortedMerge = false even when the preserve-ordering config is on. outputOrdering must
+    // canUseSortedMerge = false even with enableSortedMerge = true. outputOrdering must
     // therefore fall back to key-expression filtering (not return the full child ordering).
     val partitionKeys = Seq(row(1), row(2), row(1))
     val childOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
@@ -159,19 +159,19 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     withSQLConf(
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      // Even though preserve-ordering is enabled, the child is not safe for k-way merge,
+      // Even though enableSortedMerge = true, the child is not safe for k-way merge,
       // so only key-expression orders survive (non-key exprC is dropped).
-      val ordering = GroupPartitionsExec(child).outputOrdering
+      val ordering = GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
     }
   }
 
-  test("SPARK-55715: coalescing with sorted merge config enabled returns full child ordering") {
-    // Key 1 appears on partitions 0 and 2, causing coalescing.  The child is a LeafExecNode
-    // so childIsSafeForKWayMerge = true.  With the preserve-ordering config enabled, case 2
-    // of outputOrdering kicks in and the full child ordering (including the non-key exprC) must
-    // be returned, not just the subset of key-expression orders.
+  test("SPARK-55715: coalescing with enableSortedMerge = true returns full child ordering") {
+    // Key 1 appears on partitions 0 and 2, causing coalescing. The child is a LeafExecNode so
+    // childIsSafeForKWayMerge = true. With enableSortedMerge = true and the config enabled,
+    // canUseSortedMerge = true and the full child ordering (including the non-key exprC) must be
+    // returned, not just the subset of key-expression orders.
     val partitionKeys = Seq(row(1), row(2), row(1))
     val childOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
     val child = DummyLeafSparkPlan(
@@ -181,17 +181,75 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     assert(!GroupPartitionsExec(child).groupedPartitions.forall(_._2.size <= 1),
       "expected coalescing")
     withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
-      // Config enabled: k-way merge preserves full ordering including non-key exprC.
-      assert(GroupPartitionsExec(child).outputOrdering === childOrdering)
+      assert(GroupPartitionsExec(child).outputOrdering !== childOrdering,
+        "config alone should not enable k-way merge; enableSortedMerge must be set by planner")
+      assert(GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering === childOrdering)
     }
     withSQLConf(
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false",
         SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       // Sorted-merge config disabled, key-ordering config enabled: only key-expression orders
       // survive simple concatenation (non-key exprC is dropped).
-      val ordering = GroupPartitionsExec(child).outputOrdering
+      val ordering = GroupPartitionsExec(child, enableSortedMerge = true).outputOrdering
       assert(ordering.length === 1)
       assert(ordering.head.child === exprA)
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge returns Some when conditions are met") {
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val childOrdering = Seq(SortOrder(exprA, Ascending), SortOrder(exprC, Ascending))
+    val child = DummyLeafSparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering)
+    val gpe = GroupPartitionsExec(child)
+
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val result = gpe.tryEnableSortedMerge()
+      assert(result.isDefined)
+      assert(result.get.enableSortedMerge)
+      assert(result.get.outputOrdering === childOrdering)
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge returns None when config is disabled") {
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val childOrdering = Seq(SortOrder(exprA, Ascending))
+    val child = DummyLeafSparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering)
+    val gpe = GroupPartitionsExec(child)
+
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "false") {
+      assert(gpe.tryEnableSortedMerge().isEmpty)
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge returns None when child is not SafeForKWayMerge") {
+    val partitionKeys = Seq(row(1), row(2), row(1))
+    val childOrdering = Seq(SortOrder(exprA, Ascending))
+    // DummySparkPlan does not extend SafeForKWayMerge
+    val child = DummySparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering)
+    val gpe = GroupPartitionsExec(child)
+
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      assert(gpe.tryEnableSortedMerge().isEmpty)
+    }
+  }
+
+  test("SPARK-56549: tryEnableSortedMerge returns None when no coalescing occurs") {
+    val partitionKeys = Seq(row(1), row(2), row(3))
+    val childOrdering = Seq(SortOrder(exprA, Ascending))
+    val child = DummyLeafSparkPlan(
+      outputPartitioning = KeyedPartitioning(Seq(exprA), partitionKeys),
+      outputOrdering = childOrdering)
+    val gpe = GroupPartitionsExec(child)
+
+    assert(gpe.groupedPartitions.forall(_._2.size <= 1), "expected non-coalescing")
+    withSQLConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      assert(gpe.tryEnableSortedMerge().isEmpty)
     }
   }
 }
