@@ -24,7 +24,7 @@ import importlib
 from inspect import currentframe, getframeinfo
 import os
 import sys
-from typing import Any, Generator, IO, Optional
+from typing import Any, Generator, IO, Optional, Union, overload
 import warnings
 
 if "SPARK_TESTING" in os.environ:
@@ -44,7 +44,6 @@ from pyspark.util import is_remote_only
 from pyspark.errors import PySparkRuntimeError
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import (
-    read_bool,
     read_int,
     read_long,
     write_int,
@@ -66,21 +65,27 @@ def add_path(path: str) -> bool:
     return False
 
 
-def read_command(serializer: FramedSerializer, file: IO) -> Any:
+def read_command(serializer: FramedSerializer, file: Union[IO, bytes]) -> Any:
     if not is_remote_only():
         from pyspark.core.broadcast import Broadcast
 
-    command = serializer._read_with_length(file)
+    if isinstance(file, bytes):
+        command = serializer.loads(file)
+    else:
+        command = serializer._read_with_length(file)
     if not is_remote_only() and isinstance(command, Broadcast):
         command = serializer.loads(command.value)
     return command
 
 
-def check_python_version(infile: IO) -> None:
+def check_python_version(infile_or_version: Union[IO, str]) -> None:
     """
     Check the Python version between the running process and the one used to serialize the command.
     """
-    version = utf8_deserializer.loads(infile)
+    if isinstance(infile_or_version, str):
+        version = infile_or_version
+    else:
+        version = utf8_deserializer.loads(infile_or_version)
     worker_version = "%d.%d" % sys.version_info[:2]
     if version != worker_version:
         raise PySparkRuntimeError(
@@ -130,12 +135,20 @@ def setup_memory_limits(memory_limit_mb: int) -> None:
                 )
 
 
-def setup_spark_files(infile: IO) -> None:
+@overload
+def setup_spark_files(infile_or_spark_files_dir: IO) -> None: ...
+@overload
+def setup_spark_files(infile_or_spark_files_dir: str, python_includes: list[str]) -> None: ...
+def setup_spark_files(
+    infile_or_spark_files_dir: Union[IO, str], python_includes: Optional[list[str]] = None
+) -> None:
     """
     Set up Spark files, archives, and pyfiles.
     """
-    # fetch name of workdir
-    spark_files_dir = utf8_deserializer.loads(infile)
+    if isinstance(infile_or_spark_files_dir, str):
+        spark_files_dir = infile_or_spark_files_dir
+    else:
+        spark_files_dir = utf8_deserializer.loads(infile_or_spark_files_dir)
 
     if not is_remote_only():
         from pyspark.core.files import SparkFiles
@@ -145,51 +158,74 @@ def setup_spark_files(infile: IO) -> None:
 
     # fetch names of includes (*.zip and *.egg files) and construct PYTHONPATH
     path_changed = add_path(spark_files_dir)  # *.py files that were added will be copied here
-    num_python_includes = read_int(infile)
-    for _ in range(num_python_includes):
-        filename = utf8_deserializer.loads(infile)
+    if not isinstance(infile_or_spark_files_dir, str):
+        python_includes = [
+            utf8_deserializer.loads(infile_or_spark_files_dir)
+            for _ in range(read_int(infile_or_spark_files_dir))
+        ]
+    assert python_includes is not None
+
+    for filename in python_includes:
         path_changed = add_path(os.path.join(spark_files_dir, filename)) or path_changed
 
     if path_changed:
         importlib.invalidate_caches()
 
 
-def setup_broadcasts(infile: IO) -> None:
+@overload
+def setup_broadcasts(infile_or_variables: IO) -> None: ...
+@overload
+def setup_broadcasts(
+    infile_or_variables: list[tuple[int, Union[str, None]]], conn_info: str, auth_secret: None
+) -> None: ...
+@overload
+def setup_broadcasts(
+    infile_or_variables: list[tuple[int, Union[str, None]]], conn_info: int, auth_secret: str
+) -> None: ...
+@overload
+def setup_broadcasts(
+    infile_or_variables: list[tuple[int, Union[str, None]]], conn_info: None, auth_secret: None
+) -> None: ...
+def setup_broadcasts(
+    infile_or_variables: Union[IO, list[tuple[int, Union[str, None]]]],
+    conn_info: Optional[Union[str, int]] = None,
+    auth_secret: Optional[str] = None,
+) -> None:
     """
     Set up broadcasted variables.
     """
     if not is_remote_only():
         from pyspark.core.broadcast import Broadcast, _broadcastRegistry
 
-    # fetch names and values of broadcast variables
-    needs_broadcast_decryption_server = read_bool(infile)
-    num_broadcast_variables = read_int(infile)
-    if needs_broadcast_decryption_server:
-        # read the decrypted data from a server in the jvm
-        conn_info = read_int(infile)
-        auth_secret = None
-        if conn_info == -1:
-            conn_info = utf8_deserializer.loads(infile)
-        else:
-            auth_secret = utf8_deserializer.loads(infile)
-        broadcast_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
+    if isinstance(infile_or_variables, list):
+        variables = infile_or_variables
+    else:
+        from pyspark.worker_message import BroadcastInfo
 
-    for _ in range(num_broadcast_variables):
-        bid = read_long(infile)
+        broadcast_info = BroadcastInfo.from_stream(infile_or_variables)
+        conn_info = broadcast_info.conn_info
+        auth_secret = broadcast_info.auth_secret
+        variables = broadcast_info.variables
+
+    needs_broadcast_decryption_server = conn_info is not None or auth_secret is not None
+
+    if needs_broadcast_decryption_server:
+        broadcast_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
+    else:
+        broadcast_sock_file = None
+
+    for bid, path in variables:
         if bid >= 0:
-            if needs_broadcast_decryption_server:
+            if path is None:
                 read_bid = read_long(broadcast_sock_file)
                 assert read_bid == bid
                 _broadcastRegistry[bid] = Broadcast(sock_file=broadcast_sock_file)
             else:
-                path = utf8_deserializer.loads(infile)
                 _broadcastRegistry[bid] = Broadcast(path=path)
-
         else:
-            bid = -bid - 1
-            _broadcastRegistry.pop(bid)
+            _broadcastRegistry.pop(-bid - 1)
 
-    if needs_broadcast_decryption_server:
+    if broadcast_sock_file is not None:
         broadcast_sock_file.write(b"1")
         broadcast_sock_file.close()
 
@@ -223,29 +259,32 @@ def send_accumulator_updates(outfile: IO) -> None:
 
 
 class Conf:
-    def __init__(self, infile: Optional[IO] = None) -> None:
+    def __init__(self, infile_or_dict: Optional[Union[dict[str, str], IO]] = None) -> None:
         self._conf: dict[str, Any] = {}
-        if infile is not None:
-            self.load(infile)
+        if infile_or_dict is not None:
+            self.load(infile_or_dict)
 
-    def load(self, infile: IO) -> None:
-        num_conf = read_int(infile)
-        # We do a sanity check here to reduce the possibility to stuck indefinitely
-        # due to an invalid messsage. If the numer of configurations is obviously
-        # wrong, we just raise an error directly.
-        # We hand-pick the configurations to send to the worker so the number should
-        # be very small (less than 100).
-        if num_conf < 0 or num_conf > 10000:
-            raise PySparkRuntimeError(
-                errorClass="PROTOCOL_ERROR",
-                messageParameters={
-                    "failure": f"Invalid number of configurations: {num_conf}",
-                },
-            )
-        for _ in range(num_conf):
-            k = utf8_deserializer.loads(infile)
-            v = utf8_deserializer.loads(infile)
-            self._conf[k] = v
+    def load(self, infile_or_dict: Union[dict[str, str], IO]) -> None:
+        if isinstance(infile_or_dict, dict):
+            self._conf = infile_or_dict
+        else:
+            num_conf = read_int(infile_or_dict)
+            # We do a sanity check here to reduce the possibility to stuck indefinitely
+            # due to an invalid messsage. If the numer of configurations is obviously
+            # wrong, we just raise an error directly.
+            # We hand-pick the configurations to send to the worker so the number should
+            # be very small (less than 100).
+            if num_conf < 0 or num_conf > 10000:
+                raise PySparkRuntimeError(
+                    errorClass="PROTOCOL_ERROR",
+                    messageParameters={
+                        "failure": f"Invalid number of configurations: {num_conf}",
+                    },
+                )
+            for _ in range(num_conf):
+                k = utf8_deserializer.loads(infile_or_dict)
+                v = utf8_deserializer.loads(infile_or_dict)
+                self._conf[k] = v
 
     def get(self, key: str, default: Any = "", *, lower_str: bool = True) -> Any:
         val = self._conf.get(key, default)
