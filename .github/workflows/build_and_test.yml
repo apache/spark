@@ -601,13 +601,13 @@ jobs:
     - name: Package compile output
       run: |
         find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
-          | XZ_OPT='-T0 -9' tar --null -cJf compile-artifact.tar.xz -T -
-        ls -lh compile-artifact.tar.xz
+          | tar --null -cjf compile-artifact.tar.bz2 -T -
+        ls -lh compile-artifact.tar.bz2
     - name: Upload compile artifact
       uses: actions/upload-artifact@v6
       with:
         name: spark-compile-${{ github.run_id }}
-        path: compile-artifact.tar.xz
+        path: compile-artifact.tar.bz2
         retention-days: 1
         if-no-files-found: error
 
@@ -740,8 +740,8 @@ jobs:
         name: spark-compile-${{ github.run_id }}
     - name: Extract precompiled artifact
       run: |
-        tar -xJf compile-artifact.tar.xz
-        rm compile-artifact.tar.xz
+        tar -xjf compile-artifact.tar.bz2
+        rm compile-artifact.tar.bz2
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -868,8 +868,8 @@ jobs:
         name: spark-compile-${{ github.run_id }}
     - name: Extract precompiled artifact
       run: |
-        tar -xJf compile-artifact.tar.xz
-        rm compile-artifact.tar.xz
+        tar -xjf compile-artifact.tar.bz2
+        rm compile-artifact.tar.bz2
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
