@@ -1019,13 +1019,18 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // The helper takes `int partitionIndex` as a parameter; `addNewFunction`
     // may spill helpers into a nested class once the outer class fills up,
     // and a nested class cannot access the protected
-    // `BufferedRowIterator.partitionIndex` field. The helper also binds
-    // `childLocalIdx` once at entry; `currentPartitionIndexVar` rebinds to
-    // that local so leaf operators (`RangeExec`, `SampleExec`) read the
-    // child-local index without re-evaluating an array access on every use.
+    // `BufferedRowIterator.partitionIndex` field.
+    //
+    // `currentPartitionIndexVar` is rebound to an array-deref expression
+    // (rather than a local) so leaf operators (`RangeExec`, `SampleExec`)
+    // see the child-local index regardless of where their code is emitted.
+    // `SampleExec.doConsume` uses `addMutableState`, whose initializer is
+    // emitted into the state-init function, not the helper — a local in
+    // the helper would not be in scope there. The expression resolves
+    // against `partitionIndex` (the helper parameter inside the helper,
+    // and the `BufferedRowIterator` field elsewhere) in every context.
     val savedPartIdxVar = ctx.currentPartitionIndexVar
-    val childLocalIdxVar = "childLocalIdx"
-    ctx.currentPartitionIndexVar = childLocalIdxVar
+    ctx.currentPartitionIndexVar = s"((int[]) $p2lRef)[partitionIndex]"
     val cases = children.zipWithIndex.map { case (c, i) =>
       currentEmittingChild = i
       val producedCode = c.asInstanceOf[CodegenSupport].produce(ctx, this)
@@ -1033,7 +1038,6 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
       val qualifiedHelper = ctx.addNewFunction(helper,
         s"""
            |private void $helper(int partitionIndex) throws java.io.IOException {
-           |  int $childLocalIdxVar = ((int[]) $p2lRef)[partitionIndex];
            |  $producedCode
            |}
          """.stripMargin)

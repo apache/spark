@@ -641,6 +641,18 @@ class UnionCodegenSuite extends QueryTest with SharedSparkSession {
       assertFlagParity(() => a.union(b).orderBy("id", "f"))
     }
   }
+
+  test("SPARK-56482: union with sample children fuses (or falls back) without crashing") {
+    // `SampleExec.doConsume` reads `currentPartitionIndexVar` from inside an
+    // `addMutableState` initializer, which is emitted into the state-init
+    // function rather than the per-child helper. The bound expression must
+    // therefore resolve in any emission scope, not just inside the helper.
+    val a = rangeDF(20).sample(false, 0.5, 1L)
+    val b = rangeDF(20).sample(false, 0.5, 1L)
+    val df = a.union(b).filter(col("id") > 0)
+    df.collect()
+    assertFlagParity(() => a.union(b).orderBy("id"))
+  }
 }
 
 /** Runs [[UnionCodegenSuite]] with ANSI mode enabled. */
