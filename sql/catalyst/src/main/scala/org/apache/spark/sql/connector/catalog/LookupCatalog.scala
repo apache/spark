@@ -125,7 +125,7 @@ private[sql] trait LookupCatalog extends Logging {
         // catalog via SupportsCatalogOptions are routed to that catalog with the full nameParts
         // as the identifier.
         val (catalogName, ident) =
-          catalogManager.catalogForDataSource(nameParts.head) match {
+          Option(catalogManager.catalogForDataSource(nameParts.head)).flatten match {
             case Some(catName) => (catName, nameParts.asIdentifier)
             case None => (nameParts.head, nameParts.tail.asIdentifier)
           }

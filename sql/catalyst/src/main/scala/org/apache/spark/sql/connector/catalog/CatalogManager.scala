@@ -89,7 +89,7 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
    * Returns None if the format is unknown or does not implement [[SupportsCatalogOptions]].
    */
   def catalogForDataSource(formatName: String): Option[String] =
-    Option(dataSourceCatalogResolver.catalogFor(formatName)).flatten
+    dataSourceCatalogResolver.catalogFor(formatName)
 
   // ---- Transactions ----
   def transaction: Option[Transaction] = None
