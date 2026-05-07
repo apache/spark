@@ -90,7 +90,7 @@ class CatalogManager(
    * Returns None if the format is unknown or does not implement [[SupportsCatalogOptions]].
    */
   def catalogForDataSource(formatName: String): Option[String] =
-    Option(dataSourceCatalogResolver.catalogFor(formatName)).flatten
+    dataSourceCatalogResolver.catalogFor(formatName)
 
   def isCatalogRegistered(name: String): Boolean = {
     try {
