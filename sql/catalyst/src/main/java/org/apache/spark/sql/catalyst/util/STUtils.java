@@ -30,7 +30,6 @@ public final class STUtils {
 
   // Endianness for WKB.
   public static final String NDR = "NDR";
-  public static final UTF8String ENDIANNESS_NDR = UTF8String.fromString(NDR);
 
   /** Conversion methods from physical values to Geography/Geometry objects. */
 
@@ -67,7 +66,7 @@ public final class STUtils {
     }
     // We also need to check whether the input geometry has coordinates in geography bounds.
     try {
-      byte[] wkb = stAsBinary(geometryVal, ENDIANNESS_NDR);
+      byte[] wkb = stAsBinary(geometryVal);
       new WkbReader(true).read(wkb, srid);
     } catch (WkbParseException e) {
       throw QueryExecutionErrors.wkbParseError(e.getParseError(), e.getPosition());
@@ -80,16 +79,6 @@ public final class STUtils {
     // Geographic SRID is always a valid SRID for geometry, so we don't need to check it.
     // Also, all geographic coordinates are valid for geometry, so no need to check bounds.
     return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
-  }
-
-  // Cast geography to binary.
-  public static byte[] geographyToBinary(GeographyVal geographyVal) {
-    return fromPhysVal(geographyVal).toWkb(NDR);
-  }
-
-  // Cast geometry to binary.
-  public static byte[] geometryToBinary(GeometryVal geometryVal) {
-    return fromPhysVal(geometryVal).toWkb(NDR);
   }
 
   /** Geospatial type encoder/decoder utilities. */
@@ -112,7 +101,7 @@ public final class STUtils {
       GeometryVal geometry, GeometryType gt) {
     int geometrySrid = stSrid(geometry);
     gt.assertSridAllowedForType(geometrySrid);
-    byte[] wkb = stAsBinary(geometry, ENDIANNESS_NDR);
+    byte[] wkb = stAsBinary(geometry);
     return org.apache.spark.sql.types.Geometry.fromWKB(wkb, geometrySrid);
   }
 
@@ -120,7 +109,7 @@ public final class STUtils {
       GeographyVal geography, GeographyType gt) {
     int geographySrid = stSrid(geography);
     gt.assertSridAllowedForType(geographySrid);
-    byte[] wkb = stAsBinary(geography, ENDIANNESS_NDR);
+    byte[] wkb = stAsBinary(geography);
     return org.apache.spark.sql.types.Geography.fromWKB(wkb, geographySrid);
   }
 
@@ -128,7 +117,7 @@ public final class STUtils {
 
   // ST_AsBinary
   public static byte[] stAsBinary(GeographyVal geo) {
-    return geographyToBinary(geo);
+    return fromPhysVal(geo).toWkb(NDR);
   }
 
   public static byte[] stAsBinary(GeographyVal geo, UTF8String endianness) {
@@ -136,7 +125,7 @@ public final class STUtils {
   }
 
   public static byte[] stAsBinary(GeometryVal geo) {
-    return geometryToBinary(geo);
+    return fromPhysVal(geo).toWkb(NDR);
   }
 
   public static byte[] stAsBinary(GeometryVal geo, UTF8String endianness) {

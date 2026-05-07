@@ -52,7 +52,7 @@ sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
 private[sql] object ExpressionDefaults {
   val DEFAULT_GEOGRAPHY_SRID: Int = Geography.DEFAULT_SRID
   val DEFAULT_GEOMETRY_SRID: Int = Geometry.DEFAULT_SRID
-  val DEFAULT_WKB_ENDIANNESS: String = "NDR"
+  val DEFAULT_WKB_ENDIANNESS: String = STUtils.NDR
 }
 
 /** ST writer expressions. */
@@ -64,7 +64,7 @@ private[sql] object ExpressionDefaults {
  * for more details on the WKB format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(geo, endianness) - Returns the geospatial value (value of type GEOGRAPHY or "
+  usage = "_FUNC_(geo[, endianness]) - Returns the geospatial value (value of type GEOGRAPHY or "
     + "GEOMETRY) in WKB format using the specified endianness ('NDR' for little-endian, 'XDR' for "
     + "big-endian), if provided. Defaults to little-endian encoding.",
   arguments = """

@@ -133,8 +133,7 @@ public final class Geometry implements Geo {
   public byte[] toWkb(String endianness) {
     // Check the endianness value.
     if (!endianness.equalsIgnoreCase("NDR") && !endianness.equalsIgnoreCase("XDR")) {
-      throw QueryExecutionErrors.stInvalidArgumentErrorInvalidEndiannessValue(
-          "st_asbinary", endianness);
+      throw QueryExecutionErrors.stInvalidArgumentErrorInvalidEndiannessValue(endianness);
     }
     return toWkb(endianness.equalsIgnoreCase("NDR") ?
         ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);

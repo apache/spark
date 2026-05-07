@@ -479,18 +479,35 @@ class STExpressionsSuite
     val wkbNdr = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
     val wkbXdr = Hex.unhex("00000000013FF00000000000004000000000000000".getBytes())
     val wkbLiteral = Literal.create(wkbNdr, BinaryType)
+    val endiannessNdr = Literal.create("NDR")
+    val endiannessXdr = Literal.create("XDR")
     // ST_GeogFromWKB and ST_AsBinary.
     val geographyExpression = ST_GeogFromWKB(wkbLiteral)
     assert(geographyExpression.dataType.sameType(defaultGeographyType))
     checkEvaluation(new ST_AsBinary(geographyExpression), wkbNdr)
-    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create("NDR")), wkbNdr)
-    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create("XDR")), wkbXdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, endiannessXdr), wkbXdr)
     // ST_GeomFromWKB and ST_AsBinary.
     val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpression.dataType.sameType(defaultGeometryType))
     checkEvaluation(new ST_AsBinary(geometryExpression), wkbNdr)
-    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create("NDR")), wkbNdr)
-    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create("XDR")), wkbXdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, endiannessXdr), wkbXdr)
+    // Test NULL handling.
+    checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeographyType)), null)
+    checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeographyType), endiannessNdr), null)
+    checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeometryType)), null)
+    checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeometryType), endiannessXdr), null)
+    // Test invalid endianness.
+    Seq(geographyExpression, geometryExpression).foreach { expr =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          ST_AsBinary(expr, Literal.create("ABC")).eval()
+        },
+        condition = "ST_INVALID_ENDIANNESS_VALUE",
+        parameters = Map("endianness" -> "ABC")
+      )
+    }
   }
 
   test("ST_GeogFromWKB - expressions") {
