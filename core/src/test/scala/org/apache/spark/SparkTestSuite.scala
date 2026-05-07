@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -36,7 +36,7 @@ import org.scalatest.concurrent.TimeLimits
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.util.{AccumulatorContext, TestEnvHelper, Utils}
+import org.apache.spark.util.{AccumulatorContext, Utils}
 
 /**
  * Base trait for all unit tests in Spark for handling common functionality.
@@ -70,8 +70,7 @@ trait SparkTestSuite
     with BeforeAndAfterEach
     with ThreadAudit
     with TimeLimits
-    with Logging
-    with TestEnvHelper {
+    with Logging {
   // scalastyle:on
 
   // Initialize the logger forcibly to let the logger log timestamp
@@ -88,6 +87,9 @@ trait SparkTestSuite
   Locale.setDefault(Locale.US)
 
   protected def enableAutoThreadAudit = true
+
+  protected def regenerateGoldenFiles: Boolean =
+    System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   protected override def beforeAll(): Unit = {
     System.setProperty(IS_TESTING.key, "true")
@@ -127,6 +129,17 @@ trait SparkTestSuite
     file.deleteOnExit()
     Utils.copyURLToFile(url, file)
     file
+  }
+
+  /**
+   * Get a Path relative to the root project. It is assumed that a spark home is set.
+   */
+  protected final def getWorkspaceFilePath(first: String, more: String*): Path = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+    java.nio.file.Paths.get(sparkHome, first +: more: _*)
   }
 
   // subclasses can override this to exclude certain tests by name
