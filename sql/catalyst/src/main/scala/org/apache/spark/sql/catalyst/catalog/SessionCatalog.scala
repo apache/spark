@@ -127,12 +127,7 @@ class SessionCatalog(
    * orderings should call [[setSessionFunctionKindsProvider]] explicitly.
    */
   @volatile private var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
-    () =>
-      conf.systemPathOrder.flatMap { e =>
-        if (CatalogManager.isSystemBuiltinPathEntry(e)) Some(Builtin)
-        else if (CatalogManager.isSystemSessionPathEntry(e)) Some(Temp)
-        else None
-      }
+    () => CatalogManager.systemFunctionKindsFromPath(conf.systemPathOrder)
 
   /**
    * Override the session-function-kinds provider. Called once by

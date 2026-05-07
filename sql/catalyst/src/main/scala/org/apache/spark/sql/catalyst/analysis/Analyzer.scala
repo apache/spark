@@ -1989,7 +1989,7 @@ class Analyzer(
       if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
         return false
       }
-      if (nameParts.size == 1 && catalogManager.isSessionBeforeBuiltinInPath) {
+      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
         val v1Catalog = catalogManager.v1SessionCatalog
         !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
       } else {

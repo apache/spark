@@ -55,28 +55,13 @@ class CatalogManager(
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
   val tempVariableManager: TempVariableManager = new TempVariableManager
 
-  // Wire the path-driven kinds provider into SessionCatalog so the function-resolution loop
-  // and the security check that blocks temp functions from shadowing builtins read the live
-  // SQL PATH (post-`SET PATH`, with `DEFAULT_PATH` and `defaultPathOrder` fallbacks already
-  // applied). Kinds are extracted from the path in path order; see `systemFunctionKinds`.
-  v1SessionCatalog.setSessionFunctionKindsProvider(() => systemFunctionKinds())
-
-  /**
-   * Kinds for the SC fast-path: `system.builtin` / `system.session` entries on the effective
-   * SQL PATH, in path order. The path is the source of truth -- we don't distinguish how the
-   * path was set (SET PATH, DEFAULT_PATH conf, or the seeded default), the same way we don't
-   * distinguish whether `current_catalog` came from `USE CATALOG` or `defaultCatalog`.
-   *
-   * "No injection" of temp functions over persistent ones is enforced by path order: when
-   * persistent (a user catalog entry) precedes `system.session`, the strategy layer resolves
-   * persistent first regardless of fast-path kinds.
-   */
-  private def systemFunctionKinds(): Seq[SessionCatalog.SessionFunctionKind] =
-    sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq).flatMap { e =>
-      if (CatalogManager.isSystemBuiltinPathEntry(e)) Some(SessionCatalog.Builtin)
-      else if (CatalogManager.isSystemSessionPathEntry(e)) Some(SessionCatalog.Temp)
-      else None
-    }
+  // Wire `SessionCatalog`'s fast-path kinds to the live SQL PATH. The kinds list itself is
+  // pure data conversion (system entries from the path, in path order); the *decision* to use
+  // path-order kinds for unqualified lookups lives at the Strategy layer (see callers of
+  // [[CatalogManager.systemFunctionKindsFromPath]]).
+  v1SessionCatalog.setSessionFunctionKindsProvider(() =>
+    CatalogManager.systemFunctionKindsFromPath(
+      sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq)))
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -301,21 +286,6 @@ class CatalogManager(
   }
 
   /**
-   * True iff `system.session` is searched before `system.builtin` in the effective SQL PATH.
-   *
-   * Drives function-resolution semantics that depend on whether unqualified names hit
-   * temp/session functions before builtins: the security check that blocks creating a
-   * temp function with a builtin's name, and the `count(*) -> count(1)` rewrite that
-   * must skip transformation when a temp `count` shadows the builtin.
-   *
-   * Shares [[systemFunctionKinds]] with [[SessionCatalog]]'s `sessionFirstInPath` so both
-   * call sites read the same canonical computation, avoiding drift between the security
-   * check and the analyzer rewrite.
-   */
-  def isSessionBeforeBuiltinInPath: Boolean =
-    systemFunctionKinds().headOption.contains(SessionCatalog.Temp)
-
-  /**
    * Single source of truth for analysis-time resolution path entries used by relation, routine,
    * and procedure resolution. When `pinnedEntries` are set (a view or SQL function body's
    * persisted frozen path) and PATH is enabled, returns them as-is so unqualified lookups follow
@@ -444,6 +414,19 @@ private[sql] object CatalogManager extends Logging {
     parts.length == 2 &&
       parts.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
       parts(1).equalsIgnoreCase(BUILTIN_NAMESPACE)
+
+  /**
+   * Extract `system.builtin` / `system.session` entries from a resolved PATH, mapped to
+   * [[SessionCatalog.SessionFunctionKind]] in path order. Pure data conversion -- callers
+   * decide whether and how to use this list.
+   */
+  def systemFunctionKindsFromPath(
+      path: Seq[Seq[String]]): Seq[SessionCatalog.SessionFunctionKind] =
+    path.flatMap { e =>
+      if (isSystemBuiltinPathEntry(e)) Some(SessionCatalog.Builtin)
+      else if (isSystemSessionPathEntry(e)) Some(SessionCatalog.Temp)
+      else None
+    }
 
   /**
    * A single entry in the session SQL path: either a literal schema
