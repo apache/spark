@@ -2529,10 +2529,10 @@ class SessionCatalog(
    * Resolution order follows the configured path (e.g. builtin then session).
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
-    // SPARK-56750: Intentionally not `synchronized` on this [[SessionCatalog]]. Resolution order
-    // calls [[sessionFunctionKindsProvider]], which may synchronize on [[CatalogManager]]; another
-    // thread can hold that lock and call into this catalog (e.g. via `setCurrentNamespace`), which
-    // would deadlock if this method also synchronized on `this`.
+    // Intentionally not `synchronized` on this [[SessionCatalog]]. Resolution order calls
+    // [[sessionFunctionKindsProvider]], which may synchronize on [[CatalogManager]]; another
+    // thread can hold that lock and call into this catalog (e.g. via `setCurrentNamespace`),
+    // which would deadlock if this method also synchronized on `this`.
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
   }
 
@@ -2684,7 +2684,7 @@ class SessionCatalog(
    * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
    */
   def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
-    // SPARK-56750: Intentionally not `synchronized` on this [[SessionCatalog]] (see
+    // Intentionally not `synchronized` on this [[SessionCatalog]] (see
     // [[lookupBuiltinOrTempTableFunction]]): unqualified builtin/temp resolution uses
     // [[sessionFunctionKindsProvider]] and must not run under this catalog's intrinsic lock.
     if (name.database.isEmpty) {
