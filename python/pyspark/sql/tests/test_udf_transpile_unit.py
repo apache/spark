@@ -74,7 +74,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Test callable object
         class PlusFour:
             def __call__(self, col):
-                if col is None:
+                if col is not None:
                     return col + 4
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": True}):
@@ -84,10 +84,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(pudf.transpiled)
             # Now make sure we can run the transpiled UDF*
             input_df = self.spark.createDataFrame([Row(a=1)])
-            transformed_df = input_df.select(pudf("a"))
+            transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
-            self.assertEqual("notfound", transformed_df.explain(extended=True))
+            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
+            self.assertNotIn("UDF", physical_plan)
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": False}):
             call = PlusFour()
@@ -95,9 +96,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([], pudf.transpiled)
             # Now make sure we can run the UDF
             input_df = self.spark.createDataFrame([Row(a=1)])
-            transformed_df = input_df.select(pudf("a"))
+            transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
+            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
+            self.assertIn("UDF", physical_plan)
+
 
     def test_udf_not_transpilable(self):
         class UnsupportedEx:
