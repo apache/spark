@@ -163,12 +163,17 @@ abstract class BaseSessionStateBuilder(
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
   protected lazy val dataSourceCatalogResolver: DataSourceCatalogResolver =
-    (formatName: String) =>
+    (nameParts: Seq[String]) =>
       try {
-        DataSource.lookupDataSourceV2(formatName, conf).flatMap {
+        DataSource.lookupDataSourceV2(nameParts.head, conf).flatMap {
           case sco: SupportsCatalogOptions =>
-            val options = DataSourceV2Utils.extractSessionConfigs(sco, conf)
-            Option(sco.extractCatalog(new CaseInsensitiveStringMap(options.asJava)))
+            // Pass the full multipart name as the `path` option so the connector can do its
+            // own canonicalization (strip its format prefix, normalize, etc.). Session configs
+            // are passed through as well.
+            val sessionOpts = DataSourceV2Utils.extractSessionConfigs(sco, conf)
+            val opts = new CaseInsensitiveStringMap(
+              (sessionOpts + ("path" -> nameParts.mkString("."))).asJava)
+            Some((sco.extractCatalog(opts), sco.extractIdentifier(opts)))
           case _ => None
         }
       } catch {

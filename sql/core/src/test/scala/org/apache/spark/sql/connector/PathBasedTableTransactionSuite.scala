@@ -211,8 +211,10 @@ class FakePathBasedSource
 
   override def shortName(): String = "pathformat"
 
-  // Not used in the transactional path.
-  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = null
+  // Strip our own format prefix from the multipart path and return the rest under our
+  // format-name namespace.
+  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
+    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
 }
 
 /**
@@ -232,6 +234,8 @@ class FakePathBasedSourceWithSessionConfig
 
   override def extractCatalog(options: CaseInsensitiveStringMap): String = options.get("catalog")
 
-  // Not used in the transactional path.
-  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = null
+  // Strip our own format prefix from the multipart path and return the rest under our
+  // format-name namespace.
+  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
+    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
 }
