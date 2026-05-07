@@ -4123,6 +4123,12 @@
     },
     "sqlState" : "KD002"
   },
+  "INVALID_METRIC_VIEW_YAML" : {
+    "message" : [
+      "Failed to parse metric view YAML: <message>"
+    ],
+    "sqlState" : "42K0L"
+  },
   "INVALID_NAME_IN_USE_COMMAND" : {
     "message" : [
       "Invalid name '<name>' in <command> command. Reason: <reason>"
@@ -8312,6 +8318,11 @@
       "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
         "message" : [
           "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
+        ]
+      },
+      "ON_METRIC_VIEW" : {
+        "message" : [
+          "The command is not supported on a metric view <tableName>."
         ]
       },
       "ON_TEMPORARY_VIEW" : {

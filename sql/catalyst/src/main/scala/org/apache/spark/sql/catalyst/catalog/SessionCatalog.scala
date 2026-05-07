@@ -1256,7 +1256,7 @@ class SessionCatalog(
       import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
       val ident = nameParts.asTableIdentifier
       try {
-        getTempViewOrPermanentTableMetadata(ident).tableType == CatalogTableType.VIEW
+        getTempViewOrPermanentTableMetadata(ident).isViewLike
       } catch {
         case _: NoSuchTableException => false
         case _: NoSuchNamespaceException => false

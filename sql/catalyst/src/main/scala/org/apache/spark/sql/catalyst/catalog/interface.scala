@@ -462,6 +462,14 @@ case class CatalogTable(
   def fullIdent: Seq[String] = multipartIdentifier.getOrElse(identifier.nameParts)
 
   /**
+   * Returns whether this table behaves like a view at resolution / DDL time. Today: VIEW or
+   * METRIC_VIEW. Forks may extend this set with additional view-like types, so call sites
+   * that need a uniform "is this view-like?" check should prefer this helper over inline
+   * disjunctions on `tableType`.
+   */
+  def isViewLike: Boolean = CatalogTable.isViewLike(tableType)
+
+  /**
    * schema of this table's partition columns
    */
   def partitionSchema: StructType = {
@@ -667,7 +675,7 @@ case class CatalogTable(
     if (comment.isDefined) map += "Comment" -> JString(comment.get)
     if (collation.isDefined) map += "Collation" -> JString(collation.get)
 
-    if (tableType == CatalogTableType.VIEW) {
+    if (isViewLike) {
       if (viewText.isDefined) {
         map += "View Text" -> JString(viewText.get)
       }
@@ -742,15 +750,30 @@ object CatalogTable {
   val VIEW_CATALOG_AND_NAMESPACE = VIEW_PREFIX + "catalogAndNamespace.numParts"
   val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = VIEW_PREFIX + "catalogAndNamespace.part."
 
-  // Property to indicate that a VIEW is actually a METRIC VIEW
-  val VIEW_WITH_METRICS = VIEW_PREFIX + "viewWithMetrics"
+  /**
+   * View sub-type marker persisted in `properties` so the metric-view distinction survives a
+   * round-trip through external catalogs whose enum can't carry it (e.g. the Hive Metastore,
+   * which only knows `VIRTUAL_VIEW`). When this property is set, the in-memory `tableType`
+   * upgrades from [[CatalogTableType.VIEW]] back to [[CatalogTableType.METRIC_VIEW]] on read.
+   */
+  val VIEW_SUB_TYPE = VIEW_PREFIX + "subType"
+  val VIEW_SUB_TYPE_METRIC_VIEW = "METRIC_VIEW"
 
   /**
-   * Check if a CatalogTable is a metric view by looking at its properties.
+   * Check if a CatalogTable is a metric view.
    */
   def isMetricView(table: CatalogTable): Boolean = {
-    table.tableType == CatalogTableType.VIEW &&
-      table.properties.get(VIEW_WITH_METRICS).contains("true")
+    table.tableType == CatalogTableType.METRIC_VIEW
+  }
+
+  /**
+   * Type-only form of [[CatalogTable.isViewLike]]; returns whether the given table type
+   * behaves like a view at resolution / DDL time. Use this overload when you have a
+   * [[CatalogTableType]] but no surrounding [[CatalogTable]] (e.g. inside `match`/`case`
+   * patterns or [[org.apache.spark.sql.catalyst.catalog.SessionCatalog.isView]]).
+   */
+  def isViewLike(tableType: CatalogTableType): Boolean = {
+    tableType == CatalogTableType.VIEW || tableType == CatalogTableType.METRIC_VIEW
   }
 
   // Convert the current catalog and namespace to properties.
@@ -1089,8 +1112,9 @@ object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
   val VIEW = new CatalogTableType("VIEW")
+  val METRIC_VIEW = new CatalogTableType("METRIC_VIEW")
 
-  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW)
+  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW, METRIC_VIEW)
 }
 
 

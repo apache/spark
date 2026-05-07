@@ -105,6 +105,7 @@ private[sql] object V1Table {
       case CatalogTableType.EXTERNAL => Some(TableSummary.EXTERNAL_TABLE_TYPE)
       case CatalogTableType.MANAGED => Some(TableSummary.MANAGED_TABLE_TYPE)
       case CatalogTableType.VIEW => Some(TableSummary.VIEW_TABLE_TYPE)
+      case CatalogTableType.METRIC_VIEW => Some(TableSummary.METRIC_VIEW_TABLE_TYPE)
       case _ => None
     }
   }
@@ -195,9 +196,15 @@ private[sql] object V1Table {
     val schemaModeProps = Option(info.schemaMode)
       .map(m => Map(CatalogTable.VIEW_SCHEMA_MODE -> m))
       .getOrElse(Map.empty)
+    // ViewInfo always represents a view-like table, but PROP_TABLE_TYPE may further refine the
+    // kind (e.g. METRIC_VIEW). Default to plain VIEW when no refinement is supplied.
+    val tableType = props.get(TableCatalog.PROP_TABLE_TYPE) match {
+      case Some(TableSummary.METRIC_VIEW_TABLE_TYPE) => CatalogTableType.METRIC_VIEW
+      case _ => CatalogTableType.VIEW
+    }
     CatalogTable(
       identifier = ident.asLegacyTableIdentifier(catalog.name()),
-      tableType = CatalogTableType.VIEW,
+      tableType = tableType,
       storage = CatalogStorageFormat.empty,
       schema = CatalogV2Util.v2ColumnsToStructType(info.columns),
       owner = props.getOrElse(TableCatalog.PROP_OWNER, ""),
