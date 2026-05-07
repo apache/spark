@@ -245,11 +245,11 @@ class UserDefinedFunction:
         if transpile_enabled:
             # Import only if needed, also avoid circular import loops.
             from pyspark.sql.transpile import _transpile_func
+
             try:
                 transpiled, errors, transpiled_param_names = _transpile_func(
-                    session,
-                    func,
-                    returnType)
+                    session, func, returnType
+                )
                 if errors:
                     warnings.warn(f"Errors encountered during transpilation attempts: {errors}")
                     self._transpile_errors.extend(errors)
@@ -483,8 +483,12 @@ class UserDefinedFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic,
-            map(_to_java_column_opt, self.transpiled)
+            self._name,
+            wrapped_func,
+            jdt,
+            self.evalType,
+            self.deterministic,
+            map(_to_java_column_opt, self.transpiled),
         )
         return judf
 
@@ -506,7 +510,7 @@ class UserDefinedFunction:
             params = self._transpiled_param_names
             ordered: list = list(args)
             remaining_kwargs = dict(kwargs)
-            for pname in params[len(args):]:
+            for pname in params[len(args) :]:
                 if pname in remaining_kwargs:
                     ordered.append(remaining_kwargs.pop(pname))
                 else:
