@@ -75,9 +75,6 @@ class ProtoToParsedPlanTestSuite
     with SharedSparkSession
     with ResourceHelper {
 
-  private val cleanOrphanedGoldenFiles: Boolean =
-    System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
-
   val url = "jdbc:h2:mem:testdb0"
   var conn: java.sql.Connection = null
 

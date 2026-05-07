@@ -22,11 +22,8 @@ import java.nio.file.{Path, Paths}
 import org.scalatest.Assertions
 
 /**
- * Shared test helpers for resolving workspace files and detecting golden-file regeneration mode.
- *
- * Lives in `common-utils` so it can be mixed into test suites across modules whose dependency
- * direction prevents extending `SparkFunSuite` (e.g. `LogKeysSuite` in `common-utils`,
- * `ConnectFunSuite` in the shaded Spark Connect client).
+ * Shared test helpers for resolving workspace files and reading golden-file env-var flags.
+ * Mixed into `SparkTestSuite` so every suite extending `SparkFunSuite` inherits these.
  */
 trait TestEnvHelper extends Assertions {
 
@@ -43,4 +40,7 @@ trait TestEnvHelper extends Assertions {
 
   protected def regenerateGoldenFiles: Boolean =
     System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+
+  protected def cleanOrphanedGoldenFiles: Boolean =
+    System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
 }
