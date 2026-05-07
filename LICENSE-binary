@@ -326,7 +326,6 @@ org.apache.derby:derby
 org.apache.derby:derbyshared
 org.apache.derby:derbytools
 org.apache.datasketches:datasketches-java
-org.apache.datasketches:datasketches-memory
 org.apache.hadoop:hadoop-client-api
 org.apache.hadoop:hadoop-client-runtime
 org.apache.hive:hive-beeline
