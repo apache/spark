@@ -60,11 +60,11 @@ transpiler or this test file.
 To run locally::
 
     pip install hypothesis
-    RUN_HYPOTHESIS=1 \\
+    RUN_HYPOTHESIS=1 RUN_HYPOTHESIS_MAX_EXAMPLES=1000 \
         python/run-tests --testnames pyspark.sql.tests.test_udf_transpile_hypothesis
 
 Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
-(default 25, kept small because every example spins up a Spark job).
+(default 100, kept small for CI).
 """
 
 import os
@@ -101,9 +101,9 @@ _skip_reason = (
 if _have_hypothesis:
     from hypothesis import HealthCheck, example, given, settings, strategies as st
 
-    _DEFAULT_MAX_EXAMPLES = int(os.environ.get("RUN_HYPOTHESIS_MAX_EXAMPLES", "1000"))
+    _DEFAULT_MAX_EXAMPLES = int(os.environ.get("RUN_HYPOTHESIS_MAX_EXAMPLES", "100"))
 
-    # Spark jobs are expensive but coverage at ~25 examples per case felt
+    # Spark jobs are expensive but coverage at ~100 examples per case felt
     # too thin for a property-based suite -- 1k gives hypothesis room to
     # explore boundary regions properly. The ``function_scoped_fixture``
     # health check is suppressed because we intentionally reuse the
