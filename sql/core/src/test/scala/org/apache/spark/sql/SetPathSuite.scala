@@ -738,6 +738,28 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("PATH enabled: explicit SET PATH with system.session AFTER a user catalog still " +
+      "reaches temp functions") {
+    // Explicit paths are honored as written: placing `system.session` after a user catalog
+    // is the user's authorization for unqualified temp functions to resolve. Contrast with
+    // the implicit (no SET PATH, no DEFAULT_PATH) form, which preserves the security property
+    // of the seeded default path.
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_interleaved_user")
+      try {
+        sql("CREATE TEMPORARY FUNCTION path_interleaved_temp() RETURNS INT RETURN 7")
+        try {
+          sql("SET PATH = system.builtin, spark_catalog.path_interleaved_user, system.session")
+          checkAnswer(sql("SELECT path_interleaved_temp()"), Row(7))
+        } finally {
+          sql("DROP TEMPORARY FUNCTION IF EXISTS path_interleaved_temp")
+        }
+      } finally {
+        sql("DROP SCHEMA IF EXISTS path_interleaved_user")
+      }
+    }
+  }
+
   test("PATH enabled: SET PATH with user schema before system.builtin still resolves builtins") {
     // Exercises the `leadingSystemFunctionKinds` else-branch in CatalogManager: prefix before
     // the first user catalog entry has no system entries, so kinds are taken from the full path.

@@ -64,8 +64,11 @@ class CatalogManager(
 
   /**
    * Prefix of the effective SQL PATH up to (but not including) the first user-catalog entry
-   * (anything that is not `system.builtin` / `system.session`). Used so `"last"` session order
-   * keeps the legacy shortcut of consulting builtins only before persistent catalog lookup.
+   * (anything that is not `system.builtin` / `system.session`). Only meaningful for *implicit*
+   * paths (no `SET PATH`, no `DEFAULT_PATH`): when the implicit default places a user catalog
+   * between `system.builtin` and `system.session` (the no-SET-PATH form of the seeded default
+   * path), pruning to this prefix preserves the legacy security property that temp functions
+   * stay unreachable for unqualified names.
    */
   private def pathPrefixBeforeFirstUserCatalog(path: Seq[Seq[String]]): Seq[Seq[String]] = {
     val idx = path.indexWhere { e =>
@@ -74,37 +77,35 @@ class CatalogManager(
     if (idx < 0) path else path.take(idx)
   }
 
-  /**
-   * System function kinds (`system.builtin` / `system.session`) derived from the effective PATH.
-   *
-   * When the prefix before the first user-catalog entry contains any system entries, only that
-   * prefix is used (so `"last"` [[SQLConf.sessionFunctionResolutionOrder]] keeps the legacy
-   * builtin-only shortcut before persistent catalog lookup).
-   *
-   * When that prefix has no system entries but the full PATH does (e.g. user schema listed
-   * before `system.builtin`), kinds are taken from the **full** resolved path in order.
-   *
-   * When the PATH has no `system.builtin` / `system.session` anywhere, returns an empty
-   * sequence (no implicit builtin/session ordering).
-   */
-  private def systemFunctionKindsFromPath(path: Seq[Seq[String]]): Seq[SessionCatalog.SessionFunctionKind] =
+  /** System function kinds (`system.builtin` / `system.session`) extracted from a PATH in order. */
+  private def systemFunctionKindsFromPath(
+      path: Seq[Seq[String]]): Seq[SessionCatalog.SessionFunctionKind] =
     path.flatMap { e =>
       if (CatalogManager.isSystemBuiltinPathEntry(e)) Some(SessionCatalog.Builtin)
       else if (CatalogManager.isSystemSessionPathEntry(e)) Some(SessionCatalog.Temp)
       else None
     }
 
-  // Limitation: with system entries split across a user-catalog entry (e.g. `SET PATH =
-  // system.builtin, <user>, system.session`), only the prefix kinds are surfaced. Unqualified
-  // temp functions on such interleaved paths fail at `LookupFunctions` because the SC fast path
-  // does not see Temp and `FunctionResolution.lookupFunctionType` filters `system.session.*`
-  // from persistent candidates. Place `system.session` before any user catalog to avoid this.
-  private def leadingSystemFunctionKinds(): Seq[SessionCatalog.SessionFunctionKind] = {
+  /**
+   * Kinds for the SC fast-path. When the path was set explicitly (via `SET PATH` or
+   * `DEFAULT_PATH`), every system entry on the resolved path is honored as written -- placing
+   * `system.session` is the user's authorization to reach temp functions via unqualified names.
+   * For implicit paths (seeded by `defaultPathOrder`), the prefix-before-first-user-catalog
+   * rule preserves the security property that the seeded form keeps temp functions unreachable
+   * by default.
+   */
+  private def leadingSystemFunctionKinds(): Seq[SessionCatalog.SessionFunctionKind] = synchronized {
+    val explicit =
+      conf.pathEnabled && (_sessionPath.isDefined || confDefaultPathEntries.isDefined)
     val path = sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq)
-    val prefix = pathPrefixBeforeFirstUserCatalog(path)
-    val fromPrefix = systemFunctionKindsFromPath(prefix)
-    if (fromPrefix.nonEmpty) fromPrefix
-    else systemFunctionKindsFromPath(path)
+    if (explicit) {
+      systemFunctionKindsFromPath(path)
+    } else {
+      val prefix = pathPrefixBeforeFirstUserCatalog(path)
+      val fromPrefix = systemFunctionKindsFromPath(prefix)
+      if (fromPrefix.nonEmpty) fromPrefix
+      else systemFunctionKindsFromPath(path)
+    }
   }
 
   def catalog(name: String): CatalogPlugin = synchronized {

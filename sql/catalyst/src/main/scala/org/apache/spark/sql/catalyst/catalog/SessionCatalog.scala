@@ -118,19 +118,20 @@ class SessionCatalog(
    * [[org.apache.spark.sql.connector.catalog.CatalogManager]] via
    * [[setSessionFunctionKindsProvider]] so unqualified function lookups and the security check
    * that blocks temp functions from shadowing builtins read the live PATH (post-`SET PATH`,
-   * with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already applied)
-   * instead of the legacy [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
+   * with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already applied).
    *
-   * The default follows [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] for tests that construct
-   * a [[SessionCatalog]] directly without going through [[CatalogManager]] (which overrides
-   * this callback from its constructor).
+   * The default derives kinds from [[SQLConf.systemPathOrder]] -- which is itself the seeded
+   * default path -- so this code makes no direct assumption about the legacy resolution-order
+   * conf beyond using it to seed `defaultPathOrder`. Tests that construct a [[SessionCatalog]]
+   * standalone without [[CatalogManager]] get sensible default kinds; tests that need other
+   * orderings should call [[setSessionFunctionKindsProvider]] explicitly.
    */
   @volatile private var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
     () =>
-      conf.sessionFunctionResolutionOrder match {
-        case "first" => Seq(Temp, Builtin)
-        case "last" => Seq(Builtin)
-        case _ => Seq(Builtin, Temp)
+      conf.systemPathOrder.flatMap { e =>
+        if (CatalogManager.isSystemBuiltinPathEntry(e)) Some(Builtin)
+        else if (CatalogManager.isSystemSessionPathEntry(e)) Some(Temp)
+        else None
       }
 
   /**
