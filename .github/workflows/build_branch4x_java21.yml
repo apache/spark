@@ -21,7 +21,7 @@ name: "Build (branch-4.x, Scala 2.13, Hadoop 3, JDK 21)"
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 7 */2 * *'
   workflow_dispatch:
 
 jobs:
