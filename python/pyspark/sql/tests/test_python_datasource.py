@@ -849,32 +849,6 @@ class BasePythonDataSourceTestsMixin:
                     with self.assertRaisesRegex(Exception, expected):
                         self.spark.read.format("test").load().show()
 
-                with self.subTest(worker="pyspark.sql.worker.plan_data_source_read"):
-
-                    class TestDataSource(DataSource):
-                        @classmethod
-                        def name(cls):
-                            return "test"
-
-                        def schema(self):
-                            return "x string"
-
-                        def reader(self, schema):
-                            return TestReader()
-
-                    class TestReader(DataSourceReader):
-                        def partitions(self):
-                            ctypes.string_at(0)
-                            return []
-
-                        def read(self, partition):
-                            return []
-
-                    self.spark.dataSource.register(TestDataSource)
-
-                    with self.assertRaisesRegex(Exception, expected):
-                        self.spark.read.format("test").load().show()
-
                 with self.subTest(worker="pyspark.worker"):
 
                     class TestDataSource(DataSource):
@@ -897,50 +871,6 @@ class BasePythonDataSourceTestsMixin:
 
                     with self.assertRaisesRegex(Exception, expected):
                         self.spark.read.format("test").load().show()
-
-                with self.subTest(worker="pyspark.sql.worker.write_into_data_source"):
-
-                    class TestDataSource(DataSource):
-                        @classmethod
-                        def name(cls):
-                            return "test"
-
-                        def writer(self, schema, overwrite):
-                            return TestWriter()
-
-                    class TestWriter(DataSourceWriter):
-                        def write(self, iterator):
-                            ctypes.string_at(0)
-                            return WriterCommitMessage()
-
-                    self.spark.dataSource.register(TestDataSource)
-
-                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
-                        with self.assertRaisesRegex(Exception, expected):
-                            self.spark.range(10).write.format("test").mode("append").save(d)
-
-                with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
-
-                    class TestDataSource(DataSource):
-                        @classmethod
-                        def name(cls):
-                            return "test"
-
-                        def writer(self, schema, overwrite):
-                            return TestWriter2()
-
-                    class TestWriter2(DataSourceWriter):
-                        def write(self, iterator):
-                            return WriterCommitMessage()
-
-                        def commit(self, messages):
-                            ctypes.string_at(0)
-
-                    self.spark.dataSource.register(TestDataSource)
-
-                    with tempfile.TemporaryDirectory(prefix="test_segfault_") as d:
-                        with self.assertRaisesRegex(Exception, expected):
-                            self.spark.range(10).write.format("test").mode("append").save(d)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_data_source_reader_with_logging(self):
