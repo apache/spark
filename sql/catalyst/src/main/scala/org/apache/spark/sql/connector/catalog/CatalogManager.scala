@@ -58,55 +58,25 @@ class CatalogManager(
   // Wire the path-driven kinds provider into SessionCatalog so the function-resolution loop
   // and the security check that blocks temp functions from shadowing builtins read the live
   // SQL PATH (post-`SET PATH`, with `DEFAULT_PATH` and `defaultPathOrder` fallbacks already
-  // applied) instead of the legacy [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
-  // The order is derived from `leadingSystemFunctionKinds` (see Scaladoc there).
-  v1SessionCatalog.setSessionFunctionKindsProvider(() => leadingSystemFunctionKinds())
+  // applied). Kinds are extracted from the path in path order; see `systemFunctionKinds`.
+  v1SessionCatalog.setSessionFunctionKindsProvider(() => systemFunctionKinds())
 
   /**
-   * Prefix of the effective SQL PATH up to (but not including) the first user-catalog entry
-   * (anything that is not `system.builtin` / `system.session`). Only meaningful for *implicit*
-   * paths (no `SET PATH`, no `DEFAULT_PATH`): when the implicit default places a user catalog
-   * between `system.builtin` and `system.session` (the no-SET-PATH form of the seeded default
-   * path), pruning to this prefix preserves the legacy security property that temp functions
-   * stay unreachable for unqualified names.
+   * Kinds for the SC fast-path: `system.builtin` / `system.session` entries on the effective
+   * SQL PATH, in path order. The path is the source of truth -- we don't distinguish how the
+   * path was set (SET PATH, DEFAULT_PATH conf, or the seeded default), the same way we don't
+   * distinguish whether `current_catalog` came from `USE CATALOG` or `defaultCatalog`.
+   *
+   * "No injection" of temp functions over persistent ones is enforced by path order: when
+   * persistent (a user catalog entry) precedes `system.session`, the strategy layer resolves
+   * persistent first regardless of fast-path kinds.
    */
-  private def pathPrefixBeforeFirstUserCatalog(path: Seq[Seq[String]]): Seq[Seq[String]] = {
-    val idx = path.indexWhere { e =>
-      !CatalogManager.isSystemBuiltinPathEntry(e) && !CatalogManager.isSystemSessionPathEntry(e)
-    }
-    if (idx < 0) path else path.take(idx)
-  }
-
-  /** System function kinds (`system.builtin` / `system.session`) extracted from a PATH in order. */
-  private def systemFunctionKindsFromPath(
-      path: Seq[Seq[String]]): Seq[SessionCatalog.SessionFunctionKind] =
-    path.flatMap { e =>
+  private def systemFunctionKinds(): Seq[SessionCatalog.SessionFunctionKind] =
+    sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq).flatMap { e =>
       if (CatalogManager.isSystemBuiltinPathEntry(e)) Some(SessionCatalog.Builtin)
       else if (CatalogManager.isSystemSessionPathEntry(e)) Some(SessionCatalog.Temp)
       else None
     }
-
-  /**
-   * Kinds for the SC fast-path. When the path was set explicitly (via `SET PATH` or
-   * `DEFAULT_PATH`), every system entry on the resolved path is honored as written -- placing
-   * `system.session` is the user's authorization to reach temp functions via unqualified names.
-   * For implicit paths (seeded by `defaultPathOrder`), the prefix-before-first-user-catalog
-   * rule preserves the security property that the seeded form keeps temp functions unreachable
-   * by default.
-   */
-  private def leadingSystemFunctionKinds(): Seq[SessionCatalog.SessionFunctionKind] = synchronized {
-    val explicit =
-      conf.pathEnabled && (_sessionPath.isDefined || confDefaultPathEntries.isDefined)
-    val path = sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq)
-    if (explicit) {
-      systemFunctionKindsFromPath(path)
-    } else {
-      val prefix = pathPrefixBeforeFirstUserCatalog(path)
-      val fromPrefix = systemFunctionKindsFromPath(prefix)
-      if (fromPrefix.nonEmpty) fromPrefix
-      else systemFunctionKindsFromPath(path)
-    }
-  }
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -338,12 +308,12 @@ class CatalogManager(
    * temp function with a builtin's name, and the `count(*) -> count(1)` rewrite that
    * must skip transformation when a temp `count` shadows the builtin.
    *
-   * Shares [[leadingSystemFunctionKinds]] with [[SessionCatalog]]'s `sessionFirstInPath`
-   * so both call sites read the same canonical computation, avoiding drift between
-   * the security check and the analyzer rewrite.
+   * Shares [[systemFunctionKinds]] with [[SessionCatalog]]'s `sessionFirstInPath` so both
+   * call sites read the same canonical computation, avoiding drift between the security
+   * check and the analyzer rewrite.
    */
   def isSessionBeforeBuiltinInPath: Boolean =
-    leadingSystemFunctionKinds().headOption.contains(SessionCatalog.Temp)
+    systemFunctionKinds().headOption.contains(SessionCatalog.Temp)
 
   /**
    * Single source of truth for analysis-time resolution path entries used by relation, routine,
