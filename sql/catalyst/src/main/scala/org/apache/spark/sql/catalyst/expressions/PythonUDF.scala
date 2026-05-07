@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TRANSPILED_PYTHON_UDF,
+  TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -102,6 +103,7 @@ case class TranspiledPythonUDF(
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
       TranspiledPythonUDF =
     copy(pythonUDFExpr = newChildren.head, transpiledOptions = newChildren.tail.toList)
+  final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_PYTHON_UDF)
 }
 
 /**
