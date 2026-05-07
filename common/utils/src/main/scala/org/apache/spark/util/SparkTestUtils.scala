@@ -53,8 +53,8 @@ private[spark] trait SparkTestUtils {
       Seq(
         "-classpath",
         classpathUrls
-          .map {
-            _.getFile
+          .map { u =>
+            new File(u.toURI).getPath
           }
           .mkString(File.pathSeparator))
     } else {
@@ -123,7 +123,7 @@ private[spark] trait SparkTestUtils {
 
     val options = Seq("-d", classDir.getAbsolutePath) ++ (
       if (classpathUrls.nonEmpty) {
-        Seq("-classpath", classpathUrls.map(_.getFile).mkString(File.pathSeparator))
+        Seq("-classpath", classpathUrls.map(u => new File(u.toURI).getPath).mkString(File.pathSeparator))
       } else Seq.empty
     )
 
@@ -177,7 +177,7 @@ private[spark] trait SparkTestUtils {
     // on Windows to work around CMD's command-line length limit and by some build/CI
     // tools. Expand any such JARs before invoking scalac so the classpath is complete.
     val expandedClasspath = classpathUrls.flatMap(expandManifestClasspath)
-    val cpStr = expandedClasspath.map(_.getFile).mkString(File.pathSeparator)
+    val cpStr = expandedClasspath.map(u => new File(u.toURI).getPath).mkString(File.pathSeparator)
     val args = Array("-classpath", cpStr, "-d", classDir.getAbsolutePath) ++
       sourceFiles.map(_.getAbsolutePath)
 
@@ -216,7 +216,7 @@ private[spark] trait SparkTestUtils {
    * original URL unchanged.
    */
   private[spark] def expandManifestClasspath(url: URL): Seq[URL] = {
-    val file = new File(url.getFile)
+    val file = new File(url.toURI)
     if (!file.exists() || !file.getName.endsWith(".jar")) return Seq(url)
     try {
       val jarFile = new JarFile(file)
