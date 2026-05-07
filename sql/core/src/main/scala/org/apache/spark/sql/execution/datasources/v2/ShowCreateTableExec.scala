@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.BucketTransform
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
