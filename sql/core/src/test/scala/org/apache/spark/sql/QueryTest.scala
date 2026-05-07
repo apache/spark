@@ -1073,14 +1073,13 @@ object QueryTest extends Assertions {
       }
     }
 
-    val classicSession = spark.asInstanceOf[classic.SparkSession]
-    classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
-    classicSession.listenerManager.register(listener)
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
     try {
       thunk
-      classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
     } finally {
-      classicSession.listenerManager.unregister(listener)
+      spark.listenerManager.unregister(listener)
     }
 
     capturedQueryExecutions
