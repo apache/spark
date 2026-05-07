@@ -17,23 +17,27 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, V2TableReference}
+import org.apache.spark.sql.catalyst.analysis.NamedRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode, V2StreamingWriteCommand}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * The logical plan for writing data to a micro-batch stream.
  *
  * Note that this logical plan does not have a corresponding physical plan, as it will be
- * converted to [[WriteToDataSourceV2]] with [[MicroBatchWrite]] before execution.
+ * converted to
+ * [[org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2 WriteToDataSourceV2]]
+ * with [[MicroBatchWrite]] before execution.
  *
  * When the write target is backed by a transactional catalog, it is created as a
- * [[V2TableReference]] with [[V2TableReference.WriteTargetContext]]. This is then resolved by
- * ResolveRelations as a [[DataSourceV2Relation]] for each micro-batch.
+ * [[org.apache.spark.sql.catalyst.analysis.V2TableReference V2TableReference]].
+ * This is then resolved by ResolveRelations as a
+ * [[org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation DataSourceV2Relation]]
+ * for each micro-batch.
  *
- * For non-transactional catalogs, the write target is pre-resolved as a [[DataSourceV2Relation]].
+ * For non-transactional catalogs, the write target is pre-resolved as a
+ * [[org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation DataSourceV2Relation]].
  */
 case class WriteToMicroBatchDataSource(
     relation: NamedRelation,
