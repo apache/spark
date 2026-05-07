@@ -237,8 +237,8 @@ class CatalogManager(
   /**
    * Ordered catalog/schema path entries for resolving unqualified SQL object names.
    * When PATH is off or unset, applies [[SQLConf.defaultPathOrder]] (legacy).
-   * When PATH is in effect (stored or via the workspace default conf), uses the resolved
-   * entries.
+   * When PATH is in effect (stored or via the [[SQLConf.DEFAULT_PATH]] conf), uses the
+   * resolved entries.
    */
   def sqlResolutionPathEntries(
       pathDefaultCatalog: String,

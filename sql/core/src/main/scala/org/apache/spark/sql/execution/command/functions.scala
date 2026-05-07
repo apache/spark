@@ -175,10 +175,8 @@ case class DropFunctionCommand(
           !ifExists &&
           !catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
           catalog.isBuiltinFunction(funcName)) {
-        throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }
-
-      // `dropTempFunction` only removes entries from the session (temp) registry.
       catalog.dropTempFunction(funcName, ifExists)
     } else {
       // We are dropping a permanent function.
