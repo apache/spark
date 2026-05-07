@@ -1406,7 +1406,7 @@ class ArrowArrayConversion:
             # arr = pc.local_timestamp(arr)
             # arr[0]
             # <pyarrow.TimestampScalar: '2022-01-05T15:00:01.000000'>
-            return pc.local_timestamp(arr)
+            return pc.local_timestamp(arr)  # type: ignore[attr-defined, unused-ignore]
 
         return cls.convert(
             arr,
@@ -1436,7 +1436,7 @@ class ArrowArrayConversion:
             pa_type = arr.type
 
             if pa_type.tz is not None:
-                arr = pc.local_timestamp(arr)
+                arr = pc.local_timestamp(arr)  # type: ignore[attr-defined, unused-ignore]
             if pa_type.unit != "ns":
                 arr = pc.cast(arr, target_type=pa.timestamp("ns", tz=None))
             return arr

@@ -543,14 +543,14 @@ def _check_arrow_array_timestamps_localize(
         )
 
     if types.is_timestamp(a.type) and truncate and a.type.unit == "ns":
-        a = pc.floor_temporal(a, unit="microsecond")
+        a = pc.floor_temporal(a, unit="microsecond")  # type: ignore[attr-defined, unused-ignore]
 
     if types.is_timestamp(a.type) and a.type.tz is None and isinstance(dt, TimestampType):
         assert timezone is not None
 
         # Only localize timestamps that will become Spark TimestampType columns.
         # Do not localize timestamps that will become Spark TimestampNTZType columns.
-        return pc.assume_timezone(a, timezone)
+        return pc.assume_timezone(a, timezone)  # type: ignore[attr-defined, unused-ignore]
     if types.is_list(a.type):
         # Return the ListArray as-is if it contains no nested fields or timestamps
         if not types.is_nested(a.type.value_type) and not types.is_timestamp(a.type.value_type):
