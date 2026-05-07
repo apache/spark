@@ -166,6 +166,9 @@ jobs:
               \"ui\" : \"$ui\",
             }"
           echo $precondition # For debugging
+          # TEMP for PR #55726: only run pyspark + pyspark-pandas. REVERT BEFORE MERGE.
+          precondition='{ "build": "false", "pyspark": "true", "pyspark-pandas": "true", "pyspark-install": "false", "sparkr": "false", "tpcds-1g": "false", "docker-integration-tests": "false", "lint" : "false", "java17" : "false", "java25" : "false", "docs" : "false", "yarn" : "false", "k8s-integration-tests" : "false", "buf" : "false", "ui" : "false" }'
+          echo "TEMP override: $precondition"
           # Remove `\n` to avoid "Invalid format" error
           precondition="${precondition//$'\n'/}"
           echo "required=$precondition" >> $GITHUB_OUTPUT
