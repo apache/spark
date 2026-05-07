@@ -60,7 +60,7 @@ class CatalogManager(
   // SQL PATH (post-`SET PATH`, with `DEFAULT_PATH` and `defaultPathOrder` fallbacks already
   // applied) instead of the legacy [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
   // The order is derived from `leadingSystemFunctionKinds` (see Scaladoc there).
-  v1SessionCatalog.sessionFunctionKindsProvider = () => leadingSystemFunctionKinds()
+  v1SessionCatalog.setSessionFunctionKindsProvider(() => leadingSystemFunctionKinds())
 
   /**
    * Prefix of the effective SQL PATH up to (but not including) the first user-catalog entry
@@ -340,17 +340,12 @@ class CatalogManager(
    * temp function with a builtin's name, and the `count(*) -> count(1)` rewrite that
    * must skip transformation when a temp `count` shadows the builtin.
    *
-   * Reads the live PATH (post-`SET PATH`, with [[SQLConf.DEFAULT_PATH]] and
-   * [[SQLConf.defaultPathOrder]] fallbacks already applied), so admin/user changes to
-   * PATH are reflected without relying on the legacy
-   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
+   * Shares [[leadingSystemFunctionKinds]] with [[SessionCatalog]]'s `sessionFirstInPath`
+   * so both call sites read the same canonical computation, avoiding drift between
+   * the security check and the analyzer rewrite.
    */
-  def isSessionBeforeBuiltinInPath: Boolean = {
-    val path = sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq)
-    val sessionIdx = path.indexWhere(CatalogManager.isSystemSessionPathEntry)
-    val builtinIdx = path.indexWhere(CatalogManager.isSystemBuiltinPathEntry)
-    sessionIdx >= 0 && (builtinIdx < 0 || sessionIdx < builtinIdx)
-  }
+  def isSessionBeforeBuiltinInPath: Boolean =
+    leadingSystemFunctionKinds().headOption.contains(SessionCatalog.Temp)
 
   /**
    * Single source of truth for analysis-time resolution path entries used by relation, routine,

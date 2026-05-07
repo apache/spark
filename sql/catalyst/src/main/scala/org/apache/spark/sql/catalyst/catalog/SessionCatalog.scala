@@ -115,23 +115,33 @@ class SessionCatalog(
   /**
    * Provider for the ordered `system.builtin` / `system.session` entries on the effective SQL
    * PATH (mapped to [[SessionFunctionKind]]). Wired by
-   * [[org.apache.spark.sql.connector.catalog.CatalogManager]] after construction so unqualified
-   * function lookups and the security check that blocks temp functions from shadowing builtins
-   * read the live PATH (post-`SET PATH`, with [[SQLConf.DEFAULT_PATH]] and
-   * [[SQLConf.defaultPathOrder]] fallbacks already applied) instead of the legacy
-   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager]] via
+   * [[setSessionFunctionKindsProvider]] so unqualified function lookups and the security check
+   * that blocks temp functions from shadowing builtins read the live PATH (post-`SET PATH`,
+   * with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already applied)
+   * instead of the legacy [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
    *
    * The default follows [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] for tests that construct
    * a [[SessionCatalog]] directly without going through [[CatalogManager]] (which overrides
    * this callback from its constructor).
    */
-  @volatile private[sql] var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
+  @volatile private var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
     () =>
       conf.sessionFunctionResolutionOrder match {
         case "first" => Seq(Temp, Builtin)
         case "last" => Seq(Builtin)
         case _ => Seq(Builtin, Temp)
       }
+
+  /**
+   * Override the session-function-kinds provider. Called once by
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager]] from its constructor to wire in
+   * path-driven kinds; intended for that single writer plus tests that bypass `CatalogManager`.
+   */
+  private[sql] def setSessionFunctionKindsProvider(
+      provider: () => Seq[SessionFunctionKind]): Unit = {
+    sessionFunctionKindsProvider = provider
+  }
 
   /**
    * Session function kinds in resolution order for unqualified lookups, derived from the
