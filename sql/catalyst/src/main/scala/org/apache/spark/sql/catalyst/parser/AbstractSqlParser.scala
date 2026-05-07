@@ -116,7 +116,7 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
    * Used by [[org.apache.spark.sql.connector.catalog.CatalogManager]] to honor the
    * [[SQLConf.DEFAULT_PATH]] conf without re-implementing the SET PATH grammar.
    */
-  def parseSqlPathElements(sqlText: String): Seq[PathElement] = parse(sqlText) { parser =>
+  def parsePathElements(sqlText: String): Seq[PathElement] = parse(sqlText) { parser =>
     val ctx = parser.singlePathElementList()
     withErrorHandling(ctx, Some(sqlText)) {
       astBuilder.visitSinglePathElementList(ctx)

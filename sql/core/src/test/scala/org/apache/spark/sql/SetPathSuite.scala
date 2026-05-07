@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -569,7 +570,7 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  // --- Workspace default path conf (SQLConf.DEFAULT_PATH) ---
+  // --- spark.sql.defaultPath (SQLConf.DEFAULT_PATH) ---
   // The conf carries the SET PATH grammar; sessionPathEntries falls back to it lazily
   // when no `SET PATH` has been issued, mirroring how `currentCatalog` falls back to
   // [[SQLConf.DEFAULT_CATALOG]].
@@ -653,13 +654,12 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("DEFAULT_PATH conf: rejected value surfaces a parse error") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "this is not a path") {
-      intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
-        currentPath()
+  test("DEFAULT_PATH conf: invalid value rejected on SET spark.sql.defaultPath") {
+    withPathEnabled {
+      val e = intercept[SparkIllegalArgumentException] {
+        sql("SET spark.sql.defaultPath = this is not a path")
       }
+      assert(e.getCondition.startsWith("INVALID_CONF_VALUE"), e.getMessage)
     }
   }
 
@@ -692,14 +692,14 @@ class SetPathSuite extends SharedSparkSession {
         }
         assert(e.getCondition == "ROUTINE_ALREADY_EXISTS", e.getMessage)
       } finally {
-        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS session.count")
         catalogManager.clearSessionPath()
         priorSessionPath.foreach(catalogManager.setSessionPath)
       }
     }
   }
 
-  test("path-driven security check: workspace DEFAULT_PATH putting session before builtin " +
+  test("path-driven security check: DEFAULT_PATH conf putting session before builtin " +
       "blocks temp function with a builtin name (no SET PATH issued)") {
     withSQLConf(
         SQLConf.PATH_ENABLED.key -> "true",
@@ -715,7 +715,39 @@ class SetPathSuite extends SharedSparkSession {
         }
         assert(e.getCondition == "ROUTINE_ALREADY_EXISTS", e.getMessage)
       } finally {
-        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS session.count")
+        catalogManager.clearSessionPath()
+        priorSessionPath.foreach(catalogManager.setSessionPath)
+      }
+    }
+  }
+
+  test("PATH enabled: SET PATH with only user schemas does not implicitly resolve builtins") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS only_user_on_path")
+      try {
+        sql("SET PATH = spark_catalog.only_user_on_path")
+        val e = intercept[AnalysisException] {
+          sql("SELECT abs(-1)").collect()
+        }
+        assert(e.getCondition == "UNRESOLVED_ROUTINE", e.getMessage)
+      } finally {
+        sql("DROP SCHEMA IF EXISTS only_user_on_path")
+      }
+    }
+  }
+
+  test("DEFAULT_PATH conf: duplicate system entries rejected when materialized") {
+    withSQLConf(
+        SQLConf.PATH_ENABLED.key -> "true",
+        SQLConf.DEFAULT_PATH.key -> "system.builtin, system.builtin") {
+      val catalogManager = spark.sessionState.catalogManager
+      val priorSessionPath = catalogManager.storedSessionPathEntries
+      catalogManager.clearSessionPath()
+      try {
+        val e = intercept[AnalysisException](currentPath())
+        assert(e.getCondition == "DUPLICATE_SQL_PATH_ENTRY", e.getMessage)
+      } finally {
         catalogManager.clearSessionPath()
         priorSessionPath.foreach(catalogManager.setSessionPath)
       }

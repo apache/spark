@@ -121,11 +121,17 @@ class SessionCatalog(
    * [[SQLConf.defaultPathOrder]] fallbacks already applied) instead of the legacy
    * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] proxy.
    *
-   * The default reproduces the previous "second" behavior (builtin-then-session) for tests
-   * that construct a [[SessionCatalog]] directly without going through [[CatalogManager]].
+   * The default follows [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] for tests that construct
+   * a [[SessionCatalog]] directly without going through [[CatalogManager]] (which overrides
+   * this callback from its constructor).
    */
-  private[sql] var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
-    () => Seq(Builtin, Temp)
+  @volatile private[sql] var sessionFunctionKindsProvider: () => Seq[SessionFunctionKind] =
+    () =>
+      conf.sessionFunctionResolutionOrder match {
+        case "first" => Seq(Temp, Builtin)
+        case "last" => Seq(Builtin)
+        case _ => Seq(Builtin, Temp)
+      }
 
   /**
    * Session function kinds in resolution order for unqualified lookups, derived from the
@@ -2516,7 +2522,11 @@ class SessionCatalog(
    * Look up the `ExpressionInfo` of the given function by name.
    * Resolution order follows the configured path (e.g. builtin then session).
    */
-  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
+  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
+    // SPARK-56750: Intentionally not `synchronized` on this [[SessionCatalog]]. Resolution order
+    // calls [[sessionFunctionKindsProvider]], which may synchronize on [[CatalogManager]]; another
+    // thread can hold that lock and call into this catalog (e.g. via `setCurrentNamespace`), which
+    // would deadlock if this method also synchronized on `this`.
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
   }
 
@@ -2667,7 +2677,10 @@ class SessionCatalog(
   /**
    * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
    */
-  def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
+  def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
+    // SPARK-56750: Intentionally not `synchronized` on this [[SessionCatalog]] (see
+    // [[lookupBuiltinOrTempTableFunction]]): unqualified builtin/temp resolution uses
+    // [[sessionFunctionKindsProvider]] and must not run under this catalog's intrinsic lock.
     if (name.database.isEmpty) {
       lookupBuiltinOrTempFunction(name.funcName)
         .orElse(lookupBuiltinOrTempTableFunction(name.funcName))

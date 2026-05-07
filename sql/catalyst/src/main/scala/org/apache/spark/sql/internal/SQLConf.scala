@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
@@ -2474,13 +2475,19 @@ object SQLConf {
   val DEFAULT_PATH =
     buildConf("spark.sql.defaultPath")
       .version("4.2.0")
-      .doc("Default SQL PATH used when no SET PATH has been issued in the session, and the " +
-        "value SET PATH = DEFAULT_PATH expands to. Accepts the full SET PATH grammar; an inner " +
-        "DEFAULT_PATH token resolves to the spark-builtin default ordering. When empty, the " +
-        "spark-builtin default ordering controlled by " +
-        "[[SESSION_FUNCTION_RESOLUTION_ORDER]] applies.")
+      .doc("Default SQL PATH used when no SET PATH has been issued in the session; this is " +
+        "also the value to which `SET PATH = DEFAULT_PATH` expands. Accepts the full SET PATH " +
+        "grammar; an inner DEFAULT_PATH token resolves to the spark-builtin default ordering. " +
+        "When empty, the spark-builtin default ordering controlled by " +
+        "`spark.sql.functionResolution.sessionOrder` applies.")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .stringConf
+      .checkValue(
+        v =>
+          v == null || v.trim.isEmpty ||
+            Try(CatalystSqlParser.parsePathElements(v.trim)).isSuccess,
+        "The value must be empty or a comma-separated SET PATH element list " +
+          "(same grammar as SET PATH).")
       .createWithDefault("")
 
   // Whether to retain group by columns or not in GroupedData.agg.

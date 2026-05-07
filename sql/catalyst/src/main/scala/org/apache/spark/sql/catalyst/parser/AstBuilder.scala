@@ -720,7 +720,11 @@ class AstBuilder extends DataTypeAstBuilder
     else if (ctx.CURRENT_DATABASE() != null || ctx.CURRENT_SCHEMA() != null) {
       PathElement.CurrentSchema
     } else {
-      PathElement.SchemaInPath(visitMultipartIdentifier(ctx.multipartIdentifier()))
+      val parts = visitMultipartIdentifier(ctx.multipartIdentifier())
+      if (parts.length < 2) {
+        throw QueryCompilationErrors.invalidSqlPathSchemaReferenceError(parts.mkString("."))
+      }
+      PathElement.SchemaInPath(parts)
     }
   }
 

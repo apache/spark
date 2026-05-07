@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.Locale
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.PathElement
@@ -45,21 +43,13 @@ case class SetPathCommand(elements: Seq[PathElement]) extends LeafRunnableComman
     val catalogManager = sparkSession.sessionState.catalogManager
     val currentCatalog = catalogManager.currentCatalog.name
     val currentNamespace = catalogManager.currentNamespace.toSeq
-    val caseSensitive = conf.caseSensitiveAnalysis
 
-    val expanded = PathElement.expand(elements, conf, catalogManager)
-    val seen = new scala.collection.mutable.HashSet[Seq[String]]
-    expanded.foreach { entry =>
-      val concrete = entry.resolve(currentCatalog, currentNamespace)
-      def normalize(s: String): String = if (caseSensitive) s else s.toLowerCase(Locale.ROOT)
-      val key = concrete.map(normalize)
-      if (!seen.add(key)) {
-        throw new AnalysisException(
-          errorClass = "DUPLICATE_SQL_PATH_ENTRY",
-          messageParameters = Map("pathEntry" ->
-            concrete.map(p => if (p.contains(".")) s"`$p`" else p).mkString(".")))
-      }
-    }
+    val expanded0 = PathElement.expand(elements, conf, catalogManager)
+    val expanded = PathElement.validateNoDuplicateResolvedPath(
+      expanded0,
+      currentCatalog,
+      currentNamespace,
+      conf.caseSensitiveAnalysis)
 
     if (expanded.isEmpty) {
       catalogManager.clearSessionPath()

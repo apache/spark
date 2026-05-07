@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.util.Locale
+
+import scala.collection.mutable
+
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogManager.{
   CurrentSchemaEntry, LiteralPathEntry, SessionPathEntry
 }
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -53,17 +57,17 @@ object PathElement {
    * suitable for storing in [[CatalogManager._sessionPath]] or returning from
    * [[CatalogManager.sessionPathEntries]].
    *
-   * @param isWorkspaceDefaultExpansion when true, an inner [[DefaultPath]] token resolves
-   *                                    to the spark-builtin default ordering (cycle break)
-   *                                    rather than reading [[SQLConf.DEFAULT_PATH]] again.
-   *                                    Set to true when this method is invoked while
-   *                                    parsing [[SQLConf.DEFAULT_PATH]] itself.
+   * @param isConfDefaultExpansion when true, an inner [[DefaultPath]] token resolves
+   *                               to the spark-builtin default ordering (cycle break)
+   *                               rather than reading [[SQLConf.DEFAULT_PATH]] again.
+   *                               Set to true when this method is invoked while
+   *                               parsing [[SQLConf.DEFAULT_PATH]] itself.
    */
   def expand(
       elements: Seq[PathElement],
       conf: SQLConf,
       catalogManager: CatalogManager,
-      isWorkspaceDefaultExpansion: Boolean = false): Seq[SessionPathEntry] = {
+      isConfDefaultExpansion: Boolean = false): Seq[SessionPathEntry] = {
     val currentSchemaSentinel = Seq("__current_schema__")
 
     def toEntries(parts: Seq[Seq[String]]): Seq[SessionPathEntry] = parts.map {
@@ -75,12 +79,12 @@ object PathElement {
       toEntries(conf.defaultPathOrder(Seq(currentSchemaSentinel)))
 
     def defaultPathExpansion: Seq[SessionPathEntry] = {
-      if (isWorkspaceDefaultExpansion) {
-        // Cycle break: inner DEFAULT_PATH inside the workspace default conf value falls
-        // back to the spark-builtin default ordering instead of recursing.
+      if (isConfDefaultExpansion) {
+        // Cycle break: inner DEFAULT_PATH inside the conf default value falls back to the
+        // spark-builtin default ordering instead of recursing.
         builtinDefaultWithCurrentSchema
       } else {
-        catalogManager.workspaceDefaultPathEntries.getOrElse(builtinDefaultWithCurrentSchema)
+        catalogManager.confDefaultPathEntries.getOrElse(builtinDefaultWithCurrentSchema)
       }
     }
 
@@ -94,10 +98,32 @@ object PathElement {
       case PathRef =>
         catalogManager.storedSessionPathEntries.getOrElse(defaultPathExpansion)
       case SchemaInPath(parts) =>
-        if (parts.length < 2) {
-          throw QueryCompilationErrors.invalidSqlPathSchemaReferenceError(parts.mkString("."))
-        }
         Seq(LiteralPathEntry(parts))
     }
+  }
+
+  /**
+   * Reject duplicate resolved PATH entries (same semantics as `SET PATH` run).
+   * Used for both interactive `SET PATH` and [[SQLConf.DEFAULT_PATH]] materialization.
+   */
+  def validateNoDuplicateResolvedPath(
+      entries: Seq[SessionPathEntry],
+      currentCatalog: String,
+      currentNamespace: Seq[String],
+      caseSensitive: Boolean): Seq[SessionPathEntry] = {
+    val seen = new mutable.HashSet[Seq[String]]
+    entries.foreach { entry =>
+      val concrete = entry.resolve(currentCatalog, currentNamespace)
+      def normalize(s: String): String = if (caseSensitive) s else s.toLowerCase(Locale.ROOT)
+      val key = concrete.map(normalize)
+      if (!seen.add(key)) {
+        throw new AnalysisException(
+          errorClass = "DUPLICATE_SQL_PATH_ENTRY",
+          messageParameters = Map(
+            "pathEntry" ->
+              concrete.map(p => if (p.contains(".")) s"`$p`" else p).mkString(".")))
+      }
+    }
+    entries
   }
 }
