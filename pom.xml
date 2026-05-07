@@ -220,7 +220,7 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.12.Final</netty.version>
+    <netty.version>4.2.13.Final</netty.version>
     <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
