@@ -22,38 +22,28 @@ Avoid introducing non-ASCII characters in code or comments. String literals may 
 
 ## Scala Test Base Classes
 
-When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs.
+When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. Spark uses the `AnyFunSuite` ScalaTest style throughout, so the bases below are the chain to choose from. Each adds capability on top of the previous:
 
-The actual test helpers live in style-agnostic traits that do not commit to a ScalaTest style:
-
-    SparkTestSuite                                                          (core; thread audit, fixed timezone/locale, withTempDir, withLogAppender, checkError)
-    PlanTestBase                                                            (sql/catalyst; plan-comparison helpers — comparePlans, normalizePlan)
-      <- QueryTestBase                                                      (sql/core; adds SQL/DataFrame helpers + abstract `spark` via `SparkSessionProvider`)
-        <- SharedSparkSessionBase                                           (sql/core; provides the actual `TestSparkSession`)
-
-The class-bearing test bases bundle each style-agnostic helper with `AnyFunSuite` (the default ScalaTest style) so concrete suites can extend them directly. They form a layered chain — each adds capability on top of the previous:
-
-    SparkFunSuite = AnyFunSuite + SparkTestSuite                            (core; pins the FunSuite style — the default)
-      <- PlanTest = SparkFunSuite + PlanTestBase                            (sql/catalyst)
-        <- QueryTest = PlanTest + QueryTestBase                             (sql/core)
-          <- SharedSparkSession = QueryTest + SharedSparkSessionBase        (sql/core)
+    SparkFunSuite                                                           (core)
+      <- PlanTest                                                           (sql/catalyst)
+        <- QueryTest                                                        (sql/core)
+          <- SharedSparkSession                                             (sql/core)
 
 | Test scope | Base | Notes |
 |------------|------|-------|
-| Non-FunSuite ScalaTest style (rare) | `SparkTestSuite` | Style-agnostic trait holding the common Spark test functionality (thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`, etc.). Mix with any ScalaTest style — see `core/src/test/scala/org/apache/spark/{WordSpec,FunSpec,FlatSpec,...}SparkTestSuite.scala` for examples. Real Spark tests should use `SparkFunSuite` instead. |
-| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. = `AnyFunSuite + SparkTestSuite`. Adds per-test timeout, `testRetry`, `gridTest` on top of `SparkTestSuite`. |
+| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, `testRetry`, `gridTest`, thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`. |
 | Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
 | SQL/DataFrame helpers — abstract `spark` | `QueryTest` | Adds `checkAnswer`, codegen-on/off helpers. Cannot be instantiated alone — `spark` is abstract and must be supplied by a session-providing trait. |
 | SQL/DataFrame integration tests — provides a session | `SharedSparkSession` | The default for most SQL suites. Provides a shared classic `TestSparkSession`, `testImplicits`, plus `checkAnswer` from `QueryTest`. |
 
 `QueryTest` declares `spark: SparkSession` abstractly via `SparkSessionProvider`. To run a concrete suite, mix in a session-providing trait. The common providers in this repo are:
 
-| Session provider | Module / location | Base chain | Use case |
-|---|---|---|---|
-| `SharedSparkSession` | `sql/core` | `QueryTest` -> `SparkFunSuite` | Classic in-process `SparkSession`. Default for tests under `sql/core`. |
-| `TestHiveSingleton` | `sql/hive` | `SparkFunSuite` | Hive-backed session (`TestHive`). Used by tests under `sql/hive`. |
+| Session provider | Module / location | Use case |
+|---|---|---|
+| `SharedSparkSession` | `sql/core` | Classic in-process `SparkSession`. Default for tests under `sql/core`. |
+| `TestHiveSingleton` | `sql/hive` | Hive-backed session (`TestHive`). Used by tests under `sql/hive`. |
 
-Linearization gotcha: the first item in the `extends` clause must transitively extend a class (i.e. carry a non-`Object` superclass). Of the bases above, `SparkFunSuite`, `PlanTest`, `QueryTest`, and `SharedSparkSession` all carry the `SparkFunSuite` -> `AnyFunSuite` chain. `SparkTestSuite` is a pure trait and does NOT — if you use it directly you must put a ScalaTest style class first (e.g. `class X extends AnyWordSpec with SparkTestSuite`). The same applies to other "pure helper" traits (`*ErrorsBase`, `*Helper`): if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
+Linearization gotcha: the first item in the `extends` clause must transitively extend a class (i.e. carry a non-`Object` superclass). The four bases above all carry the `SparkFunSuite` chain, so they can appear first. A "pure helper" trait (e.g. `*ErrorsBase`, `*Helper`) does not — if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
 
 ## Build and Test
 
