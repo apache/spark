@@ -21,6 +21,9 @@ openpyxl
 asv
 coverage
 tabulate
+# Used by the opt-in UDF transpile hypothesis test suite (gated on
+# RUN_HYPOTHESIS in the environment). See SPARK-54783.
+hypothesis>=6,<7
 
 # Kafka streaming test dependencies (optional)
 # Required for running Kafka integration tests with Docker test containers
