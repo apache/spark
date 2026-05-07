@@ -18,10 +18,11 @@
 package org.apache.spark
 
 import org.apache.spark.scheduler.ExecutorDecommissionInfo
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A client that communicates with the cluster manager to request or kill executors.
- * This is currently supported only in YARN mode.
+ * This is currently supported only in Kubernetes and YARN mode.
  */
 private[spark] trait ExecutorAllocationClient {
 
@@ -98,7 +99,7 @@ private[spark] trait ExecutorAllocationClient {
       executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
       adjustTargetNumExecutors: Boolean,
       triggeredByExecutor: Boolean): Seq[String] = {
-    killExecutors(executorsAndDecomInfo.map(_._1),
+    killExecutors(executorsAndDecomInfo.map(_._1).toImmutableArraySeq,
       adjustTargetNumExecutors,
       countFailures = false)
   }

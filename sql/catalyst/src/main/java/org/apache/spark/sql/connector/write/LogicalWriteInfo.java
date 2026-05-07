@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.connector.write;
 
+import java.util.Map;
+import java.util.Optional;
+
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -45,4 +49,20 @@ public interface LogicalWriteInfo {
    * the schema of the input data from Spark to data source.
    */
   StructType schema();
+
+  /**
+   * the schema of the ID columns from Spark to data source.
+   */
+  default Optional<StructType> rowIdSchema() {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
+  }
+
+  /**
+   * the schema of the input metadata from Spark to data source.
+   */
+  default Optional<StructType> metadataSchema() {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED", Map.of("class", getClass().getName()));
+  }
 }

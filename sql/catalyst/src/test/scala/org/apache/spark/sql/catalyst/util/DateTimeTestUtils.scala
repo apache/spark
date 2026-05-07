@@ -21,10 +21,10 @@ import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, localTimeToNanos}
 
 /**
  * Helper functions for testing date and time functionality.
@@ -49,9 +49,9 @@ object DateTimeTestUtils {
     CET.getId,
     "Africa/Dakar",
     LA.getId,
-    "Antarctica/Vostok",
+    "Asia/Urumqi",
     "Asia/Hong_Kong",
-    "Europe/Amsterdam")
+    "Europe/Brussels")
   val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(getZoneId)
 
   def withDefaultTimeZone[T](newDefaultTimeZone: ZoneId)(block: => T): T = {
@@ -111,5 +111,16 @@ object DateTimeTestUtils {
     result = Math.addExact(result, Math.multiplyExact(milliseconds, MICROS_PER_MILLIS))
     result = Math.addExact(result, Math.multiplyExact(seconds, MICROS_PER_SECOND))
     result
+  }
+
+  // Returns nanoseconds since midnight
+  def localTime(
+      hour: Byte = 0,
+      minute: Byte = 0,
+      sec: Byte = 0,
+      micros: Int = 0): Long = {
+    val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
+    val localTime = LocalTime.of(hour, minute, sec, nanos)
+    localTimeToNanos(localTime)
   }
 }

@@ -19,33 +19,41 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeMap
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SafeForKWayMerge}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
-trait DataSourceV2ScanExecBase extends LeafExecNode {
+trait DataSourceV2ScanExecBase
+  extends LeafExecNode
+  with SafeForKWayMerge
+  with SupportsCustomDriverMetrics {
 
-  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
-    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-  }.toMap
+  override lazy val customMetrics: Map[String, SQLMetric] =
+    createCustomMetrics(scan.supportedCustomMetrics())
 
-  override lazy val metrics = {
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
-      customMetrics
-  }
+  override protected lazy val sparkMetrics: Map[String, SQLMetric] =
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   def scan: Scan
 
-  def partitions: Seq[InputPartition]
-
   def readerFactory: PartitionReaderFactory
+
+  /** Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning` */
+  def keyGroupedPartitioning: Option[Seq[Expression]]
+
+  /** Optional ordering expressions provided by the V2 data sources, through
+   * `SupportsReportOrdering` */
+  def ordering: Option[Seq[SortOrder]]
+
+  protected def inputPartitions: Seq[InputPartition]
 
   override def simpleString(maxFields: Int): String = {
     val result =
@@ -53,11 +61,13 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     redact(result)
   }
 
+  def partitions: Seq[Option[InputPartition]] = inputPartitions.map(Some)
+
   /**
    * Shorthand for calling redact() without specifying redacting rules
    */
   protected def redact(text: String): String = {
-    Utils.redact(session.sessionState.conf.stringRedactionPattern, text)
+    Utils.redact(conf.stringRedactionPattern, text)
   }
 
   override def verboseStringWithOperatorId(): String = {
@@ -78,23 +88,48 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
        |""".stripMargin
   }
 
-  override def outputPartitioning: physical.Partitioning = scan match {
-    case _ if partitions.length == 1 =>
-      SinglePartition
+  override def outputPartitioning: physical.Partitioning = {
+    keyGroupedPartitioning match {
+      case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
+          inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
+        val dataTypes = exprs.map(_.dataType)
+        val rowOrdering = RowOrdering.createNaturalAscendingOrdering(dataTypes)
+        val partitionKeys =
+          inputPartitions.map(_.asInstanceOf[HasPartitionKey].partitionKey()).sorted(rowOrdering)
+        KeyedPartitioning(exprs, partitionKeys)
+      case _ =>
+        super.outputPartitioning
+    }
+  }
 
-    case s: SupportsReportPartitioning =>
-      new DataSourcePartitioning(
-        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
-
-    case _ => super.outputPartitioning
+  /**
+   * Returns the output ordering for this scan. When the source reports ordering via
+   * `SupportsReportOrdering`, that ordering is returned as-is. Otherwise, when the output
+   * partitioning is a `KeyedPartitioning` and
+   * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on, each partition
+   * contains rows where the key expressions evaluate to a single constant value, so the data
+   * is trivially sorted by those expressions within the partition.
+   */
+  override def outputOrdering: Seq[SortOrder] = {
+    (ordering, outputPartitioning) match {
+      case (Some(o), _) => o
+      case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
+        k.expressions.map(SortOrder(_, Ascending))
+      case _ => Seq.empty
+    }
   }
 
   override def supportsColumnar: Boolean = {
-    require(partitions.forall(readerFactory.supportColumnarReads) ||
-      !partitions.exists(readerFactory.supportColumnarReads),
-      "Cannot mix row-based and columnar input partitions.")
-
-    partitions.exists(readerFactory.supportColumnarReads)
+    scan.columnarSupportMode() match {
+      case Scan.ColumnarSupportMode.PARTITION_DEFINED =>
+        require(
+          inputPartitions.forall(readerFactory.supportColumnarReads) ||
+            !inputPartitions.exists(readerFactory.supportColumnarReads),
+          "Cannot mix row-based and columnar input partitions.")
+        inputPartitions.exists(readerFactory.supportColumnarReads)
+      case Scan.ColumnarSupportMode.SUPPORTED => true
+      case Scan.ColumnarSupportMode.UNSUPPORTED => false
+    }
   }
 
   def inputRDD: RDD[InternalRow]

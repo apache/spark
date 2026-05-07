@@ -23,33 +23,29 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 
 if extension_object_dtypes_available:
     from pandas import StringDtype
 
 
-class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class StringOpsTestsMixin:
     @property
-    def bool_pdf(self):
+    def str_pdf(self):
         return pd.DataFrame({"this": ["x", "y", "z"], "that": ["z", "y", "x"]})
 
     @property
-    def bool_psdf(self):
-        return ps.from_pandas(self.bool_pdf)
+    def str_non_numeric_pdf(self):
+        return pd.concat([self.str_pdf, self.non_numeric_pdf], axis=1)
 
     @property
-    def bool_non_numeric_pdf(self):
-        return pd.concat([self.bool_pdf, self.non_numeric_pdf], axis=1)
-
-    @property
-    def bool_non_numeric_psdf(self):
-        return ps.from_pandas(self.bool_non_numeric_pdf)
+    def str_non_numeric_psdf(self):
+        return ps.from_pandas(self.str_non_numeric_pdf)
 
     def test_add(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser + "x", psser + "x")
@@ -161,8 +157,16 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         data = ["x", "y", "z"]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
+
+    def test_from_to_pandas_with_missing_values(self):
+        pser = pd.Series(["x", None, "z"])
+        psser = ps.from_pandas(pser)
+
+        self.assert_eq(psser.to_pandas(), pser)
+        self.assertEqual(psser.dtype, pser.dtype)
+        self.assertEqual(psser.to_pandas().dtype, pser.dtype)
 
     def test_isnull(self):
         self.assert_eq(self.pdf["string"].isnull(), self.psdf["string"].isnull())
@@ -192,52 +196,60 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: ~self.psdf["string"])
 
     def test_eq(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser == other_pser, psser == other_psser)
         self.assert_eq(pser == pser, psser == psser)
 
     def test_ne(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser != other_pser, psser != other_psser)
         self.assert_eq(pser != pser, psser != psser)
 
     def test_lt(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser < other_pser, psser < other_psser)
         self.assert_eq(pser < pser, psser < psser)
 
     def test_le(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser <= other_pser, psser <= other_psser)
         self.assert_eq(pser <= pser, psser <= psser)
 
     def test_gt(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser > other_pser, psser > other_psser)
         self.assert_eq(pser > pser, psser > psser)
 
     def test_ge(self):
-        pdf, psdf = self.bool_non_numeric_pdf, self.bool_non_numeric_psdf
+        pdf, psdf = self.str_non_numeric_pdf, self.str_non_numeric_psdf
         pser, psser = pdf["this"], psdf["this"]
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.assert_eq(pser >= other_pser, psser >= other_psser)
         self.assert_eq(pser >= pser, psser >= psser)
 
 
+class StringOpsTests(
+    StringOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtils):
+class StringExtensionOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(["x", "y", "z", None], dtype="string")
@@ -276,7 +288,7 @@ class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtil
         data = ["x", "y", "z", None]
         pser = pd.Series(data, dtype="string")
         psser = ps.Series(data, dtype="string")
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -338,14 +350,15 @@ class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtil
             self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
 
 
+class StringExtensionOpsTests(
+    StringExtensionOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
+    from pyspark.testing import main
 
-    from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
-
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

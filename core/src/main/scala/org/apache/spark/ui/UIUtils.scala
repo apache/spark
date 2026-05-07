@@ -21,34 +21,38 @@ import java.{util => ju}
 import java.lang.{Long => JLong}
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.text.SimpleDateFormat
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.{Date, Locale, TimeZone}
-import javax.servlet.http.HttpServletRequest
-import javax.ws.rs.core.{MediaType, Response}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import jakarta.servlet.http.HttpServletRequest
+import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import org.eclipse.jetty.server.Request
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
+
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-sm"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-hover table-sm"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
+  private val dateTimeFormatter = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
-  def formatDate(date: Date): String = dateFormat.get.format(date)
+  def formatDate(date: Date): String = dateTimeFormatter.format(date.toInstant)
 
-  def formatDate(timestamp: Long): String = dateFormat.get.format(new Date(timestamp))
+  def formatDate(timestamp: Long): String =
+    dateTimeFormatter.format(Instant.ofEpochMilli(timestamp))
 
   def formatDuration(milliseconds: Long): String = {
     if (milliseconds < 100) {
@@ -122,16 +126,13 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-  // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
-  private val batchTimeFormat = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-  }
+  private val batchTimeFormat = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
-  private val batchTimeFormatWithMilliseconds = new ThreadLocal[SimpleDateFormat]() {
-    override def initialValue(): SimpleDateFormat =
-      new SimpleDateFormat("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
-  }
+  private val batchTimeFormatWithMilliseconds = DateTimeFormatter
+    .ofPattern("yyyy/MM/dd HH:mm:ss.SSS", Locale.US)
+    .withZone(ZoneId.systemDefault())
 
   /**
    * If `batchInterval` is less than 1 second, format `batchTime` with milliseconds. Otherwise,
@@ -139,7 +140,7 @@ private[spark] object UIUtils extends Logging {
    *
    * @param batchTime the batch time to be formatted
    * @param batchInterval the batch interval
-   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value wll be
+   * @param showYYYYMMSS if showing the `yyyy/MM/dd` part. If it's false, the return value will be
    *                     only `HH:mm:ss` or `HH:mm:ss.SSS` depending on `batchInterval`
    * @param timezone only for test
    */
@@ -148,30 +149,14 @@ private[spark] object UIUtils extends Logging {
       batchInterval: Long,
       showYYYYMMSS: Boolean = true,
       timezone: TimeZone = null): String = {
-    val oldTimezones =
-      (batchTimeFormat.get.getTimeZone, batchTimeFormatWithMilliseconds.get.getTimeZone)
-    if (timezone != null) {
-      batchTimeFormat.get.setTimeZone(timezone)
-      batchTimeFormatWithMilliseconds.get.setTimeZone(timezone)
-    }
-    try {
-      val formattedBatchTime =
-        if (batchInterval < 1000) {
-          batchTimeFormatWithMilliseconds.get.format(batchTime)
-        } else {
-          // If batchInterval >= 1 second, don't show milliseconds
-          batchTimeFormat.get.format(batchTime)
-        }
-      if (showYYYYMMSS) {
-        formattedBatchTime
-      } else {
-        formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
-      }
-    } finally {
-      if (timezone != null) {
-        batchTimeFormat.get.setTimeZone(oldTimezones._1)
-        batchTimeFormatWithMilliseconds.get.setTimeZone(oldTimezones._2)
-      }
+    // If batchInterval >= 1 second, don't show milliseconds
+    val format = if (batchInterval < 1000) batchTimeFormatWithMilliseconds else batchTimeFormat
+    val formatWithZone = if (timezone == null) format else format.withZone(timezone.toZoneId)
+    val formattedBatchTime = formatWithZone.format(Instant.ofEpochMilli(batchTime))
+    if (showYYYYMMSS) {
+      formattedBatchTime
+    } else {
+      formattedBatchTime.substring(formattedBatchTime.indexOf(' ') + 1)
     }
   }
 
@@ -203,14 +188,22 @@ private[spark] object UIUtils extends Logging {
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  def uiRoot(request: HttpServletRequest): String = {
+  def uiRoot(knoxBasePathGetter: String => String): String = {
     // Knox uses X-Forwarded-Context to notify the application the base path
-    val knoxBasePath = Option(request.getHeader("X-Forwarded-Context"))
+    val knoxBasePath = Option(knoxBasePathGetter("X-Forwarded-Context"))
     // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
     sys.props.get("spark.ui.proxyBase")
       .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
       .orElse(knoxBasePath)
       .getOrElse("")
+  }
+
+  def uiRoot(request: HttpServletRequest): String = {
+    uiRoot(request.getHeader _)
+  }
+
+  def uiRoot(request: Request): String = {
+    uiRoot(request.getHeaders.get: String => String)
   }
 
   def prependBaseUri(
@@ -225,21 +218,25 @@ private[spark] object UIUtils extends Logging {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri(request, "/static/webui.css")} type="text/css"/>
-    <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-3.5.1.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
-    <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
+    <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
+    <script nonce={CspNonce.get}>setUIRoot('{UIUtils.uiRoot(request)}')</script>
+  }
+
+  def timelineHeaderNodes(request: HttpServletRequest): Seq[Node] = {
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/vis-timeline-graph2d.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
+    <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
   }
 
   def vizHeaderNodes(request: HttpServletRequest): Seq[Node] = {
@@ -252,21 +249,16 @@ private[spark] object UIUtils extends Logging {
   }
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
-    <link rel="stylesheet" href={prependBaseUri(request,
-      "/static/jquery.dataTables.1.10.20.min.css")} type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.20.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap5.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/jsonFormatter.min.css")} type="text/css"/>
+          href={prependBaseUri(request, "/static/jquery.dataTables.min.css")}
+          type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.10.20.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.10.20.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jsonFormatter.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap5.min.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -277,7 +269,8 @@ private[spark] object UIUtils extends Logging {
       activeTab: SparkUITab,
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
-      useDataTables: Boolean = false): Seq[Node] = {
+      useDataTables: Boolean = false,
+      useTimeline: Boolean = false): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -289,44 +282,60 @@ private[spark] object UIUtils extends Logging {
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "top")).getOrElse(Seq.empty)
 
-    <html>
+    <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
-        <script>setAppBasePath('{activeTab.basePath}')</script>
+        <script nonce={CspNonce.get}>{Unparsed(
+          "document.documentElement.setAttribute('data-bs-theme'," +
+          "localStorage.getItem('spark-theme')||" +
+          "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
+        <script nonce={CspNonce.get}>setAppBasePath('{activeTab.basePath}')</script>
         {if (showVisualization) vizHeaderNodes(request) else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
+        {if (useTimeline) timelineHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
-              href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
+              href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{appName} - {title}</title>
       </head>
-      <body>
+      <body class="d-flex flex-column min-vh-100">
+        <div id="loading-overlay"
+             class={"position-fixed top-0 start-0 w-100 h-100" +
+               " d-flex justify-content-center align-items-center d-none"}>
+          <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <h3 class="mt-2">Loading...</h3>
+          </div>
+        </div>
         <nav class="navbar navbar-expand-md navbar-light bg-light mb-4">
           <div class="navbar-header">
             <div class="navbar-brand">
               <a href={prependBaseUri(request, "/")}>
-                <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
-                <span class="version">{activeTab.appSparkVersion}</span>
+                <img class="spark-logo" src={prependBaseUri(request, "/static/spark-logo.svg")}
+                     alt="Spark Logo" height="36" />
               </a>
             </div>
           </div>
-          <button class="navbar-toggler" type="button" data-toggle="collapse"
-                  data-target="#navbarCollapse" aria-controls="navbarCollapse"
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#navbarCollapse" aria-controls="navbarCollapse"
                   aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
           </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
-            <ul class="navbar-nav mr-auto">{header}</ul>
+            <ul class="navbar-nav me-auto">{header}</ul>
             <span class="navbar-text navbar-right d-none d-md-block">
               <strong title={appName} class="text-nowrap">{shortAppName}</strong>
               <span class="text-nowrap">application UI</span>
             </span>
+            <button id="theme-toggle" class="btn btn-sm btn-link text-decoration-none fs-5 ms-2 p-0"
+                    type="button" title="Toggle dark mode"></button>
           </div>
         </nav>
-        <div class="container-fluid">
+        <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: bottom; white-space: nowrap; overflow: hidden;
-                text-overflow: ellipsis;">
+              <h3 class="align-bottom text-nowrap overflow-hidden text-truncate">
                 {title}
                 {helpButton}
               </h3>
@@ -338,6 +347,7 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
         </div>
+        {sparkFooter(Some(activeTab))}
       </body>
     </html>
   }
@@ -347,26 +357,45 @@ private[spark] object UIUtils extends Logging {
       request: HttpServletRequest,
       content: => Seq[Node],
       title: String,
-      useDataTables: Boolean = false): Seq[Node] = {
-    <html>
+      useDataTables: Boolean = false,
+      useTimeline: Boolean = false): Seq[Node] = {
+    <html data-bs-theme="light">
       <head>
         {commonHeaderNodes(request)}
+        <script nonce={CspNonce.get}>{Unparsed(
+          "document.documentElement.setAttribute('data-bs-theme'," +
+          "localStorage.getItem('spark-theme')||" +
+          "(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'))")}</script>
         {if (useDataTables) dataTablesHeaderNodes(request) else Seq.empty}
+        {if (useTimeline) timelineHeaderNodes(request) else Seq.empty}
         <link rel="shortcut icon"
-              href={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")}></link>
+              href={prependBaseUri(request, "/static/spark-logo.svg")}></link>
         <title>{title}</title>
       </head>
-      <body>
-        <div class="container-fluid">
+      <body class="d-flex flex-column min-vh-100">
+        <div id="loading-overlay"
+             class={"position-fixed top-0 start-0 w-100 h-100" +
+               " d-flex justify-content-center align-items-center d-none"}>
+          <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <h3 class="mt-2">Loading...</h3>
+          </div>
+        </div>
+        <div class="container-fluid flex-fill">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: middle; display: inline-block;">
-                <a style="text-decoration: none" href={prependBaseUri(request, "/")}>
-                  <img src={prependBaseUri(request, "/static/spark-logo-77x50px-hd.png")} />
-                  <span class="version"
-                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
+              <h3 class="align-middle d-inline-block">
+                <a class="text-decoration-none" href={prependBaseUri(request, "/")}>
+                  <img class="spark-logo" src={prependBaseUri(request, "/static/spark-logo.svg")}
+                       alt="Spark Logo" height="36" />
+                  <span class="version me-3">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
+                <button id="theme-toggle"
+                        class="btn btn-sm btn-link text-decoration-none fs-5 ms-2 p-0 align-middle"
+                        type="button" title="Toggle dark mode"></button>
               </h3>
             </div>
           </div>
@@ -376,8 +405,30 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
         </div>
+        {sparkFooter()}
       </body>
     </html>
+  }
+
+  private def sparkFooter(tab: Option[SparkUITab] = None): Seq[Node] = {
+    val user = tab.map(_.sparkUser).getOrElse(System.getProperty("user.name", ""))
+    val version = tab.map(_.appSparkVersion).getOrElse(org.apache.spark.SPARK_VERSION)
+    val startTimeOpt = tab.map(_.appStartTime).orElse(SparkContext.getActive.map(_.startTime))
+
+    // scalastyle:off
+    <footer class="footer mt-auto py-2 bg-body-tertiary border-top">
+      <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center small text-body-secondary">
+          <span>{version}</span>
+          {startTimeOpt.map { t =>
+            <span>Started: {formatDate(new Date(t))}</span>
+            <span id="footer-uptime" data-start-time={t.toString}></span>
+          }.getOrElse(Seq.empty)}
+          <span>{user}</span>
+        </div>
+      </div>
+    </footer>
+    // scalastyle:on
   }
 
   /** Returns an HTML table constructed by generating a row for each object in a sequence. */
@@ -404,7 +455,7 @@ private[spark] object UIUtils extends Logging {
       }
     }
     val colWidth = 100.toDouble / headers.size
-    val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
+    val colWidthAttr = if (fixedWidth) s"$colWidth%" else ""
 
     def getClass(index: Int): String = {
       if (index < headerClasses.size) {
@@ -434,24 +485,24 @@ private[spark] object UIUtils extends Logging {
     }
 
     val headerRow: Seq[Node] = {
-      headers.view.zipWithIndex.map { x =>
+      headers.to(LazyList).zipWithIndex.map { x =>
         getTooltip(x._2) match {
           case Some(tooltip) =>
             <th width={colWidthAttr} class={getClass(x._2)}>
-              <span data-toggle="tooltip" title={tooltip}>
-                {getHeaderContent(x._1)}
-              </span>
+              {tooltipSpan(getHeaderContent(x._1), tooltip)}
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
-      }.toSeq
+      }
     }
+    <div class="table-responsive">
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
       <tbody>
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+    </div>
   }
 
   def makeProgressBar(
@@ -468,20 +519,39 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
-    <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
-        {completed}/{total}
-        { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
-        { if (failed > 0) s"($failed failed)" }
-        { if (skipped > 0) s"($skipped skipped)" }
-        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
-            case (reason, count) => s"($count killed: $reason)"
-          }
-        }
+    val totalKilled = reasonToNumKilled.values.sum
+    val killReasonTitle = reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) =>
+          val truncated = if (reason.length > 120) reason.take(120) + "..." else reason
+          s" ($count killed: $truncated)"
+      }.mkString
+    val progressTitle = s"$completed/$total" + {
+      if (started > 0) s" ($started running)" else ""
+    } + {
+      if (failed > 0) s" ($failed failed)" else ""
+    } + {
+      if (skipped > 0) s" ($skipped skipped)" else ""
+    } + killReasonTitle
+
+    val progressLabel = s"$completed/$total" +
+      (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
+      (if (failed > 0) s" ($failed failed)" else "") +
+      (if (skipped > 0) s" ($skipped skipped)" else "") +
+      (if (totalKilled > 0) s" ($totalKilled killed)" else "")
+
+    // scalastyle:off line.size.limit
+    <div class="progress-stacked" title={progressTitle}>
+      <span class="position-absolute w-100 h-100 d-flex align-items-center justify-content-center">
+        {progressLabel}
       </span>
-      <div class="progress-bar progress-completed" style={completeWidth}></div>
-      <div class="progress-bar progress-started" style={startWidth}></div>
+      <div class="progress" role="progressbar" aria-label="Completed" aria-valuenow={ratio.toInt.toString} aria-valuemin="0" aria-valuemax="100" style={completeWidth}>
+        <div class="progress-bar progress-completed"></div>
+      </div>
+      <div class="progress" role="progressbar" aria-label="Running" aria-valuenow={startRatio.toInt.toString} aria-valuemin="0" aria-valuemax="100" style={startWidth}>
+        <div class="progress-bar progress-started"></div>
+      </div>
     </div>
+    // scalastyle:on line.size.limit
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */
@@ -490,7 +560,8 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a job. */
-  def showDagVizForJob(jobId: Int, graphs: Seq[RDDOperationGraph]): Seq[Node] = {
+  def showDagVizForJob(jobId: Int,
+      graphs: collection.Seq[RDDOperationGraph]): collection.Seq[Node] = {
     showDagViz(graphs, forJob = true)
   }
 
@@ -501,18 +572,17 @@ private[spark] object UIUtils extends Logging {
    * a format that is expected by spark-dag-viz.js. Any changes in the format here must be
    * reflected there.
    */
-  private def showDagViz(graphs: Seq[RDDOperationGraph], forJob: Boolean): Seq[Node] = {
+  private def showDagViz(
+      graphs: collection.Seq[RDDOperationGraph], forJob: Boolean): collection.Seq[Node] = {
     <div>
       <span id={if (forJob) "job-dag-viz" else "stage-dag-viz"}
-            class="expand-dag-viz" onclick={s"toggleDagViz($forJob);"}>
+            class="expand-dag-viz" data-forjob={forJob.toString}>
         <span class="expand-dag-viz-arrow arrow-closed"></span>
-        <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
-           data-placement="top">
-          DAG Visualization
-        </a>
+        {tooltipLink(<xml:group>DAG Visualization</xml:group>,
+          if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG)}
       </span>
       <div id="dag-viz-graph"></div>
-      <div id="dag-viz-metadata" style="display:none">
+      <div id="dag-viz-metadata" class="d-none">
         {
           graphs.map { g =>
             val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "")
@@ -541,8 +611,28 @@ private[spark] object UIUtils extends Logging {
 
   def tooltip(text: String, position: String): Seq[Node] = {
     <sup>
-      (<a data-toggle="tooltip" data-placement={position} title={text}>?</a>)
+      (<a data-bs-toggle="tooltip" title={text}>?</a>)
     </sup>
+  }
+
+  /** Wrap content in a span with a Bootstrap 5 tooltip. */
+  def tooltipSpan(content: Seq[Node], text: String,
+      placement: String = "top"): Seq[Node] = {
+    val bsPlacement = if (placement == "top") null else placement
+    <span data-bs-toggle="tooltip"
+        data-bs-placement={bsPlacement} title={text}>
+      {content}
+    </span>
+  }
+
+  /** Create a link with a Bootstrap 5 tooltip. */
+  def tooltipLink(content: Seq[Node], text: String,
+      placement: String = "top"): Seq[Node] = {
+    val bsPlacement = if (placement == "top") null else placement
+    <a data-bs-toggle="tooltip"
+        data-bs-placement={bsPlacement} title={text}>
+      {content}
+    </a>
   }
 
   /**
@@ -551,8 +641,8 @@ private[spark] object UIUtils extends Logging {
    * the whole string will rendered as a simple escaped text.
    *
    * Note: In terms of security, only anchor tags with root relative links are supported. So any
-   * attempts to embed links outside Spark UI, or other tags like &lt;script&gt; will cause in
-   * the whole description to be treated as plain text.
+   * attempts to embed links outside Spark UI, other tags like &lt;script&gt;, or inline scripts
+   * like `onclick` will cause in the whole description to be treated as plain text.
    *
    * @param desc        the original job or stage description string, which may contain html tags.
    * @param basePathUri with which to prepend the relative links; this is used when plainText is
@@ -572,7 +662,13 @@ private[spark] object UIUtils extends Logging {
 
       // Verify that this has only anchors and span (we are wrapping in span)
       val allowedNodeLabels = Set("a", "span", "br")
-      val illegalNodes = (xml \\ "_").filterNot(node => allowedNodeLabels.contains(node.label))
+      val allowedAttributes = Set("class", "href")
+      val illegalNodes =
+        (xml \\ "_").filterNot { node =>
+          allowedNodeLabels.contains(node.label) &&
+            // Verify we only have href attributes
+            node.attributes.map(_.key).forall(allowedAttributes.contains)
+        }
       if (illegalNodes.nonEmpty) {
         throw new IllegalArgumentException(
           "Only HTML anchors allowed in job descriptions\n" +
@@ -636,6 +732,22 @@ private[spark] object UIUtils extends Logging {
     param
   }
 
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   */
+  def decodeURLParameter(params: MultivaluedMap[String, String]): MultivaluedStringMap = {
+    val decodedParameters = new MultivaluedStringMap
+    params.forEach((encodeKey, encodeValues) => {
+      val decodeKey = decodeURLParameter(encodeKey)
+      val decodeValues = new java.util.LinkedList[String]
+      encodeValues.forEach(v => {
+        decodeValues.add(decodeURLParameter(v))
+      })
+      decodedParameters.addAll(decodeKey, decodeValues)
+    })
+    decodedParameters
+  }
+
   def getTimeZoneOffset() : Int =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
@@ -678,8 +790,8 @@ private[spark] object UIUtils extends Logging {
   def detailsUINode(isMultiline: Boolean, message: String): Seq[Node] = {
     if (isMultiline) {
       // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
+      <span data-toggle-details=".stacktrace-details"
+            class="expand-details float-end">
         +details
       </span> ++
         <div class="stacktrace-details collapsed">
@@ -689,5 +801,43 @@ private[spark] object UIUtils extends Logging {
     } else {
       Seq.empty[Node]
     }
+  }
+
+  private final val ERROR_CLASS_REGEX = """\[(?<errorClass>[A-Z][A-Z_.]+[A-Z])]""".r
+
+  /**
+   * This function works exactly the same as utils.errorSummary(javascript), it shall be
+   * remained the same whichever changed */
+  def errorSummary(errorMessage: String): (String, Boolean) = {
+    var isMultiline = true
+    val maybeErrorClass =
+      ERROR_CLASS_REGEX.findFirstMatchIn(errorMessage).map(_.group("errorClass"))
+    val errorClassOrBrief = if (maybeErrorClass.nonEmpty && maybeErrorClass.get.nonEmpty) {
+      maybeErrorClass.get
+    } else if (errorMessage.indexOf('\n') >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf('\n'))
+    } else if (errorMessage.indexOf(":") >= 0) {
+      errorMessage.substring(0, errorMessage.indexOf(":"))
+    } else {
+      isMultiline = false
+      errorMessage
+    }
+
+    (errorClassOrBrief, isMultiline)
+  }
+
+  def errorMessageCell(errorMessage: String): Seq[Node] = {
+    val (summary, isMultiline) = errorSummary(errorMessage)
+    val details = detailsUINode(isMultiline, errorMessage)
+    <td>{summary}{details}</td>
+  }
+
+  def formatImportJavaScript(
+      request: HttpServletRequest,
+      sourceFile: String,
+      methods: String*): String = {
+    val methodsStr = methods.mkString("{", ", ", "}")
+    val sourceFileStr = prependBaseUri(request, sourceFile)
+    s"""import $methodsStr from "$sourceFileStr";"""
   }
 }

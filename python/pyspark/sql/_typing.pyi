@@ -19,22 +19,29 @@
 from typing import (
     Any,
     Callable,
+    Dict,
     List,
     Optional,
     Tuple,
+    TypedDict,
     TypeVar,
     Union,
 )
-from typing_extensions import Protocol
+from typing_extensions import Literal, Protocol
 
 import datetime
 import decimal
+import pstats
 
 from pyspark._typing import PrimitiveType
+from pyspark.profiler import CodeMapDict
 import pyspark.sql.types
 from pyspark.sql.column import Column
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 
 ColumnOrName = Union[Column, str]
+TVFArgumentOrName = Union[TableValuedFunctionArgument, str]
+ColumnOrNameOrOrdinal = Union[Column, str, int]
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
 LiteralType = PrimitiveType
@@ -42,7 +49,24 @@ AtomicDataTypeOrString = Union[pyspark.sql.types.AtomicType, str]
 DataTypeOrString = Union[pyspark.sql.types.DataType, str]
 OptionalPrimitiveType = Optional[PrimitiveType]
 
+AtomicValue = TypeVar(
+    "AtomicValue",
+    datetime.datetime,
+    datetime.date,
+    decimal.Decimal,
+    bool,
+    str,
+    int,
+    float,
+)
+
 RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
+
+SQLBatchedUDFType = Literal[100]
+SQLArrowBatchedUDFType = Literal[101]
+SQLTableUDFType = Literal[300]
+SQLArrowTableUDFType = Literal[301]
+SQLArrowUDTFType = Literal[302]
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...
@@ -61,3 +85,11 @@ class UserDefinedFunctionLike(Protocol):
     def returnType(self) -> pyspark.sql.types.DataType: ...
     def __call__(self, *args: ColumnOrName) -> Column: ...
     def asNondeterministic(self) -> UserDefinedFunctionLike: ...
+
+ProfileResults = Dict[Union[int, str], Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]
+
+class ProfileResult(TypedDict, total=False):
+    perf: pstats.Stats
+    memory: CodeMapDict
+
+ProfileResultsV2 = Dict[Union[int, str], ProfileResult]

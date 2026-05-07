@@ -22,6 +22,8 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -79,7 +81,7 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange addColumn(String[] fieldNames, DataType dataType) {
-    return new AddColumn(fieldNames, dataType, true, null, null);
+    return new AddColumn(fieldNames, dataType, true, null, null, null);
   }
 
   /**
@@ -95,7 +97,7 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange addColumn(String[] fieldNames, DataType dataType, boolean isNullable) {
-    return new AddColumn(fieldNames, dataType, isNullable, null, null);
+    return new AddColumn(fieldNames, dataType, isNullable, null, null, null);
   }
 
   /**
@@ -116,7 +118,7 @@ public interface TableChange {
       DataType dataType,
       boolean isNullable,
       String comment) {
-    return new AddColumn(fieldNames, dataType, isNullable, comment, null);
+    return new AddColumn(fieldNames, dataType, isNullable, comment, null, null);
   }
 
   /**
@@ -131,6 +133,7 @@ public interface TableChange {
    * @param isNullable whether the new column can contain null
    * @param comment the new field's comment string
    * @param position the new columns's position
+   * @param defaultValue default value to return when scanning from the new column, if any
    * @return a TableChange for the addition
    */
   static TableChange addColumn(
@@ -138,8 +141,9 @@ public interface TableChange {
       DataType dataType,
       boolean isNullable,
       String comment,
-      ColumnPosition position) {
-    return new AddColumn(fieldNames, dataType, isNullable, comment, position);
+      ColumnPosition position,
+      ColumnDefaultValue defaultValue) {
+    return new AddColumn(fieldNames, dataType, isNullable, comment, position, defaultValue);
   }
 
   /**
@@ -219,15 +223,62 @@ public interface TableChange {
   }
 
   /**
+   * Create a TableChange for updating the default value of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param newDefaultValue the new default value SQL string (Spark SQL dialect).
+   * @return a TableChange for the update
+   *
+   * @deprecated Please use {@link #updateColumnDefaultValue(String[], DefaultValue)} instead.
+   */
+  @Deprecated(since = "4.1.0")
+  static TableChange updateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
+    return new UpdateColumnDefaultValue(fieldNames, new ColumnDefaultValue(newDefaultValue, null));
+  }
+
+  /**
+   * Create a TableChange for updating the default value of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param newDefaultValue the new default value SQL (Spark SQL dialect and
+   *                        V2 expression representation if it can be converted).
+   *                        Null indicates dropping column default value
+   * @return a TableChange for the update
+   */
+  static TableChange updateColumnDefaultValue(String[] fieldNames, DefaultValue newDefaultValue) {
+    return new UpdateColumnDefaultValue(fieldNames, newDefaultValue);
+  }
+
+  /**
    * Create a TableChange for deleting a field.
    * <p>
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to delete
+   * @param ifExists   silence the error if column doesn't exist during drop
    * @return a TableChange for the delete
    */
-  static TableChange deleteColumn(String[] fieldNames) {
-    return new DeleteColumn(fieldNames);
+  static TableChange deleteColumn(String[] fieldNames, Boolean ifExists) {
+    return new DeleteColumn(fieldNames, ifExists);
+  }
+
+  /**
+   * Create a TableChange for changing clustering columns for a table.
+   *
+   * @param clusteringColumns clustering columns to change to. Each clustering column represents
+   *                          field names.
+   * @return a TableChange for this assignment
+   */
+  static TableChange clusterBy(NamedReference[] clusteringColumns) {
+    return new ClusterBy(clusteringColumns);
   }
 
   /**
@@ -253,6 +304,11 @@ public interface TableChange {
     }
 
     @Override
+    public String toString() {
+      return "SET PROPERTY " + property + " = " + value;
+    }
+
+    @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
@@ -265,6 +321,21 @@ public interface TableChange {
     public int hashCode() {
       return Objects.hash(property, value);
     }
+  }
+
+  /**
+   * Create a TableChange for adding a new table constraint
+   */
+  static TableChange addConstraint(Constraint constraint, String validatedTableVersion) {
+    return new AddConstraint(constraint, validatedTableVersion);
+  }
+
+  /**
+   * Create a TableChange for dropping a table constraint
+   */
+  static TableChange dropConstraint(String name, boolean ifExists, boolean cascade) {
+    DropConstraint.Mode mode = cascade ? DropConstraint.Mode.CASCADE : DropConstraint.Mode.RESTRICT;
+    return new DropConstraint(name, ifExists, mode);
   }
 
   /**
@@ -281,6 +352,11 @@ public interface TableChange {
 
     public String property() {
       return property;
+    }
+
+    @Override
+    public String toString() {
+      return "REMOVE PROPERTY " + property;
     }
 
     @Override
@@ -364,8 +440,14 @@ public interface TableChange {
     String[] fieldNames();
   }
 
+  static String fieldPath(String[] fieldNames) {
+    return String.join(".", fieldNames);
+  }
+
   /**
-   * A TableChange to add a field.
+   * A TableChange to add a field. The implementation may need to back-fill all the existing data
+   * to add this new column, or remember the column default value specified here and let the reader
+   * fill the column value when reading existing data that do not have this new column.
    * <p>
    * If the field already exists, the change must result in an {@link IllegalArgumentException}.
    * If the new field is nested and its parent does not exist or is not a struct, the change must
@@ -377,18 +459,21 @@ public interface TableChange {
     private final boolean isNullable;
     private final String comment;
     private final ColumnPosition position;
+    private final ColumnDefaultValue defaultValue;
 
     private AddColumn(
         String[] fieldNames,
         DataType dataType,
         boolean isNullable,
         String comment,
-        ColumnPosition position) {
+        ColumnPosition position,
+        ColumnDefaultValue defaultValue) {
       this.fieldNames = fieldNames;
       this.dataType = dataType;
       this.isNullable = isNullable;
       this.comment = comment;
       this.position = position;
+      this.defaultValue = defaultValue;
     }
 
     @Override
@@ -414,6 +499,9 @@ public interface TableChange {
       return position;
     }
 
+    @Nullable
+    public ColumnDefaultValue defaultValue() { return defaultValue; }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -423,7 +511,8 @@ public interface TableChange {
         Arrays.equals(fieldNames, addColumn.fieldNames) &&
         dataType.equals(addColumn.dataType) &&
         Objects.equals(comment, addColumn.comment) &&
-        Objects.equals(position, addColumn.position);
+        Objects.equals(position, addColumn.position) &&
+        Objects.equals(defaultValue, addColumn.defaultValue);
     }
 
     @Override
@@ -431,6 +520,11 @@ public interface TableChange {
       int result = Objects.hash(dataType, isNullable, comment, position);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
+    }
+
+    @Override
+    public String toString() {
+      return "ADD COLUMN " + TableChange.fieldPath(fieldNames) + " " + dataType.sql();
     }
   }
 
@@ -475,6 +569,11 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "RENAME COLUMN " + TableChange.fieldPath(fieldNames) + " TO " + newName;
+    }
   }
 
   /**
@@ -517,6 +616,11 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " TYPE " + newDataType.sql();
+    }
   }
 
   /**
@@ -535,6 +639,7 @@ public interface TableChange {
       this.nullable = nullable;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }
@@ -557,6 +662,13 @@ public interface TableChange {
       int result = Objects.hash(nullable);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
+    }
+
+    @Override
+    public String toString() {
+      return nullable
+          ? "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " DROP NOT NULL"
+          : "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " SET NOT NULL";
     }
   }
 
@@ -600,6 +712,11 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " COMMENT";
+    }
   }
 
   /**
@@ -642,6 +759,75 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " " + position.toString();
+    }
+  }
+
+  /**
+   * A TableChange to update the default value of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   */
+  final class UpdateColumnDefaultValue implements ColumnChange {
+    private final String[] fieldNames;
+    private final DefaultValue newCurrentDefault;
+
+    private UpdateColumnDefaultValue(String[] fieldNames, DefaultValue newCurrentDefault) {
+      this.fieldNames = fieldNames;
+      this.newCurrentDefault = newCurrentDefault;
+    }
+
+    @Override
+    public String[] fieldNames() {
+      return fieldNames;
+    }
+
+    /**
+     * Returns the column default value SQL string (Spark SQL dialect). The default value literal
+     * is not provided as updating column default values does not need to back-fill existing data.
+     * Empty string means dropping the column default value.
+     *
+     * @deprecated Use {@link #newCurrentDefault()} instead.
+     */
+    @Deprecated(since = "4.1.0")
+    public String newDefaultValue() {
+      return newCurrentDefault == null ? "" : newCurrentDefault.getSql();
+    }
+
+    /**
+     * Returns the column default value as {@link DefaultValue}.  The default value literal
+     * is not provided as updating column default values does not need to back-fill existing data.
+     * Null means dropping the column default value.
+     */
+    public DefaultValue newCurrentDefault() { return newCurrentDefault; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateColumnDefaultValue that = (UpdateColumnDefaultValue) o;
+      return Arrays.equals(fieldNames, that.fieldNames) &&
+        Objects.equals(newCurrentDefault, that.newCurrentDefault);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Arrays.hashCode(fieldNames);
+      result = 31 * result + Objects.hashCode(newCurrentDefault);
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return newCurrentDefault == null
+              ? "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " DROP DEFAULT"
+              : "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " SET DEFAULT " +
+                  newCurrentDefault.getSql();
+    }
   }
 
   /**
@@ -651,9 +837,11 @@ public interface TableChange {
    */
   final class DeleteColumn implements ColumnChange {
     private final String[] fieldNames;
+    private final Boolean ifExists;
 
-    private DeleteColumn(String[] fieldNames) {
+    private DeleteColumn(String[] fieldNames, Boolean ifExists) {
       this.fieldNames = fieldNames;
+      this.ifExists = ifExists;
     }
 
     @Override
@@ -661,18 +849,126 @@ public interface TableChange {
       return fieldNames;
     }
 
+    public Boolean ifExists() { return ifExists; }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       DeleteColumn that = (DeleteColumn) o;
-      return Arrays.equals(fieldNames, that.fieldNames);
+      return Arrays.equals(fieldNames, that.fieldNames) && that.ifExists() == this.ifExists();
     }
 
     @Override
     public int hashCode() {
       return Arrays.hashCode(fieldNames);
     }
+
+    @Override
+    public String toString() {
+      return "DROP COLUMN " + TableChange.fieldPath(fieldNames);
+    }
   }
 
+  /** A TableChange to alter clustering columns for a table. */
+  final class ClusterBy implements TableChange {
+    private final NamedReference[] clusteringColumns;
+
+    private ClusterBy(NamedReference[] clusteringColumns) {
+      this.clusteringColumns = clusteringColumns;
+    }
+
+    public NamedReference[] clusteringColumns() { return clusteringColumns; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      ClusterBy that = (ClusterBy) o;
+      return Arrays.equals(clusteringColumns, that.clusteringColumns());
+    }
+
+    @Override
+    public int hashCode() {
+      return Arrays.hashCode(clusteringColumns);
+    }
+  }
+
+  /** A TableChange to alter table and add a constraint. */
+  final class AddConstraint implements TableChange {
+    private final Constraint constraint;
+    private final String validatedTableVersion;
+
+    private AddConstraint(Constraint constraint, String validatedTableVersion) {
+      this.constraint = constraint;
+      this.validatedTableVersion = validatedTableVersion;
+    }
+
+    public Constraint constraint() {
+      return constraint;
+    }
+
+    public String validatedTableVersion() {
+      return validatedTableVersion;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      AddConstraint that = (AddConstraint) o;
+      return constraint.equals(that.constraint) &&
+              Objects.equals(validatedTableVersion, that.validatedTableVersion);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(constraint, validatedTableVersion);
+    }
+  }
+
+  /** A TableChange to alter table and drop a constraint. */
+  final class DropConstraint implements TableChange {
+    private final String name;
+    private final boolean ifExists;
+    private final Mode mode;
+
+    /**
+     * Defines modes for dropping a constraint.
+     * <p>
+     * RESTRICT - Prevents dropping a constraint if it is referenced by other objects.
+     * CASCADE - Automatically drops objects that depend on the constraint.
+     */
+    public enum Mode { RESTRICT, CASCADE }
+
+    private DropConstraint(String name, boolean ifExists, Mode mode) {
+      this.name = name;
+      this.ifExists = ifExists;
+      this.mode = mode;
+    }
+
+    public String name() {
+      return name;
+    }
+
+    public boolean ifExists() {
+      return ifExists;
+    }
+
+    public Mode mode() {
+      return mode;
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      DropConstraint that = (DropConstraint) o;
+      return that.name.equals(name) && that.ifExists == ifExists && mode == that.mode;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(name, ifExists, mode);
+    }
+  }
 }

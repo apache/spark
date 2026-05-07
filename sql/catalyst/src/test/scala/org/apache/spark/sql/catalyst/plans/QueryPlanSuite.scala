@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.types.IntegerType
 
 class QueryPlanSuite extends SparkFunSuite {
@@ -97,8 +99,90 @@ class QueryPlanSuite extends SparkFunSuite {
       }
     }
 
-    val t = LocalRelation('a.int, 'b.int)
+    val t = LocalRelation($"a".int, $"b".int)
     val plan = t.select($"a", $"b").select($"a", $"b").select($"a", $"b").analyze
     assert(testRule(plan).resolved)
+  }
+
+  test("SPARK-37199: add a deterministic field to QueryPlan") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val aRand: NamedExpression = Alias(a + Rand(1), "aRand")()
+    val deterministicPlan = Project(
+      Seq(a),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+    assert(deterministicPlan.deterministic)
+
+    val nonDeterministicPlan = Project(
+      Seq(aRand),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+    assert(!nonDeterministicPlan.deterministic)
+  }
+
+  test("SPARK-38347: Nullability propagation in transformUpWithNewOutput") {
+    // A test rule that replaces Attributes in Project's project list.
+    val testRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+        case p @ Project(projectList, _) =>
+          val newProjectList = projectList.map {
+            case a: AttributeReference => a.newInstance()
+            case ne => ne
+          }
+          val newProject = p.copy(projectList = newProjectList)
+          newProject -> p.output.zip(newProject.output)
+      }
+    }
+
+    // Test a Left Outer Join plan in which right-hand-side input attributes are not nullable.
+    // Those attributes should be nullable after join even with a `transformUpWithNewOutput`
+    // started below the Left Outer join.
+    val t1 = LocalRelation($"a".int.withNullability(false),
+      $"b".int.withNullability(false), $"c".int.withNullability(false))
+    val t2 = LocalRelation($"c".int.withNullability(false),
+      $"d".int.withNullability(false), $"e".int.withNullability(false))
+    val plan = t1.select($"a", $"b")
+      .join(t2.select($"c", $"d"), LeftOuter, Some($"a" === $"c"))
+      .select($"a" + $"d").analyze
+    // The output Attribute of `plan` is nullable even though `d` is not nullable before the join.
+    assert(plan.output(0).nullable)
+    // The test rule with `transformUpWithNewOutput` should not change the nullability.
+    val planAfterTestRule = testRule(plan)
+    assert(planAfterTestRule.output(0).nullable)
+  }
+
+  test("SPARK-54865: pruning works correctly in foreachWithSubqueriesAndPruning") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val plan = Project(
+      Seq(a),
+      Filter(
+        ListQuery(Project(
+          Seq(a),
+          UnresolvedRelation(TableIdentifier("t", None))
+        )),
+        UnresolvedRelation(TableIdentifier("t", None))
+      )
+    )
+
+    val visited = ArrayBuffer[LogicalPlan]()
+    plan.foreachWithSubqueriesAndPruning(_.containsPattern(TreePattern.FILTER)) { p =>
+      visited += p
+    }
+
+    // Only 2 nodes contain FILTER pattern: outer Project and Filter
+    assert(visited.size == 2)
+    assert(visited.forall(_.containsPattern(TreePattern.FILTER)))
   }
 }

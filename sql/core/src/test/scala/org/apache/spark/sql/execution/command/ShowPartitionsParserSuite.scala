@@ -19,27 +19,24 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
-import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
+class ShowPartitionsParserSuite extends AnalysisTest {
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(
-      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTable(Seq("t1"), commandName, None), None),
+      "SHOW PARTITIONS t1" -> ShowPartitions(UnresolvedTable(Seq("t1"), commandName), None),
       "SHOW PARTITIONS db1.t1" -> ShowPartitions(
-        UnresolvedTable(Seq("db1", "t1"), commandName, None), None),
+        UnresolvedTable(Seq("db1", "t1"), commandName), None),
       "SHOW PARTITIONS t1 PARTITION(partcol1='partvalue', partcol2='partvalue')" ->
         ShowPartitions(
-          UnresolvedTable(Seq("t1"), commandName, None),
+          UnresolvedTable(Seq("t1"), commandName),
           Some(UnresolvedPartitionSpec(Map("partcol1" -> "partvalue", "partcol2" -> "partvalue")))),
       "SHOW PARTITIONS a.b.c" -> ShowPartitions(
-        UnresolvedTable(Seq("a", "b", "c"), commandName, None), None),
+        UnresolvedTable(Seq("a", "b", "c"), commandName), None),
       "SHOW PARTITIONS a.b.c PARTITION(ds='2017-06-10')" ->
         ShowPartitions(
-          UnresolvedTable(Seq("a", "b", "c"), commandName, None),
+          UnresolvedTable(Seq("a", "b", "c"), commandName),
           Some(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))))
     ).foreach { case (sql, expected) =>
       val parsed = parsePlan(sql)
@@ -48,10 +45,14 @@ class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("empty values in non-optional partition specs") {
-    val e = intercept[ParseException] {
-      new SparkSqlParser().parsePlan(
-        "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(e.contains("Found an empty partition key 'b'"))
+    checkError(
+      exception = parseException(parsePlan)("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
+      sqlState = "42000",
+      parameters = Map("partKey" -> "`b`"),
+      context = ExpectedContext(
+        fragment = "PARTITION (a='1', b)",
+        start = 25,
+        stop = 44))
   }
 }

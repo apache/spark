@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -27,8 +28,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
-import com.google.common.collect.Lists;
 
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
@@ -52,6 +54,10 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
+  // Push based shuffle requires a comparable Id to distinguish the shuffle data among multiple
+  // application attempts. This variable is derived from the String typed appAttemptId. If no
+  // appAttemptId is set, the default comparableAppAttemptId is -1.
+  private int comparableAppAttemptId = -1;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -76,11 +82,32 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     this.appId = appId;
     TransportContext context = new TransportContext(
       transportConf, new NoOpRpcHandler(), true, true);
-    List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
+    List<TransportClientBootstrap> bootstraps = new ArrayList<>();
     if (authEnabled) {
       bootstraps.add(new AuthClientBootstrap(transportConf, appId, secretKeyHolder));
     }
     clientFactory = context.createClientFactory(bootstraps);
+  }
+
+  @Override
+  public void setAppAttemptId(String appAttemptId) {
+    super.setAppAttemptId(appAttemptId);
+    setComparableAppAttemptId(appAttemptId);
+  }
+
+  private void setComparableAppAttemptId(String appAttemptId) {
+    // For now, push based shuffle only supports running in YARN.
+    // Application attemptId in YARN is integer and it can be safely parsed
+    // to integer here. For the application attemptId from other cluster set up
+    // which is not numeric, it needs to generate this comparableAppAttemptId
+    // from the String typed appAttemptId through some other customized logic.
+    try {
+      this.comparableAppAttemptId = Integer.parseInt(appAttemptId);
+    } catch (NumberFormatException e) {
+      logger.warn("Push based shuffle requires comparable application attemptId, " +
+        "but the appAttemptId {} cannot be parsed to Integer", e,
+          MDC.of(LogKeys.APP_ATTEMPT_ID, appAttemptId));
+    }
   }
 
   @Override
@@ -146,7 +173,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
               assert inputListener instanceof BlockPushingListener :
                 "Expecting a BlockPushingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port);
-              new OneForOneBlockPusher(client, appId, transportConf.appAttemptId(), inputBlockId,
+              new OneForOneBlockPusher(client, appId, comparableAppAttemptId, inputBlockId,
                 (BlockPushingListener) inputListener, buffersWithId).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block push retries.");
@@ -178,8 +205,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       TransportClient client = clientFactory.createClient(host, port);
       ByteBuffer finalizeShuffleMerge =
-        new FinalizeShuffleMerge(appId, transportConf.appAttemptId(), shuffleId,
-          shuffleMergeId).toByteBuffer();
+        new FinalizeShuffleMerge(
+          appId, comparableAppAttemptId, shuffleId, shuffleMergeId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
@@ -193,8 +220,9 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         }
       });
     } catch (Exception e) {
-      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
-        host, port, e);
+      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}", e,
+        MDC.of(LogKeys.HOST, host),
+        MDC.of(LogKeys.PORT, port));
       listener.onShuffleMergeFailure(e);
     }
   }
@@ -230,6 +258,23 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     } catch (Exception e) {
       listener.onFailure(shuffleId, shuffleMergeId, reduceId, e);
     }
+  }
+
+  @Override
+  public boolean removeShuffleMerge(String host, int port, int shuffleId, int shuffleMergeId) {
+    checkInit();
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      client.send(
+          new RemoveShuffleMerge(appId, comparableAppAttemptId, shuffleId, shuffleMergeId)
+              .toByteBuffer());
+      // TODO(SPARK-42025): Add some error logs for RemoveShuffleMerge RPC
+    } catch (Exception e) {
+      logger.debug("Exception while sending RemoveShuffleMerge request to {}:{}",
+          host, port, e);
+      return false;
+    }
+    return true;
   }
 
   @Override
@@ -275,16 +320,19 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
           numRemovedBlocksFuture.complete(((BlocksRemoved) msgObj).numRemovedBlocks);
         } catch (Throwable t) {
-          logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
-            " via external shuffle service from executor: " + execId, t);
+          logger.warn("Error trying to remove blocks {} via external shuffle service from " +
+            "executor: {}", t,
+            MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
+            MDC.of(LogKeys.EXECUTOR_ID, execId));
           numRemovedBlocksFuture.complete(0);
         }
       }
 
       @Override
       public void onFailure(Throwable e) {
-        logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
-          " via external shuffle service from executor: " + execId, e);
+        logger.warn("Error trying to remove blocks {} via external shuffle service from " +
+          "executor: {}", e, MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
+          MDC.of(LogKeys.EXECUTOR_ID, execId));
         numRemovedBlocksFuture.complete(0);
       }
     });

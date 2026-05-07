@@ -43,6 +43,7 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportFactory;
 
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2$;
 
 public class ThriftBinaryCLIService extends ThriftCLIService {
 
@@ -90,16 +91,10 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
 
       // Server args
       int maxMessageSize = hiveConf.getIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_MAX_MESSAGE_SIZE);
-      int requestTimeout = (int) hiveConf.getTimeVar(
-          HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT, TimeUnit.SECONDS);
-      int beBackoffSlotLength = (int) hiveConf.getTimeVar(
-          HiveConf.ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH, TimeUnit.MILLISECONDS);
       TThreadPoolServer.Args sargs = new TThreadPoolServer.Args(serverSocket)
           .processorFactory(processorFactory).transportFactory(transportFactory)
           .protocolFactory(new TBinaryProtocol.Factory())
           .inputProtocolFactory(new TBinaryProtocol.Factory(true, true, maxMessageSize, maxMessageSize))
-          .requestTimeout(requestTimeout).requestTimeoutUnit(TimeUnit.SECONDS)
-          .beBackoffSlotLength(beBackoffSlotLength).beBackoffSlotLengthUnit(TimeUnit.MILLISECONDS)
           .executorService(executorService);
 
       // TCP Server
@@ -137,7 +132,11 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
       LOG.error(
           "Error starting HiveServer2: could not start "
               + ThriftBinaryCLIService.class.getSimpleName(), t);
-      System.exit(-1);
+      if (HiveThriftServer2$.MODULE$.systemExitOnError().get()) {
+        System.exit(-1);
+      } else {
+        throw new ServiceException(t);
+      }
     }
   }
 

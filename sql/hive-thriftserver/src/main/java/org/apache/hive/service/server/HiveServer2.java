@@ -36,17 +36,20 @@ import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.util.ShutdownHookManager;
+import org.apache.spark.util.SparkExitCode;
 
 /**
  * HiveServer2.
  *
  */
 public class HiveServer2 extends CompositeService {
-  private static final Logger LOG = LoggerFactory.getLogger(HiveServer2.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveServer2.class);
 
   private CLIService cliService;
   private ThriftCLIService thriftCLIService;
@@ -141,8 +144,8 @@ public class HiveServer2 extends CompositeService {
         if (++attempts >= maxAttempts) {
           throw new Error("Max start attempts " + maxAttempts + " exhausted", throwable);
         } else {
-          LOG.warn("Error starting HiveServer2 on attempt " + attempts
-              + ", will retry in 60 seconds", throwable);
+          LOG.warn("Error starting HiveServer2 on attempt {}, will retry in 60 seconds",
+            throwable, MDC.of(LogKeys.NUM_RETRY, attempts));
           try {
             Thread.sleep(60L * 1000L);
           } catch (InterruptedException e) {
@@ -158,7 +161,7 @@ public class HiveServer2 extends CompositeService {
     ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
     ServerOptionsProcessorResponse oprocResponse = oproc.parse(args);
 
-    HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
+    HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG.getSlf4jLogger());
 
     // Call the executor which will execute the appropriate command based on the parsed options
     oprocResponse.getServerOptionsExecutor().execute();
@@ -259,7 +262,7 @@ public class HiveServer2 extends CompositeService {
     @Override
     public void execute() {
       new HelpFormatter().printHelp(serverName, options);
-      System.exit(0);
+      System.exit(SparkExitCode.EXIT_SUCCESS());
     }
   }
 

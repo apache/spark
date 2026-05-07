@@ -36,7 +36,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param dataSchema Schema of JSON files.
  * @param readDataSchema Required schema of JSON files.
  * @param partitionSchema Schema of partitions.
- * @param parsedOptions Options for parsing JSON files.
+ * @param options Options for parsing JSON files.
  * @param filters The filters pushed down to JSON datasource.
  */
 case class JsonPartitionReaderFactory(
@@ -45,18 +45,18 @@ case class JsonPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    parsedOptions: JSONOptionsInRead,
+    options: JSONOptionsInRead,
     filters: Seq[Filter]) extends FilePartitionReaderFactory {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val actualSchema =
-      StructType(readDataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      StructType(readDataSchema.filterNot(_.name == options.columnNameOfCorruptRecord))
     val parser = new JacksonParser(
       actualSchema,
-      parsedOptions,
+      options,
       allowArrayAsStructs = true,
       filters)
-    val iter = JsonDataSource(parsedOptions).readFile(
+    val iter = JsonDataSource(options).readFile(
       broadcastedConf.value.value,
       partitionedFile,
       parser,

@@ -22,13 +22,12 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.TimeoutException;
 
-import com.google.common.base.Throwables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.sasl.SaslClientBootstrap;
@@ -47,7 +46,7 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class AuthClientBootstrap implements TransportClientBootstrap {
 
-  private static final Logger LOG = LoggerFactory.getLogger(AuthClientBootstrap.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(AuthClientBootstrap.class);
 
   private final TransportConf conf;
   private final String appId;
@@ -80,7 +79,7 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
       doSparkAuth(client, channel);
       client.setClientId(appId);
     } catch (GeneralSecurityException | IOException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     } catch (RuntimeException e) {
       // There isn't a good exception that can be caught here to know whether it's really
       // OK to switch back to SASL (because the server doesn't speak the new protocol). So

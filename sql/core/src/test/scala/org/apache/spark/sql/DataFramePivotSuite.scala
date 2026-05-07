@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDateTime
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
@@ -25,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSparkSession {
+class DataFramePivotSuite extends SharedSparkSession {
   import testImplicits._
 
   test("pivot courses") {
@@ -301,14 +302,17 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-24722: aggregate as the pivot column") {
-    val exception = intercept[AnalysisException] {
-      trainingSales
-        .groupBy($"sales.year")
-        .pivot(min($"training"), Seq("Experts"))
-        .agg(sum($"sales.earnings"))
-    }
-
-    assert(exception.getMessage.contains("aggregate functions are not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        trainingSales
+          .groupBy($"sales.year")
+          .pivot(min($"training"), Seq("Experts"))
+          .agg(sum($"sales.earnings"))
+      },
+      condition = "GROUP_BY_AGGREGATE",
+      parameters = Map("sqlExpr" -> "min(training)"),
+      context = ExpectedContext(fragment = "min", callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("pivoting column list with values") {
@@ -323,24 +327,13 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, expected)
   }
 
-  test("pivoting column list") {
-    val exception = intercept[RuntimeException] {
-      trainingSales
-        .groupBy($"sales.year")
-        .pivot(struct(lower($"sales.course"), $"training"))
-        .agg(sum($"sales.earnings"))
-        .collect()
-    }
-    assert(exception.getMessage.contains("Unsupported literal type"))
-  }
-
   test("SPARK-26403: pivoting by array column") {
     val df = Seq(
       (2, Seq.empty[String]),
       (2, Seq("a", "x")),
       (3, Seq.empty[String]),
       (3, Seq("a", "x"))).toDF("x", "s")
-    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
+    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF()
     val actual = df.groupBy("x").pivot("s").count()
     checkAnswer(actual, expected)
   }
@@ -351,5 +344,136 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       .groupBy().pivot("type", Seq("a", "b")).agg(
         percentile_approx(col("value"), array(lit(0.5)), lit(10000)))
     checkAnswer(actual, Row(Array(2.5), Array(3.0)))
+  }
+
+  test("SPARK-38133: Grouping by TIMESTAMP_NTZ should not corrupt results") {
+    checkAnswer(
+      courseSales.withColumn("ts", $"year".cast("string").cast("timestamp_ntz"))
+        .groupBy("ts")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings"))
+        .select("ts", "dotNET", "Java"),
+      Row(LocalDateTime.of(2012, 1, 1, 0, 0, 0, 0), 15000.0, 20000.0) ::
+        Row(LocalDateTime.of(2013, 1, 1, 0, 0, 0, 0), 48000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("using pivot in streaming is not supported") {
+    val df = spark
+      .readStream
+      .format("rate")
+      .load()
+      .withColumn("key", expr(s"MOD(value, 10)"))
+      .groupBy($"key")
+
+    val e = intercept[AnalysisException] {
+      df.pivot("value").count()
+    }
+
+    assert(e.getMessage.contains("pivot is not supported on a streaming DataFrames/Datasets"))
+  }
+
+  test("SPARK-55483: pivot with null non-atomic pivot column should not throw NPE") {
+    // When the pivot column is a non-atomic type (struct, array), PivotFirst uses a TreeMap
+    // whose comparison-based lookup throws NPE on null keys. Null pivot column values should
+    // be silently ignored since they can never match any declared pivot value.
+    withTempView("struct_pivot_data") {
+      sql(
+        """CREATE OR REPLACE TEMP VIEW struct_pivot_data AS
+          |SELECT * FROM VALUES
+          |  (named_struct('x', 1, 'y', 2), 100),
+          |  (named_struct('x', 3, 'y', 4), 200),
+          |  (CAST(NULL AS STRUCT<x: INT, y: INT>), 300),
+          |  (named_struct('x', 1, 'y', 2), 400)
+          |AS t(key, amount)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM struct_pivot_data
+            |PIVOT (SUM(amount) FOR key IN (
+            |  named_struct('x', 1, 'y', 2) AS k12,
+            |  named_struct('x', 3, 'y', 4) AS k34
+            |))""".stripMargin),
+        Row(500, 200))
+    }
+  }
+
+  test("pivot with explicit values under UTF8_LCASE collation") {
+    withTable("lcase_pivot") {
+      sql(
+        """CREATE TABLE lcase_pivot (
+          |  quarter STRING COLLATE UTF8_LCASE,
+          |  course STRING,
+          |  earnings INT
+          |) USING PARQUET""".stripMargin)
+      sql(
+        """INSERT INTO lcase_pivot VALUES
+          |  ('q1', 'dotNET', 10000),
+          |  ('q2', 'dotNET', 15000),
+          |  ('q1', 'Java',   20000),
+          |  ('q2', 'Java',   30000)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM lcase_pivot
+            |PIVOT (
+            |  SUM(earnings)
+            |  FOR quarter IN ('Q1' AS Q1, 'Q2' AS Q2)
+            |)""".stripMargin),
+        Row("dotNET", 10000, 15000) ::
+          Row("Java", 20000, 30000) :: Nil)
+    }
+  }
+
+  test("pivot with explicit values under UNICODE_CI collation") {
+    // scalastyle:off nonascii
+    val precomposed = "\u00FCber"  // über (precomposed)
+    val decomposed = "u\u0308ber" // über (decomposed)
+    // scalastyle:on nonascii
+    withTable("uci_pivot") {
+      sql(
+        """CREATE TABLE uci_pivot (
+          |  key STRING COLLATE UNICODE_CI,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql(s"INSERT INTO uci_pivot VALUES ('$precomposed', 100)")
+      sql(s"INSERT INTO uci_pivot VALUES ('$decomposed', 200)")
+      sql("INSERT INTO uci_pivot VALUES ('other', 50)")
+
+      checkAnswer(
+        sql(
+          s"""SELECT * FROM uci_pivot
+             |PIVOT (
+             |  SUM(amount) FOR key IN (
+             |    '$precomposed' AS uber,
+             |    'other' AS other
+             |  )
+             |)""".stripMargin),
+        Row(300, 50))
+    }
+  }
+
+  test("pivot with null collated string column should not NPE") {
+    withTable("lcase_null_pivot") {
+      sql(
+        """CREATE TABLE lcase_null_pivot (
+          |  key STRING COLLATE UTF8_LCASE,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql(
+        """INSERT INTO lcase_null_pivot VALUES
+          |  ('a', 10),
+          |  (NULL, 20),
+          |  ('b', 30)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM lcase_null_pivot
+            |PIVOT (
+            |  SUM(amount)
+            |  FOR key IN ('a' AS a, 'b' AS b)
+            |)""".stripMargin),
+        Row(10, 30))
+    }
   }
 }

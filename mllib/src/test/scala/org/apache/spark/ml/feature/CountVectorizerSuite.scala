@@ -21,6 +21,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.Row
+import org.apache.spark.util.ArrayImplicits._
 
 class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
 
@@ -31,7 +32,7 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new CountVectorizerModel(Array("empty")))
   }
 
-  private def split(s: String): Seq[String] = s.split("\\s+")
+  private def split(s: String): Seq[String] = s.split("\\s+").toImmutableArraySeq
 
   test("CountVectorizerModel common cases") {
     val df = Seq(
@@ -348,5 +349,19 @@ class CountVectorizerSuite extends MLTest with DefaultReadWriteTest {
       case Row(features: Vector) =>
         assert(features === Vectors.sparse(0, Seq()))
     }
+  }
+
+  test("SPARK-55655: CountVectorizer vocabulary ordering is deterministic for tied counts") {
+    val df = Seq(
+      (0, split("a b c d e")),
+      (1, split("e d c b a"))
+    ).toDF("id", "words")
+
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .fit(df)
+
+    assert(cvModel.vocabulary === Array("a", "b", "c", "d", "e"))
   }
 }

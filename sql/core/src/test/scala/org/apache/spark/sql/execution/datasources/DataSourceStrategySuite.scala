@@ -19,28 +19,27 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
+class DataSourceStrategySuite extends SharedSparkSession {
   val attrInts = Seq(
-    'cint.int,
-    Symbol("c.int").int,
-    GetStructField('a.struct(StructType(
+    $"cint".int,
+    $"`c.int`".int,
+    GetStructField($"a".struct(StructType(
       StructField("cstr", StringType, nullable = true) ::
         StructField("cint", IntegerType, nullable = true) :: Nil)), 1, None),
-    GetStructField('a.struct(StructType(
+    GetStructField($"a".struct(StructType(
       StructField("c.int", IntegerType, nullable = true) ::
         StructField("cstr", StringType, nullable = true) :: Nil)), 0, None),
-    GetStructField(Symbol("a.b").struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("cstr1", StringType, nullable = true) ::
         StructField("cstr2", StringType, nullable = true) ::
         StructField("cint", IntegerType, nullable = true) :: Nil)), 2, None),
-    GetStructField(Symbol("a.b").struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("c.int", IntegerType, nullable = true) :: Nil)), 0, None),
-    GetStructField(GetStructField('a.struct(StructType(
+    GetStructField(GetStructField($"a".struct(StructType(
       StructField("cstr1", StringType, nullable = true) ::
         StructField("b", StructType(StructField("cint", IntegerType, nullable = true) ::
           StructField("cstr2", StringType, nullable = true) :: Nil)) :: Nil)), 1, None), 0, None)
@@ -55,21 +54,21 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   ))
 
   val attrStrs = Seq(
-    'cstr.string,
-    Symbol("c.str").string,
-    GetStructField('a.struct(StructType(
+    $"cstr".string,
+    $"`c.str`".string,
+    GetStructField($"a".struct(StructType(
       StructField("cint", IntegerType, nullable = true) ::
         StructField("cstr", StringType, nullable = true) :: Nil)), 1, None),
-    GetStructField('a.struct(StructType(
+    GetStructField($"a".struct(StructType(
       StructField("c.str", StringType, nullable = true) ::
         StructField("cint", IntegerType, nullable = true) :: Nil)), 0, None),
-    GetStructField(Symbol("a.b").struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("cint1", IntegerType, nullable = true) ::
         StructField("cint2", IntegerType, nullable = true) ::
         StructField("cstr", StringType, nullable = true) :: Nil)), 2, None),
-    GetStructField(Symbol("a.b").struct(StructType(
+    GetStructField($"`a.b`".struct(StructType(
       StructField("c.str", StringType, nullable = true) :: Nil)), 0, None),
-    GetStructField(GetStructField('a.struct(StructType(
+    GetStructField(GetStructField($"a".struct(StructType(
       StructField("cint1", IntegerType, nullable = true) ::
         StructField("b", StructType(StructField("cstr", StringType, nullable = true) ::
           StructField("cint2", IntegerType, nullable = true) :: Nil)) :: Nil)), 1, None), 0, None)
@@ -280,7 +279,7 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
   }}
 
   test("SPARK-26865 DataSourceV2Strategy should push normalized filters") {
-    val attrInt = 'cint.int
+    val attrInt = $"cint".int
     assertResult(Seq(IsNotNull(attrInt))) {
       DataSourceStrategy.normalizeExprs(Seq(IsNotNull(attrInt.withName("CiNt"))), Seq(attrInt))
     }
@@ -308,7 +307,11 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     }
 
     // `Abs(col)` can not be pushed down, so it returns `None`
-    assert(PushableColumnAndNestedColumn.unapply(Abs('col.int)) === None)
+    assert(PushableColumnAndNestedColumn.unapply(Abs($"col".int)) === None)
+  }
+
+  test("SPARK-36644: Push down boolean column filter") {
+    testTranslateFilter($"col".boolean, Some(sources.EqualTo("col", true)))
   }
 
   /**
@@ -319,5 +322,38 @@ class DataSourceStrategySuite extends PlanTest with SharedSparkSession {
     assertResult(result) {
       DataSourceStrategy.translateFilter(catalystFilter, true)
     }
+  }
+
+  test("SPARK-41636: selectFilters returns predicates in deterministic order") {
+
+    val idColAttribute = AttributeReference("id", IntegerType)()
+    val predicates = Seq(EqualTo(idColAttribute, 1), EqualTo(idColAttribute, 2),
+      EqualTo(idColAttribute, 3), EqualTo(idColAttribute, 4), EqualTo(idColAttribute, 5),
+      EqualTo(idColAttribute, 6))
+
+    val (unhandledPredicates, pushedFilters, handledFilters) =
+      DataSourceStrategy.selectFilters(FakeRelation(), predicates)
+    assert(unhandledPredicates.equals(predicates))
+    assert(pushedFilters.zipWithIndex.forall { case (f, i) =>
+      f.equals(sources.EqualTo("id", i + 1))
+    })
+    assert(handledFilters.isEmpty)
+  }
+
+  test("SPARK-48431: Push filters on columns with UTF8_BINARY collation") {
+    val colAttr = $"col".string("UTF8_BINARY")
+    testTranslateFilter(EqualTo(colAttr, Literal("value")), Some(sources.EqualTo("col", "value")))
+    testTranslateFilter(Not(EqualTo(colAttr, Literal("value"))),
+      Some(sources.Not(sources.EqualTo("col", "value"))))
+    testTranslateFilter(LessThan(colAttr, Literal("value")),
+      Some(sources.LessThan("col", "value")))
+    testTranslateFilter(LessThan(colAttr, Literal("value")), Some(sources.LessThan("col", "value")))
+    testTranslateFilter(LessThanOrEqual(colAttr, Literal("value")),
+      Some(sources.LessThanOrEqual("col", "value")))
+    testTranslateFilter(GreaterThan(colAttr, Literal("value")),
+      Some(sources.GreaterThan("col", "value")))
+    testTranslateFilter(GreaterThanOrEqual(colAttr, Literal("value")),
+      Some(sources.GreaterThanOrEqual("col", "value")))
+    testTranslateFilter(IsNotNull(colAttr), Some(sources.IsNotNull("col")))
   }
 }

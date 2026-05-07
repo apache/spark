@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-/* global $, formatTimeMillis, getTimeZone */
+/* global $ */
+
+import {formatTimeMillis, getTimeZone} from "./utils.js";
 
 $(document).ready(function() {
   if ($('#last-updated').length) {

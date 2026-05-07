@@ -19,9 +19,8 @@
 package org.apache.spark.examples.streaming
 
 import java.io.File
-import java.nio.charset.Charset
-
-import com.google.common.io.Files
+import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.broadcast.Broadcast
@@ -134,7 +133,7 @@ object RecoverableNetworkWordCount {
       println(output)
       println(s"Dropped ${droppedWordsCounter.value} word(s) totally")
       println(s"Appending to ${outputFile.getAbsolutePath}")
-      Files.append(output + "\n", outputFile, Charset.defaultCharset())
+      Files.writeString(outputFile.toPath, output + "\n", StandardOpenOption.APPEND)
     }
     ssc
   }

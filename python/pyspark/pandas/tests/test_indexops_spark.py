@@ -16,15 +16,15 @@
 #
 
 import pandas as pd
-from pyspark.sql.utils import AnalysisException
-from pyspark.sql import functions as F
 
+from pyspark.errors import AnalysisException
+from pyspark.sql import functions as F
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
+class SparkIndexOpsMethodsTestsMixin:
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -39,7 +39,7 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             self.psser.spark.transform(lambda scol: 1)
 
-        with self.assertRaisesRegex(AnalysisException, "cannot resolve.*non-existent.*"):
+        with self.assertRaisesRegex(AnalysisException, ".*UNRESOLVED_COLUMN.*`non-existent`.*"):
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
     def test_multiindex_transform_negative(self):
@@ -59,18 +59,17 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         ):
             self.psser.spark.apply(lambda scol: 1)
 
-        with self.assertRaisesRegex(AnalysisException, "cannot resolve.*non-existent.*"):
+        with self.assertRaisesRegex(AnalysisException, ".*UNRESOLVED_COLUMN.*`non-existent`.*"):
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
 
+class SparkIndexOpsMethodsTests(
+    SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
+
+
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_indexops_spark import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

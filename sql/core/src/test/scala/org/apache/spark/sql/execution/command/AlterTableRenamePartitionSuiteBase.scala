@@ -18,7 +18,10 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -57,10 +60,11 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
   test("table to alter does not exist") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
-      val errMsg = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalog.ns.no_tbl PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
+      }
+      checkErrorTableNotFound(e, s"`$catalog`.`ns`.`no_tbl`",
+        ExpectedContext(s"$catalog.ns.no_tbl", 12, 11 + s"$catalog.ns.no_tbl".length))
     }
   }
 
@@ -68,22 +72,40 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
       checkPartitions(t, Map("id" -> "1"))
-      val errMsg = intercept[NoSuchPartitionException] {
+      val parsed = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        "`ns`.`tbl`"
+      } else {
+        CatalystSqlParser.parseMultipartIdentifier(t)
+          .map(part => quoteIdentifier(part)).mkString(".")
+      }
+      val e = intercept[NoSuchPartitionException] {
         sql(s"ALTER TABLE $t PARTITION (id = 3) RENAME TO PARTITION (id = 2)")
-      }.getMessage
-      assert(errMsg.contains("Partition not found in table"))
+      }
+      checkError(e,
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 3)",
+          "tableName" -> parsed))
     }
   }
 
-  test("target partition exists") {
+  test("target partitions exist") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createSinglePartTable(t)
       sql(s"INSERT INTO $t PARTITION (id = 2) SELECT 'def'")
       checkPartitions(t, Map("id" -> "1"), Map("id" -> "2"))
-      val errMsg = intercept[PartitionAlreadyExistsException] {
+      val parsed = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        "`ns`.`tbl`"
+      } else {
+        CatalystSqlParser.parseMultipartIdentifier(t)
+          .map(part => quoteIdentifier(part)).mkString(".")
+      }
+
+      val e = intercept[PartitionsAlreadyExistException] {
         sql(s"ALTER TABLE $t PARTITION (id = 1) RENAME TO PARTITION (id = 2)")
-      }.getMessage
-      assert(errMsg.contains("Partition already exists"))
+      }
+      checkError(e,
+        condition = "PARTITIONS_ALREADY_EXIST",
+        parameters = Map("partitionList" -> "PARTITION (`id` = 2)", "tableName" -> parsed))
     }
   }
 
@@ -149,10 +171,20 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       checkPartitions(t, Map("id" -> "1"))
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
         checkPartitions(t, Map("id" -> "1"))
       }
 
@@ -188,25 +220,26 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1)))
 
       withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        // Add a dummy column so that this view is semantically different from raw table scan.
+        sql(s"CREATE VIEW v0 AS SELECT *, 'a' FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=2)")
-        checkCachedRelation("v0", Seq(Row(0, 2), Row(1, 1)))
+        checkCachedRelation("v0", Seq(Row(0, 2, "a"), Row(1, 1, "a")))
       }
 
       withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        sql(s"CREATE TEMP VIEW v1 AS SELECT *, 'a' FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=3)")
-        checkCachedRelation("v1", Seq(Row(0, 2), Row(1, 3)))
+        checkCachedRelation("v1", Seq(Row(0, 2, "a"), Row(1, 3, "a")))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
-        checkCachedRelation(v2, Seq(Row(0, 4), Row(1, 3)))
+        checkCachedRelation(v2, Seq(Row(0, 4, "a"), Row(1, 3, "a")))
       }
     }
   }
@@ -219,6 +252,42 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"ALTER TABLE $t PARTITION (part = date'2020-01-01')" +
         s" RENAME TO PARTITION (part = date'2020-01-02')")
       checkPartitions(t, Map("part" -> "2020-01-02"))
+    }
+  }
+
+  test("SPARK-41982: rename partition when keepPartitionSpecAsString set `true`") {
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 08)" +
+          s" RENAME TO PARTITION (dt = 09)")
+        checkPartitions(t, Map("dt" -> "09"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 09)" +
+          s" RENAME TO PARTITION (dt = '08')")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t PARTITION (dt = '08')" +
+          s" RENAME TO PARTITION (dt = '09')")
+        checkPartitions(t, Map("dt" -> "09"))
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_KEEP_PARTITION_SPEC_AS_STRING_LITERAL.key -> "false") {
+      withNamespaceAndTable("ns", "tb2") { t =>
+        sql(s"CREATE TABLE $t(name STRING, age INT) USING PARQUET PARTITIONED BY (dt STRING)")
+        sql(s"ALTER TABLE $t ADD PARTITION(dt = 08)")
+        checkPartitions(t, Map("dt" -> "8"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 08)" +
+          s" RENAME TO PARTITION (dt = 09)")
+        checkPartitions(t, Map("dt" -> "9"))
+        sql(s"ALTER TABLE $t PARTITION (dt = 09)" +
+          s" RENAME TO PARTITION (dt = '08')")
+        checkPartitions(t, Map("dt" -> "08"))
+        sql(s"ALTER TABLE $t PARTITION (dt = '08')" +
+          s" RENAME TO PARTITION (dt = '09')")
+        checkPartitions(t, Map("dt" -> "09"))
+      }
     }
   }
 }

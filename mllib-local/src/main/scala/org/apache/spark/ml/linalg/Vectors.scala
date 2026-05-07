@@ -21,8 +21,8 @@ import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => Java
 import java.util
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
+import scala.jdk.CollectionConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
@@ -54,11 +54,15 @@ sealed trait Vector extends Serializable {
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
-            Vectors.equals(s1.indices, s1.values, s2.indices, s2.values)
+            Vectors.equals(
+              immutable.ArraySeq.unsafeWrapArray(s1.indices), s1.values,
+              immutable.ArraySeq.unsafeWrapArray(s2.indices), s2.values)
           case (s1: SparseVector, d1: DenseVector) =>
-            Vectors.equals(s1.indices, s1.values, 0 until d1.size, d1.values)
+            Vectors.equals(
+              immutable.ArraySeq.unsafeWrapArray(s1.indices), s1.values, 0 until d1.size, d1.values)
           case (d1: DenseVector, s1: SparseVector) =>
-            Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
+            Vectors.equals(
+              0 until d1.size, d1.values, immutable.ArraySeq.unsafeWrapArray(s1.indices), s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
       case _ => false
@@ -184,10 +188,10 @@ sealed trait Vector extends Serializable {
    * Returns a vector in either dense or sparse format, whichever uses less storage.
    */
   @Since("2.0.0")
-  def compressed: Vector = {
-    val nnz = numNonzeros
-    // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
-    if (1.5 * (nnz + 1.0) < size) {
+  def compressed: Vector = compressedWithNNZ(numNonzeros)
+
+  private[ml] def compressedWithNNZ(nnz: Int): Vector = {
+    if (Vectors.getSparseSize(nnz) < Vectors.getDenseSize(size)) {
       toSparseWithSize(nnz)
     } else {
       toDense
@@ -225,6 +229,8 @@ sealed trait Vector extends Serializable {
    */
   private[spark] def nonZeroIterator: Iterator[(Int, Double)] =
     activeIterator.filter(_._2 != 0)
+
+  private[ml] def getSizeInBytes: Long
 }
 
 /**
@@ -234,6 +240,8 @@ sealed trait Vector extends Serializable {
  */
 @Since("2.0.0")
 object Vectors {
+
+  private[ml] val empty: DenseVector = new DenseVector(Array.emptyDoubleArray)
 
   /**
    * Creates a dense vector from its values.
@@ -372,6 +380,13 @@ object Vectors {
     }
   }
 
+  private[ml] def normalize(vector: Vector, p: Double): Vector = {
+    val n = norm(vector, p)
+    require(n > 0, "Can not normalize zero-length vectors.")
+    BLAS.scal(1.0 / n, vector)
+    vector
+  }
+
   /**
    * Returns the squared distance between two Vectors.
    * @param v1 first Vector.
@@ -490,6 +505,27 @@ object Vectors {
 
   /** Max number of nonzero entries used in computing hash code. */
   private[linalg] val MAX_HASH_NNZ = 128
+
+  private[ml] def getSparseSize(nnz: Long): Long = {
+    /*
+      A sparse vector stores one double array, one int array and one int:
+      8 * values.length + 4 * values.length + arrayHeader * 2 + 4
+     */
+    val doubleBytes = java.lang.Double.BYTES
+    val intBytes = java.lang.Integer.BYTES
+    val arrayHeader = 12L
+    (doubleBytes + intBytes) * nnz + arrayHeader * 2L + 4L
+  }
+
+  private[ml] def getDenseSize(size: Long): Long = {
+    /*
+      A dense vector stores one double array:
+      8 * values.length + arrayHeader
+     */
+    val doubleBytes = java.lang.Double.BYTES
+    val arrayHeader = 12L
+    doubleBytes * size + arrayHeader
+  }
 }
 
 /**
@@ -582,6 +618,8 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
 
   private[spark] override def activeIterator: Iterator[(Int, Double)] =
     iterator
+
+  override private[ml] def getSizeInBytes: Long = Vectors.getDenseSize(values.length)
 }
 
 @Since("2.0.0")
@@ -798,7 +836,7 @@ class SparseVector @Since("2.0.0") (
         s += 1
       }
     }
-    new SparseVector(ns, indexBuff.result, valueBuff.result)
+    new SparseVector(ns, indexBuff.result(), valueBuff.result())
   }
 
   private[spark] override def iterator: Iterator[(Int, Double)] = {
@@ -831,6 +869,8 @@ class SparseVector @Since("2.0.0") (
     val localValues = values
     Iterator.tabulate(numActives)(j => (localIndices(j), localValues(j)))
   }
+
+  override private[ml] def getSizeInBytes: Long = Vectors.getSparseSize(values.length)
 }
 
 @Since("2.0.0")

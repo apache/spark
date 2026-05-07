@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.noop
 
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 
 class NoopStreamSuite extends StreamTest {
@@ -90,7 +90,7 @@ class NoopStreamSuite extends StreamTest {
       .option("numPartitions", "1")
       .option("rowsPerSecond", "5")
       .load()
-      .select('value)
+      .select($"value")
   }
 }
 

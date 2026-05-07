@@ -18,16 +18,23 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
-class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
+class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("except") {
@@ -299,11 +306,8 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // When generating expected results at here, we need to follow the implementation of
     // Rand expression.
     def expected(df: DataFrame): Seq[Row] =
-      df.rdd.collectPartitions().zipWithIndex.flatMap {
-        case (data, index) =>
-          val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
-          data.filter(_.getInt(0) < rng.nextDouble() * 10)
-      }.toSeq
+      df.select($"i", rand(7) * 10).as[(Long, Double)].collect()
+        .filter(r => r._1 < r._2).map(r => Row(r._1)).toImmutableArraySeq
 
     val union = df1.union(df2)
     checkAnswer(
@@ -316,7 +320,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         case (data, index) =>
           val rng = new org.apache.spark.util.random.XORShiftRandom(7 + index)
           data.map(_ => rng.nextDouble()).map(i => Row(i))
-      }
+      }.toImmutableArraySeq
     )
 
     val intersect = df1.intersect(df2)
@@ -339,7 +343,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     ).toDF("date", "timestamp", "decimal")
 
     val widenTypedRows = Seq(
-      (new Timestamp(2), 10.5D, "string")
+      (new Timestamp(2), 10.5D, "2021-01-01 00:00:00")
     ).toDF("date", "timestamp", "decimal")
 
     dates.union(widenTypedRows).collect()
@@ -347,22 +351,119 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     dates.intersect(widenTypedRows).collect()
   }
 
+  test("SPARK-50373 - cannot run set operations with variant type") {
+    val df = sql("select parse_json(case when id = 0 then 'null' else '1' end)" +
+      " as v, id % 5 as id from range(0, 100, 1, 5)")
+    checkError(
+      exception = intercept[AnalysisException](df.intersect(df)),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.except(df)),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.distinct()),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\""))
+    checkError(
+      exception = intercept[AnalysisException](df.dropDuplicates()),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\""))
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT v FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+        parameters = Map(
+          "colName" -> "`v`",
+          "dataType" -> "\"VARIANT\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT v FROM tv",
+          start = 0,
+          stop = 24)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT STRUCT(v) FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+        parameters = Map(
+          "colName" -> "`struct(v)`",
+          "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT STRUCT(v) FROM tv",
+          start = 0,
+          stop = 32)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT ARRAY(v) FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+        parameters = Map(
+          "colName" -> "`array(v)`",
+          "dataType" -> "\"ARRAY<VARIANT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT ARRAY(v) FROM tv",
+          start = 0,
+          stop = 31)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT MAP('m', v) FROM tv")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        parameters = Map(
+          "colName" -> "`map(m, v)`",
+          "dataType" -> "\"MAP<STRING, VARIANT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT MAP('m', v) FROM tv",
+          start = 0,
+          stop = 34)
+      )
+    }
+  }
+
   test("SPARK-19893: cannot run set operations with map type") {
     val df = spark.range(1).select(map(lit("key"), $"id").as("m"))
-    val e = intercept[AnalysisException](df.intersect(df))
-    assert(e.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
-    val e2 = intercept[AnalysisException](df.except(df))
-    assert(e2.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
-    val e3 = intercept[AnalysisException](df.distinct())
-    assert(e3.message.contains(
-      "Cannot have map type columns in DataFrame which calls set operations"))
+    checkError(
+      exception = intercept[AnalysisException](df.intersect(df)),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.except(df)),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](df.distinct()),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+      parameters = Map(
+        "colName" -> "`m`",
+        "dataType" -> "\"MAP<STRING, BIGINT>\""))
     withTempView("v") {
       df.createOrReplaceTempView("v")
-      val e4 = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v"))
-      assert(e4.message.contains(
-        "Cannot have map type columns in DataFrame which calls set operations"))
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT DISTINCT m FROM v")),
+        condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
+        parameters = Map(
+          "colName" -> "`m`",
+          "dataType" -> "\"MAP<STRING, BIGINT>\""),
+        context = ExpectedContext(
+          fragment = "SELECT DISTINCT m FROM v",
+          start = 0,
+          stop = 23)
+      )
     }
   }
 
@@ -520,40 +621,46 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // Check failure cases
     df1 = Seq((1, 2)).toDF("a", "c")
     df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
-    var errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains(
-      "Union can only be performed on tables with the same number of columns, " +
-        "but the first table has 2 columns and the second table has 3 columns"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      condition = "NUM_COLUMNS_MISMATCH",
+      parameters = Map(
+        "operator" -> "UNION",
+        "firstNumColumns" -> "2",
+        "invalidOrdinalNum" -> "second",
+        "invalidNumColumns" -> "3")
+    )
 
     df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
     df2 = Seq((4, 5, 6)).toDF("a", "c", "d")
-    errMsg = intercept[AnalysisException] {
+    val errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
     assert(errMsg.contains("""Cannot resolve column name "b" among (a, c, d)"""))
   }
 
   test("union by name - type coercion") {
-    var df1 = Seq((1, "a")).toDF("c0", "c1")
-    var df2 = Seq((3, 1L)).toDF("c1", "c0")
-    checkAnswer(df1.unionByName(df2), Row(1L, "a") :: Row(1L, "3") :: Nil)
-
-    df1 = Seq((1, 1.0)).toDF("c0", "c1")
-    df2 = Seq((8L, 3.0)).toDF("c1", "c0")
+    var df1 = Seq((1, 1.0)).toDF("c0", "c1")
+    var df2 = Seq((8L, 3.0)).toDF("c1", "c0")
     checkAnswer(df1.unionByName(df2), Row(1.0, 1.0) :: Row(3.0, 8.0) :: Nil)
+    if (!conf.ansiEnabled) {
+      df1 = Seq((1, "a")).toDF("c0", "c1")
+      df2 = Seq((3, 1L)).toDF("c1", "c0")
+      checkAnswer(df1.unionByName(df2), Row(1L, "a") :: Row(1L, "3") :: Nil)
 
-    df1 = Seq((2.0f, 7.4)).toDF("c0", "c1")
-    df2 = Seq(("a", 4.0)).toDF("c1", "c0")
-    checkAnswer(df1.unionByName(df2), Row(2.0, "7.4") :: Row(4.0, "a") :: Nil)
+      df1 = Seq((2.0f, 7.4)).toDF("c0", "c1")
+      df2 = Seq(("a", 4.0)).toDF("c1", "c0")
+      checkAnswer(df1.unionByName(df2), Row(2.0, "7.4") :: Row(4.0, "a") :: Nil)
 
-    df1 = Seq((1, "a", 3.0)).toDF("c0", "c1", "c2")
-    df2 = Seq((1.2, 2, "bc")).toDF("c2", "c0", "c1")
-    val df3 = Seq(("def", 1.2, 3)).toDF("c1", "c2", "c0")
-    checkAnswer(df1.unionByName(df2.unionByName(df3)),
-      Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
-    )
+      df1 = Seq((1, "a", 3.0)).toDF("c0", "c1", "c2")
+      df2 = Seq((1.2, 2, "bc")).toDF("c2", "c0", "c1")
+      val df3 = Seq(("def", 1.2, 3)).toDF("c1", "c2", "c0")
+      checkAnswer(df1.unionByName(df2.unionByName(df3)),
+        Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
+      )
+    }
   }
 
   test("union by name - check case sensitivity") {
@@ -578,16 +685,20 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         var df1 = Seq((1, 1)).toDF(c0, c1)
         var df2 = Seq((1, 1)).toDF("c0", "c1")
-        var errMsg = intercept[AnalysisException] {
-          df1.unionByName(df2)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the left attributes:"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df1.unionByName(df2)
+          },
+          condition = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
         df1 = Seq((1, 1)).toDF("c0", "c1")
         df2 = Seq((1, 1)).toDF(c0, c1)
-        errMsg = intercept[AnalysisException] {
-          df1.unionByName(df2)
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the right attributes:"))
+        checkError(
+          exception = intercept[AnalysisException] {
+            df1.unionByName(df2)
+          },
+          condition = "COLUMN_ALREADY_EXISTS",
+          parameters = Map("columnName" -> s"`${c0.toLowerCase(Locale.ROOT)}`"))
       }
     }
   }
@@ -598,7 +709,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         (1, 1)
       )).toDF("a", "b").withColumn("c", newCol)
 
-      val df2 = df1.union(df1).withColumn("d", spark_partition_id).filter(filter)
+      val df2 = df1.union(df1).withColumn("d", spark_partition_id()).filter(filter)
       checkAnswer(df2, result)
     }
 
@@ -802,7 +913,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
     val union = df1.unionByName(df2, allowMissingColumns = true)
-    assert(union.schema.toDDL == "`topLevelCol` STRUCT<`b`: STRING, `a`: STRING>")
+    assert(union.schema.toDDL == "topLevelCol STRUCT<b: STRING, a: STRING>")
     checkAnswer(union, Row(Row("b", null)) :: Row(Row("b", "a")) :: Nil)
   }
 
@@ -834,22 +945,22 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       StructType(Seq(StructField("topLevelCol", nestedStructType2))))
 
     var unionDf = df1.unionByName(df2, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` " +
-      "STRUCT<`b`: STRUCT<`ba`: STRING, `bb`: STRING>, `a`: STRUCT<`aa`: STRING>>")
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: STRUCT<ba: STRING, bb: STRING>, a: STRUCT<aa: STRING>>")
     checkAnswer(unionDf,
       Row(Row(Row("ba", null), null)) ::
       Row(Row(Row(null, "bb"), Row("aa"))) :: Nil)
 
     unionDf = df2.unionByName(df1, true)
-    assert(unionDf.schema.toDDL == "`topLevelCol` STRUCT<`a`: STRUCT<`aa`: STRING>, " +
-      "`b`: STRUCT<`bb`: STRING, `ba`: STRING>>")
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<a: STRUCT<aa: STRING>, " +
+      "b: STRUCT<bb: STRING, ba: STRING>>")
     checkAnswer(unionDf,
       Row(Row(null, Row(null, "ba"))) ::
       Row(Row(Row("aa"), Row("bb", null))) :: Nil)
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - deep expr") {
-    def nestedDf(depth: Int, numColsAtEachDepth: Int): DataFrame = {
+    def nestedDf(depth: Int, numColsAtEachDepth: Int): classic.DataFrame = {
       val initialNestedStructType = StructType(
         (0 to numColsAtEachDepth).map(i =>
           StructField(s"nested${depth}Col$i", IntegerType, nullable = false))
@@ -986,21 +1097,30 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // nested struct, inner struct having different col name
     df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
     df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
-    var errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains("No such struct field c in a, b"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`c`", "fields" -> "`a`, `b`"))
 
     // If right side of the nested struct has extra col.
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
     df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1, 5)))).toDF("a", "b", "c")
-    errMsg = intercept[AnalysisException] {
-      df1.unionByName(df2)
-    }.getMessage
-    assert(errMsg.contains("Union can only be performed on tables with" +
-      " the compatible column types." +
-      " struct<c1:int,c2:int,c3:struct<c3:int,c5:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
-      " at the third column of the second table"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.unionByName(df2)
+      },
+      condition = "INCOMPATIBLE_COLUMN_TYPE",
+      parameters = Map(
+        "tableOrdinalNumber" -> "second",
+        "columnOrdinalNumber" -> "third",
+        "dataType2" ->
+          "\"STRUCT<c1: INT NOT NULL, c2: INT NOT NULL, c3: STRUCT<c3: INT NOT NULL>>\"",
+        "operator" -> "UNION",
+        "hint" -> "",
+        "dataType1" -> "\"STRUCT<c1: INT, c2: INT, c3: STRUCT<c3: INT, c5: INT>>\"")
+    )
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
@@ -1017,6 +1137,510 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     unionDF = df1.unionByName(df2)
     checkAnswer(unionDF, expected)
+  }
+
+  test("SPARK-36673: Only merge nullability for Unions of struct") {
+    val df1 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS INNER")))
+    val df2 = spark.range(2).withColumn("nested", struct(expr("id * 5 AS inner")))
+
+    val union1 = df1.union(df2)
+    val union2 = df1.unionByName(df2)
+
+    val schema = StructType(Seq(StructField("id", LongType, false),
+      StructField("nested", StructType(Seq(StructField("INNER", LongType, false))), false)))
+
+    Seq(union1, union2).foreach { df =>
+      assert(df.schema == schema)
+      assert(df.queryExecution.optimizedPlan.schema == schema)
+      assert(df.queryExecution.executedPlan.schema == schema)
+
+      checkAnswer(df, Row(0, Row(0)) :: Row(1, Row(5)) :: Row(0, Row(0)) :: Row(1, Row(5)) :: Nil)
+      checkAnswer(df.select("nested.*"), Row(0) :: Row(5) :: Row(0) :: Row(5) :: Nil)
+    }
+  }
+
+  test("SPARK-36797: Union should resolve nested columns as top-level columns") {
+    // Different nested field names, but same nested field types. Union resolves column by position.
+    val df1 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2"))))
+    val df2 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1"))))
+
+    checkAnswer(df1.union(df2),
+      Row(0, Row(0, Row(0))) :: Row(0, Row(0, Row(0))) :: Row(1, Row(5, Row(10))) ::
+        Row(1, Row(5, Row(10))) :: Nil)
+
+    val df3 = spark.range(2).withColumn("nested array",
+      array(struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2")))))
+    val df4 = spark.range(2).withColumn("nested",
+      array(struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1")))))
+
+    checkAnswer(df3.union(df4),
+      Row(0, Seq(Row(0, Row(0)))) :: Row(0, Seq(Row(0, Row(0)))) :: Row(1, Seq(Row(5, Row(10)))) ::
+        Row(1, Seq(Row(5, Row(10)))) :: Nil)
+
+    val df5 = spark.range(2).withColumn("nested array",
+      map(struct(expr("id * 5 AS key1")),
+        struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2")))))
+    val df6 = spark.range(2).withColumn("nested",
+      map(struct(expr("id * 5 AS key2")),
+        struct(expr("id * 5 AS inner2"), struct(expr("id * 10 AS inner1")))))
+
+    checkAnswer(df5.union(df6),
+      Row(0, Map(Row(0) -> Row(0, Row(0)))) ::
+        Row(0, Map(Row(0) -> Row(0, Row(0)))) ::
+        Row(1, Map(Row(5) ->Row(5, Row(10)))) ::
+        Row(1, Map(Row(5) ->Row(5, Row(10)))) :: Nil)
+
+    // Different nested field names, and different nested field types.
+    val df7 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner1"), struct(expr("id * 10 AS inner2").cast("string"))))
+    val df8 = spark.range(2).withColumn("nested",
+      struct(expr("id * 5 AS inner2").cast("string"), struct(expr("id * 10 AS inner1"))))
+
+    val err = intercept[AnalysisException](df7.union(df8).collect())
+    assert(err.message
+      .contains("UNION can only be performed on tables with compatible column types"))
+  }
+
+  test("SPARK-36546: Add unionByName support to arrays of structs") {
+    val arrayType1 = ArrayType(
+      StructType(Seq(
+        StructField("ba", StringType),
+        StructField("bb", StringType)
+      ))
+    )
+    val arrayValues1 = Seq(Row("ba", "bb"))
+
+    val arrayType2 = ArrayType(
+      StructType(Seq(
+        StructField("bb", StringType),
+        StructField("ba", StringType)
+      ))
+    )
+    val arrayValues2 = Seq(Row("bb", "ba"))
+
+    val df1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(arrayValues1) :: Nil),
+      StructType(Seq(StructField("arr", arrayType1))))
+
+    val df2 = spark.createDataFrame(
+      sparkContext.parallelize(Row(arrayValues2) :: Nil),
+      StructType(Seq(StructField("arr", arrayType2))))
+
+    var unionDf = df1.unionByName(df2)
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<ba: STRING, bb: STRING>>")
+    checkAnswer(unionDf,
+      Row(Seq(Row("ba", "bb"))) ::
+      Row(Seq(Row("ba", "bb"))) :: Nil)
+
+    unionDf = df2.unionByName(df1)
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<bb: STRING, ba: STRING>>")
+    checkAnswer(unionDf,
+      Row(Seq(Row("bb", "ba"))) ::
+      Row(Seq(Row("bb", "ba"))) :: Nil)
+
+    val arrayType3 = ArrayType(
+      StructType(Seq(
+        StructField("ba", StringType)
+      ))
+    )
+    val arrayValues3 = Seq(Row("ba"))
+
+    val arrayType4 = ArrayType(
+      StructType(Seq(
+        StructField("bb", StringType)
+      ))
+    )
+    val arrayValues4 = Seq(Row("bb"))
+
+    val df3 = spark.createDataFrame(
+      sparkContext.parallelize(Row(arrayValues3) :: Nil),
+      StructType(Seq(StructField("arr", arrayType3))))
+
+    val df4 = spark.createDataFrame(
+      sparkContext.parallelize(Row(arrayValues4) :: Nil),
+      StructType(Seq(StructField("arr", arrayType4))))
+
+    assertThrows[AnalysisException] {
+      df3.unionByName(df4)
+    }
+
+    unionDf = df3.unionByName(df4, true)
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<ba: STRING, bb: STRING>>")
+    checkAnswer(unionDf,
+      Row(Seq(Row("ba", null))) ::
+      Row(Seq(Row(null, "bb"))) :: Nil)
+
+    assertThrows[AnalysisException] {
+      df4.unionByName(df3)
+    }
+
+    unionDf = df4.unionByName(df3, true)
+    assert(unionDf.schema.toDDL == "arr ARRAY<STRUCT<bb: STRING, ba: STRING>>")
+    checkAnswer(unionDf,
+      Row(Seq(Row("bb", null))) ::
+      Row(Seq(Row(null, "ba"))) :: Nil)
+  }
+
+  test("SPARK-36546: Add unionByName support to nested arrays of structs") {
+    val nestedStructType1 = StructType(Seq(
+      StructField("b", ArrayType(
+        StructType(Seq(
+          StructField("ba", StringType),
+          StructField("bb", StringType)
+        ))
+      ))
+    ))
+    val nestedStructValues1 = Row(Seq(Row("ba", "bb")))
+
+    val nestedStructType2 = StructType(Seq(
+      StructField("b", ArrayType(
+        StructType(Seq(
+          StructField("bb", StringType),
+          StructField("ba", StringType)
+        ))
+      ))
+    ))
+    val nestedStructValues2 = Row(Seq(Row("bb", "ba")))
+
+    val df1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType1))))
+
+    val df2 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType2))))
+
+    var unionDf = df1.unionByName(df2)
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<STRUCT<ba: STRING, bb: STRING>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Row("ba", "bb")))) ::
+      Row(Row(Seq(Row("ba", "bb")))) :: Nil)
+
+    unionDf = df2.unionByName(df1)
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<STRUCT<bb: STRING, ba: STRING>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Row("bb", "ba")))) ::
+      Row(Row(Seq(Row("bb", "ba")))) :: Nil)
+
+    val nestedStructType3 = StructType(Seq(
+      StructField("b", ArrayType(
+        StructType(Seq(
+          StructField("ba", StringType)
+        ))
+      ))
+    ))
+    val nestedStructValues3 = Row(Seq(Row("ba")))
+
+    val nestedStructType4 = StructType(Seq(
+      StructField("b", ArrayType(
+        StructType(Seq(
+          StructField("bb", StringType)
+        ))
+      ))
+    ))
+    val nestedStructValues4 = Row(Seq(Row("bb")))
+
+    val df3 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues3) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType3))))
+
+    val df4 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues4) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType4))))
+
+    assertThrows[AnalysisException] {
+      df3.unionByName(df4)
+    }
+
+    unionDf = df3.unionByName(df4, true)
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<STRUCT<ba: STRING, bb: STRING>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Row("ba", null)))) ::
+      Row(Row(Seq(Row(null, "bb")))) :: Nil)
+
+    assertThrows[AnalysisException] {
+      df4.unionByName(df3)
+    }
+
+    unionDf = df4.unionByName(df3, true)
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<STRUCT<bb: STRING, ba: STRING>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Row("bb", null)))) ::
+      Row(Row(Seq(Row(null, "ba")))) :: Nil)
+  }
+
+  test("SPARK-36546: Add unionByName support to multiple levels of nested arrays of structs") {
+    val nestedStructType1 = StructType(Seq(
+      StructField("b", ArrayType(
+        ArrayType(
+          StructType(Seq(
+            StructField("ba", StringType),
+            StructField("bb", StringType)
+          ))
+        )
+      ))
+    ))
+    val nestedStructValues1 = Row(Seq(Seq(Row("ba", "bb"))))
+
+    val nestedStructType2 = StructType(Seq(
+      StructField("b", ArrayType(
+        ArrayType(
+          StructType(Seq(
+            StructField("bb", StringType),
+            StructField("ba", StringType)
+          ))
+        )
+      ))
+    ))
+    val nestedStructValues2 = Row(Seq(Seq(Row("bb", "ba"))))
+
+    val df1 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues1) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType1))))
+
+    val df2 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues2) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType2))))
+
+    var unionDf = df1.unionByName(df2)
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<ARRAY<STRUCT<ba: STRING, bb: STRING>>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Seq(Row("ba", "bb"))))) ::
+      Row(Row(Seq(Seq(Row("ba", "bb"))))) :: Nil)
+
+    unionDf = df2.unionByName(df1)
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<ARRAY<STRUCT<bb: STRING, ba: STRING>>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Seq(Row("bb", "ba"))))) ::
+      Row(Row(Seq(Seq(Row("bb", "ba"))))) :: Nil)
+
+    val nestedStructType3 = StructType(Seq(
+      StructField("b", ArrayType(
+        ArrayType(
+          StructType(Seq(
+            StructField("ba", StringType)
+          ))
+        )
+      ))
+    ))
+    val nestedStructValues3 = Row(Seq(Seq(Row("ba"))))
+
+    val nestedStructType4 = StructType(Seq(
+      StructField("b", ArrayType(
+        ArrayType(
+          StructType(Seq(
+            StructField("bb", StringType)
+          ))
+        )
+      ))
+    ))
+    val nestedStructValues4 = Row(Seq(Seq(Row("bb"))))
+
+    val df3 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues3) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType3))))
+
+    val df4 = spark.createDataFrame(
+      sparkContext.parallelize(Row(nestedStructValues4) :: Nil),
+      StructType(Seq(StructField("topLevelCol", nestedStructType4))))
+
+    assertThrows[AnalysisException] {
+      df3.unionByName(df4)
+    }
+
+    unionDf = df3.unionByName(df4, true)
+    assert(unionDf.schema.toDDL == "topLevelCol " +
+      "STRUCT<b: ARRAY<ARRAY<STRUCT<ba: STRING, bb: STRING>>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Seq(Row("ba", null))))) ::
+      Row(Row(Seq(Seq(Row(null, "bb"))))) :: Nil)
+
+    assertThrows[AnalysisException] {
+      df4.unionByName(df3)
+    }
+
+    unionDf = df4.unionByName(df3, true)
+    assert(unionDf.schema.toDDL == "topLevelCol STRUCT<" +
+      "b: ARRAY<ARRAY<STRUCT<bb: STRING, ba: STRING>>>>")
+    checkAnswer(unionDf,
+      Row(Row(Seq(Seq(Row("bb", null))))) ::
+      Row(Row(Seq(Seq(Row(null, "ba"))))) :: Nil)
+  }
+
+  test("SPARK-37371: UnionExec should support columnar if all children support columnar") {
+    def checkIfColumnar(
+        plan: SparkPlan,
+        targetPlan: (SparkPlan) => Boolean,
+        isColumnar: Boolean,
+        targetPlanNum: Int): Unit = {
+      val target = collect(plan) {
+        case p if targetPlan(p) => p
+      }
+      assert(target.nonEmpty)
+      assert(target.size == targetPlanNum)
+      assert(target.forall(_.supportsColumnar == isColumnar))
+    }
+
+    Seq(true, false).foreach { supported =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> supported.toString) {
+        val df1 = Seq(1, 2, 3).toDF("i").cache()
+        val df2 = Seq(4, 5, 6).toDF("j").cache()
+
+        val union = df1.union(df2)
+        union.collect()
+        checkIfColumnar(union.queryExecution.executedPlan,
+          _.isInstanceOf[InMemoryTableScanExec], supported, 2)
+        checkIfColumnar(union.queryExecution.executedPlan, _.isInstanceOf[UnionExec], supported, 1)
+        checkAnswer(union, Row(1) :: Row(2) :: Row(3) :: Row(4) :: Row(5) :: Row(6) :: Nil)
+
+        val nonColumnarUnion = df1.union(Seq(7, 8, 9).toDF("k"))
+        checkIfColumnar(nonColumnarUnion.queryExecution.executedPlan,
+          _.isInstanceOf[UnionExec], false, 1)
+        checkAnswer(nonColumnarUnion,
+          Row(1) :: Row(2) :: Row(3) :: Row(7) :: Row(8) :: Row(9) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-52921: union partitioning - reused shuffle") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+      val df2 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+
+      val union = df1.repartition($"a").union(df2.repartition($"a"))
+      val unionExec = union.queryExecution.executedPlan.collect {
+        case u: UnionExec => u
+      }
+      assert(unionExec.size == 1)
+
+      val shuffle = df1.repartition($"a").queryExecution.executedPlan.collect {
+        case s: ShuffleExchangeExec => s
+      }
+      assert(shuffle.size == 1)
+
+      val reuseShuffle = union.queryExecution.executedPlan.collect {
+        case r: ReusedExchangeExec => r
+      }
+      assert(reuseShuffle.size == 1)
+
+      val childPartitioning = shuffle.head.outputPartitioning
+      val partitioning = unionExec.head.outputPartitioning
+      assert(partitioning == childPartitioning)
+    }
+  }
+
+  test("SPARK-52921: union partitioning - semantic equality") {
+    val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
+
+    val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+      df1.repartition($"a").union(df2.repartition($"d")).collect()
+    }
+
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+
+        val union = df1.repartition($"a").union(df2.repartition($"d"))
+        val unionExec = union.queryExecution.executedPlan.collect {
+          case u: UnionExec => u
+        }
+        assert(unionExec.size == 1)
+
+        val shuffle = df1.repartition($"a").queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+        assert(shuffle.size == 1)
+
+        val childPartitioning = shuffle.head.outputPartitioning
+        val partitioning = unionExec.head.outputPartitioning
+        if (enabled) {
+          assert(partitioning == childPartitioning)
+        }
+
+        checkAnswer(union, correctResult)
+
+        // Avoid unnecessary shuffle if union output partitioning is enabled
+        val shuffledUnion = union.repartition($"a")
+        val shuffleNumBefore = union.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+        val shuffleNumAfter = shuffledUnion.queryExecution.executedPlan.collect {
+          case s: ShuffleExchangeExec => s
+        }
+
+        if (enabled) {
+          assert(shuffleNumBefore.size == shuffleNumAfter.size)
+        } else {
+          assert(shuffleNumBefore.size + 1 == shuffleNumAfter.size)
+        }
+        checkAnswer(union, shuffledUnion)
+      }
+    }
+  }
+
+  test("SPARK-52921: union partitioning - range partitioning") {
+    val df1 = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df2 = Seq((4, 1, 5), (2, 4, 6), (1, 4, 2), (3, 5, 1)).toDF("d", "e", "f")
+
+    val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+      df1.repartitionByRange($"a").union(df2.repartitionByRange($"d")).collect()
+    }
+
+    Seq(true, false).foreach { enabled =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+
+        val union = df1.repartitionByRange($"a").union(df2.repartitionByRange($"d"))
+        val unionExec = union.queryExecution.executedPlan.collect {
+          case u: UnionExec => u
+        }
+        assert(unionExec.size == 1)
+
+        // For range partitioning, even children have the same partitioning,
+        // the union output partitioning is still UnknownPartitioning.
+        val partitioning = unionExec.head.outputPartitioning
+        assert(partitioning.isInstanceOf[UnknownPartitioning])
+
+        checkAnswer(union, correctResult)
+      }
+    }
+  }
+
+  test("SPARK-53550: union partitioning should compare canonicalized attributes") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("person_base", "person_a", "person_b", "person_c") {
+        // scalastyle:off line.size.limit
+        sql(
+          """create or replace temp view person_base(id, name, age) as values
+            |(0, "mike", 30),
+            |(1, "jim", 20);
+            |""".stripMargin)
+        sql(
+          """create or replace temp view person_a as
+            |SELECT name, avg(age) as avg_age FROM person_base GROUP BY name;""".stripMargin)
+        sql(
+          """create or replace temp view person_b as
+            |SELECT p1.name, p2.avg_age FROM person_base p1 JOIN person_a p2 ON p1.name = p2.name;""".stripMargin)
+        sql(
+          """create or replace temp view person_c as
+            |SELECT * FROM person_a UNION SELECT * FROM person_b;""".stripMargin)
+        val df = sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name")
+        // scalastyle:on line.size.limit
+        checkAnswer(df, Row("jim", 20) :: Row("mike", 30) :: Nil)
+      }
+    }
   }
 }
 

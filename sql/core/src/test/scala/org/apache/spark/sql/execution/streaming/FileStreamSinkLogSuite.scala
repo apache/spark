@@ -28,12 +28,14 @@ import scala.util.Random
 import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path, RawLocalFileSystem}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSinkLog, SinkFileStatus}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
-  import CompactibleFileStreamLog._
+  import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
   import FileStreamSinkLog._
 
   test("shouldRetain") {
@@ -296,7 +298,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
   private def readFromResource(dir: String): Seq[SinkFileStatus] = {
     val input = getClass.getResource(s"/structured-streaming/$dir")
     val log = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, input.toString)
-    log.allFiles()
+    log.allFiles().toImmutableArraySeq
   }
 
   private def withCountOpenLocalFileSystemAsLocalFileSystem(body: => Unit): Unit = {
@@ -331,7 +333,7 @@ class CountOpenLocalFileSystem extends RawLocalFileSystem {
 }
 
 object CountOpenLocalFileSystem {
-  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt)}fs"
+  val scheme = s"FileStreamSinkLogSuite${math.abs(Random.nextInt())}fs"
   val pathToNumOpenCalled = new ConcurrentHashMap[String, JLong]
 
   def resetCount(): Unit = pathToNumOpenCalled.clear()

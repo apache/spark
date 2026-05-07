@@ -58,7 +58,7 @@ private[ml] class RDDLossFunction[
     val thisAgg = getAggregator(bcCoefficients)
     val seqOp = (agg: Agg, x: T) => agg.add(x)
     val combOp = (agg1: Agg, agg2: Agg) => agg1.merge(agg2)
-    val newAgg = instances.treeAggregate(thisAgg)(seqOp, combOp, aggregationDepth)
+    val newAgg = instances.treeAggregate(thisAgg, seqOp, combOp, aggregationDepth, true)
     val gradient = newAgg.gradient
     val regLoss = regularization.map { regFun =>
       val (regLoss, regGradient) = regFun.calculate(Vectors.fromBreeze(coefficients))

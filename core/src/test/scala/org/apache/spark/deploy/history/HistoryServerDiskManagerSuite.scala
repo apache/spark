@@ -26,11 +26,20 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.status.KVUtils
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
-class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
+abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
+
+  protected def backend: HybridStoreDiskBackend.Value
+
+  protected def extension: String
+
+  protected def conf: SparkConf = new SparkConf()
+    .set(HYBRID_STORE_DISK_BACKEND, backend.toString)
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
@@ -41,7 +50,7 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     testDir = Utils.createTempDir()
-    store = KVUtils.open(new File(testDir, "listing"), "test")
+    store = KVUtils.open(new File(testDir, "listing"), "test", conf, live = false)
   }
 
   after {
@@ -53,7 +62,8 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private def mockManager(): HistoryServerDiskManager = {
     val conf = new SparkConf().set(MAX_LOCAL_DISK_USAGE, MAX_USAGE)
-    val manager = spy(new HistoryServerDiskManager(conf, testDir, store, new ManualClock()))
+    val manager = spy[HistoryServerDiskManager](
+      new HistoryServerDiskManager(conf, testDir, store, new ManualClock()))
     doAnswer(AdditionalAnswers.returnsFirstArg[Long]()).when(manager)
       .approximateSize(anyLong(), anyBoolean())
     manager
@@ -210,4 +220,52 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(store.read(classOf[ApplicationStoreInfo], dstC.getAbsolutePath).size === 2)
   }
 
+  test("SPARK-56044: release with delete cleans up store when app is not in active map") {
+    val manager = mockManager()
+    val leaseA = manager.lease(2)
+    doReturn(2L).when(manager).sizeOf(meq(leaseA.tmpPath))
+    val dstPathA = manager.appStorePath("app1", None)
+    doReturn(2L).when(manager).sizeOf(meq(dstPathA))
+    val dst = leaseA.commit("app1", None)
+    assert(dst.exists())
+    assert(manager.committed() === 2)
+
+    // Release without deleting; the store remains on disk and in the listing.
+    doReturn(2L).when(manager).sizeOf(meq(dst))
+    manager.release("app1", None)
+    assert(dst.exists())
+    assert(manager.committed() === 2)
+
+    // Simulate: service restarts, new disk manager is initialized with an empty active map.
+    val manager2 = mockManager()
+    doReturn(2L).when(manager2).sizeOf(meq(dst))
+    doReturn(2L).when(manager2).sizeOf(meq(new File(testDir, "apps")))
+    manager2.initialize()
+    assert(dst.exists())
+    assert(store.read(classOf[ApplicationStoreInfo], dst.getAbsolutePath).size === 2)
+
+    // Delete via release; the app was never opened in manager2 so it is not in the active map.
+    manager2.release("app1", None, delete = true)
+    assert(!dst.exists())
+    assert(!store.view(classOf[ApplicationStoreInfo]).iterator().hasNext)
+    assert(manager2.committed() === 0)
+    assert(manager2.free() === MAX_USAGE)
+  }
+
+  test("SPARK-38095: appStorePath should use backend extensions") {
+    val conf = new SparkConf().set(HYBRID_STORE_DISK_BACKEND, backend.toString)
+    val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())
+    assert(manager.appStorePath("appId", None).getName.endsWith(extension))
+  }
+}
+
+@ExtendedLevelDBTest
+class HistoryServerDiskManagerUseLevelDBSuite extends HistoryServerDiskManagerSuite {
+  override protected def backend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.LEVELDB
+  override protected def extension: String = ".ldb"
+}
+
+class HistoryServerDiskManagerUseRocksDBSuite extends HistoryServerDiskManagerSuite {
+  override protected def backend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.ROCKSDB
+  override protected def extension: String = ".rdb"
 }

@@ -33,8 +33,10 @@ import org.apache.hadoop.security.token.Token
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.KEYTAB
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.util.Utils
 
 private[spark] class HiveDelegationTokenProvider
@@ -42,8 +44,9 @@ private[spark] class HiveDelegationTokenProvider
 
   override def serviceName: String = "hive"
 
-  private val classNotFoundErrorStr = s"You are attempting to use the " +
-    s"${getClass.getCanonicalName}, but your Spark distribution is not built with Hive libraries."
+  private val classNotFoundErrorStr =
+    log"You are attempting to use the ${MDC(CLASS_NAME, getClass.getCanonicalName)}, " +
+      log"but your Spark distribution is not built with Hive libraries."
 
   private def hiveConf(hadoopConf: Configuration): Configuration = {
     try {
@@ -53,7 +56,7 @@ private[spark] class HiveDelegationTokenProvider
         logWarning("Fail to create Hive Configuration", e)
         hadoopConf
       case e: NoClassDefFoundError =>
-        logWarning(classNotFoundErrorStr)
+        logWarning(classNotFoundErrorStr, e)
         hadoopConf
     }
   }
@@ -99,7 +102,7 @@ private[spark] class HiveDelegationTokenProvider
         s"$principal at $metastoreUri")
 
       doAsRealUser {
-        val hive = Hive.get(conf, classOf[HiveConf])
+        val hive = HiveClientImpl.getHive(conf)
         val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
 
         val hive2Token = new Token[DelegationTokenIdentifier]()
@@ -111,7 +114,7 @@ private[spark] class HiveDelegationTokenProvider
       None
     } catch {
       case NonFatal(e) =>
-        logWarning(Utils.createFailedToGetTokenMessage(serviceName, e))
+        logWarning(Utils.createFailedToGetTokenMessage(serviceName), e)
         None
       case e: NoClassDefFoundError =>
         logWarning(classNotFoundErrorStr)

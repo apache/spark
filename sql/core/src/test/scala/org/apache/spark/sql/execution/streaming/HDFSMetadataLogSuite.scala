@@ -25,6 +25,7 @@ import scala.language.implicitConversions
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.execution.streaming.checkpointing.{FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager, HDFSMetadataLog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
@@ -32,6 +33,18 @@ import org.apache.spark.util.UninterruptibleThread
 class HDFSMetadataLogSuite extends SharedSparkSession {
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
+
+  test("SPARK-46339: Directory with number name should not be treated as metadata log") {
+    withTempDir { temp =>
+      val dir = new File(temp, "dir")
+      val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      assert(metadataLog.metadataPath.toString.endsWith("/dir"))
+
+      // Create a directory with batch id 0
+      new File(dir, "0").mkdir()
+      assert(metadataLog.getLatest() === None)
+    }
+  }
 
   test("HDFSMetadataLog: basic") {
     withTempDir { temp =>
@@ -204,5 +217,25 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     intercept[AssertionError](verifyBatchIds(Seq(2), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
+  }
+
+  test("HDFSMetadataLog: readOnly=false always creates directory") {
+    withTempDir { temp =>
+      val dir = new File(temp, "nonexistent")
+      assert(!dir.exists())
+      new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
+      assert(dir.exists(),
+        "HDFSMetadataLog should create directory when readOnly=false (default)")
+    }
+  }
+
+  test("HDFSMetadataLog: readOnly=true does not create directory") {
+    withTempDir { temp =>
+      val dir = new File(temp, "nonexistent")
+      assert(!dir.exists())
+      new HDFSMetadataLog[String](spark, dir.getAbsolutePath, readOnly = true)
+      assert(!dir.exists(),
+        "HDFSMetadataLog should not create directory when readOnly=true")
+    }
   }
 }

@@ -16,19 +16,19 @@
  */
 package org.apache.spark.deploy.yarn
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{FAILURES, HOST, NODES}
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.HealthTracker
-import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * YarnAllocatorNodeHealthTracker is responsible for tracking the health of nodes
@@ -47,10 +47,10 @@ import org.apache.spark.util.{Clock, SystemClock}
 private[spark] class YarnAllocatorNodeHealthTracker(
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
-    failureTracker: FailureTracker)
+    failureTracker: ExecutorFailureTracker)
   extends Logging {
 
-  private val excludeOnFailureTimeoutMillis = HealthTracker.getExludeOnFailureTimeout(sparkConf)
+  private val excludeOnFailureTimeoutMillis = HealthTracker.getExcludeOnFailureTimeout(sparkConf)
 
   private val launchExcludeOnFailureEnabled =
     sparkConf.get(YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED)
@@ -91,7 +91,8 @@ private[spark] class YarnAllocatorNodeHealthTracker(
   private def updateAllocationExcludedNodes(hostname: String): Unit = {
     val failuresOnHost = failureTracker.numFailuresOnHost(hostname)
     if (failuresOnHost > maxFailuresPerHost) {
-      logInfo(s"excluding $hostname as YARN allocation failed $failuresOnHost times")
+      logInfo(log"excluding ${MDC(HOST, hostname)} as YARN allocation failed " +
+        log"${MDC(FAILURES, failuresOnHost)} times")
       allocatorExcludedNodeList.put(
         hostname,
         failureTracker.clock.getTimeMillis() + excludeOnFailureTimeoutMillis)
@@ -126,10 +127,12 @@ private[spark] class YarnAllocatorNodeHealthTracker(
     val additions = (nodesToExclude -- currentExcludededYarnNodes).toList.sorted
     val removals = (currentExcludededYarnNodes -- nodesToExclude).toList.sorted
     if (additions.nonEmpty) {
-      logInfo(s"adding nodes to YARN application master's excluded node list: $additions")
+      logInfo(log"adding nodes to YARN application master's " +
+        log"excluded node list: ${MDC(NODES, additions)}")
     }
     if (removals.nonEmpty) {
-      logInfo(s"removing nodes from YARN application master's excluded node list: $removals")
+      logInfo(log"removing nodes from YARN application master's " +
+        log"excluded node list: ${MDC(NODES, removals)}")
     }
     if (additions.nonEmpty || removals.nonEmpty) {
       // Note YARNs api for excluding nodes is updateBlacklist.
@@ -142,62 +145,8 @@ private[spark] class YarnAllocatorNodeHealthTracker(
 
   private def removeExpiredYarnExcludedNodes(): Unit = {
     val now = failureTracker.clock.getTimeMillis()
-    allocatorExcludedNodeList.retain { (_, expiryTime) => expiryTime > now }
+    allocatorExcludedNodeList.filterInPlace { (_, expiryTime) => expiryTime > now }
   }
+
+  refreshExcludedNodes()
 }
-
-/**
- * FailureTracker is responsible for tracking executor failures both for each host separately
- * and for all hosts altogether.
- */
-private[spark] class FailureTracker(
-    sparkConf: SparkConf,
-    val clock: Clock = new SystemClock) extends Logging {
-
-  private val executorFailuresValidityInterval =
-    sparkConf.get(config.EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
-
-  // Queue to store the timestamp of failed executors for each host
-  private val failedExecutorsTimeStampsPerHost = mutable.Map[String, mutable.Queue[Long]]()
-
-  private val failedExecutorsTimeStamps = new mutable.Queue[Long]()
-
-  private def updateAndCountFailures(failedExecutorsWithTimeStamps: mutable.Queue[Long]): Int = {
-    val endTime = clock.getTimeMillis()
-    while (executorFailuresValidityInterval > 0 &&
-        failedExecutorsWithTimeStamps.nonEmpty &&
-        failedExecutorsWithTimeStamps.head < endTime - executorFailuresValidityInterval) {
-      failedExecutorsWithTimeStamps.dequeue()
-    }
-    failedExecutorsWithTimeStamps.size
-  }
-
-  def numFailedExecutors: Int = synchronized {
-    updateAndCountFailures(failedExecutorsTimeStamps)
-  }
-
-  def registerFailureOnHost(hostname: String): Unit = synchronized {
-    val timeMillis = clock.getTimeMillis()
-    failedExecutorsTimeStamps.enqueue(timeMillis)
-    val failedExecutorsOnHost =
-      failedExecutorsTimeStampsPerHost.getOrElse(hostname, {
-        val failureOnHost = mutable.Queue[Long]()
-        failedExecutorsTimeStampsPerHost.put(hostname, failureOnHost)
-        failureOnHost
-      })
-    failedExecutorsOnHost.enqueue(timeMillis)
-  }
-
-  def registerExecutorFailure(): Unit = synchronized {
-    val timeMillis = clock.getTimeMillis()
-    failedExecutorsTimeStamps.enqueue(timeMillis)
-  }
-
-  def numFailuresOnHost(hostname: String): Int = {
-    failedExecutorsTimeStampsPerHost.get(hostname).map { failedExecutorsOnHost =>
-      updateAndCountFailures(failedExecutorsOnHost)
-    }.getOrElse(0)
-  }
-
-}
-

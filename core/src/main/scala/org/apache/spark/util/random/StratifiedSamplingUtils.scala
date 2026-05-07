@@ -69,7 +69,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
       val rng = new RandomDataGenerator()
       rng.reSeed(seed + partition)
       val seqOp = getSeqOp(withReplacement, fractions, rng, counts)
-      Iterator(iter.aggregate(zeroU)(seqOp, combOp))
+      Iterator(iter.foldLeft(zeroU)(seqOp))
     }
     mappedPartitionRDD.reduce(combOp)
   }
@@ -98,8 +98,8 @@ private[spark] object StratifiedSamplingUtils extends Logging {
         if (acceptResult.areBoundsEmpty) {
           val n = counts.get(key)
           val sampleSize = math.ceil(n * fraction).toLong
-          val lmbd1 = PoissonBounds.getLowerBound(sampleSize)
-          val lmbd2 = PoissonBounds.getUpperBound(sampleSize)
+          val lmbd1 = PoissonBounds.getLowerBound(sampleSize.toDouble)
+          val lmbd2 = PoissonBounds.getUpperBound(sampleSize.toDouble)
           acceptResult.acceptBound = lmbd1 / n
           acceptResult.waitListBound = (lmbd2 - lmbd1) / n
         }

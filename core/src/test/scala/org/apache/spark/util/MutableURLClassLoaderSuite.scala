@@ -19,12 +19,13 @@ package org.apache.spark.util
 
 import java.net.URLClassLoader
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TestUtils}
+import org.apache.spark.util.ArrayImplicits._
 
 class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
@@ -35,7 +36,7 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
       classNames = Seq("FakeClass1"),
       classNamesWithBase = Seq(("FakeClass2", "FakeClass3")), // FakeClass3 is in parent
       toStringValue = "1",
-      classpathUrls = urls2)).toArray
+      classpathUrls = urls2.toImmutableArraySeq)).toArray
 
   val fileUrlsChild = List(TestUtils.createJarWithFiles(Map(
     "resource1" -> "resource1Contents-child",

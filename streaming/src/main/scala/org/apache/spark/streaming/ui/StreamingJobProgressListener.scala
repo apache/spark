@@ -20,8 +20,8 @@ package org.apache.spark.streaming.ui
 import java.util.{LinkedHashMap, Map => JMap, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, Queue}
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.scheduler._
 import org.apache.spark.streaming.{StreamingConf, StreamingContext, Time}
@@ -216,7 +216,8 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
   def receivedRecordRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
     val _retainedBatches = retainedBatches
     val latestBatches = _retainedBatches.map { batchUIData =>
-      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToInputInfo.mapValues(_.numRecords))
+      (batchUIData.batchTime.milliseconds,
+        batchUIData.streamIdToInputInfo.transform((_, v) => v.numRecords))
     }
     streamIds.map { streamId =>
       val recordRates = latestBatches.map {
@@ -230,7 +231,7 @@ private[spark] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
     val lastReceivedBlockInfoOption =
-      lastReceivedBatch.map(_.streamIdToInputInfo.mapValues(_.numRecords))
+      lastReceivedBatch.map(_.streamIdToInputInfo.transform((_, v) => v.numRecords))
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
       streamIds.map { streamId =>
         (streamId, lastReceivedBlockInfo.getOrElse(streamId, 0L))

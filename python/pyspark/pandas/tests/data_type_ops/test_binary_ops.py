@@ -19,11 +19,11 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class BinaryOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([b"1", b"2", b"3"])
@@ -98,10 +98,10 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_pow(self):
         self.assertRaises(TypeError, lambda: self.psser ** "x")
-        self.assertRaises(TypeError, lambda: self.psser ** 1)
+        self.assertRaises(TypeError, lambda: self.psser**1)
 
         for psser in self.pssers:
-            self.assertRaises(TypeError, lambda: self.psser ** psser)
+            self.assertRaises(TypeError, lambda: self.psser**psser)
 
     def test_radd(self):
         self.assert_eq(b"1" + self.psser, b"1" + self.pser)
@@ -129,7 +129,7 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_rpow(self):
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: 1 ** self.psser)
+        self.assertRaises(TypeError, lambda: 1**self.psser)
 
     def test_and(self):
         self.assertRaises(TypeError, lambda: self.psser & True)
@@ -153,7 +153,7 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         data = [b"1", b"2", b"3"]
         pser = pd.Series(data)
         psser = ps.Series(data)
-        self.assert_eq(pser, psser.to_pandas())
+        self.assert_eq(pser, psser._to_pandas())
         self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -162,7 +162,8 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq(pd.Series(["1", "2", "3"]), psser.astype(str))
+        self.assert_eq(psser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[b"2", b"3", b"1"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
@@ -207,14 +208,15 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(byte_pdf["this"] >= byte_pdf["this"], byte_psdf["this"] >= byte_psdf["this"])
 
 
+class BinaryOpsTests(
+    BinaryOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
+    pass
+
+
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.data_type_ops.test_binary_ops import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

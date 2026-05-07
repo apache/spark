@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.hive.client
 
-import scala.collection.immutable.IndexedSeq
-
 import org.scalatest.Suite
 
 class HivePartitionFilteringSuites extends Suite with HiveClientVersions {
   override def nestedSuites: IndexedSeq[Suite] = {
-    // Hive 0.12 does not provide the partition filtering API we call
-    versions.filterNot(_ == "0.12").map(new HivePartitionFilteringSuite(_))
+    versions.map(new HivePartitionFilteringSuite(_))
   }
 }

@@ -18,9 +18,7 @@
 package org.apache.spark.ml.source.libsvm
 
 import java.io.{File, IOException}
-import java.nio.charset.StandardCharsets
-
-import com.google.common.io.Files
+import java.nio.file.Files
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -65,9 +63,9 @@ class LibSVMRelationSuite
     val succ = new File(dir, "_SUCCESS")
     val file0 = new File(dir, "part-00000")
     val file1 = new File(dir, "part-00001")
-    Files.write("", succ, StandardCharsets.UTF_8)
-    Files.write(lines0, file0, StandardCharsets.UTF_8)
-    Files.write(lines1, file1, StandardCharsets.UTF_8)
+    Files.writeString(succ.toPath, "")
+    Files.writeString(file0.toPath, lines0)
+    Files.writeString(file1.toPath, lines1)
     path = dir.getPath
   }
 
@@ -154,11 +152,11 @@ class LibSVMRelationSuite
     rawData.add(Row(1.0, Vectors.sparse(3, Seq((0, 2.0), (1, 3.0)))))
     rawData.add(Row(4.0, Vectors.sparse(3, Seq((0, 5.0), (2, 6.0)))))
 
-    val struct = StructType(
-      StructField("labelFoo", DoubleType, false) ::
-      StructField("featuresBar", VectorType, false) :: Nil
+    val struct = StructType(Array(
+      StructField("labelFoo", DoubleType, false),
+      StructField("featuresBar", VectorType, false))
     )
-    val df = spark.sqlContext.createDataFrame(rawData, struct)
+    val df = spark.createDataFrame(rawData, struct)
 
     val writePath = Utils.createTempDir().getPath
 
@@ -173,8 +171,8 @@ class LibSVMRelationSuite
 
   test("select features from libsvm relation") {
     val df = spark.read.format("libsvm").load(path)
-    df.select("features").rdd.map { case Row(d: Vector) => d }.first
-    df.select("features").collect
+    df.select("features").rdd.map { case Row(d: Vector) => d }.first()
+    df.select("features").collect()
   }
 
   test("create libsvmTable table without schema") {

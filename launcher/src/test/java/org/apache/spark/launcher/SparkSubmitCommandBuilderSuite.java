@@ -18,44 +18,125 @@
 package org.apache.spark.launcher;
 
 import java.io.File;
+import java.io.FileReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.regex.Pattern;
 
-import org.junit.*;
+import org.junit.jupiter.api.*;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private static File dummyPropsFile;
+  private static File connectPropsFile;
+  private static File driverMemPropsFile;
   private static SparkSubmitOptionParser parser;
 
-  @BeforeClass
+  @BeforeAll
   public static void setUp() throws Exception {
     dummyPropsFile = File.createTempFile("spark", "properties");
+    connectPropsFile = File.createTempFile("spark", "properties");
+    Files.writeString(connectPropsFile.toPath(), "spark.remote=sc://connect-server:15002");
+    driverMemPropsFile = File.createTempFile("spark", "properties");
+    Files.writeString(driverMemPropsFile.toPath(),
+        "spark.driver.memory=4g\nspark.driver.memoryOverhead=768m");
     parser = new SparkSubmitOptionParser();
   }
 
-  @AfterClass
+  @AfterAll
   public static void cleanUp() throws Exception {
     dummyPropsFile.delete();
+    connectPropsFile.delete();
+    driverMemPropsFile.delete();
+  }
+
+  @Test
+  public void testGetEffectiveConfig() throws Exception {
+    doTestGetEffectiveConfig(null, true, true);
+    doTestGetEffectiveConfig(null, true, false);
+    doTestGetEffectiveConfig(null, false, true);
+    doTestGetEffectiveConfig(null, false, false);
+    doTestGetEffectiveConfig(driverMemPropsFile, true, true);
+    doTestGetEffectiveConfig(driverMemPropsFile, true, false);
+    doTestGetEffectiveConfig(driverMemPropsFile, false, true);
+    doTestGetEffectiveConfig(driverMemPropsFile, false, false);
+  }
+
+  private void doTestGetEffectiveConfig(
+      File propertiesFile, boolean loadSparkDefaults, boolean confDriverMemory) throws Exception {
+    SparkSubmitCommandBuilder launcher =
+        newCommandBuilder(Collections.emptyList());
+    launcher.loadSparkDefaults = loadSparkDefaults;
+    launcher.conf.put("spark.foo", "bar");
+    launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+        + "/launcher/src/test/resources");
+
+    if (propertiesFile != null) {
+      launcher.setPropertiesFile(propertiesFile.getAbsolutePath());
+    }
+
+    if (confDriverMemory) {
+      launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "2g");
+    }
+
+    Map<String, String> effectiveConfig = launcher.getEffectiveConfig();
+
+    assertEquals("bar", effectiveConfig.get("spark.foo"));
+    if (confDriverMemory) {
+      assertEquals("2g", effectiveConfig.get(SparkLauncher.DRIVER_MEMORY));
+    } else if (propertiesFile != null) {
+      try (FileReader reader = new FileReader(propertiesFile, StandardCharsets.UTF_8)) {
+        Properties props = new Properties();
+        props.load(reader);
+        if (props.containsKey(SparkLauncher.DRIVER_MEMORY)) {
+          assertEquals(props.getProperty(SparkLauncher.DRIVER_MEMORY),
+            effectiveConfig.get(SparkLauncher.DRIVER_MEMORY));
+        }
+      }
+    } else {
+      assertEquals("1g", effectiveConfig.get(SparkLauncher.DRIVER_MEMORY));
+    }
+
+    if (propertiesFile != null) {
+      try (FileReader reader = new FileReader(propertiesFile, StandardCharsets.UTF_8)) {
+        Properties props = new Properties();
+        props.load(reader);
+        if (props.containsKey("spark.driver.memoryOverhead")) {
+          assertEquals(props.getProperty("spark.driver.memoryOverhead"),
+              effectiveConfig.get("spark.driver.memoryOverhead"));
+        }
+      }
+      if (loadSparkDefaults) {
+        assertEquals("/driver", effectiveConfig.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH));
+      } else {
+        assertFalse(effectiveConfig.containsKey(SparkLauncher.DRIVER_EXTRA_CLASSPATH));
+      }
+    } else {
+      assertEquals("/driver", effectiveConfig.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH));
+    }
   }
 
   @Test
   public void testDriverCmdBuilder() throws Exception {
-    testCmdBuilder(true, true);
-    testCmdBuilder(true, false);
+    testCmdBuilder(true, null);
+    testCmdBuilder(true, dummyPropsFile);
+    testCmdBuilder(true, connectPropsFile);
   }
 
   @Test
   public void testClusterCmdBuilder() throws Exception {
-    testCmdBuilder(false, true);
-    testCmdBuilder(false, false);
+    testCmdBuilder(false, null);
+    testCmdBuilder(false, dummyPropsFile);
+    testCmdBuilder(false, connectPropsFile);
   }
 
   @Test
@@ -63,13 +144,43 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     List<String> helpArgs = Arrays.asList(parser.HELP);
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(helpArgs, env);
-    assertTrue("--help should be contained in the final cmd.", cmd.contains(parser.HELP));
+    assertTrue(cmd.contains(parser.HELP), "--help should be contained in the final cmd.");
 
     List<String> sparkEmptyArgs = Collections.emptyList();
     cmd = buildCommand(sparkEmptyArgs, env);
     assertTrue(
-      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
-      cmd.contains("org.apache.spark.deploy.SparkSubmit"));
+      cmd.contains("org.apache.spark.deploy.SparkSubmit"),
+      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.");
+  }
+
+  @Test
+  public void testCheckJavaOptionsThrowException() throws Exception {
+    Map<String, String> env = new HashMap<>();
+    List<String> sparkSubmitArgs = Arrays.asList(
+      parser.MASTER,
+      "local",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "-Xmx64g -Dprop=Other -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
+        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      SparkLauncher.NO_RESOURCE);
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(sparkSubmitArgs, env));
+  }
+
+  @Test
+  public void testCheckJavaOptions() throws Exception {
+    Map<String, String> env = new HashMap<>();
+    List<String> sparkSubmitArgs = Arrays.asList(
+      parser.MASTER,
+      "local",
+      parser.DRIVER_CLASS_PATH,
+      "/driverCp",
+      parser.DRIVER_JAVA_OPTIONS,
+      "-Dprop=-Xmx -Dprop1=\"-Xmx -Xmx\" -Dprop2=\"-Xmx '-Xmx\" " +
+        "-Dprop3='-Xmx -Xmx' -Dprop4='-Xmx \"-Xmx'",
+      SparkLauncher.NO_RESOURCE);
+    buildCommand(sparkSubmitArgs, env);
   }
 
   @Test
@@ -103,9 +214,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertTrue(findInStringList(env.get(CommandBuilderUtils.getLibPathEnvName()),
         File.pathSeparator, "/driverLibPath"));
     assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/driverCp"));
-    assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
-    assertTrue("Command should contain user-defined conf.",
-      Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
+    assertTrue(cmd.contains("-Xmx42g"), "Driver -Xmx should be configured.");
+    assertTrue(
+      Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0,
+      "Command should contain user-defined conf.");
   }
 
   @Test
@@ -193,11 +305,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       env.get("SPARKR_SUBMIT_ARGS"));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testExamplesRunnerNoArg() throws Exception {
+  @Test
+  public void testExamplesRunnerNoArg() {
     List<String> sparkSubmitArgs = Arrays.asList(SparkSubmitCommandBuilder.RUN_EXAMPLE);
     Map<String, String> env = new HashMap<>();
-    buildCommand(sparkSubmitArgs, env);
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(sparkSubmitArgs, env));
   }
 
   @Test
@@ -208,14 +320,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testExamplesRunnerWithMasterNoMainClass() throws Exception {
+  public void testExamplesRunnerWithMasterNoMainClass() {
     List<String> sparkSubmitArgs = Arrays.asList(
       SparkSubmitCommandBuilder.RUN_EXAMPLE,
       parser.MASTER + "=foo"
     );
     Map<String, String> env = new HashMap<>();
-    Assert.assertThrows("Missing example class name.", IllegalArgumentException.class,
-      () -> buildCommand(sparkSubmitArgs, env));
+    assertThrows(IllegalArgumentException.class,
+      () -> buildCommand(sparkSubmitArgs, env), "Missing example class name.");
   }
 
   @Test
@@ -237,7 +349,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
-  public void testExamplesRunnerPrimaryResource() throws Exception {
+  public void testExamplesRunnerPrimaryResource() {
     List<String> sparkSubmitArgs = Arrays.asList(
             SparkSubmitCommandBuilder.RUN_EXAMPLE,
             parser.MASTER + "=foo",
@@ -254,32 +366,29 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
             || new File(primaryResource).getName().startsWith("spark-examples"));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testMissingAppResource() {
-    new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkSubmitCommandBuilder().buildSparkSubmitArgs());
   }
 
   @Test
   public void testIsClientMode() {
     // Default master is "local[*]"
     SparkSubmitCommandBuilder builder = newCommandBuilder(Collections.emptyList());
-    assertTrue("By default application run in local mode",
-      builder.isClientMode(Collections.emptyMap()));
+    assertTrue(builder.isClientMode(Collections.emptyMap()),
+      "By default application run in local mode");
     // --master yarn or it can be any RM
     List<String> sparkSubmitArgs = Arrays.asList(parser.MASTER, "yarn");
     builder = newCommandBuilder(sparkSubmitArgs);
-    assertTrue("By default deploy mode is client", builder.isClientMode(Collections.emptyMap()));
+    assertTrue(builder.isClientMode(Collections.emptyMap()), "By default deploy mode is client");
     // --master yarn and set spark.submit.deployMode to client
     Map<String, String> userProps = new HashMap<>();
     userProps.put("spark.submit.deployMode", "client");
     assertTrue(builder.isClientMode(userProps));
-    // --master mesos --deploy-mode cluster
-    sparkSubmitArgs = Arrays.asList(parser.MASTER, "mesos", parser.DEPLOY_MODE, "cluster");
-    builder = newCommandBuilder(sparkSubmitArgs);
-    assertFalse(builder.isClientMode(Collections.emptyMap()));
   }
 
-  private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
+  private void testCmdBuilder(boolean isDriver, File propertiesFile) throws Exception {
     final String DRIVER_DEFAULT_PARAM = "-Ddriver-default";
     final String DRIVER_EXTRA_PARAM = "-Ddriver-extra";
     String deployMode = isDriver ? "client" : "cluster";
@@ -297,16 +406,16 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     launcher.appArgs.add("bar");
     launcher.conf.put("spark.foo", "foo");
     // either set the property through "--conf" or through default property file
-    if (!useDefaultPropertyFile) {
-      launcher.setPropertiesFile(dummyPropsFile.getAbsolutePath());
+    if (propertiesFile == null) {
+      launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
+          + "/launcher/src/test/resources");
+    } else {
+      launcher.setPropertiesFile(propertiesFile.getAbsolutePath());
       launcher.conf.put(SparkLauncher.DRIVER_MEMORY, "1g");
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver");
       launcher.conf.put(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS, DRIVER_DEFAULT_PARAM);
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_PARAM);
       launcher.conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native");
-    } else {
-      launcher.childEnv.put("SPARK_CONF_DIR", System.getProperty("spark.test.home")
-          + "/launcher/src/test/resources");
     }
 
     Map<String, String> env = new HashMap<>();
@@ -315,44 +424,45 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     // Checks below are different for driver and non-driver mode.
 
     if (isDriver) {
-      assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
-      assertTrue("Driver default options should be configured.",
-        cmd.contains(DRIVER_DEFAULT_PARAM));
-      assertTrue("Driver extra options should be configured.", cmd.contains(DRIVER_EXTRA_PARAM));
+      assertTrue(cmd.contains("-Xmx1g"), "Driver -Xmx should be configured.");
+      assertTrue(cmd.contains(DRIVER_DEFAULT_PARAM),
+        "Driver default options should be configured.");
+      assertTrue(cmd.contains(DRIVER_EXTRA_PARAM), "Driver extra options should be configured.");
     } else {
-      boolean found = false;
-      for (String arg : cmd) {
-        if (arg.startsWith("-Xmx")) {
-          found = true;
-          break;
-        }
-      }
-      assertFalse("Memory arguments should not be set.", found);
-      assertFalse("Driver default options should not be configured.",
-        cmd.contains(DRIVER_DEFAULT_PARAM));
-      assertFalse("Driver extra options should not be configured.",
-        cmd.contains(DRIVER_EXTRA_PARAM));
+      boolean found = cmd.stream().anyMatch(arg -> arg.startsWith("-Xmx"));
+      assertFalse(found, "Memory arguments should not be set.");
+      assertFalse(cmd.contains(DRIVER_DEFAULT_PARAM),
+        "Driver default options should not be configured.");
+      assertFalse(cmd.contains(DRIVER_EXTRA_PARAM),
+        "Driver extra options should not be configured.");
     }
 
     String[] cp = findArgValue(cmd, "-cp").split(Pattern.quote(File.pathSeparator));
     if (isDriver) {
-      assertTrue("Driver classpath should contain provided entry.", contains("/driver", cp));
+      assertTrue(contains("/driver", cp), "Driver classpath should contain provided entry.");
     } else {
-      assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
+      assertFalse(contains("/driver", cp), "Driver classpath should not be in command.");
     }
 
     String libPath = env.get(CommandBuilderUtils.getLibPathEnvName());
     if (isDriver) {
-      assertNotNull("Native library path should be set.", libPath);
-      assertTrue("Native library path should contain provided entry.",
-        contains("/native", libPath.split(Pattern.quote(File.pathSeparator))));
+      assertNotNull(libPath, "Native library path should be set.");
+      assertTrue(contains("/native", libPath.split(Pattern.quote(File.pathSeparator))),
+        "Native library path should contain provided entry.");
     } else {
-      assertNull("Native library should not be set.", libPath);
+      assertNull(libPath, "Native library should not be set.");
     }
 
     // Checks below are the same for both driver and non-driver mode.
-    if (!useDefaultPropertyFile) {
-      assertEquals(dummyPropsFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
+    if (propertiesFile != null) {
+      assertEquals(propertiesFile.getAbsolutePath(), findArgValue(cmd, parser.PROPERTIES_FILE));
+      try (FileReader reader = new FileReader(propertiesFile, StandardCharsets.UTF_8)) {
+        Properties props = new Properties();
+        props.load(reader);
+        if (props.containsKey("spark.remote")) {
+          assertTrue(launcher.isRemote);
+        }
+      }
     }
     assertEquals("yarn", findArgValue(cmd, parser.MASTER));
     assertEquals(deployMode, findArgValue(cmd, parser.DEPLOY_MODE));
@@ -369,7 +479,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
         break;
       }
     }
-    assertTrue("App resource and args should be added to command.", appArgsOk);
+    assertTrue(appArgsOk, "App resource and args should be added to command.");
 
     Map<String, String> conf = parseConf(cmd, parser);
     assertEquals("foo", conf.get("spark.foo"));
@@ -431,8 +541,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     }
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(args, env);
-    assertTrue(opt + " should be contained in the final cmd.",
-      cmd.contains(opt));
+    assertTrue(cmd.contains(opt), opt + " should be contained in the final cmd.");
   }
 
 }

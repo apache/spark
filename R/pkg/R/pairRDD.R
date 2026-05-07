@@ -135,7 +135,7 @@ setMethod("values",
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
 #' makePairs <- lapply(rdd, function(x) { list(x, x) })
-#' collectRDD(mapValues(makePairs, function(x) { x * 2) })
+#' collectRDD(mapValues(makePairs, function(x) { x * 2 }))
 #' Output: list(list(1,2), list(2,4), list(3,6), ...)
 #'}
 #' @rdname mapValues

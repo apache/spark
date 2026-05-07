@@ -21,10 +21,8 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
 
-import com.google.common.base.Preconditions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -34,6 +32,7 @@ import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Similar to {@link OneForOneBlockFetcher}, but for pushing blocks to remote shuffle service to
@@ -44,7 +43,8 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  * @since 3.1.0
  */
 public class OneForOneBlockPusher {
-  private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockPusher.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(OneForOneBlockPusher.class);
   private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
   public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
 
@@ -89,7 +89,7 @@ public class OneForOneBlockPusher {
       ReturnCode returnCode = BlockPushNonFatalFailure.getReturnCode(pushResponse.returnCode);
       if (returnCode != ReturnCode.SUCCESS) {
         String blockId = pushResponse.failureBlockId;
-        Preconditions.checkArgument(!blockId.isEmpty());
+        JavaUtils.checkArgument(!blockId.isEmpty(), "BlockID should not be empty");
         checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode,
           BlockPushNonFatalFailure.getErrorMsg(blockId, returnCode)));
       } else {

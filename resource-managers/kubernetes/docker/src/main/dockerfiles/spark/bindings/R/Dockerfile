@@ -17,7 +17,12 @@
 
 ARG base_img
 
-FROM $base_img
+FROM ${base_img:-spark}
+LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.ref.name="Apache Spark R Image"
+# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
+LABEL org.opencontainers.image.version=""
 WORKDIR /
 
 # Reset to root to run installation tasks
@@ -25,18 +30,14 @@ USER 0
 
 RUN mkdir ${SPARK_HOME}/R
 
-# Install R 3.6.3 (http://cloud.r-project.org/bin/linux/debian/)
+# Install R 4.1.2 (http://cloud.r-project.org/bin/linux/debian/)
 RUN \
   apt-get update && \
-  apt install -y gnupg && \
-  echo "deb http://cloud.r-project.org/bin/linux/debian buster-cran35/" >> /etc/apt/sources.list && \
-  apt-key adv --keyserver keyserver.ubuntu.com --recv-key 'E19F5F87128899B192B1A2C2AD5F960A256A04AF' && \
-  apt-get update && \
-  apt install -y -t buster-cran35 r-base r-base-dev && \
-  rm -rf /var/cache/apt/*
+  apt install -y r-base r-base-dev && \
+  rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
 COPY R ${SPARK_HOME}/R
-ENV R_HOME /usr/lib/R
+ENV R_HOME=/usr/lib/R
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]

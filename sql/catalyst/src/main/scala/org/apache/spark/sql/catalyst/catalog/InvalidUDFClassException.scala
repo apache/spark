@@ -17,12 +17,23 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 
 /**
  * Thrown when a query failed for invalid function class, usually because a SQL
  * function's class does not follow the rules of the UDF/UDAF/UDTF class definition.
  */
-class InvalidUDFClassException private[sql](message: String)
-  extends AnalysisException(message, None, None, None, None) {
+class InvalidUDFClassException private(
+    message: String,
+    errorClass: Option[String] = None,
+    messageParameters: Map[String, String] = Map.empty)
+  extends AnalysisException(
+    message = message, errorClass = errorClass, messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      Some(errorClass),
+      messageParameters)
 }

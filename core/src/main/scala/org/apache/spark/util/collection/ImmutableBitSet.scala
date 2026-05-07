@@ -28,7 +28,7 @@ class ImmutableBitSet(val numBits: Int, val bitsToSet: Int*) extends BitSet(numB
   {
     val bitsIterator = bitsToSet.iterator
     while (bitsIterator.hasNext) {
-      super.set(bitsIterator.next)
+      super.set(bitsIterator.next())
     }
   }
 

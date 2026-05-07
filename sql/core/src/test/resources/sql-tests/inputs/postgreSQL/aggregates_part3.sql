@@ -73,7 +73,7 @@ select max(min(unique1)) from tenk1;
 -- drop table t2;
 -- drop table t3;
 
--- [SPARK-27974] Add built-in Aggregate Function: array_agg
+-- [SPARK-28664] ORDER BY in aggregate function
 --
 -- Test combinations of DISTINCT and/or ORDER BY
 --

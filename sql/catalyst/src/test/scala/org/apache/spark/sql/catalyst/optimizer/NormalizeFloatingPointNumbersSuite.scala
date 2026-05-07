@@ -30,9 +30,9 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val batches = Batch("NormalizeFloatingPointNumbers", Once, NormalizeFloatingNumbers) :: Nil
   }
 
-  val testRelation1 = LocalRelation('a.double)
+  val testRelation1 = LocalRelation($"a".double)
   val a = testRelation1.output(0)
-  val testRelation2 = LocalRelation('a.double)
+  val testRelation2 = LocalRelation($"a".double)
   val b = testRelation2.output(0)
 
   test("normalize floating points in window function expressions") {
@@ -123,6 +123,14 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
     comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-49863: NormalizeFloatingNumbers preserves nullability for nested struct") {
+    val relation = LocalRelation($"a".double, $"b".string)
+    val nestedExpr = namedStruct("struct", namedStruct("double", relation.output.head))
+      .as("nestedExpr").toAttribute
+    val normalizedExpr = NormalizeFloatingNumbers.normalize(nestedExpr)
+    assert(nestedExpr.dataType == normalizedExpr.dataType)
   }
 }
 

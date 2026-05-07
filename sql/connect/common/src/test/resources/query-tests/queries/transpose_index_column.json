@@ -1,0 +1,37 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "transpose": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "indexColumns": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "id"
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "col",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

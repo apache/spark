@@ -1,0 +1,171 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis.resolver
+
+import org.apache.spark.sql.catalyst.analysis.{AliasResolution, UnresolvedAlias}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Expression, NamedExpression}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+
+/**
+ * Resolver class that resolves unresolved aliases and handles user-specified aliases.
+ */
+class AliasResolver(expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[UnresolvedAlias, Expression]
+    with ResolvesExpressionChildren
+    with AliasHelper {
+  private val scopes: NameScopeStack = expressionResolver.getNameScopes
+  private val expressionResolutionContextStack =
+    expressionResolver.getExpressionResolutionContextStack
+
+  /**
+   * Resolves [[UnresolvedAlias]] by resolving its child and computing the alias name by calling
+   * [[AliasResolution]] on the result. All aliases in child are resolved without alias
+   * collapsing. This is done to be fixed-point analyzer compatible. Fixed-point analyzer
+   * cleanup aliases after the analyzer
+   * resolves auto generated names. For example:
+   * {{{
+   *  val table = Seq((1), (2), (3)).toDF("a")
+   *  table.select($"a".as("innerAlias").as("outerAlias") + 1)
+   * }}}
+   *
+   * Should return
+   * {{{
+   *  [(a AS innerAlias AS outerAlias + 1): int]
+   * }}}
+   *
+   * After resolving it, we assign a correct exprId to the
+   * resulting [[Alias]].Here we allow inner aliases to persist until the end of single-pass
+   * resolution, after which they will be removed in the post-processing phase.
+   *
+   * Resulting [[Alias]] must be added to the list of `availableAliases` in the current
+   * [[NameScope]].
+   *
+   */
+  override def resolve(unresolvedAlias: UnresolvedAlias): NamedExpression =
+    scopes.current.lcaRegistry.withNewLcaScope(aliasKind = AliasKind.Implicit) {
+      val currentExpressionResolutionContext = expressionResolutionContextStack.peek()
+
+      val previousResolvingUnresolvedAlias =
+        currentExpressionResolutionContext.resolvingUnresolvedAlias
+      currentExpressionResolutionContext.resolvingUnresolvedAlias = true
+      val aliasWithResolvedChildren = try {
+        withResolvedChildren(unresolvedAlias, expressionResolver.resolve _)
+          .asInstanceOf[UnresolvedAlias]
+      } finally {
+        currentExpressionResolutionContext.resolvingUnresolvedAlias =
+          previousResolvingUnresolvedAlias
+      }
+
+      val resolvedNode =
+        AliasResolution.resolve(aliasWithResolvedChildren).asInstanceOf[NamedExpression]
+
+      resolvedNode match {
+        case alias: Alias =>
+          val resultAlias = expressionResolver.getExpressionIdAssigner.mapExpression(alias)
+          scopes.current.registerAlias(resultAlias)
+          resultAlias
+        case _ =>
+          throw QueryCompilationErrors.unsupportedSinglePassAnalyzerFeature(
+            s"${resolvedNode.getClass} expression resolution"
+          )
+      }
+    }
+
+  /**
+   * Handle already resolved [[Alias]] nodes, i.e. user-specified aliases. Here we only need to
+   * resolve its children and afterwards reassign exprId to the resulting [[Alias]]. Resulting
+   * [[Alias]] must be added to the list of `availableAliases` in the current [[NameScope]].
+   *
+   * When resolving grouping expressions, we may meet duplicate aliases from grouping expressions.
+   * This is only the case with partially resolved DataFrame logical plans. We need to deprioritize
+   * those aliases. See [[ExpressionIdAssigner.mapExpression]] doc for more details.
+   *
+   */
+  def handleResolvedAlias(alias: Alias): Alias = {
+    scopes.current.lcaRegistry.withNewLcaScope(
+      aliasKind = AliasKind.Explicit
+    ) {
+      val aliasWithResolvedChildren =
+        withResolvedChildren(alias, expressionResolver.resolve _).asInstanceOf[Alias]
+
+      val resultAlias = expressionResolver.getExpressionIdAssigner.mapExpression(
+        originalExpression = aliasWithResolvedChildren,
+        prioritizeOldDuplicateAliasId =
+          expressionResolutionContextStack.peek().resolvingGroupingExpressions
+      )
+
+      scopes.current.registerAlias(resultAlias)
+
+      collapseAlias(resultAlias)
+    }
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * In case where there are two explicit [[Alias]]es, one on top of the other, remove the bottom
+   * one. However, we only do this in case we are not inside of [[CreateNamedStruct]]. This is
+   * because we need to wait for the name of [[UnresolvedAlias]] on top of the
+   * [[CreateNamedStruct]] to be computed before removing inner aliases.
+   *
+   * For the example below:
+   *
+   * - df.select($"column".as("alias_1").as("alias_2"))
+   *
+   * the plan is:
+   *
+   *   Project[
+   *     Alias("alias_2")(
+   *       Alias("alias_1")(id1)
+   *     )(id2)
+   *   ]( ... )
+   *
+   * and after the `collapseAlias` call (removing the bottom one) it would be:
+   *
+   *   Project[
+   *     Alias("alias_2")(id2)
+   *   ]( ... )
+   *
+   * However, in case we have a [[CreateNamedStruct]]:
+   *
+   * {{{
+   *   CREATE TABLE t(col1 STRUCT<a: STRING>);
+   *   SELECT DISTINCT(col1.a:b.c AS out1, col1.a:b.d AS out2) FROM t;
+   * }}}
+   *
+   * The unresolved plan will be:
+   * 'Distinct
+   * +- 'Project [unresolvedalias(named_struct(out1, semistructuredextract('col1.a, $.b.c) AS c#9 AS out1#10, out2, semistructuredextract('col1.a, $.b.d) AS d#11 AS out2#12))]
+   *    +- 'UnresolvedRelation [t], [], false
+   *
+   * After resolving, the expected column name in fixed-point schema is:
+   *
+   * named_struct(out1, semi_structured_extract_json_multi(col1.a, $.b.c) AS c AS out1, out2, semi_structured_extract_json_multi(col1.a, $.b.d) AS d AS out2
+   *
+   * Because of this, we need to delay cleanup of inner aliases in [[CreateNamedStruct]] until the
+   * end of resolution.
+   */
+  // scalastyle:on line.size.limit
+  private def collapseAlias(alias: Alias): Alias =
+    alias.child match {
+      case innerAlias: Alias
+          if !expressionResolutionContextStack.peek().resolvingCreateNamedStruct &&
+          !expressionResolutionContextStack.peek().resolvingUnresolvedAlias =>
+        mergeAliases(alias)
+      case _ => alias
+    }
+}

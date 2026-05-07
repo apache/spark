@@ -22,22 +22,51 @@ import java.io.File
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo, WorkerResourceInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
+import org.apache.spark.resource.{ExecutorResourceRequests, ResourceInformation, ResourceProfile, ResourceRequirement, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
 private[deploy] object DeployTestUtils {
-  def createAppDesc(): ApplicationDescription = {
-    val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl")
+  def defaultResourceProfile: ResourceProfile = {
+    createDefaultResourceProfile(1234)
   }
 
-  def createAppInfo() : ApplicationInfo = {
-    val appDesc = createAppDesc()
+  def createAppDesc(customResources: Map[String, Int] = Map.empty): ApplicationDescription = {
+    val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
+    val rp = createDefaultResourceProfile(1234, customResources)
+    new ApplicationDescription("name", Some(4), cmd, "appUiUrl", rp)
+  }
+
+  def createAppInfo(): ApplicationInfo = {
+    val customResources = Map(
+      GPU -> 3,
+      FPGA -> 3)
+    val appDesc = createAppDesc(customResources)
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", appDesc.copy(resourceReqsPerExecutor = createResourceRequirement),
-      JsonConstants.submitDate, null, Int.MaxValue)
+      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
+  }
+
+  def createDefaultResourceProfile(
+      memoryPerExecutorMb: Int,
+      customResources: Map[String, Int] = Map.empty,
+      coresPerExecutor: Option[Int] = None): ResourceProfile = {
+    val rp = createResourceProfile(Some(memoryPerExecutorMb), customResources, coresPerExecutor)
+    rp.setToDefaultProfile()
+    rp
+  }
+
+  def createResourceProfile(
+      memoryPerExecutorMb: Option[Int] = None,
+      customResources: Map[String, Int] = Map.empty,
+      coresPerExecutor: Option[Int] = None): ResourceProfile = {
+    val treqs = new TaskResourceRequests().cpus(1)
+    val ereqs = new ExecutorResourceRequests()
+    memoryPerExecutorMb.foreach(value => ereqs.memory(s"${value}m"))
+    customResources.foreach { case (resource, amount) =>
+      ereqs.resource(resource, amount) }
+    coresPerExecutor.foreach(ereqs.cores)
+    new ResourceProfile(ereqs.requests, treqs.requests)
   }
 
   def createDriverCommand(): Command = new Command(
@@ -89,6 +118,7 @@ private[deploy] object DeployTestUtils {
       new SparkConf,
       Seq("localDir"),
       ExecutorState.RUNNING,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
       resources)
   }
 
@@ -113,6 +143,6 @@ private[deploy] object DeployTestUtils {
   }
 
   private def createResourceRequirement: Seq[ResourceRequirement] = {
-    Seq(ResourceRequirement("gpu", 3), ResourceRequirement("fpga", 3))
+    Seq(ResourceRequirement(GPU, 3), ResourceRequirement(FPGA, 3))
   }
 }

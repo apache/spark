@@ -19,15 +19,15 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 /**
  * The common settings and utility functions for all v1 and v2 test suites. When a function
@@ -37,9 +37,11 @@ import org.apache.spark.sql.test.SQLTestUtils
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.CommandSuiteBase`
  *   - V2 In-Memory catalog: `org.apache.spark.sql.execution.command.v2.CommandSuiteBase`
  */
-trait DDLCommandTestUtils extends SQLTestUtils {
+trait DDLCommandTestUtils extends QueryTest {
   // The version of the catalog under testing such as "V1", "V2", "Hive V1".
-  protected def version: String
+  protected def catalogVersion: String
+  // The version of the SQL command under testing such as "V1", "V2".
+  protected def commandVersion: String
   // Name of the command as SQL statement, for instance "SHOW PARTITIONS"
   protected def command: String
   // The catalog name which can be used in SQL statements under testing
@@ -51,14 +53,15 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   // the failed test in logs belongs to.
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
-    super.test(s"$command $version: " + testName, testTags: _*)(testFun)
+    val testNamePrefix = s"$command using $catalogVersion catalog $commandVersion command"
+    super.test(s"$testNamePrefix: $testName", testTags: _*)(testFun)
   }
 
   protected def withNamespaceAndTable(ns: String, tableName: String, cat: String = catalog)
       (f: String => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE $nsCat")
+      sql(s"CREATE NAMESPACE IF NOT EXISTS $nsCat")
       val t = s"$nsCat.$tableName"
       withTable(t) {
         f(t)
@@ -166,7 +169,17 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   def copyPartition(tableName: String, from: String, to: String): String = {
     val part0Loc = getPartitionLocation(tableName, from)
     val part1Loc = part0Loc.replace(from, to)
-    FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
+    Utils.copyDirectory(new File(part0Loc), new File(part1Loc))
     part1Loc
   }
+
+  def tableLegacyProperties: Seq[String] = {
+    val excludedProperties = Set(TableCatalog.PROP_COMMENT, TableCatalog.PROP_COLLATION)
+    CatalogV2Util.TABLE_RESERVED_PROPERTIES.filterNot(excludedProperties.contains)
+  }
+}
+
+object DDLCommandTestUtils {
+  val V1_COMMAND_VERSION = "V1"
+  val V2_COMMAND_VERSION = "V2"
 }

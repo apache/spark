@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 
 /**
  * Physical plan node for altering a table.
@@ -28,7 +31,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 case class AlterTableExec(
     catalog: TableCatalog,
     ident: Identifier,
-    changes: Seq[TableChange]) extends LeafV2CommandExec {
+    changes: Seq[TableChange],
+    refreshCache: () => Unit) extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
@@ -36,10 +40,42 @@ case class AlterTableExec(
     try {
       catalog.alterTable(ident, changes: _*)
     } catch {
-      case e: IllegalArgumentException =>
+      case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
+        throw QueryExecutionErrors.unsupportedTableChangeError(e)
+    }
+    refreshCache()
+    Seq.empty
+  }
+}
+
+/**
+ * Physical plan node for adding a check constraint with validation.
+ */
+case class AddCheckConstraintExec(
+    catalog: TableCatalog,
+    ident: Identifier,
+    change: TableChange,
+    condition: String,
+    child: SparkPlan) extends V2CommandExec with UnaryExecNode {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    if (child.executeTake(1).nonEmpty) {
+      throw QueryExecutionErrors.newCheckViolation(
+        condition, ident.toQualifiedNameParts(catalog).quoted)
+    }
+    try {
+     catalog.alterTable(ident, change)
+    } catch {
+      case e: IllegalArgumentException if !e.isInstanceOf[SparkThrowable] =>
         throw QueryExecutionErrors.unsupportedTableChangeError(e)
     }
 
     Seq.empty
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan = {
+    copy(child = newChild)
   }
 }

@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
@@ -72,12 +73,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("case when") {
     val row = create_row(null, false, true, "a", "b", "c")
-    val c1 = 'a.boolean.at(0)
-    val c2 = 'a.boolean.at(1)
-    val c3 = 'a.boolean.at(2)
-    val c4 = 'a.string.at(3)
-    val c5 = 'a.string.at(4)
-    val c6 = 'a.string.at(5)
+    val c1 = $"a".boolean.at(0)
+    val c2 = $"a".boolean.at(1)
+    val c3 = $"a".boolean.at(2)
+    val c4 = $"a".string.at(3)
+    val c5 = $"a".string.at(4)
+    val c6 = $"a".string.at(5)
 
     checkEvaluation(CaseWhen(Seq((c1, c4)), c6), "c", row)
     checkEvaluation(CaseWhen(Seq((c2, c4)), c6), "c", row)
@@ -95,9 +96,9 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(CaseWhen(Seq((c2, c4), (c3, c5)), c6).nullable)
     assert(CaseWhen(Seq((c2, c4), (c3, c5))).nullable)
 
-    val c4_notNull = 'a.boolean.notNull.at(3)
-    val c5_notNull = 'a.boolean.notNull.at(4)
-    val c6_notNull = 'a.boolean.notNull.at(5)
+    val c4_notNull = $"a".boolean.notNull.at(3)
+    val c5_notNull = $"a".boolean.notNull.at(4)
+    val c6_notNull = $"a".boolean.notNull.at(5)
 
     assert(CaseWhen(Seq((c2, c4_notNull)), c6_notNull).nullable === false)
     assert(CaseWhen(Seq((c2, c4)), c6_notNull).nullable)
@@ -186,12 +187,12 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("case key when") {
     val row = create_row(null, 1, 2, "a", "b", "c")
-    val c1 = 'a.int.at(0)
-    val c2 = 'a.int.at(1)
-    val c3 = 'a.int.at(2)
-    val c4 = 'a.string.at(3)
-    val c5 = 'a.string.at(4)
-    val c6 = 'a.string.at(5)
+    val c1 = $"a".int.at(0)
+    val c2 = $"a".int.at(1)
+    val c3 = $"a".int.at(2)
+    val c4 = $"a".string.at(3)
+    val c5 = $"a".string.at(4)
+    val c6 = $"a".string.at(5)
 
     val literalNull = Literal.create(null, IntegerType)
     val literalInt = Literal(1)
@@ -238,16 +239,20 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
     val checkResult1 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
       (Literal.FalseLiteral, caseVal2))).checkInputDataTypes()
-    assert(checkResult1.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult1.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("CASE WHEN ... THEN struct<x:int> WHEN ... THEN struct<y:int> END"))
+    assert(checkResult1 == DataTypeMismatch(
+      errorSubClass = "DATA_DIFF_TYPES",
+      messageParameters = Map(
+        "functionName" -> "`casewhen`",
+        "dataType" -> "[\"STRUCT<x: INT NOT NULL>\", \"STRUCT<y: INT NOT NULL>\"]")))
 
     val checkResult2 = CaseWhen(Seq((Literal.FalseLiteral, caseVal1),
       (Literal.FalseLiteral, caseVal2)), Some(elseVal)).checkInputDataTypes()
-    assert(checkResult2.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-    assert(checkResult2.asInstanceOf[TypeCheckResult.TypeCheckFailure].message
-      .contains("CASE WHEN ... THEN struct<x:int> WHEN ... THEN struct<y:int> " +
-        "ELSE struct<z:int> END"))
+    assert(checkResult2 == DataTypeMismatch(
+      errorSubClass = "DATA_DIFF_TYPES",
+      messageParameters = Map(
+        "functionName" -> "`casewhen`",
+        "dataType" -> ("[\"STRUCT<x: INT NOT NULL>\", " +
+          "\"STRUCT<y: INT NOT NULL>\", \"STRUCT<z: INT NOT NULL>\"]"))))
   }
 
   test("SPARK-27917 test semantic equals of CaseWhen") {
@@ -272,5 +277,28 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     // Test with elseValue with inEquality
     assert(!caseWhenObj1.semanticEquals(caseWhenObj2))
     assert(!caseWhenObj2.semanticEquals(caseWhenObj1))
+  }
+
+  test("SPARK-49396 accurate nullability check") {
+    val trueBranch = (TrueLiteral, Literal(5))
+    val normalBranch = (NonFoldableLiteral(true), Literal(10))
+
+    val nullLiteral = Literal.create(null, BooleanType)
+    val noElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, None)
+    assert(!noElseValue.nullable)
+    val withElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, Some(Literal(1)))
+    assert(!withElseValue.nullable)
+    val withNullableElseValue = CaseWhen(normalBranch :: trueBranch :: Nil, Some(nullLiteral))
+    assert(!withNullableElseValue.nullable)
+    val firstTrueNonNullableSecondTrueNullable = CaseWhen(trueBranch ::
+      (TrueLiteral, nullLiteral) :: Nil, None)
+    assert(!firstTrueNonNullableSecondTrueNullable.nullable)
+    val firstTrueNullableSecondTrueNonNullable = CaseWhen((TrueLiteral, nullLiteral) ::
+      trueBranch :: Nil, None)
+    assert(firstTrueNullableSecondTrueNonNullable.nullable)
+    val hasNullInNotTrueBranch = CaseWhen(trueBranch :: (FalseLiteral, nullLiteral) :: Nil, None)
+    assert(!hasNullInNotTrueBranch.nullable)
+    val noTrueBranch = CaseWhen(normalBranch :: Nil, Literal(1))
+    assert(!noTrueBranch.nullable)
   }
 }

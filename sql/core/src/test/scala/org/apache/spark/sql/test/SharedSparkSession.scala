@@ -24,12 +24,12 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, SparkSessionProvider, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
-trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
+trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
 
   /**
    * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
@@ -53,13 +53,41 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
       doThreadPostAudit()
     }
   }
+
+  // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
+  // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
+  def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    func
+
+    // Wait until the new execution is started and being tracked.
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(statusStore.executionsCount() >= oldCount)
+    }
+
+    // Wait for listener to finish computing the metrics for the execution.
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(statusStore.executionsList().nonEmpty &&
+        statusStore.executionsList().last.metricValues != null)
+    }
+
+    val exec = statusStore.executionsList().last
+    val execId = exec.executionId
+    val sqlMetrics = statusStore.planGraph(execId).allNodes
+      .flatMap(n => n.metrics.map(m => (m.accumulatorId, (n.id, n.name, m.name))))
+      .toMap
+    statusStore.executionMetrics(execId).map { case (k, v) => sqlMetrics(k) -> v }
+  }
 }
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
 trait SharedSparkSessionBase
-  extends SQLTestUtilsBase
+  extends QueryTestBase
+  with SparkSessionProvider
   with BeforeAndAfterEach
   with Eventually { self: Suite =>
 
@@ -77,6 +105,13 @@ trait SharedSparkSessionBase
     conf.set(
       StaticSQLConf.WAREHOUSE_PATH,
       conf.get(StaticSQLConf.WAREHOUSE_PATH) + "/" + getClass.getCanonicalName)
+    conf.set(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH, false)
+    conf.set(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
+      sys.env.getOrElse("SPARK_TEST_SQL_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+        StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
+    conf.set(StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
+      sys.env.getOrElse("SPARK_TEST_SQL_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+        StaticSQLConf.RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
   }
 
   /**
@@ -90,7 +125,7 @@ trait SharedSparkSessionBase
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
    */
-  protected implicit def spark: SparkSession = _spark
+  protected override def spark: classic.SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -98,9 +133,11 @@ trait SharedSparkSessionBase
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   protected def createSparkSession: TestSparkSession = {
-    SparkSession.cleanupAnyExistingSession()
+    classic.SparkSession.cleanupAnyExistingSession()
     new TestSparkSession(sparkConf)
   }
+
+  protected def sqlConf: SQLConf = _spark.sessionState.conf
 
   /**
    * Initialize the [[TestSparkSession]].  Generally, this is just called from

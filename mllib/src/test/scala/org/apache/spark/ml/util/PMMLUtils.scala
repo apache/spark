@@ -20,7 +20,7 @@ import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 
 import org.dmg.pmml.PMML
-import org.jpmml.model.{JAXBUtil, SAXUtil}
+import org.jpmml.model.{JAXBSerializer, SAXUtil}
 import org.jpmml.model.filters.ImportFilter
 
 /**
@@ -37,6 +37,7 @@ private[spark] object PMMLUtils {
     val transformed = SAXUtil.createFilteredSource(
       new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)),
       new ImportFilter())
-    JAXBUtil.unmarshalPMML(transformed)
+    val jaxbSerializer = new JAXBSerializer()
+    jaxbSerializer.unmarshal(transformed).asInstanceOf[PMML]
   }
 }

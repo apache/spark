@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The trait contains settings and utility functions. It can be mixed to the test suites for
@@ -30,14 +31,22 @@ import org.apache.spark.sql.test.SharedSparkSession
  * for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends SharedSparkSession {
-  def version: String = "V2" // The prefix is added to test names
+  def catalogVersion: String = "V2" // The catalog version is added to test names
+  def commandVersion: String = "V2" // The command version is added to test names
   def catalog: String = "test_catalog" // The default V2 catalog for testing
+  def nonPartitionCatalog: String = "non_part_test_catalog" // Catalog for non-partitioned tables
+  def atomicCatalog: String = "atomic_test_catalog" // Catalog with StagingTableCatalog support
+  def rowLevelOPCatalog: String = "row_level_op_catalog"
   def defaultUsing: String = "USING _" // The clause is used in creating v2 tables under testing
 
   // V2 catalogs created and used especially for testing
   override def sparkConf: SparkConf = super.sparkConf
     .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
-    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
+    .set(s"spark.sql.catalog.$nonPartitionCatalog", classOf[InMemoryTableCatalog].getName)
+    .set(s"spark.sql.catalog.$atomicCatalog", classOf[StagingInMemoryTableCatalog].getName)
+    .set(s"spark.sql.catalog.fun_$catalog", classOf[InMemoryCatalog].getName)
+    .set(s"spark.sql.catalog.$rowLevelOPCatalog",
+      classOf[InMemoryRowLevelOperationTableCatalog].getName)
 
   def checkLocation(
       t: String,
@@ -54,10 +63,18 @@ trait CommandSuiteBase extends SharedSparkSession {
     val partTable = catalogPlugin.asTableCatalog
       .loadTable(Identifier.of(namespaces, tableName))
       .asInstanceOf[InMemoryPartitionTable]
-    val ident = ResolvePartitionSpec.convertToPartIdent(spec, partTable.partitionSchema.fields)
+    val ident = ResolvePartitionSpec.convertToPartIdent(spec,
+      partTable.partitionSchema.fields.toImmutableArraySeq)
     val partMetadata = partTable.loadPartitionMetadata(ident)
 
     assert(partMetadata.containsKey("location"))
     assert(partMetadata.get("location") === expected)
+  }
+
+  def loadTable(catalog: String, schema : String, table: String): InMemoryTable = {
+    import CatalogV2Implicits._
+    val catalogPlugin = spark.sessionState.catalogManager.catalog(catalog)
+    catalogPlugin.asTableCatalog.loadTable(Identifier.of(Array(schema), table))
+      .asInstanceOf[InMemoryTable]
   }
 }

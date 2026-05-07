@@ -31,7 +31,7 @@ class StreamingLinearRegressionSuite
   with TestSuiteBase {
 
   // use longer wait time to ensure job completion
-  override def maxWaitTimeMillis: Int = 60000
+  override def maxWaitTimeMillis: Int = 100000
 
   // Assert that two values are equal within tolerance epsilon
   def assertEqual(v1: Double, v2: Double, epsilon: Double): Unit = {

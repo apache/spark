@@ -18,20 +18,17 @@
 package org.apache.spark.memory;
 
 import javax.annotation.concurrent.GuardedBy;
+import java.io.InterruptedIOException;
 import java.io.IOException;
 import java.nio.channels.ClosedByInterruptException;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
@@ -58,7 +55,7 @@ import org.apache.spark.util.Utils;
  */
 public class TaskMemoryManager {
 
-  private static final Logger logger = LoggerFactory.getLogger(TaskMemoryManager.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(TaskMemoryManager.class);
 
   /** The number of bits used to address the page table. */
   private static final int PAGE_NUMBER_BITS = 13;
@@ -120,6 +117,30 @@ public class TaskMemoryManager {
   private volatile long acquiredButNotUsed = 0L;
 
   /**
+   * Current off heap memory usage by this task.
+   */
+  private long currentOffHeapMemory = 0L;
+
+  private final Object offHeapMemoryLock = new Object();
+
+  /*
+   * Current on heap memory usage by this task.
+   */
+  private long currentOnHeapMemory = 0L;
+
+  private final Object onHeapMemoryLock = new Object();
+
+  /**
+   * Peak off heap memory usage by this task.
+   */
+  private volatile long peakOffHeapMemory = 0L;
+
+  /**
+   * Peak on heap memory usage by this task.
+   */
+  private volatile long peakOnHeapMemory = 0L;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
@@ -135,10 +156,10 @@ public class TaskMemoryManager {
    *
    * @return number of bytes successfully granted (<= N).
    */
-  public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
+  public long acquireExecutionMemory(long required, MemoryConsumer requestingConsumer) {
     assert(required >= 0);
-    assert(consumer != null);
-    MemoryMode mode = consumer.getMode();
+    assert(requestingConsumer != null);
+    MemoryMode mode = requestingConsumer.getMode();
     // If we are allocating Tungsten pages off-heap and receive a request to allocate on-heap
     // memory here, then it may not make sense to spill since that would only end up freeing
     // off-heap memory. This is subject to change, though, so it may be risky to make this
@@ -149,92 +170,128 @@ public class TaskMemoryManager {
       // Try to release memory from other consumers first, then we can reduce the frequency of
       // spilling, avoid to have too many spilled files.
       if (got < required) {
-        // Call spill() on other consumers to release memory
-        // Sort the consumers according their memory usage. So we avoid spilling the same consumer
-        // which is just spilled in last few times and re-spilling on it will produce many small
-        // spill files.
+        if (logger.isDebugEnabled()) {
+          logger.debug("Task {} need to spill {} for {}", taskAttemptId,
+            Utils.bytesToString(required - got), requestingConsumer);
+        }
+        // We need to call spill() on consumers to free up more memory. We want to optimize for two
+        // things:
+        // * Minimize the number of spill calls, to reduce the number of spill files and avoid small
+        //   spill files.
+        // * Avoid spilling more data than necessary - if we only need a little more memory, we may
+        //   not want to spill as much data as possible. Many consumers spill more than the
+        //   requested amount, so we can take that into account in our decisions.
+        // We use a heuristic that selects the smallest memory consumer with at least `required`
+        // bytes of memory in an attempt to balance these factors. It may work well if there are
+        // fewer larger requests, but can result in many small spills if there are many smaller
+        // requests.
+
+        // Build a map of consumer in order of memory usage to prioritize spilling. Assign current
+        // consumer (if present) a nominal memory usage of 0 so that it is always last in priority
+        // order. The map will include all consumers that have previously acquired memory.
         TreeMap<Long, List<MemoryConsumer>> sortedConsumers = new TreeMap<>();
         for (MemoryConsumer c: consumers) {
-          if (c != consumer && c.getUsed() > 0 && c.getMode() == mode) {
-            long key = c.getUsed();
+          if (c.getUsed() > 0 && c.getMode() == mode) {
+            long key = c == requestingConsumer ? 0 : c.getUsed();
             List<MemoryConsumer> list =
                 sortedConsumers.computeIfAbsent(key, k -> new ArrayList<>(1));
             list.add(c);
           }
         }
-        while (!sortedConsumers.isEmpty()) {
+        // Iteratively spill consumers until we've freed enough memory or run out of consumers.
+        while (got < required && !sortedConsumers.isEmpty()) {
           // Get the consumer using the least memory more than the remaining required memory.
           Map.Entry<Long, List<MemoryConsumer>> currentEntry =
             sortedConsumers.ceilingEntry(required - got);
-          // No consumer has used memory more than the remaining required memory.
-          // Get the consumer of largest used memory.
+          // No consumer has enough memory on its own, start with spilling the biggest consumer.
           if (currentEntry == null) {
             currentEntry = sortedConsumers.lastEntry();
           }
           List<MemoryConsumer> cList = currentEntry.getValue();
-          MemoryConsumer c = cList.get(cList.size() - 1);
-          try {
-            long released = c.spill(required - got, consumer);
-            if (released > 0) {
-              logger.debug("Task {} released {} from {} for {}", taskAttemptId,
-                Utils.bytesToString(released), c, consumer);
-              got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
-              if (got >= required) {
-                break;
-              }
-            } else {
-              cList.remove(cList.size() - 1);
-              if (cList.isEmpty()) {
-                sortedConsumers.remove(currentEntry.getKey());
-              }
-            }
-          } catch (ClosedByInterruptException e) {
-            // This called by user to kill a task (e.g: speculative task).
-            logger.error("error while calling spill() on " + c, e);
-            throw new RuntimeException(e.getMessage());
-          } catch (IOException e) {
-            logger.error("error while calling spill() on " + c, e);
-            // checkstyle.off: RegexpSinglelineJava
-            throw new SparkOutOfMemoryError("error while calling spill() on " + c + " : "
-              + e.getMessage());
-            // checkstyle.on: RegexpSinglelineJava
+          got += trySpillAndAcquire(requestingConsumer, required - got, cList, cList.size() - 1);
+          if (cList.isEmpty()) {
+            sortedConsumers.remove(currentEntry.getKey());
           }
         }
       }
 
-      // Attempt to free up memory by self-spilling.
-      //
-      // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
-      // immediately notify other tasks that memory has been freed, and they may acquire the
-      // newly-freed memory before we have a chance to do so (SPARK-35486). In that case, we will
-      // try again in the next loop iteration.
-      while (got < required) {
-        try {
-          long released = consumer.spill(required - got, consumer);
-          if (released > 0) {
-            logger.debug("Task {} released {} from itself ({})", taskAttemptId,
-              Utils.bytesToString(released), consumer);
-            got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
-          } else {
-            // Self-spilling could not free up any more memory.
-            break;
-          }
-        } catch (ClosedByInterruptException e) {
-          // This called by user to kill a task (e.g: speculative task).
-          logger.error("error while calling spill() on " + consumer, e);
-          throw new RuntimeException(e.getMessage());
-        } catch (IOException e) {
-          logger.error("error while calling spill() on " + consumer, e);
-          // checkstyle.off: RegexpSinglelineJava
-          throw new SparkOutOfMemoryError("error while calling spill() on " + consumer + " : "
-            + e.getMessage());
-          // checkstyle.on: RegexpSinglelineJava
+      consumers.add(requestingConsumer);
+      if (logger.isDebugEnabled()) {
+        logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got),
+          requestingConsumer);
+      }
+
+      if (mode == MemoryMode.OFF_HEAP) {
+        synchronized (offHeapMemoryLock) {
+          currentOffHeapMemory += got;
+          peakOffHeapMemory = Math.max(peakOffHeapMemory, currentOffHeapMemory);
+        }
+      } else {
+        synchronized (onHeapMemoryLock) {
+          currentOnHeapMemory += got;
+          peakOnHeapMemory = Math.max(peakOnHeapMemory, currentOnHeapMemory);
         }
       }
 
-      consumers.add(consumer);
-      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
+    }
+  }
+
+  /**
+   * Try to acquire as much memory as possible from `cList[idx]`, up to `requested` bytes by
+   * spilling and then acquiring the freed memory. If no more memory can be spilled from
+   * `cList[idx]`, remove it from the list.
+   *
+   * @return number of bytes acquired (<= requested)
+   * @throws RuntimeException if task is interrupted
+   * @throws SparkOutOfMemoryError if an IOException occurs during spilling
+   */
+  private long trySpillAndAcquire(
+      MemoryConsumer requestingConsumer,
+      long requested,
+      List<MemoryConsumer> cList,
+      int idx) {
+    MemoryMode mode = requestingConsumer.getMode();
+    MemoryConsumer consumerToSpill = cList.get(idx);
+    if (logger.isDebugEnabled()) {
+      logger.debug("Task {} try to spill {} from {} for {}", taskAttemptId,
+        Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
+    }
+    try {
+      long released = consumerToSpill.spill(requested, requestingConsumer);
+      if (released > 0) {
+        if (logger.isDebugEnabled()) {
+          logger.debug("Task {} spilled {} of requested {} from {} for {}", taskAttemptId,
+            Utils.bytesToString(released), Utils.bytesToString(requested), consumerToSpill,
+            requestingConsumer);
+        }
+
+        // When our spill handler releases memory, `ExecutionMemoryPool#releaseMemory()` will
+        // immediately notify other tasks that memory has been freed, and they may acquire the
+        // newly-freed memory before we have a chance to do so (SPARK-35486). Therefore we may
+        // not be able to acquire all the memory that was just spilled. In that case, we will
+        // try again in the next loop iteration.
+        return memoryManager.acquireExecutionMemory(requested, taskAttemptId, mode);
+      } else {
+        cList.remove(idx);
+        return 0;
+      }
+    } catch (ClosedByInterruptException | InterruptedIOException e) {
+      // This called by user to kill a task (e.g: speculative task).
+      logger.error("Error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER, consumerToSpill));
+      throw new RuntimeException(e.getMessage());
+    } catch (IOException e) {
+      logger.error("Error while calling spill() on {}", e,
+        MDC.of(LogKeys.MEMORY_CONSUMER, consumerToSpill));
+      // checkstyle.off: RegexpSinglelineJava
+      throw new SparkOutOfMemoryError(
+        "SPILL_OUT_OF_MEMORY",
+        new HashMap<String, String>() {{
+          put("consumerToSpill", consumerToSpill.toString());
+          put("message", e.getMessage());
+        }});
+      // checkstyle.on: RegexpSinglelineJava
     }
   }
 
@@ -242,32 +299,52 @@ public class TaskMemoryManager {
    * Release N bytes of execution memory for a MemoryConsumer.
    */
   public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
-    logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
+    if (logger.isDebugEnabled()) {
+      logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size),
+        consumer);
+    }
     memoryManager.releaseExecutionMemory(size, taskAttemptId, consumer.getMode());
+    if (consumer.getMode() == MemoryMode.OFF_HEAP) {
+      synchronized (offHeapMemoryLock) {
+        currentOffHeapMemory -= size;
+      }
+    } else {
+      synchronized (onHeapMemoryLock) {
+        currentOnHeapMemory -= size;
+      }
+    }
   }
 
   /**
    * Dump the memory usage of all consumers.
    */
   public void showMemoryUsage() {
-    logger.info("Memory used in task " + taskAttemptId);
+    logger.info("Memory used in task {}",
+      MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
         long totalMemUsage = c.getUsed();
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
-          logger.info("Acquired by " + c + ": " + Utils.bytesToString(totalMemUsage));
+          logger.info("Acquired by {}: {}",
+            MDC.of(LogKeys.MEMORY_CONSUMER, c),
+            MDC.of(LogKeys.MEMORY_SIZE, Utils.bytesToString(totalMemUsage)));
         }
       }
       long memoryNotAccountedFor =
         memoryManager.getExecutionMemoryUsageForTask(taskAttemptId) - memoryAccountedForByConsumers;
       logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
-        memoryNotAccountedFor, taskAttemptId);
+        MDC.of(LogKeys.MEMORY_SIZE, memoryNotAccountedFor),
+        MDC.of(LogKeys.TASK_ATTEMPT_ID, taskAttemptId));
       logger.info(
-        "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
-        memoryManager.executionMemoryUsed(), memoryManager.storageMemoryUsed());
+        "{} bytes of memory are used for execution " +
+                "and {} bytes of memory are used for storage " +
+                "and {} bytes of unmanaged memory are used",
+        MDC.of(LogKeys.EXECUTION_MEMORY_SIZE, memoryManager.executionMemoryUsed()),
+        MDC.of(LogKeys.STORAGE_MEMORY_SIZE,  memoryManager.storageMemoryUsed()),
+        MDC.of(LogKeys.MEMORY_SIZE, UnifiedMemoryManager$.MODULE$.getUnmanagedMemoryUsed()));
     }
   }
 
@@ -276,6 +353,10 @@ public class TaskMemoryManager {
    */
   public long pageSizeBytes() {
     return memoryManager.pageSizeBytes();
+  }
+
+  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+    return allocatePage(size, consumer, 0);
   }
 
   /**
@@ -287,7 +368,10 @@ public class TaskMemoryManager {
    *
    * @throws TooLargePageException
    */
-  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+  private MemoryBlock allocatePage(
+      long size,
+      MemoryConsumer consumer,
+      int retryCount) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
@@ -313,7 +397,15 @@ public class TaskMemoryManager {
     try {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
-      logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);
+      if (retryCount == 0) {
+        logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.", e,
+            MDC.of(LogKeys.PAGE_SIZE, acquired),
+            MDC.of(LogKeys.NUM_RETRY, retryCount));
+      } else {
+        logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.",
+            MDC.of(LogKeys.PAGE_SIZE, acquired),
+            MDC.of(LogKeys.NUM_RETRY, retryCount));
+      }
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {
@@ -321,7 +413,7 @@ public class TaskMemoryManager {
         allocatedPages.clear(pageNumber);
       }
       // this could trigger spilling to free some pages.
-      return allocatePage(size, consumer);
+      return allocatePage(size, consumer, retryCount + 1);
     }
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
@@ -437,15 +529,19 @@ public class TaskMemoryManager {
     synchronized (this) {
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
-          // In case of failed task, it's normal to see leaked memory
-          logger.debug("unreleased " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
+          if (logger.isDebugEnabled()) {
+            // In case of failed task, it's normal to see leaked memory
+            logger.debug("unreleased {} memory from {}", Utils.bytesToString(c.getUsed()), c);
+          }
         }
       }
       consumers.clear();
 
       for (MemoryBlock page : pageTable) {
         if (page != null) {
-          logger.debug("unreleased page: " + page + " in task " + taskAttemptId);
+          if (logger.isDebugEnabled()) {
+            logger.debug("unreleased page: {} in task {}", page, taskAttemptId);
+          }
           page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
           memoryManager.tungstenMemoryAllocator().free(page);
         }
@@ -471,5 +567,20 @@ public class TaskMemoryManager {
    */
   public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
+  }
+
+  /**
+   * Returns peak task-level off-heap memory usage in bytes.
+   *
+   */
+  public long getPeakOnHeapExecutionMemory() {
+    return peakOnHeapMemory;
+  }
+
+  /**
+   * Returns peak task-level on-heap memory usage in bytes.
+   */
+  public long getPeakOffHeapExecutionMemory() {
+    return peakOffHeapMemory;
   }
 }

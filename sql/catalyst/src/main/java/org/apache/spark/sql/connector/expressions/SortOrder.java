@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Represents a sort order in the public expression API.
  *
  * @since 3.2.0
  */
-@Experimental
+@Evolving
 public interface SortOrder extends Expression {
   /**
    * Returns the sort expression.
@@ -40,4 +40,7 @@ public interface SortOrder extends Expression {
    * Returns the null ordering.
    */
   NullOrdering nullOrdering();
+
+  @Override
+  default Expression[] children() { return new Expression[]{ expression() }; }
 }

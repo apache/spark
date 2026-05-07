@@ -18,14 +18,13 @@
 package org.apache.spark.examples.streaming;
 
 import java.io.File;
-import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
-
-import com.google.common.io.Files;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -152,7 +151,7 @@ public final class JavaRecoverableNetworkWordCount {
       System.out.println(output);
       System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
       System.out.println("Appending to " + outputFile.getAbsolutePath());
-      Files.append(output + "\n", outputFile, Charset.defaultCharset());
+      Files.writeString(outputFile.toPath(), output + "\n", StandardOpenOption.APPEND);
     });
 
     return ssc;

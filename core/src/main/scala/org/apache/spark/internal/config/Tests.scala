@@ -21,6 +21,8 @@ private[spark] object Tests {
 
   val TEST_USE_COMPRESSED_OOPS_KEY = "spark.test.useCompressedOops"
 
+  val TEST_USE_COMPACT_OBJECT_HEADERS_KEY = "spark.test.useCompactObjectHeaders"
+
   val TEST_MEMORY = ConfigBuilder("spark.testing.memory")
     .version("1.6.0")
     .longConf
@@ -36,6 +38,13 @@ private[spark] object Tests {
     .version("1.0.1")
     .booleanConf
     .createOptional
+
+  val INJECT_SHUFFLE_FETCH_FAILURES =
+    ConfigBuilder("spark.testing.injectShuffleFetchFailures")
+      .doc("Injecting fetch failures for shuffle stages by providing an invalid BlockManager " +
+        "location for the first stage attempt. Testing only flag!")
+      .booleanConf
+      .createWithDefault(false)
 
   val TEST_NO_STAGE_RETRY = ConfigBuilder("spark.test.noStageRetry")
     .version("1.2.0")
@@ -82,5 +91,14 @@ private[spark] object Tests {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  val TEST_SKIP_ESS_REGISTER = ConfigBuilder("spark.testing.skipESSRegister")
+    .version("4.0.0")
+    .doc("None of Spark testing modes (local, local-cluster) enables shuffle service. So it is " +
+      s"hard to test ${SHUFFLE_SERVICE_ENABLED.key} when you only want to test this flag but " +
+      s"without the real server. This config provides a way to allow tests run with " +
+      s"${SHUFFLE_SERVICE_ENABLED.key} enabled without registration failures.")
+    .booleanConf
+    .createWithDefault(false)
 
 }

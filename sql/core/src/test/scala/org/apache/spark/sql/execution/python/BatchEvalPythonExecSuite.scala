@@ -17,19 +17,19 @@
 
 package org.apache.spark.sql.execution.python
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, GreaterThan, In}
-import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType}
 
-class BatchEvalPythonExecSuite extends SparkPlanTest
-  with SharedSparkSession
+class BatchEvalPythonExecSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
@@ -41,7 +41,12 @@ class BatchEvalPythonExecSuite extends SparkPlanTest
 
   override def afterAll(): Unit = {
     try {
-      spark.sessionState.functionRegistry.dropFunction(FunctionIdentifier("dummyPythonUDF"))
+      // Registry requires 3-part identifier for session/temp functions
+      val ident = FunctionIdentifier(
+        "dummyPythonUDF",
+        Some(CatalogManager.SESSION_NAMESPACE),
+        Some(CatalogManager.SYSTEM_CATALOG_NAME))
+      spark.sessionState.functionRegistry.dropFunction(ident)
     } finally {
       super.afterAll()
     }
@@ -121,7 +126,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest
 }
 
 // This Python UDF is dummy and just for testing. Unable to execute.
-class DummyUDF extends PythonFunction(
+class DummyUDF extends SimplePythonFunction(
   command = Array[Byte](),
   envVars = Map("" -> "").asJava,
   pythonIncludes = ArrayBuffer("").asJava,

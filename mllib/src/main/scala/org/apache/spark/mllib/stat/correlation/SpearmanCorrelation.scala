@@ -70,7 +70,7 @@ private[stat] object SpearmanCorrelation extends Correlation with Logging {
           val output = flush()
           preCol = j
           preVal = v
-          startRank = rank
+          startRank = rank.toDouble
           cachedUids += uid
           output
         } else {

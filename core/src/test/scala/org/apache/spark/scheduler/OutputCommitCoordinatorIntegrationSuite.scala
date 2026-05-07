@@ -58,7 +58,7 @@ class OutputCommitCoordinatorIntegrationSuite
 private class ThrowExceptionOnFirstAttemptOutputCommitter extends FileOutputCommitter {
   override def commitTask(context: TaskAttemptContext): Unit = {
     val ctx = TaskContext.get()
-    if (ctx.attemptNumber < 1) {
+    if (ctx.attemptNumber() < 1) {
       throw new java.io.FileNotFoundException("Intentional exception")
     }
     super.commitTask(context)

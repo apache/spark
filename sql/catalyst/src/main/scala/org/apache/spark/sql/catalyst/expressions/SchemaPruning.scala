@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
+import scala.collection.immutable.HashMap
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 object SchemaPruning extends SQLConfHelper {
@@ -29,8 +34,8 @@ object SchemaPruning extends SQLConfHelper {
    *   1. The schema field ordering at original schema is still preserved in pruned schema.
    *   2. The top-level fields are not pruned here.
    */
-  def pruneDataSchema(
-      dataSchema: StructType,
+  def pruneSchema(
+      schema: StructType,
       requestedRootFields: Seq[RootField]): StructType = {
     val resolver = conf.resolver
     // Merge the requested root fields into a single schema. Note the ordering of the fields
@@ -40,10 +45,10 @@ object SchemaPruning extends SQLConfHelper {
       .map { root: RootField => StructType(Array(root.field)) }
       .reduceLeft(_ merge _)
     val mergedDataSchema =
-      StructType(dataSchema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
+      StructType(schema.map(d => mergedSchema.find(m => resolver(m.name, d.name)).getOrElse(d)))
     // Sort the fields of mergedDataSchema according to their order in dataSchema,
     // recursively. This makes mergedDataSchema a pruned schema of dataSchema
-    sortLeftFieldsByRight(mergedDataSchema, dataSchema).asInstanceOf[StructType]
+    sortLeftFieldsByRight(mergedDataSchema, schema).asInstanceOf[StructType]
   }
 
   /**
@@ -54,6 +59,7 @@ object SchemaPruning extends SQLConfHelper {
    */
   private def sortLeftFieldsByRight(left: DataType, right: DataType): DataType =
     (left, right) match {
+      case _ if left == right => left
       case (ArrayType(leftElementType, containsNull), ArrayType(rightElementType, _)) =>
         ArrayType(
           sortLeftFieldsByRight(leftElementType, rightElementType),
@@ -65,16 +71,23 @@ object SchemaPruning extends SQLConfHelper {
           sortLeftFieldsByRight(leftValueType, rightValueType),
           containsNull)
       case (leftStruct: StructType, rightStruct: StructType) =>
-        val resolver = conf.resolver
-        val filteredRightFieldNames = rightStruct.fieldNames
-          .filter(name => leftStruct.fieldNames.exists(resolver(_, name)))
-        val sortedLeftFields = filteredRightFieldNames.map { fieldName =>
-          val resolvedLeftStruct = leftStruct.find(p => resolver(p.name, fieldName)).get
-          val leftFieldType = resolvedLeftStruct.dataType
-          val rightFieldType = rightStruct(fieldName).dataType
-          val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
-            metadata = resolvedLeftStruct.metadata)
+        val formatFieldName: String => String =
+          if (conf.caseSensitiveAnalysis) identity else _.toLowerCase(Locale.ROOT)
+
+        val leftStructHashMap =
+          HashMap(leftStruct.map(f => formatFieldName(f.name)).zip(leftStruct): _*)
+        val sortedLeftFields = rightStruct.fieldNames.flatMap { fieldName =>
+          val formattedFieldName = formatFieldName(fieldName)
+          if (leftStructHashMap.contains(formattedFieldName)) {
+            val resolvedLeftStruct = leftStructHashMap(formattedFieldName)
+            val leftFieldType = resolvedLeftStruct.dataType
+            val rightFieldType = rightStruct(fieldName).dataType
+            val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
+            Some(StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
+              metadata = resolvedLeftStruct.metadata))
+          } else {
+            None
+          }
         }
         StructType(sortedLeftFields)
       case _ => left
@@ -114,7 +127,7 @@ object SchemaPruning extends SQLConfHelper {
           val rootFieldType = StructType(Array(root.field))
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
-          merged.sameType(optFieldType)
+          DataTypeUtils.sameType(merged, optFieldType)
         }
       }
     } ++ rootFields
@@ -140,6 +153,10 @@ object SchemaPruning extends SQLConfHelper {
         RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
+      case s: SubqueryExpression =>
+        // use subquery references that only include outer attrs and
+        // ignore join conditions as those may include attributes from other tables
+        s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
     }

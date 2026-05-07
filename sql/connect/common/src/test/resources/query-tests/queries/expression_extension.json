@@ -1,0 +1,26 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "expressions": [{
+      "extension": {
+        "@type": "type.googleapis.com/spark.connect.ExamplePluginExpression",
+        "child": {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "id"
+          }
+        },
+        "customField": "abc"
+      }
+    }]
+  }
+}

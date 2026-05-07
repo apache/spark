@@ -18,9 +18,9 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{PrintWriter, StringWriter}
-import javax.servlet.FilterChain
-import javax.servlet.http.{Cookie, HttpServletRequest, HttpServletResponse}
 
+import jakarta.servlet.FilterChain
+import jakarta.servlet.http.{Cookie, HttpServletRequest, HttpServletResponse}
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite

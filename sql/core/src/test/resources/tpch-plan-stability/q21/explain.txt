@@ -11,35 +11,35 @@ TakeOrderedAndProject (38)
                :     :  +- * BroadcastHashJoin Inner BuildRight (19)
                :     :     :- * Filter (3)
                :     :     :  +- * ColumnarToRow (2)
-               :     :     :     +- Scan parquet default.supplier (1)
+               :     :     :     +- Scan parquet spark_catalog.default.supplier (1)
                :     :     +- BroadcastExchange (18)
                :     :        +- * BroadcastHashJoin LeftAnti BuildRight (17)
                :     :           :- * BroadcastHashJoin LeftSemi BuildRight (11)
                :     :           :  :- * Project (7)
                :     :           :  :  +- * Filter (6)
                :     :           :  :     +- * ColumnarToRow (5)
-               :     :           :  :        +- Scan parquet default.lineitem (4)
+               :     :           :  :        +- Scan parquet spark_catalog.default.lineitem (4)
                :     :           :  +- BroadcastExchange (10)
                :     :           :     +- * ColumnarToRow (9)
-               :     :           :        +- Scan parquet default.lineitem (8)
+               :     :           :        +- Scan parquet spark_catalog.default.lineitem (8)
                :     :           +- BroadcastExchange (16)
                :     :              +- * Project (15)
                :     :                 +- * Filter (14)
                :     :                    +- * ColumnarToRow (13)
-               :     :                       +- Scan parquet default.lineitem (12)
+               :     :                       +- Scan parquet spark_catalog.default.lineitem (12)
                :     +- BroadcastExchange (25)
                :        +- * Project (24)
                :           +- * Filter (23)
                :              +- * ColumnarToRow (22)
-               :                 +- Scan parquet default.orders (21)
+               :                 +- Scan parquet spark_catalog.default.orders (21)
                +- BroadcastExchange (32)
                   +- * Project (31)
                      +- * Filter (30)
                         +- * ColumnarToRow (29)
-                           +- Scan parquet default.nation (28)
+                           +- Scan parquet spark_catalog.default.nation (28)
 
 
-(1) Scan parquet default.supplier
+(1) Scan parquet spark_catalog.default.supplier
 Output [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
@@ -53,7 +53,7 @@ Input [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
 Input [3]: [s_suppkey#1, s_name#2, s_nationkey#3]
 Condition : (isnotnull(s_suppkey#1) AND isnotnull(s_nationkey#3))
 
-(4) Scan parquet default.lineitem
+(4) Scan parquet spark_catalog.default.lineitem
 Output [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -71,7 +71,7 @@ Condition : ((((isnotnull(l_receiptdate#7) AND isnotnull(l_commitdate#6)) AND (l
 Output [2]: [l_orderkey#4, l_suppkey#5]
 Input [4]: [l_orderkey#4, l_suppkey#5, l_commitdate#6, l_receiptdate#7]
 
-(8) Scan parquet default.lineitem
+(8) Scan parquet spark_catalog.default.lineitem
 Output [2]: [l_orderkey#8, l_suppkey#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
@@ -82,134 +82,139 @@ Input [2]: [l_orderkey#8, l_suppkey#9]
 
 (10) BroadcastExchange
 Input [2]: [l_orderkey#8, l_suppkey#9]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=1]
 
 (11) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [l_orderkey#4]
 Right keys [1]: [l_orderkey#8]
+Join type: LeftSemi
 Join condition: NOT (l_suppkey#9 = l_suppkey#5)
 
-(12) Scan parquet default.lineitem
-Output [4]: [l_orderkey#11, l_suppkey#12, l_commitdate#13, l_receiptdate#14]
+(12) Scan parquet spark_catalog.default.lineitem
+Output [4]: [l_orderkey#10, l_suppkey#11, l_commitdate#12, l_receiptdate#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
 PushedFilters: [IsNotNull(l_receiptdate), IsNotNull(l_commitdate)]
 ReadSchema: struct<l_orderkey:bigint,l_suppkey:bigint,l_commitdate:date,l_receiptdate:date>
 
 (13) ColumnarToRow [codegen id : 2]
-Input [4]: [l_orderkey#11, l_suppkey#12, l_commitdate#13, l_receiptdate#14]
+Input [4]: [l_orderkey#10, l_suppkey#11, l_commitdate#12, l_receiptdate#13]
 
 (14) Filter [codegen id : 2]
-Input [4]: [l_orderkey#11, l_suppkey#12, l_commitdate#13, l_receiptdate#14]
-Condition : ((isnotnull(l_receiptdate#14) AND isnotnull(l_commitdate#13)) AND (l_receiptdate#14 > l_commitdate#13))
+Input [4]: [l_orderkey#10, l_suppkey#11, l_commitdate#12, l_receiptdate#13]
+Condition : ((isnotnull(l_receiptdate#13) AND isnotnull(l_commitdate#12)) AND (l_receiptdate#13 > l_commitdate#12))
 
 (15) Project [codegen id : 2]
-Output [2]: [l_orderkey#11, l_suppkey#12]
-Input [4]: [l_orderkey#11, l_suppkey#12, l_commitdate#13, l_receiptdate#14]
+Output [2]: [l_orderkey#10, l_suppkey#11]
+Input [4]: [l_orderkey#10, l_suppkey#11, l_commitdate#12, l_receiptdate#13]
 
 (16) BroadcastExchange
-Input [2]: [l_orderkey#11, l_suppkey#12]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#15]
+Input [2]: [l_orderkey#10, l_suppkey#11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=2]
 
 (17) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [l_orderkey#4]
-Right keys [1]: [l_orderkey#11]
-Join condition: NOT (l_suppkey#12 = l_suppkey#5)
+Right keys [1]: [l_orderkey#10]
+Join type: LeftAnti
+Join condition: NOT (l_suppkey#11 = l_suppkey#5)
 
 (18) BroadcastExchange
 Input [2]: [l_orderkey#4, l_suppkey#5]
-Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#16]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [plan_id=3]
 
 (19) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_suppkey#1]
 Right keys [1]: [l_suppkey#5]
+Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 6]
 Output [3]: [s_name#2, s_nationkey#3, l_orderkey#4]
 Input [5]: [s_suppkey#1, s_name#2, s_nationkey#3, l_orderkey#4, l_suppkey#5]
 
-(21) Scan parquet default.orders
-Output [2]: [o_orderkey#17, o_orderstatus#18]
+(21) Scan parquet spark_catalog.default.orders
+Output [2]: [o_orderkey#14, o_orderstatus#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
 PushedFilters: [IsNotNull(o_orderstatus), EqualTo(o_orderstatus,F), IsNotNull(o_orderkey)]
 ReadSchema: struct<o_orderkey:bigint,o_orderstatus:string>
 
 (22) ColumnarToRow [codegen id : 4]
-Input [2]: [o_orderkey#17, o_orderstatus#18]
+Input [2]: [o_orderkey#14, o_orderstatus#15]
 
 (23) Filter [codegen id : 4]
-Input [2]: [o_orderkey#17, o_orderstatus#18]
-Condition : ((isnotnull(o_orderstatus#18) AND (o_orderstatus#18 = F)) AND isnotnull(o_orderkey#17))
+Input [2]: [o_orderkey#14, o_orderstatus#15]
+Condition : ((isnotnull(o_orderstatus#15) AND (o_orderstatus#15 = F)) AND isnotnull(o_orderkey#14))
 
 (24) Project [codegen id : 4]
-Output [1]: [o_orderkey#17]
-Input [2]: [o_orderkey#17, o_orderstatus#18]
+Output [1]: [o_orderkey#14]
+Input [2]: [o_orderkey#14, o_orderstatus#15]
 
 (25) BroadcastExchange
-Input [1]: [o_orderkey#17]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#19]
+Input [1]: [o_orderkey#14]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=4]
 
 (26) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [l_orderkey#4]
-Right keys [1]: [o_orderkey#17]
+Right keys [1]: [o_orderkey#14]
+Join type: Inner
 Join condition: None
 
 (27) Project [codegen id : 6]
 Output [2]: [s_name#2, s_nationkey#3]
-Input [4]: [s_name#2, s_nationkey#3, l_orderkey#4, o_orderkey#17]
+Input [4]: [s_name#2, s_nationkey#3, l_orderkey#4, o_orderkey#14]
 
-(28) Scan parquet default.nation
-Output [2]: [n_nationkey#20, n_name#21]
+(28) Scan parquet spark_catalog.default.nation
+Output [2]: [n_nationkey#16, n_name#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/nation]
 PushedFilters: [IsNotNull(n_name), EqualTo(n_name,SAUDI ARABIA), IsNotNull(n_nationkey)]
 ReadSchema: struct<n_nationkey:bigint,n_name:string>
 
 (29) ColumnarToRow [codegen id : 5]
-Input [2]: [n_nationkey#20, n_name#21]
+Input [2]: [n_nationkey#16, n_name#17]
 
 (30) Filter [codegen id : 5]
-Input [2]: [n_nationkey#20, n_name#21]
-Condition : ((isnotnull(n_name#21) AND (n_name#21 = SAUDI ARABIA)) AND isnotnull(n_nationkey#20))
+Input [2]: [n_nationkey#16, n_name#17]
+Condition : ((isnotnull(n_name#17) AND (n_name#17 = SAUDI ARABIA)) AND isnotnull(n_nationkey#16))
 
 (31) Project [codegen id : 5]
-Output [1]: [n_nationkey#20]
-Input [2]: [n_nationkey#20, n_name#21]
+Output [1]: [n_nationkey#16]
+Input [2]: [n_nationkey#16, n_name#17]
 
 (32) BroadcastExchange
-Input [1]: [n_nationkey#20]
-Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#22]
+Input [1]: [n_nationkey#16]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [plan_id=5]
 
 (33) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [s_nationkey#3]
-Right keys [1]: [n_nationkey#20]
+Right keys [1]: [n_nationkey#16]
+Join type: Inner
 Join condition: None
 
 (34) Project [codegen id : 6]
 Output [1]: [s_name#2]
-Input [3]: [s_name#2, s_nationkey#3, n_nationkey#20]
+Input [3]: [s_name#2, s_nationkey#3, n_nationkey#16]
 
 (35) HashAggregate [codegen id : 6]
 Input [1]: [s_name#2]
 Keys [1]: [s_name#2]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#23]
-Results [2]: [s_name#2, count#24]
+Aggregate Attributes [1]: [count#18]
+Results [2]: [s_name#2, count#19]
 
 (36) Exchange
-Input [2]: [s_name#2, count#24]
-Arguments: hashpartitioning(s_name#2, 5), ENSURE_REQUIREMENTS, [id=#25]
+Input [2]: [s_name#2, count#19]
+Arguments: hashpartitioning(s_name#2, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (37) HashAggregate [codegen id : 7]
-Input [2]: [s_name#2, count#24]
+Input [2]: [s_name#2, count#19]
 Keys [1]: [s_name#2]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#26]
-Results [2]: [s_name#2, count(1)#26 AS numwait#27]
+Aggregate Attributes [1]: [count(1)#20]
+Results [2]: [s_name#2, count(1)#20 AS numwait#21]
 
 (38) TakeOrderedAndProject
-Input [2]: [s_name#2, numwait#27]
-Arguments: 100, [numwait#27 DESC NULLS LAST, s_name#2 ASC NULLS FIRST], [s_name#2, numwait#27]
+Input [2]: [s_name#2, numwait#21]
+Arguments: 100, [numwait#21 DESC NULLS LAST, s_name#2 ASC NULLS FIRST], [s_name#2, numwait#21]
 

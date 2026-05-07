@@ -40,6 +40,8 @@ private[thriftserver] class ThriftServerTab(
   def detach(): Unit = {
     sparkUI.detachTab(this)
   }
+
+  override def displayOrder: Int = 1
 }
 
 private[thriftserver] object ThriftServerTab {

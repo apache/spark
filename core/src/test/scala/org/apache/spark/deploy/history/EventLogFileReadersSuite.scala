@@ -19,10 +19,9 @@ package org.apache.spark.deploy.history
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.net.URI
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
@@ -220,8 +219,8 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
 
       val entry = is.getNextEntry
       assert(entry != null)
-      val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-      val expected = Files.toString(new File(logPath.toString), StandardCharsets.UTF_8)
+      val actual = is.readAllBytes()
+      val expected = Files.readAllBytes(new File(logPath.toString).toPath)
       assert(actual === expected)
       assert(is.getNextEntry === null)
     }
@@ -229,6 +228,37 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
 }
 
 class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
+  test("SPARK-46012: appStatus file should exist") {
+    withTempDir { dir =>
+      val appId = getUniqueApplicationId
+      val attemptId = None
+
+      val conf = getLoggingConf(testDirPath)
+      conf.set(EVENT_LOG_ENABLE_ROLLING, true)
+      conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "10m")
+
+      val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
+        SparkHadoopUtil.get.newConfiguration(conf))
+
+      writer.start()
+      val dummyStr = "dummy".repeat(1024)
+      writeTestEvents(writer, dummyStr, 1024 * 1024 * 20)
+      writer.stop()
+
+      // Verify a healthy rolling event log directory
+      val logPathCompleted = getCurrentLogPath(writer.logPath, isCompleted = true)
+      val readerOpt = EventLogFileReader(fileSystem, new Path(logPathCompleted))
+      assert(readerOpt.get.isInstanceOf[RollingEventLogFilesFileReader])
+      assert(readerOpt.get.listEventLogFiles.length === 3)
+
+      // Make unhealthy rolling event directory by removing appStatus file.
+      val appStatusFile = fileSystem.listStatus(new Path(logPathCompleted))
+        .find(RollingEventLogFilesWriter.isAppStatusFile).get.getPath
+      fileSystem.delete(appStatusFile, false)
+      assert(EventLogFileReader(fileSystem, new Path(logPathCompleted)).isEmpty)
+    }
+  }
+
   allCodecs.foreach { codecShortName =>
     test(s"rolling event log files - codec $codecShortName") {
       val appId = getUniqueApplicationId
@@ -244,7 +274,7 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
       writer.start()
 
       // write log more than 20m (intended to roll over to 3 files)
-      val dummyStr = "dummy" * 1024
+      val dummyStr = "dummy".repeat(1024)
       writeTestEvents(writer, dummyStr, 1024 * 1024 * 20)
 
       val logPathIncompleted = getCurrentLogPath(writer.logPath, isCompleted = false)
@@ -336,9 +366,8 @@ class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
           val fileName = entry.getName.stripPrefix(logPath.getName + "/")
           assert(allFileNames.contains(fileName))
 
-          val actual = new String(ByteStreams.toByteArray(is), StandardCharsets.UTF_8)
-          val expected = Files.toString(new File(logPath.toString, fileName),
-            StandardCharsets.UTF_8)
+          val actual = is.readAllBytes()
+          val expected = Files.readAllBytes(new File(logPath.toString, fileName).toPath)
           assert(actual === expected)
         }
       }

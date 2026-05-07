@@ -44,6 +44,8 @@ class AggregatingAccumulator private(
   assert(bufferSchema.size == updateExpressions.size)
   assert(mergeExpressions == null || bufferSchema.size == mergeExpressions.size)
 
+  override def excludeFromHeartbeat: Boolean = true
+
   @transient
   private var joinedRow: JoinedRow = _
 
@@ -163,9 +165,18 @@ class AggregatingAccumulator private(
             i += 1
           }
           i = 0
-          while (i < typedImperatives.length) {
-            typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
-            i += 1
+          if (isAtDriverSide) {
+            while (i < typedImperatives.length) {
+              // The input buffer stores serialized data
+              typedImperatives(i).merge(buffer, otherBuffer)
+              i += 1
+            }
+          } else {
+            while (i < typedImperatives.length) {
+              // The input buffer stores deserialized object
+              typedImperatives(i).mergeBuffersObjects(buffer, otherBuffer)
+              i += 1
+            }
           }
         case _ =>
           throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
@@ -186,6 +197,19 @@ class AggregatingAccumulator private(
       createBuffer()
     }
     resultProjection(input)
+  }
+
+  override def withBufferSerialized(): AggregatingAccumulator = {
+    assert(!isAtDriverSide)
+    if (buffer != null) {
+      var i = 0
+      // AggregatingAccumulator runs on executor, we should serialize all TypedImperativeAggregate.
+      while (i < typedImperatives.length) {
+        typedImperatives(i).serializeAggregateBufferInPlace(buffer)
+        i += 1
+      }
+    }
+    this
   }
 
   /**

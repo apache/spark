@@ -1,0 +1,3 @@
+Project [if ((_common_expr_0#0 = )) null else _common_expr_0#0 AS regexp_substr(g, \d{2}(a|b|m))#0]
++- Project [id#0L, a#0, b#0, d#0, e#0, f#0, g#0, regexp_extract(g#0, \d{2}(a|b|m), 0) AS _common_expr_0#0]
+   +- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

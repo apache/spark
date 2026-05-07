@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<PMSetup startTime="2020-11-06T16:30:00+00:00" interval="15">
+    <PMTarget measurementType="TYPE1">
+        <M1>0</M1>
+        <M2>0</M2>
+    </PMTarget>
+</PMSetup>

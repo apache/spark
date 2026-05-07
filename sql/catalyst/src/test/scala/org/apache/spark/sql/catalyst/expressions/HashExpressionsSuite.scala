@@ -18,22 +18,23 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Period, ZoneId, ZoneOffset}
+import java.time.{Duration, LocalTime, Period, ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
-import org.apache.commons.codec.digest.DigestUtils
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, DateTimeUtils, GenericArrayData, IntervalUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val random = new scala.util.Random
@@ -60,13 +61,23 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("sha2") {
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(224)),
+      "107c5072b799c4771f328304cfe1ebb375eb6ea7f35a3aa753836fad")
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(0)),
+      "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78")
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(256)),
-      DigestUtils.sha256Hex("ABC"))
+      "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78")
     checkEvaluation(Sha2(Literal.create(Array[Byte](1, 2, 3, 4, 5, 6), BinaryType), Literal(384)),
-      DigestUtils.sha384Hex(Array[Byte](1, 2, 3, 4, 5, 6)))
+      "557cfe660c753b830efa61528fc350ef384a7a4b9d3467c6230049bc59548eb8" +
+        "a404874baff89cb0f9bd18400829fdc2")
+    checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)), Literal(512)),
+      "397118fdac8d83ad98813c50759c85b8c47565d8268bf10da483153b747a7474" +
+        "3a58a90e85aa9f705ce6984ffc128db567489817e4092d050d8a1cc596ddc119")
     // unsupported bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(1024)), null)
+    // null input and valid bit length
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal(512)), null)
+    // valid input and null bit length
     checkEvaluation(Sha2(Literal("ABC".getBytes(StandardCharsets.UTF_8)),
       Literal.create(null, IntegerType)), null)
     checkEvaluation(Sha2(Literal.create(null, BinaryType), Literal.create(null, IntegerType)), null)
@@ -82,7 +93,14 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
     // Note : All expected hashes need to be computed using Hive 1.2.1
-    val actual = HiveHashFunction.hash(input, dataType, seed = 0)
+    val actual = HiveHashFunction.hash(
+      input,
+      dataType,
+      seed = 0,
+      isCollationAware = true,
+      // legacyCollationAwareHashing only matters when isCollationAware is false.
+      legacyCollationAwareHashing = false
+    )
 
     withClue(s"hash mismatch for input = `$input` of type `$dataType`.") {
       assert(actual == expected)
@@ -611,11 +629,150 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDecimal("123456.123456789012345678901234567890", 38, 31, 1728235666)
   }
 
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
+    test(s"hash check for collated $collation strings - collation aware") {
+      val s1 = "aaa"
+      val s2 = "AAA"
+
+      val murmur3Hash1 = CollationAwareMurmur3Hash(
+        Seq(Collate(Literal(s1), ResolvedCollation(collation))),
+        42
+      )
+      val murmur3Hash2 = CollationAwareMurmur3Hash(
+        Seq(Collate(Literal(s2), ResolvedCollation(collation))),
+        42
+      )
+
+      // Interpreted hash values for s1 and s2
+      val interpretedHash1 = murmur3Hash1.eval()
+      val interpretedHash2 = murmur3Hash2.eval()
+
+      // Check that interpreted and codegen hashes are equal
+      checkEvaluation(murmur3Hash1, interpretedHash1)
+      checkEvaluation(murmur3Hash2, interpretedHash2)
+
+      if (CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
+        assert(interpretedHash1 != interpretedHash2)
+      } else {
+        assert(interpretedHash1 == interpretedHash2)
+      }
+    }
+  }
+
+  for (collation <- Seq("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY")) {
+    test(s"hash check for collated $collation strings - collation agnostic") {
+      val s1 = "aaa"
+      val s2 = "AAA"
+
+      val murmur3Hash1 = Murmur3Hash(Seq(Collate(Literal(s1), ResolvedCollation(collation))), 42)
+      val murmur3Hash2 = Murmur3Hash(Seq(Collate(Literal(s2), ResolvedCollation(collation))), 42)
+
+      // Interpreted hash values for s1 and s2
+      val interpretedHash1 = murmur3Hash1.eval()
+      val interpretedHash2 = murmur3Hash2.eval()
+
+      // Check that interpreted and codegen hashes are equal
+      checkEvaluation(murmur3Hash1, interpretedHash1)
+      checkEvaluation(murmur3Hash2, interpretedHash2)
+
+      assert(interpretedHash1 != interpretedHash2)
+
+      // Check that the hash computed is the same as the UTF8_BINARY version of it.
+      if (!CollationFactory.fetchCollation(collation).isUtf8BinaryType) {
+        Seq[String](s1, s2).foreach { s =>
+          val utf8BinaryStringExpr = Collate(Literal(s), ResolvedCollation("UTF8_BINARY"))
+          val murmur3HashBinary = Murmur3Hash(Seq(utf8BinaryStringExpr), 42)
+          val hashBinary = murmur3HashBinary.eval()
+          val murmur3Hash = Murmur3Hash(Seq(Collate(Literal(s), ResolvedCollation(collation))), 42)
+          val interpretedHash = murmur3Hash.eval()
+          assert(interpretedHash == hashBinary)
+        }
+      }
+    }
+  }
+
+  // Below we test the `Murmur3Hash` and `XxHash64` expressions for the old behavior before the fix.
+  // The expected values have been computed using the old implementation of the expression.
+  test("SPARK-52828: always collation aware hash expression") {
+    withSQLConf(SQLConf.COLLATION_AWARE_HASHING_ENABLED.key -> "true") {
+      val testCases = Seq[(String, String, Int, Long)](
+        // UTF8_BINARY
+        ("AAA", "UTF8_BINARY", 22125783, 3965631622972380050L),
+        ("AAA  ", "UTF8_BINARY", 399014599, 196039582279068044L),
+        ("aaa", "UTF8_BINARY", -1689629761, 2465751751477118478L),
+        ("aaa   ", "UTF8_BINARY", -1721438718, -2249763606958050730L),
+        // UTF8_BINARY_RTRIM
+        ("AAA", "UTF8_BINARY_RTRIM", -1493064582, 982928955165138586L),
+        ("AAA  ", "UTF8_BINARY_RTRIM", -1493064582, 982928955165138586L),
+        ("aaa", "UTF8_BINARY_RTRIM", 2132077201, -4940759280126763524L),
+        ("aaa   ", "UTF8_BINARY_RTRIM", 2132077201, -4940759280126763524L),
+        // UTF8_LCASE
+        ("AAA", "UTF8_LCASE", 2132077201, -4940759280126763524L),
+        ("AAA  ", "UTF8_LCASE", -619073595, -1146641051608991690L),
+        ("aaa", "UTF8_LCASE", 2132077201, -4940759280126763524L),
+        ("aaa   ", "UTF8_LCASE", -1498994355, -739345240752106297L),
+        // UTF8_LCASE_RTRIM
+        ("AAA", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        ("AAA  ", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        ("aaa", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        ("aaa   ", "UTF8_LCASE_RTRIM", 2132077201, -4940759280126763524L),
+        // UNICODE
+        ("AAA", "UNICODE", 128537619, 49663227161197117L),
+        ("AAA  ", "UNICODE", 82814175, 3618364417906061797L),
+        ("aaa", "UNICODE", -1822783942, 290910714161494507L),
+        ("aaa   ", "UNICODE", -896289340, 1025563887784400925L),
+        // UNICODE_RTRIM
+        ("AAA", "UNICODE_RTRIM", 128537619, 49663227161197117L),
+        ("AAA  ", "UNICODE_RTRIM", 128537619, 49663227161197117L),
+        ("aaa", "UNICODE_RTRIM", -1822783942, 290910714161494507L),
+        ("aaa   ", "UNICODE_RTRIM", -1822783942, 290910714161494507L),
+        // UNICODE_CI
+        ("AAA", "UNICODE_CI", -443043098, -6629915645815515868L),
+        ("AAA  ", "UNICODE_CI", 667473856, -3263604567598338200L),
+        ("aaa", "UNICODE_CI", -443043098, -6629915645815515868L),
+        ("aaa   ", "UNICODE_CI", -390983808, -5159733933636691741L),
+        // UNICODE_CI_RTRIM
+        ("AAA", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
+        ("AAA  ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
+        ("aaa", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L),
+        ("aaa   ", "UNICODE_CI_RTRIM", -443043098, -6629915645815515868L)
+      )
+      testCases.foreach { case (str, collationName, expectedMurmur3, expectedXxHash64) =>
+        val stringExpr = Collate(Literal(str), ResolvedCollation(collationName))
+        val murmur3Expr = Murmur3Hash(Seq(stringExpr), 42)
+        checkEvaluation(murmur3Expr, expectedMurmur3)
+        val xxHash64Expr = XxHash64(Seq(stringExpr), 42L)
+        checkEvaluation(xxHash64Expr, expectedXxHash64)
+      }
+    }
+  }
+
+  test("SPARK-52828: backward-compatible hash API should reject UTF8_LCASE collation") {
+    // This test verifies that the legacy hash API throws an exception when used with
+    // collation-aware strings such as UTF8_LCASE. The assertion ensures we catch unsupported
+    // usage early via the internal assertion (SchemaUtils.hasNonUTF8BinaryCollation).
+    val expr_lcase = Collate(Literal("AAA"), ResolvedCollation("UTF8_LCASE"))
+    intercept[IllegalArgumentException] {
+      Murmur3HashFunction.hash(expr_lcase.eval(null), expr_lcase.dataType, 42)
+    }
+    intercept[IllegalArgumentException] {
+      XxHash64Function.hash(expr_lcase.eval(null), expr_lcase.dataType, 42)
+    }
+    intercept[IllegalArgumentException] {
+      HiveHashFunction.hash(expr_lcase.eval(null), expr_lcase.dataType, 42)
+    }
+
+    val expr_utf8bin = Collate(Literal("AAA"), ResolvedCollation("UTF8_BINARY"))
+    Murmur3HashFunction.hash(expr_utf8bin.eval(null), expr_utf8bin.dataType, 42)
+    XxHash64Function.hash(expr_utf8bin.eval(null), expr_utf8bin.dataType, 42)
+    HiveHashFunction.hash(expr_utf8bin.eval(null), expr_utf8bin.dataType, 42)
+  }
+
   test("SPARK-18207: Compute hash for a lot of expressions") {
     def checkResult(schema: StructType, input: InternalRow): Unit = {
       val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
         BoundReference(i, f.dataType, true)
-      }
+      }.toImmutableArraySeq
       val murmur3HashExpr = Murmur3Hash(exprs, 42)
       val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
       val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
@@ -664,7 +821,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (0 until O).map(_ => StructField("structOfStructOfStructOfString", outer)).toArray)
     val exprs = schema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
-    }
+    }.toImmutableArraySeq
     val murmur3HashExpr = Murmur3Hash(exprs, 42)
     val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
 
@@ -721,9 +878,16 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkResult(Literal.create(-0F, FloatType), Literal.create(0F, FloatType))
   }
 
+  test("Support TimeType") {
+    val time = Literal.create(LocalTime.of(23, 50, 59, 123456000), TimeType())
+    checkEvaluation(Murmur3Hash(Seq(time), 10), 545499634)
+    checkEvaluation(XxHash64(Seq(time), 10), -3550518982366774761L)
+    checkEvaluation(HiveHash(Seq(time)), -1567775210)
+  }
+
   private def testHash(inputSchema: StructType): Unit = {
     val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
-    val toRow = RowEncoder(inputSchema).createSerializer()
+    val toRow = ExpressionEncoder(inputSchema).createSerializer()
     val seed = scala.util.Random.nextInt()
     test(s"murmur3/xxHash64/hive hash: ${inputSchema.simpleString}") {
       for (_ <- 1 to 10) {

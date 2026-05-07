@@ -19,7 +19,6 @@ from collections import namedtuple
 import os
 import traceback
 
-
 CallSite = namedtuple("CallSite", "function file linenum")
 
 
@@ -46,12 +45,12 @@ def first_spark_call():
     return CallSite(function=sfun, file=ufile, linenum=uline)
 
 
-class SCCallSiteSync(object):
+class SCCallSiteSync:
     """
     Helper for setting the spark context call site.
 
     Example usage:
-    from pyspark.context import SCCallSiteSync
+    from pyspark.core.context import SCCallSiteSync
     with SCCallSiteSync(<relevant SparkContext>) as css:
         <a Spark call>
     """
@@ -62,7 +61,10 @@ class SCCallSiteSync(object):
         call_site = first_spark_call()
         if call_site is not None:
             self._call_site = "%s at %s:%s" % (
-                call_site.function, call_site.file, call_site.linenum)
+                call_site.function,
+                call_site.file,
+                call_site.linenum,
+            )
         else:
             self._call_site = "Error! Could not extract traceback info"
         self._context = sc

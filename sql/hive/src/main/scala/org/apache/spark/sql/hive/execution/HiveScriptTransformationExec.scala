@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.util.Properties
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -64,7 +64,7 @@ private[hive] case class HiveScriptTransformationExec(
       outputSoi: StructObjectInspector,
       hadoopConf: Configuration): Iterator[InternalRow] = {
     new Iterator[InternalRow] with HiveInspectors {
-      var curLine: String = null
+      private var completed = false
       val scriptOutputStream = new DataInputStream(inputStream)
 
       val scriptOutputReader =
@@ -78,6 +78,9 @@ private[hive] case class HiveScriptTransformationExec(
       lazy val unwrappers = outputSoi.getAllStructFieldRefs.asScala.map(unwrapperFor)
 
       override def hasNext: Boolean = {
+        if (completed) {
+          return false
+        }
         try {
           if (scriptOutputWritable == null) {
             scriptOutputWritable = reusedWritableObject
@@ -85,6 +88,7 @@ private[hive] case class HiveScriptTransformationExec(
             if (scriptOutputReader != null) {
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
                 checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                completed = true
                 return false
               }
             } else {
@@ -97,6 +101,7 @@ private[hive] case class HiveScriptTransformationExec(
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.
                   checkFailureAndPropagate(writerThread, null, proc, stderrBuffer)
+                  completed = true
                   return false
               }
             }
@@ -278,9 +283,7 @@ object HiveScriptIOSchema extends HiveInspectors {
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
-    // Can not use properties.putAll(propsMap.asJava) in scala-2.12
-    // See https://github.com/scala/bug/issues/10418
-    propsMap.foreach { case (k, v) => properties.put(k, v) }
+    properties.putAll(propsMap.asJava)
     serde.initialize(null, properties)
 
     serde
@@ -294,9 +297,7 @@ object HiveScriptIOSchema extends HiveInspectors {
       val instance = Utils.classForName[RecordReader](klass).getConstructor().
         newInstance()
       val props = new Properties()
-      // Can not use props.putAll(outputSerdeProps.toMap.asJava) in scala-2.12
-      // See https://github.com/scala/bug/issues/10418
-      ioschema.outputSerdeProps.toMap.foreach { case (k, v) => props.put(k, v) }
+      props.putAll(ioschema.outputSerdeProps.toMap.asJava)
       instance.initialize(inputStream, conf, props)
       instance
     }

@@ -19,24 +19,37 @@ package org.apache.spark.mllib.evaluation
 
 import java.{lang => jl}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.collection.Utils
 
 /**
  * Evaluator for ranking algorithms.
  *
  * Java users should use `RankingMetrics$.of` to create a [[RankingMetrics]] instance.
  *
- * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
+ * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pair
+ *                            or (predicted ranking, ground truth set,
+ * .                          relevance value of ground truth set).
+ *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
  */
 @Since("1.2.0")
-class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
-  extends Logging with Serializable {
+class RankingMetrics[T: ClassTag] @Since("1.2.0") (predictionAndLabels: RDD[_ <: Product])
+    extends Logging
+    with Serializable {
+
+  private val rdd = predictionAndLabels.map {
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked) =>
+      (pred, lab, Array.empty[Double])
+    case (pred: Array[T] @unchecked, lab: Array[T] @unchecked, rel: Array[Double]) =>
+      (pred, lab, rel)
+    case _ => throw new IllegalArgumentException(s"Expected RDD of tuples or triplets")
+  }
 
   /**
    * Compute the average precision of all the queries, truncated at ranking position k.
@@ -58,7 +71,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    rdd.map { case (pred, lab, _) =>
       countRelevantItemRatio(pred, lab, k, k)
     }.mean()
   }
@@ -70,7 +83,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    */
   @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
-    predictionAndLabels.map { case (pred, lab) =>
+    rdd.map { case (pred, lab, _) =>
       val labSet = lab.toSet
       val k = math.max(pred.length, labSet.size)
       averagePrecision(pred, labSet, k)
@@ -87,7 +100,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("3.0.0")
   def meanAveragePrecisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    rdd.map { case (pred, lab, _) =>
       averagePrecision(pred, lab.toSet, k)
     }.mean()
   }
@@ -127,8 +140,11 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * The discounted cumulative gain at position k is computed as:
    *    sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
    * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
-   * implementation, the relevance value is binary.
+   * implementation, the relevance value is binary if the relevance value is empty.
 
+   * If the relevance value is not empty but its size doesn't match the ground truth set size,
+   * a log warning is generated.
+   *
    * If a query has an empty ground truth set, zero will be used as ndcg together with
    * a log warning.
    *
@@ -142,8 +158,15 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    rdd.map { case (pred, lab, rel) =>
+      val useBinary = rel.isEmpty
       val labSet = lab.toSet
+      val relMap = Utils.toMap(lab, rel)
+      if (!useBinary && lab.length != rel.length) {
+        logWarning(
+          "# of ground truth set and # of relevance value set should be equal, " +
+            "check input data")
+      }
 
       if (labSet.nonEmpty) {
         val labSetSize = labSet.size
@@ -152,18 +175,32 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         var dcg = 0.0
         var i = 0
         while (i < n) {
-          // Base of the log doesn't matter for calculating NDCG,
-          // if the relevance value is binary.
-          val gain = 1.0 / math.log(i + 2)
-          if (i < pred.length && labSet.contains(pred(i))) {
-            dcg += gain
-          }
-          if (i < labSetSize) {
-            maxDcg += gain
+          if (useBinary) {
+            // Base of the log doesn't matter for calculating NDCG,
+            // if the relevance value is binary.
+            val gain = 1.0 / math.log(i + 2)
+            if (i < pred.length && labSet.contains(pred(i))) {
+              dcg += gain
+            }
+            if (i < labSetSize) {
+              maxDcg += gain
+            }
+          } else {
+            if (i < pred.length) {
+              dcg += (math.pow(2.0, relMap.getOrElse(pred(i), 0.0)) - 1) / math.log(i + 2)
+            }
+            if (i < labSetSize) {
+              maxDcg += (math.pow(2.0, relMap.getOrElse(lab(i), 0.0)) - 1) / math.log(i + 2)
+            }
           }
           i += 1
         }
-        dcg / maxDcg
+        if (maxDcg == 0.0) {
+          logWarning("Maximum of relevance of ground truth set is zero, check input data")
+          0.0
+        } else {
+          dcg / maxDcg
+        }
       } else {
         logWarning("Empty ground truth set, check input data")
         0.0
@@ -191,7 +228,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   @Since("3.0.0")
   def recallAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
-    predictionAndLabels.map { case (pred, lab) =>
+    rdd.map { case (pred, lab, _) =>
       countRelevantItemRatio(pred, lab, k, lab.toSet.size)
     }.mean()
   }
@@ -207,10 +244,11 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param denominator the denominator of ratio
    * @return relevant item ratio at the first k ranking positions
    */
-  private def countRelevantItemRatio(pred: Array[T],
-                                     lab: Array[T],
-                                     k: Int,
-                                     denominator: Int): Double = {
+  private def countRelevantItemRatio(
+      pred: Array[T],
+      lab: Array[T],
+      k: Int,
+      denominator: Int): Double = {
     val labSet = lab.toSet
     if (labSet.nonEmpty) {
       val n = math.min(pred.length, k)
@@ -235,12 +273,22 @@ object RankingMetrics {
   /**
    * Creates a [[RankingMetrics]] instance (for Java users).
    * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   *                            or (predicted ranking, ground truth set,
+   *                            relevance value of ground truth set).
+   *                            Since 3.4.0, it supports ndcg evaluation with relevance value.
    */
   @Since("1.4.0")
-  def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
+  def of[E, T <: jl.Iterable[E], A <: jl.Iterable[Double]](
+      predictionAndLabels: JavaRDD[_ <: Product]): RankingMetrics[E] = {
     implicit val tag = JavaSparkContext.fakeClassTag[E]
-    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
-      (predictions.asScala.toArray, labels.asScala.toArray)
+    val rdd = predictionAndLabels.rdd.map {
+      case (predictions, labels) =>
+        (predictions.asInstanceOf[T].asScala.toArray, labels.asInstanceOf[T].asScala.toArray)
+      case (predictions, labels, rels) =>
+        (
+          predictions.asInstanceOf[T].asScala.toArray,
+          labels.asInstanceOf[T].asScala.toArray,
+          rels.asInstanceOf[A].asScala.toArray)
     }
     new RankingMetrics(rdd)
   }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -129,6 +129,38 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
       projectAttrMap = columnInfo,
       expectedSize = 2 * (8 + columnSizes.values.sum),
       expectedRowCount = 2)
+  }
+
+  test("SPARK-39989: Support estimate column statistics if it is foldable expression") {
+    val (ar1, colStat1) = (attr("key1"), ColumnStat(distinctCount = Some(2), min = Some(1),
+      max = Some(2), nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)))
+
+    val child = StatsTestPlan(
+      outputList = Seq(ar1),
+      rowCount = 2,
+      attributeStats = AttributeMap(Seq(ar1 -> colStat1)))
+
+    // nullable expression
+    val proj1 = Project(Seq(ar1, Alias(Literal(null, IntegerType), "v")()), child)
+    val expectedColStats1 = Seq(
+      "key1" -> colStat1,
+      "v" -> ColumnStat(Some(0), None, None, Some(2), Some(4), Some(4), None, 2))
+    val expectedStats1 = Statistics(
+      sizeInBytes = 2 * (8 + 4 + 4),
+      rowCount = Some(2),
+      attributeStats = toAttributeMap(expectedColStats1, proj1))
+    assert(proj1.stats == expectedStats1)
+
+    // non-nullable expression
+    val proj2 = Project(Seq(ar1, Alias(Literal(10L, LongType), "v")()), child)
+    val expectedColStats2 = Seq(
+      "key1" -> colStat1,
+      "v" -> ColumnStat(Some(1), Some(10L), Some(10L), Some(0), Some(8), Some(8), None, 2))
+    val expectedStats2 = Statistics(
+      sizeInBytes = 2 * (8 + 4 + 8),
+      rowCount = Some(2),
+      attributeStats = toAttributeMap(expectedColStats2, proj2))
+    assert(proj2.stats == expectedStats2)
   }
 
   private def checkProjectStats(

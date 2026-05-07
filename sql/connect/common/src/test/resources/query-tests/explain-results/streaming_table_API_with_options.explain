@@ -1,0 +1,2 @@
+~SubqueryAlias spark_catalog.tempdb.myStreamingTable
++- ~StreamingRelationV2 spark_catalog.tempdb.myStreamingTable, org.apache.spark.sql.connector.catalog.InMemoryTable, [p1=v1, p2=v2], [id#0L], org.apache.spark.sql.connector.catalog.InMemoryChangelogCatalog, tempdb.myStreamingTable, name=<Unassigned>

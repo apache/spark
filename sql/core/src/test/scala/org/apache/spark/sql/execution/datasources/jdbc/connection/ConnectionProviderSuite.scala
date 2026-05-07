@@ -23,6 +23,7 @@ import javax.security.auth.login.Configuration
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkConf
+import org.apache.spark.security.SecurityConfigurationLock
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.sql.test.SharedSparkSession
@@ -68,12 +69,20 @@ class ConnectionProviderSuite
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -92,12 +101,20 @@ class ConnectionProviderSuite
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
     val provider2 = new JdbcConnectionProvider() {
       override val name: String = "test2"
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         mock[Connection]
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -107,12 +124,50 @@ class ConnectionProviderSuite
     assert(providerBase.create(mock[Driver], Map.empty, Some("test2")).isInstanceOf[Connection])
   }
 
+  test("Synchronize on SecurityConfigurationLock when the specified connection provider needs") {
+    val provider1 = new JdbcConnectionProvider() {
+      override val name: String = "test1"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+        assert(Thread.holdsLock(SecurityConfigurationLock))
+        mock[Connection]
+      }
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = true
+    }
+    val provider2 = new JdbcConnectionProvider() {
+      override val name: String = "test2"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+        assert(!Thread.holdsLock(SecurityConfigurationLock))
+        mock[Connection]
+      }
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
+    }
+
+    val providerBase = new ConnectionProviderBase() {
+      override val providers = Seq(provider1, provider2)
+    }
+    // We don't expect any exceptions or null here
+    assert(providerBase.create(mock[Driver], Map.empty, Some("test1")).isInstanceOf[Connection])
+    assert(providerBase.create(mock[Driver], Map.empty, Some("test2")).isInstanceOf[Connection])
+  }
+
   test("Throw an error when user specified provider that does not exist") {
     val provider = new JdbcConnectionProvider() {
       override val name: String = "provider"
       override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
       override def getConnection(driver: Driver, options: Map[String, String]): Connection =
         throw new RuntimeException()
+      override def modifiesSecurityContext(
+        driver: Driver,
+        options: Map[String, String]
+      ): Boolean = false
     }
 
     val providerBase = new ConnectionProviderBase() {
@@ -130,28 +185,28 @@ class ConnectionProviderSuite
     val postgresDriver = registerDriver(postgresProvider.driverClass)
     val postgresOptions = options("jdbc:postgresql://localhost/postgres")
     val postgresAppEntry = postgresProvider.appEntry(postgresDriver, postgresOptions)
-    val db2Provider = new DB2ConnectionProvider()
-    val db2Driver = registerDriver(db2Provider.driverClass)
-    val db2Options = options("jdbc:db2://localhost/db2")
-    val db2AppEntry = db2Provider.appEntry(db2Driver, db2Options)
+    val mysqlProvider = new MariaDBConnectionProvider()
+    val mysqlDriver = registerDriver(mysqlProvider.driverClass)
+    val mysqlOptions = options("jdbc:mysql://localhost/db")
+    val mysqlAppEntry = mysqlProvider.appEntry(mysqlDriver, mysqlOptions)
 
     // Make sure no authentication for the databases are set
     val rootConfig = Configuration.getConfiguration
     assert(rootConfig.getAppConfigurationEntry(postgresAppEntry) == null)
-    assert(rootConfig.getAppConfigurationEntry(db2AppEntry) == null)
+    assert(rootConfig.getAppConfigurationEntry(mysqlAppEntry) == null)
 
     postgresProvider.setAuthenticationConfig(postgresDriver, postgresOptions)
     val postgresConfig = Configuration.getConfiguration
 
-    db2Provider.setAuthenticationConfig(db2Driver, db2Options)
-    val db2Config = Configuration.getConfiguration
+    mysqlProvider.setAuthenticationConfig(mysqlDriver, mysqlOptions)
+    val mysqlConfig = Configuration.getConfiguration
 
     // Make sure authentication for the databases are set
     assert(rootConfig != postgresConfig)
-    assert(rootConfig != db2Config)
+    assert(rootConfig != mysqlConfig)
     // The topmost config in the chain is linked with all the subsequent entries
-    assert(db2Config.getAppConfigurationEntry(postgresAppEntry) != null)
-    assert(db2Config.getAppConfigurationEntry(db2AppEntry) != null)
+    assert(mysqlConfig.getAppConfigurationEntry(postgresAppEntry) != null)
+    assert(mysqlConfig.getAppConfigurationEntry(mysqlAppEntry) != null)
 
     Configuration.setConfiguration(null)
   }

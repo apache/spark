@@ -225,7 +225,7 @@ class LauncherServer implements Closeable {
     try {
       while (running) {
         final Socket client = server.accept();
-        TimerTask timeout = new TimerTask() {
+        TimerTask timerTask = new TimerTask() {
           @Override
           public void run() {
             LOG.warning("Timed out waiting for hello message from client.");
@@ -236,7 +236,7 @@ class LauncherServer implements Closeable {
             }
           }
         };
-        ServerConnection clientConnection = new ServerConnection(client, timeout);
+        ServerConnection clientConnection = new ServerConnection(client, timerTask);
         Thread clientThread = factory.newThread(clientConnection);
         clientConnection.setConnectionThread(clientThread);
         synchronized (clients) {
@@ -247,9 +247,9 @@ class LauncherServer implements Closeable {
         // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
         // and force an immediate timeout.
         if (timeoutMs > 0) {
-          timeoutTimer.schedule(timeout, timeoutMs);
+          timeoutTimer.schedule(timerTask, timeoutMs);
         } else {
-          timeout.run();
+          timerTask.run();
         }
 
         clientThread.start();
@@ -317,10 +317,9 @@ class LauncherServer implements Closeable {
     @Override
     protected void handle(Message msg) throws IOException {
       try {
-        if (msg instanceof Hello) {
+        if (msg instanceof Hello hello) {
           timeout.cancel();
           timeout = null;
-          Hello hello = (Hello) msg;
           AbstractAppHandle handle = secretToPendingApps.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
@@ -334,11 +333,10 @@ class LauncherServer implements Closeable {
           if (handle == null) {
             throw new IllegalArgumentException("Expected hello, got: " + msgClassName);
           }
-          if (msg instanceof SetAppId) {
-            SetAppId set = (SetAppId) msg;
+          if (msg instanceof SetAppId set) {
             handle.setAppId(set.appId);
-          } else if (msg instanceof SetState) {
-            handle.setState(((SetState)msg).state);
+          } else if (msg instanceof SetState setState) {
+            handle.setState(setState.state);
           } else {
             throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }

@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
  * Test cases for various [[org.apache.spark.sql.catalyst.json.JSONOptions]].
  */
-class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
+class JsonParsingOptionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("allowComments off") {
@@ -130,6 +131,45 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
         Double.NegativeInfinity, Double.NegativeInfinity))
   }
 
+  test("allowNonNumericNumbers on - quoted") {
+    val str =
+      """{"c0":"NaN", "c1":"+INF", "c2":"+Infinity", "c3":"Infinity", "c4":"-INF",
+        |"c5":"-Infinity"}""".stripMargin
+    val df = spark.read
+      .schema(new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
+      .option("allowNonNumericNumbers", true).json(Seq(str).toDS())
+    checkAnswer(
+      df,
+      Row(
+        Double.NaN,
+        Double.PositiveInfinity, Double.PositiveInfinity, Double.PositiveInfinity,
+        Double.NegativeInfinity, Double.NegativeInfinity))
+  }
+
+  test("allowNonNumericNumbers off - quoted") {
+    val str =
+      """{"c0":"NaN", "c1":"+INF", "c2":"+Infinity", "c3":"Infinity", "c4":"-INF",
+        |"c5":"-Infinity"}""".stripMargin
+    val df = spark.read
+      .schema(new StructType()
+        .add("c0", "double")
+        .add("c1", "double")
+        .add("c2", "double")
+        .add("c3", "double")
+        .add("c4", "double")
+        .add("c5", "double"))
+      .option("allowNonNumericNumbers", false).json(Seq(str).toDS())
+    checkAnswer(
+      df,
+      Row(null, null, null, null, null, null))
+  }
+
   test("allowBackslashEscapingAnyCharacter off") {
     val str = """{"name": "Cazen Lee", "price": "\$10"}"""
     val df = spark.read.option("allowBackslashEscapingAnyCharacter", "false").json(Seq(str).toDS())
@@ -145,5 +185,15 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
     assert(df.schema.last.name == "price")
     assert(df.first().getString(0) == "Cazen Lee")
     assert(df.first().getString(1) == "$10")
+  }
+
+  test("SPARK-49955: null string value does not mean corrupted file") {
+    val str = "{\"name\": \"someone\"}"
+    val stringDataset = Seq(str, null).toDS()
+    val df = spark.read.json(stringDataset)
+    checkAnswer(df, Seq(Row(null, "someone"), Row(null, null)))
+
+    val e = intercept[SparkException](spark.read.option("mode", "failfast").json(stringDataset))
+    assert(e.getCause.isInstanceOf[NullPointerException])
   }
 }

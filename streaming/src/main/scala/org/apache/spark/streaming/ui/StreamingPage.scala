@@ -18,13 +18,14 @@
 package org.apache.spark.streaming.ui
 
 import java.util.concurrent.TimeUnit
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
+import jakarta.servlet.http.HttpServletRequest
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /**
@@ -64,7 +65,7 @@ private[ui] class RecordRateUIData(val data: Seq[(Long, Double)]) {
 
   val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
 
-  val formattedAvg: String = avg.map(_.formatted("%.2f")).getOrElse("-")
+  val formattedAvg: String = avg.map("%.2f".format(_)).getOrElse("-")
 
   val max: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).max)
 }
@@ -82,12 +83,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
-    val onClickTimelineFunc = generateOnClickTimelineFunction()
+    val onClickTimelineFunc = generateOnClickTimelineFunction(request)
     val basicInfo = generateBasicInfo()
     val content = resources ++
       onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
-        generateStatTable() ++
+        generateStatTable(request) ++
           generateBatchListTables(request)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
@@ -100,14 +101,23 @@ private[ui] class StreamingPage(parent: StreamingTab)
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
       <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
+      <script type="module" src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
   }
 
   /** Generate html that will set onClickTimeline declared in streaming-page.js */
-  private def generateOnClickTimelineFunction(): Seq[Node] = {
-    val js = "onClickTimeline = getOnClickTimelineFunction();"
-    <script>{Unparsed(js)}</script>
+  private def generateOnClickTimelineFunction(request: HttpServletRequest): Seq[Node] = {
+    val imported = SparkUIUtils.formatImportJavaScript(
+      request,
+      "/static/streaming-page.js",
+      "getOnClickTimelineFunction")
+    val js =
+      s"""
+         |$imported
+         |
+         |onClickTimeline = getOnClickTimelineFunction();
+         |""".stripMargin
+    <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
@@ -146,7 +156,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       s"timeFormat[$time] = '$formattedTime';"
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
   private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
@@ -156,10 +166,10 @@ private[ui] class StreamingPage(parent: StreamingTab)
       s"timeTipStrings[$time] = timeFormat[$time];"
     }.mkString("\n")
 
-    <script>{Unparsed(js)}</script>
+    <script nonce={CspNonce.get}>{Unparsed(js)}</script>
   }
 
-  private def generateStatTable(): Seq[Node] = {
+  private def generateStatTable(request: HttpServletRequest): Seq[Node] = {
     val batches = listener.retainedBatches
 
     val batchTimes = batches.map(_.batchTime.milliseconds)
@@ -197,7 +207,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
-    val jsCollector = new JsCollector
+    val jsCollector = new JsCollector(request)
 
     val graphUIDataForRecordRateOfAllStreams =
       new GraphUIData(
@@ -206,8 +216,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
         recordRateForAllStreams.data,
         minBatchTime,
         maxBatchTime,
-        minRecordRate,
-        maxRecordRate,
+        minRecordRate.toDouble,
+        maxRecordRate.toDouble,
         "records/sec")
     graphUIDataForRecordRateOfAllStreams.generateDataJs(jsCollector)
 
@@ -218,7 +228,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         schedulingDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit)
     graphUIDataForSchedulingDelay.generateDataJs(jsCollector)
@@ -230,7 +240,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         processingTime.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit, Some(batchInterval))
     graphUIDataForProcessingTime.generateDataJs(jsCollector)
@@ -242,7 +252,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         totalDelay.timelineData(normalizedUnit),
         minBatchTime,
         maxBatchTime,
-        minTime,
+        minTime.toDouble,
         maxTime,
         formattedUnit)
     graphUIDataForTotalDelay.generateDataJs(jsCollector)
@@ -271,9 +281,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="top">
-                      <strong>Input Rate</strong>
-                    </a>
+                    {SparkUIUtils.tooltipLink(<xml:group><strong>Input Rate</strong></xml:group>,
+                      "Show/hide details of each receiver")}
                   </span>
                 } else {
                   <strong>Input Rate</strong>
@@ -292,9 +301,9 @@ private[ui] class StreamingPage(parent: StreamingTab)
           <td class="histogram">{graphUIDataForRecordRateOfAllStreams.generateHistogramHtml(jsCollector)}</td>
         </tr>
       {if (hasStream) {
-        <tr id="inputs-table" style="display: none;" >
+        <tr id="inputs-table" class="d-none" >
           <td colspan="3">
-            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate, maxRecordRate)}
+            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate.toDouble)}
           </td>
         </tr>
       }}
@@ -340,8 +349,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       jsCollector: JsCollector,
       minX: Long,
       maxX: Long,
-      minY: Double,
-      maxY: Double): Seq[Node] = {
+      minY: Double): Seq[Node] = {
     val maxYCalculated = listener.receivedRecordRateWithBatchTime.values
       .flatMap { case streamAndRates => streamAndRates.map { case (_, recordRate) => recordRate } }
       .reduceOption[Double](math.max)
@@ -351,7 +359,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val content: Seq[Node] = listener.receivedRecordRateWithBatchTime.toList.sortBy(_._1).flatMap {
       case (streamId, recordRates) =>
         generateInputDStreamRow(
-          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated)
+          jsCollector, streamId, recordRates, minX, maxX, minY, maxYCalculated.toDouble)
     }
 
     // scalastyle:off
@@ -450,7 +458,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       ).table(streamingPage)
     } catch {
       case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering streaming table:</p>
           <pre>
             {Utils.exceptionString(e)}
@@ -471,15 +479,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
       content ++=
         <div class="row">
           <div class="col-12">
-            <span id="runningBatches" class="collapse-aggregated-runningBatches collapse-table"
-                  onClick="collapseTable('collapse-aggregated-runningBatches',
-                  'aggregated-runningBatches')">
+            <span id="runningBatches" class="collapse-table"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-runningBatches"
+                  aria-expanded="true" aria-controls="aggregated-runningBatches"
+                  data-collapse-name="collapse-aggregated-runningBatches">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Running Batches ({runningBatches.size})</a>
               </h4>
             </span>
-            <div class="aggregated-runningBatches collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-runningBatches">
               { streamingTable(request, runningBatches, "runningBatches") }
             </div>
           </div>
@@ -490,15 +501,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
       content ++=
         <div class="row">
           <div class="col-12">
-            <span id="waitingBatches" class="collapse-aggregated-waitingBatches collapse-table"
-                  onClick="collapseTable('collapse-aggregated-waitingBatches',
-                  'aggregated-waitingBatches')">
+            <span id="waitingBatches" class="collapse-table"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-waitingBatches"
+                  aria-expanded="true" aria-controls="aggregated-waitingBatches"
+                  data-collapse-name="collapse-aggregated-waitingBatches">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Waiting Batches ({waitingBatches.size})</a>
               </h4>
             </span>
-            <div class="aggregated-waitingBatches collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-waitingBatches">
               { streamingTable(request, waitingBatches, "waitingBatches") }
             </div>
           </div>
@@ -509,16 +523,20 @@ private[ui] class StreamingPage(parent: StreamingTab)
       content ++=
         <div class="row">
           <div class="col-12">
-            <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
-                  onClick="collapseTable('collapse-aggregated-completedBatches',
-                  'aggregated-completedBatches')">
+            <span id="completedBatches" class="collapse-table"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#aggregated-completedBatches"
+                  aria-expanded="true"
+                  aria-controls="aggregated-completedBatches"
+                  data-collapse-name="collapse-aggregated-completedBatches">
               <h4>
                 <span class="collapse-table-arrow arrow-open"></span>
                 <a>Completed Batches (last {completedBatches.size}
                   out of {listener.numTotalCompletedBatches})</a>
               </h4>
             </span>
-            <div class="aggregated-completedBatches collapsible-table">
+            <div class="collapsible-table collapse show"
+                id="aggregated-completedBatches">
               { streamingTable(request, completedBatches, "completedBatches") }
             </div>
           </div>

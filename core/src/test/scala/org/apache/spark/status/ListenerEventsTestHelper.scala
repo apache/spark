@@ -27,6 +27,7 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded, SparkListenerExecutorMetricsUpdate, SparkListenerExecutorRemoved, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{RDDInfo, StorageLevel}
+import org.apache.spark.util.ArrayImplicits._
 
 object ListenerEventsTestHelper {
 
@@ -73,7 +74,7 @@ object ListenerEventsTestHelper {
   def createTasks(ids: Seq[Long], execs: Array[String], time: Long): Seq[TaskInfo] = {
     ids.zipWithIndex.map { case (id, idx) =>
       val exec = execs(idx % execs.length)
-      new TaskInfo(id, idx, 1, time, exec, s"$exec.example.com",
+      new TaskInfo(id, idx, 1, idx, time, exec, s"$exec.example.com",
         TaskLocality.PROCESS_LOCAL, idx % 2 == 0)
     }
   }
@@ -84,7 +85,8 @@ object ListenerEventsTestHelper {
 
   def createTaskWithNewAttempt(orig: TaskInfo, time: Long): TaskInfo = {
     // Task reattempts have a different ID, but the same index as the original.
-    new TaskInfo(nextTaskId(), orig.index, orig.attemptNumber + 1, time, orig.executorId,
+    new TaskInfo(
+      nextTaskId(), orig.index, orig.attemptNumber + 1, orig.partitionId, time, orig.executorId,
       s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
   }
 
@@ -138,7 +140,8 @@ object ListenerEventsTestHelper {
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
     val executorUpdates = Map((stageId, 0) -> new ExecutorMetrics(executorMetrics))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, executorUpdates)
+    SparkListenerExecutorMetricsUpdate(
+      executorId.toString, accum.toImmutableArraySeq, executorUpdates)
   }
 
   case class JobInfo(
@@ -176,7 +179,7 @@ object ListenerEventsTestHelper {
 
     s1Tasks.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber,
+      listener.onTaskEnd(SparkListenerTaskEnd(stage.stageId, stage.attemptNumber(),
         "taskType", Success, task, new ExecutorMetrics, s1Metrics))
     }
 

@@ -41,8 +41,12 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.transport.TTransport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
+import org.apache.spark.util.Utils;
 
 /**
  * ThriftCLIService.
@@ -50,7 +54,7 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class ThriftCLIService extends AbstractService implements TCLIService.Iface, Runnable {
 
-  public static final Logger LOG = LoggerFactory.getLogger(ThriftCLIService.class.getName());
+  public static final SparkLogger LOG = SparkLoggerFactory.getLogger(ThriftCLIService.class);
 
   protected CLIService cliService;
   private static final TStatus OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS);
@@ -83,6 +87,16 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     public SessionHandle getSessionHandle() {
       return sessionHandle;
     }
+
+    @Override
+    public <T> T unwrap(Class<T> aClass) {
+      return null;
+    }
+
+    @Override
+    public boolean isWrapperFor(Class<?> aClass) {
+      return false;
+    }
   }
 
   public ThriftCLIService(CLIService service, String serviceName) {
@@ -106,7 +120,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
           try {
             cliService.closeSession(sessionHandle);
           } catch (HiveSQLException e) {
-            LOG.warn("Failed to close session: " + e, e);
+            LOG.warn("Failed to close session: ", e);
           }
         }
       }
@@ -236,7 +250,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
 
   @Override
   public TOpenSessionResp OpenSession(TOpenSessionReq req) throws TException {
-    LOG.info("Client protocol version: " + req.getClient_protocol());
+    LOG.info("Client protocol version: {}",
+      MDC.of(LogKeys.PROTOCOL_VERSION, req.getClient_protocol()));
     TOpenSessionResp resp = new TOpenSessionResp();
     try {
       SessionHandle sessionHandle = getSessionHandle(req, resp);
@@ -272,7 +287,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
         sb.append(e.getKey()).append(" = ").append(e.getValue());
       }
       if (sb != null) {
-        LOG.info("{}", sb);
+        LOG.info("{}", MDC.of(LogKeys.SET_CLIENT_INFO_REQUEST, sb));
       }
     }
     return new TSetClientInfoResp(OK_STATUS);
@@ -379,14 +394,11 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
 
   private String getDelegationToken(String userName)
       throws HiveSQLException, LoginException, IOException {
-    if (userName == null || !cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-        .equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString())) {
-      return null;
-    }
     try {
       return cliService.getDelegationTokenFromMetaStore(userName);
     } catch (UnsupportedOperationException e) {
       // The delegation token is not applicable in the given deployment mode
+      // such as HMS is not kerberos secured
     }
     return null;
   }
@@ -582,8 +594,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(org.apache.hadoop.util.StringUtils
-            .stringifyException(opException));
+        resp.setErrorMessage(Utils.stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -624,8 +635,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       throws TException {
     TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp();
     try {
-      TableSchema schema = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle()));
-      resp.setSchema(schema.toTTableSchema());
+      TTableSchema schema = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle()));
+      resp.setSchema(schema);
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
       LOG.warn("Error getting result set metadata: ", e);
@@ -638,12 +649,12 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   public TFetchResultsResp FetchResults(TFetchResultsReq req) throws TException {
     TFetchResultsResp resp = new TFetchResultsResp();
     try {
-      RowSet rowSet = cliService.fetchResults(
+      TRowSet rowSet = cliService.fetchResults(
           new OperationHandle(req.getOperationHandle()),
           FetchOrientation.getFetchOrientation(req.getOrientation()),
           req.getMaxRows(),
           FetchType.getFetchType(req.getFetchType()));
-      resp.setResults(rowSet.toTRowSet());
+      resp.setResults(rowSet);
       resp.setHasMoreRows(false);
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -697,6 +708,16 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     } catch (HiveSQLException e) {
       throw new TException(e);
     }
+  }
+
+  @Override
+  public TUploadDataResp UploadData(TUploadDataReq req) throws TException {
+    throw new UnsupportedOperationException("Method UploadData has not been implemented.");
+  }
+
+  @Override
+  public TDownloadDataResp DownloadData(TDownloadDataReq req) throws TException {
+    throw new UnsupportedOperationException("Method DownloadData has not been implemented.");
   }
 
   @Override

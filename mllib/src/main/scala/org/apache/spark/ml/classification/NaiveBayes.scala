@@ -17,21 +17,23 @@
 
 package org.apache.spark.ml.classification
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
@@ -131,7 +133,7 @@ class NaiveBayes @Since("1.5.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    trainWithLabelCheck(dataset, positiveLabel = true)
+    trainWithLabelCheck(dataset, nonNegativeLabel = true)
   }
 
   /**
@@ -142,25 +144,54 @@ class NaiveBayes @Since("1.5.0") (
    */
   private[spark] def trainWithLabelCheck(
       dataset: Dataset[_],
-      positiveLabel: Boolean): NaiveBayesModel = instrumented { instr =>
+      nonNegativeLabel: Boolean): NaiveBayesModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
       probabilityCol, modelType, smoothing, thresholds)
 
-    if (positiveLabel && isDefined(thresholds)) {
-      val numClasses = getNumClasses(dataset)
-      instr.logNumClasses(numClasses)
-      require($(thresholds).length == numClasses, this.getClass.getSimpleName +
-        ".train() called with non-matching numClasses and thresholds.length." +
-        s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
+    val validatedLabelCol = if (nonNegativeLabel) {
+      checkClassificationLabels($(labelCol), get(thresholds).map(_.length))
+    } else {
+      checkRegressionLabels($(labelCol))
     }
+
+    val validatedWeightCol = checkNonNegativeWeights(get(weightCol))
+
+    val vecCol = col($(featuresCol))
+    val validatedfeaturesCol = $(modelType) match {
+      case Multinomial | Complement =>
+        when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
+          .when(exists(unwrap_udt(vecCol).getField("values"),
+            v => v.isNaN || v < 0 || v === Double.PositiveInfinity),
+            raise_error(concat(
+              lit("Vector values MUST NOT be Negative, NaN or Infinity, but got "),
+              vecCol.cast(StringType))))
+          .otherwise(vecCol)
+
+      case Bernoulli =>
+        when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
+          .when(exists(unwrap_udt(vecCol).getField("values"),
+            v => v =!= 0 && v =!= 1),
+            raise_error(concat(
+              lit("Vector values MUST be in {0, 1}, but got "),
+              vecCol.cast(StringType))))
+          .otherwise(vecCol)
+
+      case _ => checkNonNanVectors(vecCol)
+    }
+
+    val validated = dataset.select(
+      validatedLabelCol.as("_validated_label_"),
+      validatedWeightCol.as("_validated_weight_"),
+      validatedfeaturesCol.as("_validated_features_")
+    )
 
     $(modelType) match {
       case Bernoulli | Multinomial | Complement =>
-        trainDiscreteImpl(dataset, instr)
+        trainDiscreteImpl(validated, instr)
       case Gaussian =>
-        trainGaussianImpl(dataset, instr)
+        trainGaussianImpl(validated, instr)
       case _ =>
         // This should never happen.
         throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
@@ -172,25 +203,13 @@ class NaiveBayes @Since("1.5.0") (
       instr: Instrumentation): NaiveBayesModel = {
     val spark = dataset.sparkSession
     import spark.implicits._
-
-    val validateUDF = $(modelType) match {
-      case Multinomial | Complement =>
-        udf { vector: Vector => requireNonnegativeValues(vector); vector }
-      case Bernoulli =>
-        udf { vector: Vector => requireZeroOneBernoulliValues(vector); vector }
-    }
-
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
+    val Array(label, weight, featuers) = dataset.schema.fieldNames
 
     // Aggregates term frequencies per label.
-    val aggregated = dataset.groupBy(col($(labelCol)))
-      .agg(sum(w).as("weightSum"), Summarizer.metrics("sum", "count")
-        .summary(validateUDF(col($(featuresCol))), w).as("summary"))
-      .select($(labelCol), "weightSum", "summary.sum", "summary.count")
+    val aggregated = dataset.groupBy(col(label))
+      .agg(sum(col(weight)).as("weightSum"),
+        Summarizer.metrics("sum", "count").summary(col(featuers), col(weight)).as("summary"))
+      .select(label, "weightSum", "summary.sum", "summary.count")
       .as[(Double, Double, Vector, Long)]
       .collect().sortBy(_._1)
 
@@ -259,18 +278,13 @@ class NaiveBayes @Since("1.5.0") (
       instr: Instrumentation): NaiveBayesModel = {
     val spark = dataset.sparkSession
     import spark.implicits._
-
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
+    val Array(label, weight, featuers) = dataset.schema.fieldNames
 
     // Aggregates mean vector and square-sum vector per label.
-    val aggregated = dataset.groupBy(col($(labelCol)))
-      .agg(sum(w).as("weightSum"), Summarizer.metrics("mean", "normL2")
-        .summary(col($(featuresCol)), w).as("summary"))
-      .select($(labelCol), "weightSum", "summary.mean", "summary.normL2")
+    val aggregated = dataset.groupBy(col(label))
+      .agg(sum(col(weight)).as("weightSum"),
+        Summarizer.metrics("mean", "normL2").summary(col(featuers), col(weight)).as("summary"))
+      .select(label, "weightSum", "summary.mean", "summary.normL2")
       .as[(Double, Double, Vector, Vector)]
       .map { case (label, weightSum, mean, normL2) =>
         (label, weightSum, mean, Vectors.dense(normL2.toArray.map(v => v * v)))
@@ -332,6 +346,22 @@ class NaiveBayes @Since("1.5.0") (
     new NaiveBayesModel(uid, pi.compressed, theta.compressed, sigma.compressed)
   }
 
+  private[spark] override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numClasses = DatasetUtils.getNumClasses(dataset, $(labelCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numClasses) // pi
+    size += Matrices.getDenseSize(numClasses, numFeatures) // theta
+    $(modelType) match {
+      case Multinomial | Bernoulli | Complement =>
+        size += Matrices.getDenseSize(0, 0) // sigma
+      case _ =>
+        size += Matrices.getDenseSize(numClasses, numFeatures) // sigma
+    }
+    size
+  }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
 }
@@ -388,6 +418,9 @@ class NaiveBayesModel private[ml] (
   with NaiveBayesParams with MLWritable {
 
   import NaiveBayes._
+
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Matrices.empty, Matrices.empty)
 
   /**
    * mllib NaiveBayes is a wrapper of ml implementation currently.
@@ -479,7 +512,7 @@ class NaiveBayesModel private[ml] (
 
     j = 0
     while (j < probArray.length) {
-      probArray(j) = probArray(j) - logSumExp
+      probArray(j) -= logSumExp
       j += 1
     }
     Vectors.dense(probArray)
@@ -536,6 +569,20 @@ class NaiveBayesModel private[ml] (
     }
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.pi != null) {
+      size += this.pi.getSizeInBytes
+    }
+    if (this.theta != null) {
+      size += this.theta.getSizeInBytes
+    }
+    if (this.sigma != null) {
+      size += this.sigma.getSizeInBytes
+    }
+    size
+  }
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
     copyValues(new NaiveBayesModel(uid, pi, theta, sigma).setParent(this.parent), extra)
@@ -553,6 +600,22 @@ class NaiveBayesModel private[ml] (
 
 @Since("1.6.0")
 object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
+  private[ml] case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.pi, dos)
+    serializeMatrix(data.theta, dos)
+    serializeMatrix(data.sigma, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val pi = deserializeVector(dis)
+    val theta = deserializeMatrix(dis)
+    val sigma = deserializeMatrix(dis)
+    Data(pi, theta, sigma)
+  }
 
   @Since("1.6.0")
   override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
@@ -564,11 +627,9 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
     import NaiveBayes._
 
-    private case class Data(pi: Vector, theta: Matrix, sigma: Matrix)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
 
       instance.getModelType match {
@@ -579,7 +640,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       }
 
       val data = Data(instance.pi, instance.theta, instance.sigma)
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -590,25 +651,21 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
     override def load(path: String): NaiveBayesModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-      val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
-
-      val model = if (major.toInt < 3) {
+      val model = if (major < 3) {
+        val data = sparkSession.read.parquet(dataPath)
+        val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
         val Row(pi: Vector, theta: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
             .select("pi", "theta")
             .head()
         new NaiveBayesModel(metadata.uid, pi, theta, Matrices.zeros(0, 0))
       } else {
-        val Row(pi: Vector, theta: Matrix, sigma: Matrix) =
-          MLUtils.convertMatrixColumnsToML(vecConverted, "theta", "sigma")
-            .select("pi", "theta", "sigma")
-            .head()
-        new NaiveBayesModel(metadata.uid, pi, theta, sigma)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+        new NaiveBayesModel(metadata.uid, data.pi, data.theta, data.sigma)
       }
 
       metadata.getAndSetParams(model)

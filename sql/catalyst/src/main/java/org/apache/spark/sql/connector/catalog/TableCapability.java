@@ -76,7 +76,7 @@ public enum TableCapability {
    * Signals that the table can replace existing data that matches a filter with appended data in
    * a write operation.
    * <p>
-   * See {@link org.apache.spark.sql.connector.write.SupportsOverwrite}.
+   * See {@link org.apache.spark.sql.connector.write.SupportsOverwriteV2}.
    */
   OVERWRITE_BY_FILTER,
 
@@ -92,6 +92,12 @@ public enum TableCapability {
    * Signals that the table accepts input of any schema in a write operation.
    */
   ACCEPT_ANY_SCHEMA,
+
+  /**
+   * Signals that table supports Spark altering the schema if necessary
+   * as part of an operation.
+   */
+  AUTOMATIC_SCHEMA_EVOLUTION,
 
   /**
    * Signals that the table supports append writes using the V1 InsertableRelation interface.

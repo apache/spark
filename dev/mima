@@ -24,12 +24,7 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-SPARK_PROFILES=${1:-"-Pmesos -Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
-# Apache Spark doesn't have Scala 2.13 maven artifacts yet.
-# TODO(SPARK-36151) Enable MiMa for Scala 2.13 artifacts after Spark 3.2.0 release
-if [[ "$SPARK_PROFILES" == *"-Pscala-2.13"* ]]; then
-  exit 0
-fi
+SPARK_PROFILES=${1:-"-Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
 TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
 OLD_DEPS_CLASSPATH="$(build/sbt -DcopyDependencies=false $SPARK_PROFILES "export oldDeps/fullClasspath" | grep jar | tail -n1)"
 
@@ -43,10 +38,11 @@ fi
 
 $JAVA_CMD \
   -Xmx2g \
+  -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.util.jar=ALL-UNNAMED \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
 
-echo -e "q\n" | build/sbt -mem 4096 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
+echo -e "q\n" | build/sbt -mem 5632 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
 
 if [ $ret_val != 0 ]; then

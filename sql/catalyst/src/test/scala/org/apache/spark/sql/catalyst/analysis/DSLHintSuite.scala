@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 class DSLHintSuite extends AnalysisTest {
-  lazy val a = Symbol("a").int
-  lazy val b = Symbol("b").string
-  lazy val c = Symbol("c").string
+  lazy val a = $"a".int
+  lazy val b = $"b".string
+  lazy val c = $"c".string
   lazy val r1 = LocalRelation(a, b, c)
 
   test("various hint parameters") {
@@ -41,11 +41,6 @@ class DSLHintSuite extends AnalysisTest {
     comparePlans(
       r1.hint("hint1", 1, $"a"),
       UnresolvedHint("hint1", Seq(1, $"a"), r1)
-    )
-
-    comparePlans(
-      r1.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-      UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")), r1)
     )
   }
 }

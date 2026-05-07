@@ -62,7 +62,7 @@ class PrefixComparatorsSuite extends SparkFunSuite with ScalaCheckPropertyChecks
   test("Binary prefix comparator") {
 
      def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-      for (i <- 0 until x.length; if i < y.length) {
+      for (i <- x.indices; if i < y.length) {
         val v1 = x(i) & 0xff
         val v2 = y(i) & 0xff
         val res = v1 - v2

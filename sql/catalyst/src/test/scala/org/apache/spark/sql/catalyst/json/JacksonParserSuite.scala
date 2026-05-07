@@ -24,6 +24,19 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class JacksonParserSuite extends SparkFunSuite {
+  test("feature mask should remain unchanged") {
+    val options = new JSONOptions(Map.empty[String, String], "GMT", "")
+    val parser = new JacksonParser(StructType.fromDDL("a string"), options, false, Nil)
+    val input = """{"a": {"b": 1}}""".getBytes
+    // The creating function is usually called inside `parser.parse`, but we need the JSON parser
+    // here for testing purpose.
+    val jsonParser = options.buildJsonFactory().createParser(input)
+    val oldFeature = jsonParser.getFeatureMask
+    val result = parser.parse[Array[Byte]](input, (_, _) => jsonParser, UTF8String.fromBytes)
+    assert(result === Seq(InternalRow(UTF8String.fromString("""{"b": 1}"""))))
+    assert(jsonParser.getFeatureMask == oldFeature)
+  }
+
   test("skipping rows using pushdown filters") {
     def check(
       input: String = """{"i":1, "s": "a"}""",

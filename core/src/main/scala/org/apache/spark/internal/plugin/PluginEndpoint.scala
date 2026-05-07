@@ -19,14 +19,15 @@ package org.apache.spark.internal.plugin
 
 import org.apache.spark.api.plugin.DriverPlugin
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEnv}
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEnv}
 
 case class PluginMessage(pluginName: String, message: AnyRef)
 
 private class PluginEndpoint(
     plugins: Map[String, DriverPlugin],
     override val rpcEnv: RpcEnv)
-  extends IsolatedRpcEndpoint with Logging {
+  extends IsolatedThreadSafeRpcEndpoint with Logging {
 
   override def receive: PartialFunction[Any, Unit] = {
     case PluginMessage(pluginName, message) =>
@@ -35,14 +36,16 @@ private class PluginEndpoint(
           try {
             val reply = plugin.receive(message)
             if (reply != null) {
-              logInfo(
-                s"Plugin $pluginName returned reply for one-way message of type " +
-                s"${message.getClass().getName()}.")
+              logWarning(
+                log"Plugin ${MDC(PLUGIN_NAME, pluginName)} " +
+                  log"returned reply for one-way message of type " +
+                  log"${MDC(CLASS_NAME, message.getClass().getName())}.")
             }
           } catch {
             case e: Exception =>
-              logWarning(s"Error in plugin $pluginName when handling message of type " +
-              s"${message.getClass().getName()}.", e)
+              logWarning(log"Error in plugin ${MDC(PLUGIN_NAME, pluginName)} " +
+                log"when handling message of type " +
+                log"${MDC(CLASS_NAME, message.getClass().getName())}.", e)
           }
 
         case None =>

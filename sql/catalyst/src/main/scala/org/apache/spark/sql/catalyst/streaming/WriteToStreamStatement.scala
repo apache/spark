@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.streaming
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 
 /**
  * A statement for Stream writing. It contains all neccessary param and will be resolved in the
@@ -38,7 +39,9 @@ import org.apache.spark.sql.streaming.OutputMode
  * @param sink  Sink to write the streaming outputs.
  * @param outputMode  Output mode for the sink.
  * @param hadoopConf  The Hadoop Configuration to get a FileSystem instance
- * @param isContinuousTrigger  Whether the statement is triggered by a continuous query or not.
+ * @param trigger The trigger being used for this streaming query. It is not used to create the
+ *                resolved [[WriteToStream]] node; rather, it is only used while checking the plan
+ *                for unsupported operations, which happens during resolution.
  * @param inputQuery  The analyzed query plan from the streaming DataFrame.
  * @param catalogAndIdent Catalog and identifier for the sink, set when it is a V2 catalog table
  */
@@ -50,9 +53,10 @@ case class WriteToStreamStatement(
     sink: Table,
     outputMode: OutputMode,
     hadoopConf: Configuration,
-    isContinuousTrigger: Boolean,
+    trigger: Trigger,
     inputQuery: LogicalPlan,
-    catalogAndIdent: Option[(TableCatalog, Identifier)] = None) extends UnaryNode {
+    catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
+    catalogTable: Option[CatalogTable] = None) extends UnaryNode {
 
   override def isStreaming: Boolean = true
 

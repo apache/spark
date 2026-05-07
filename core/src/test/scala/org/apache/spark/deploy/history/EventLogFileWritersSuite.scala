@@ -17,11 +17,11 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileOutputStream, IOException}
+import java.io.{File, FileOutputStream, IOException, OutputStream, PrintWriter}
 import java.net.URI
 
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -32,6 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 
@@ -66,7 +67,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     conf.set(EVENT_LOG_DIR, testDir.toString)
 
     // default config
-    buildWriterAndVerify(conf, classOf[SingleEventLogFileWriter])
+    buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
 
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
     buildWriterAndVerify(conf, classOf[RollingEventLogFilesWriter])
@@ -99,7 +100,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     }
   }
 
-  test("Use the defalut value of spark.eventLog.compression.codec") {
+  test("Use the default value of spark.eventLog.compression.codec") {
     val conf = new SparkConf
     conf.set(EVENT_LOG_COMPRESS, true)
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
@@ -111,10 +112,30 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     assert(writer.compressionCodecName === EVENT_LOG_COMPRESSION_CODEC.defaultValue)
   }
 
+  test("SPARK-52458: Support spark.eventLog.excludedPatterns") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+
+    val conf = getLoggingConf(testDirPath, None)
+    conf.set(EVENT_LOG_EXCLUDED_PATTERNS, Seq("B", "C"))
+
+    val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
+      SparkHadoopUtil.get.newConfiguration(conf))
+
+    writer.start()
+    Seq("A", "B", "C", "D").foreach { name =>
+      writer.writeEvent(s"""{"Event":"$name"}""", flushLogger = true)
+    }
+    writer.stop()
+
+    verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
+      None, Seq("""{"Event":"A"}""", """{"Event":"D"}"""))
+  }
+
   protected def readLinesFromEventLogFile(log: Path, fs: FileSystem): List[String] = {
     val logDataStream = EventLogFileReader.openEventLog(log, fs)
     try {
-      Source.fromInputStream(logDataStream).getLines().toList
+      Source.fromInputStream(logDataStream)(Codec.UTF8).getLines().toList
     } finally {
       logDataStream.close()
     }
@@ -139,7 +160,151 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
       expectedLines: Seq[String] = Seq.empty): Unit
 }
 
+/**
+ * A test OutputStream that simulates IO errors.
+ */
+class ErrorThrowingOutputStream extends OutputStream {
+  var throwOnWrite: Boolean = false
+  var throwOnFlush: Boolean = false
+  var throwOnClose: Boolean = false
+
+  override def write(b: Int): Unit = {
+    if (throwOnWrite) {
+      throw new IOException("Simulated write error")
+    }
+  }
+
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+    if (throwOnWrite) {
+      throw new IOException("Simulated write error")
+    }
+  }
+
+  override def flush(): Unit = {
+    if (throwOnFlush) {
+      throw new IOException("Simulated flush error")
+    }
+  }
+
+  override def close(): Unit = {
+    if (throwOnClose) {
+      throw new IOException("Simulated close error")
+    }
+  }
+}
+
+/**
+ * A testable subclass of SingleEventLogFileWriter that exposes the writer field
+ * and closeWriter method for testing.
+ */
+class TestableSingleEventLogFileWriter(
+    appId: String,
+    appAttemptId: Option[String],
+    logBaseDir: URI,
+    sparkConf: SparkConf,
+    hadoopConf: Configuration)
+  extends SingleEventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf) {
+
+  def setWriterForTest(pw: PrintWriter): Unit = {
+    writer = Some(pw)
+  }
+
+  def callCloseWriter(): Unit = {
+    closeWriter()
+  }
+}
+
 class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
+
+  test("SPARK-55495: closeWriter should log warning when flush error occurs") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+    val conf = getLoggingConf(testDirPath, None)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+
+    val writer = new TestableSingleEventLogFileWriter(
+      appId, attemptId, testDirPath.toUri, conf, hadoopConf)
+
+    // Create a PrintWriter with an ErrorThrowingOutputStream
+    val errorStream = new ErrorThrowingOutputStream()
+    val printWriter = new PrintWriter(errorStream)
+
+    // Simulate an error by writing to a closed stream that causes checkError to return true
+    errorStream.throwOnWrite = true
+    // scalastyle:off println
+    printWriter.println("test") // This will set the error flag
+    // scalastyle:on println
+
+    writer.setWriterForTest(printWriter)
+
+    val logAppender = new LogAppender("closeWriter flush error test")
+    withLogAppender(logAppender, level = Some(org.apache.logging.log4j.Level.WARN)) {
+      writer.callCloseWriter()
+    }
+
+    val warningMessages = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(warningMessages.exists(_.contains("Spark detects errors while flushing")),
+      s"Expected warning message not found. Messages: $warningMessages")
+  }
+
+  test("SPARK-55495: closeWriter should log warning when close error occurs") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+    val conf = getLoggingConf(testDirPath, None)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+
+    val writer = new TestableSingleEventLogFileWriter(
+      appId, attemptId, testDirPath.toUri, conf, hadoopConf)
+
+    // Create a PrintWriter with an ErrorThrowingOutputStream that errors on close
+    val errorStream = new ErrorThrowingOutputStream()
+    val printWriter = new PrintWriter(errorStream)
+
+    // First write something successfully
+    // scalastyle:off println
+    printWriter.println("test")
+    // scalastyle:on println
+    printWriter.flush()
+
+    // Now set up to error on close
+    errorStream.throwOnClose = true
+
+    writer.setWriterForTest(printWriter)
+
+    val logAppender = new LogAppender("closeWriter close error test")
+    withLogAppender(logAppender, level = Some(org.apache.logging.log4j.Level.WARN)) {
+      writer.callCloseWriter()
+    }
+
+    val warningMessages = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(warningMessages.exists(_.contains("Spark detects errors while closing")),
+      s"Expected warning message not found. Messages: $warningMessages")
+  }
+
+  test("SPARK-55495: closeWriter should complete without warnings when no errors") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+    val conf = getLoggingConf(testDirPath, None)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+
+    val writer = new TestableSingleEventLogFileWriter(
+      appId, attemptId, testDirPath.toUri, conf, hadoopConf)
+
+    // Create a normal PrintWriter with no errors
+    val normalStream = new ErrorThrowingOutputStream()
+    val printWriter = new PrintWriter(normalStream)
+
+    writer.setWriterForTest(printWriter)
+
+    val logAppender = new LogAppender("closeWriter no error test")
+    withLogAppender(logAppender, level = Some(org.apache.logging.log4j.Level.WARN)) {
+      writer.callCloseWriter()
+    }
+
+    val warningMessages = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(!warningMessages.exists(_.contains("Spark detects errors")),
+      s"Unexpected warning message found. Messages: $warningMessages")
+  }
 
   test("Log overwriting") {
     val appId = "test"
@@ -176,7 +341,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
       baseDirUri, "app1", None, None))
     // with compression
     assert(s"${baseDirUri.toString}/app1.lzf" ===
-      SingleEventLogFileWriter.getLogPath(baseDirUri, "app1", None, Some("lzf")))
+      SingleEventLogFileWriter.getLogPath(baseDirUri, "app1", None, Some(CompressionCodec.LZF)))
     // illegal characters in app ID
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1" ===
       SingleEventLogFileWriter.getLogPath(baseDirUri,
@@ -184,7 +349,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
     // illegal characters in app ID with compression
     assert(s"${baseDirUri.toString}/a-fine-mind_dollar_bills__1.lz4" ===
       SingleEventLogFileWriter.getLogPath(baseDirUri,
-        "a fine:mind$dollar{bills}.1", None, Some("lz4")))
+        "a fine:mind$dollar{bills}.1", None, Some(CompressionCodec.LZ4)))
   }
 
   override protected def createWriter(
@@ -239,7 +404,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
     // with compression
     assert(s"$logDir/${EVENT_LOG_FILE_NAME_PREFIX}1_${appId}.lzf" ===
       RollingEventLogFilesWriter.getEventLogFilePath(logDir, appId, appAttemptId,
-        1, Some("lzf")).toString)
+        1, Some(CompressionCodec.LZF)).toString)
 
     // illegal characters in app ID
     assert(s"${baseDirUri.toString}/${EVENT_LOG_DIR_NAME_PREFIX}a-fine-mind_dollar_bills__1" ===
@@ -301,7 +466,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       writer.start()
 
       // write log more than 20m (intended to roll over to 3 files)
-      val dummyStr = "dummy" * 1024
+      val dummyStr = "dummy".repeat(1024)
       val expectedLines = writeTestEvents(writer, dummyStr, 1024 * 1024 * 21)
 
       val logDirPath = getAppEventLogDirPath(testDirPath.toUri, appId, attemptId)
@@ -325,7 +490,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
     val conf = getLoggingConf(testDirPath, None)
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
-    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "9m")
+    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "1m")
 
     val e = intercept[IllegalArgumentException] {
       createWriter(appId, attemptId, testDirPath.toUri, conf,
@@ -367,6 +532,6 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
   private def listEventLogFiles(logDirPath: Path): Seq[FileStatus] = {
     fileSystem.listStatus(logDirPath).filter(isEventLogFile)
-      .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }
+      .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }.toImmutableArraySeq
   }
 }

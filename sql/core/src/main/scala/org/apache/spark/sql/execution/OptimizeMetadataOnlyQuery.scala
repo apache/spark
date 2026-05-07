@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -51,7 +52,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
 
     plan.transform {
       case a @ Aggregate(_, aggExprs, child @ PhysicalOperation(
-          projectList, filters, PartitionedRelation(partAttrs, rel))) =>
+          projectList, filters, PartitionedRelation(partAttrs, rel)), _) =>
         // We only apply this optimization when only partitioned attributes are scanned.
         if (AttributeSet((projectList ++ filters).flatMap(_.references)).subsetOf(partAttrs)) {
           // The project list and filters all only refer to partition attributes, which means the
@@ -121,10 +122,10 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     child transform {
       case plan if plan eq relation =>
         relation match {
-          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, isStreaming) =>
+          case l @ LogicalRelationWithTable(fsRelation: HadoopFsRelation, _) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(normalizedFilters, Nil)
-            LocalRelation(partAttrs, partitionData.map(_.values), isStreaming)
+            LocalRelation(partAttrs, partitionData.map(_.values), l.isStreaming)
 
           case relation: HiveTableRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
@@ -150,7 +151,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             LocalRelation(partAttrs, partitionData)
 
           case _ =>
-            throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
+            throw SparkException.internalError(s"unrecognized table scan node: $relation, " +
               s"please turn off ${SQLConf.OPTIMIZER_METADATA_ONLY.key} and try again.")
         }
     }
@@ -160,11 +161,11 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
    * A pattern that finds the partitioned table relation node inside the given plan, and returns a
    * pair of the partition attributes and the table relation node.
    */
-  object PartitionedRelation extends PredicateHelper {
+  object PartitionedRelation {
 
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = {
       plan match {
-        case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
+        case l @ LogicalRelationWithTable(fsRelation: HadoopFsRelation, _)
             if fsRelation.partitionSchema.nonEmpty =>
           val partAttrs = AttributeSet(getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l))
           Some((partAttrs, l))

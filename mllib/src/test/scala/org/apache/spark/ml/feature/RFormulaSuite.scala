@@ -627,4 +627,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     assert(get_output("keep").count() == 6)
   }
 
+  test("SPARK-37026: Ensure the element type of ResolvedRFormula.terms is " +
+    "scala.Seq for Scala 2.13") {
+    withTempPath { path =>
+      val dataset = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
+      val rFormula = new RFormula().setFormula("id ~ a:b")
+      val model = rFormula.fit(dataset)
+      model.save(path.getCanonicalPath)
+      val newModel = RFormulaModel.load(path.getCanonicalPath)
+      newModel.resolvedFormula.toString
+    }
+  }
 }

@@ -21,12 +21,12 @@ import java.lang.annotation.Annotation
 import java.lang.reflect.Type
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, SimpleTimeZone}
-import javax.ws.rs.Produces
-import javax.ws.rs.core.{MediaType, MultivaluedMap}
-import javax.ws.rs.ext.{MessageBodyWriter, Provider}
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
+import jakarta.ws.rs.Produces
+import jakarta.ws.rs.core.{MediaType, MultivaluedMap}
+import jakarta.ws.rs.ext.{MessageBodyWriter, Provider}
 
 /**
  * This class converts the POJO metric responses into json, using jackson.
@@ -48,7 +48,7 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
   }
   mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)
   mapper.enable(SerializationFeature.INDENT_OUTPUT)
-  mapper.setSerializationInclusion(JsonInclude.Include.NON_ABSENT)
+  mapper.setDefaultPropertyInclusion(JsonInclude.Include.NON_ABSENT)
   mapper.setDateFormat(JacksonMessageWriter.makeISODateFormat)
 
   override def isWriteable(

@@ -28,7 +28,6 @@ import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.avro.generic.{GenericContainer, GenericData}
 import org.apache.avro.io._
-import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
@@ -93,11 +92,11 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
       schemaBytes.remaining())
     val in = codec.compressedInputStream(bis)
     val bytes = Utils.tryWithSafeFinally {
-      IOUtils.toByteArray(in)
+      in.readAllBytes()
     } {
       in.close()
     }
-    new Schema.Parser().parse(new String(bytes, StandardCharsets.UTF_8))
+    new Schema.Parser().setValidateDefaults(false).parse(new String(bytes, StandardCharsets.UTF_8))
   })
 
   /**
@@ -137,12 +136,12 @@ private[serializer] class GenericAvroSerializer[D <: GenericContainer]
         val fingerprint = input.readLong()
         schemaCache.getOrElseUpdate(fingerprint, {
           schemas.get(fingerprint) match {
-            case Some(s) => new Schema.Parser().parse(s)
+            case Some(s) => new Schema.Parser().setValidateDefaults(false).parse(s)
             case None =>
               throw new SparkException(
-                "Error reading attempting to read avro data -- encountered an unknown " +
-                  s"fingerprint: $fingerprint, not sure what schema to use.  This could happen " +
-                  "if you registered additional schemas after starting your spark context.")
+                errorClass = "ERROR_READING_AVRO_UNKNOWN_FINGERPRINT",
+                messageParameters = Map("fingerprint" -> fingerprint.toString),
+                cause = null)
           }
         })
       } else {

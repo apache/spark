@@ -36,7 +36,7 @@ object SSSPExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession.
     val spark = SparkSession
-      .builder
+      .builder()
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
     val sc = spark.sparkContext
@@ -60,7 +60,7 @@ object SSSPExample {
       },
       (a, b) => math.min(a, b) // Merge Message
     )
-    println(sssp.vertices.collect.mkString("\n"))
+    println(sssp.vertices.collect().mkString("\n"))
     // $example off$
 
     spark.stop()

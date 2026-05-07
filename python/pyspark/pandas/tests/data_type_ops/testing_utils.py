@@ -17,14 +17,12 @@
 
 import datetime
 import decimal
-from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.pandas.typedef import extension_dtypes
-
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
@@ -41,16 +39,28 @@ if extension_object_dtypes_available:
     from pandas import BooleanDtype, StringDtype
 
 
-class TestCasesUtils(object):
-    """A utility holding common test cases for arithmetic operations of different data types."""
+class OpsTestBase:
+    """The test base for arithmetic operations of different data types."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
 
     @property
     def numeric_pdf(self):
         dtypes = [np.int32, int, np.float32, float]
         sers = [pd.Series([1, 2, 3], dtype=dtype) for dtype in dtypes]
         sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3)]))
+        sers.append(pd.Series([1, 2, np.nan], dtype=float))
+        sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)]))
         pdf = pd.concat(sers, axis=1)
-        pdf.columns = [dtype.__name__ for dtype in dtypes] + ["decimal"]
+        pdf.columns = [dtype.__name__ for dtype in dtypes] + [
+            "decimal",
+            "float_nan",
+            "decimal_nan",
+        ]
         return pdf
 
     @property
@@ -61,24 +71,13 @@ class TestCasesUtils(object):
     def numeric_df_cols(self):
         return self.numeric_pdf.columns
 
-    # TODO(SPARK-36031): Merge self.numeric_w_nan_p(s)df into self.numeric_p(s)df
     @property
-    def numeric_w_nan_pdf(self):
-        psers = {
-            "float_w_nan": pd.Series([1, 2, np.nan]),
-            "decimal_w_nan": pd.Series(
-                [decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)]
-            ),
-        }
-        return pd.concat(psers, axis=1)
+    def integral_pdf(self):
+        return pd.DataFrame({"this": [1, 2, 3], "that": [2, 2, 1]})
 
     @property
-    def numeric_w_nan_psdf(self):
-        return ps.from_pandas(self.numeric_w_nan_pdf)
-
-    @property
-    def numeric_w_nan_df_cols(self):
-        return self.numeric_w_nan_pdf.columns
+    def integral_psdf(self):
+        return ps.from_pandas(self.integral_pdf)
 
     @property
     def non_numeric_pdf(self):
@@ -89,6 +88,9 @@ class TestCasesUtils(object):
                 [datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]
             ),
             "datetime": pd.to_datetime(pd.Series([1, 2, 3])),
+            "timedelta": pd.Series(
+                [datetime.timedelta(1), datetime.timedelta(hours=2), datetime.timedelta(weeks=3)]
+            ),
             "categorical": pd.Series(["a", "b", "a"], dtype="category"),
         }
         return pd.concat(psers, axis=1)
@@ -125,31 +127,8 @@ class TestCasesUtils(object):
         return [ps.from_pandas(pser) for pser in self.numeric_psers]
 
     @property
-    def decimal_withnan_pser(self):
-        return pd.Series([decimal.Decimal(1.0), decimal.Decimal(2.0), decimal.Decimal(np.nan)])
-
-    @property
-    def decimal_withnan_psser(self):
-        return ps.from_pandas(self.decimal_withnan_pser)
-
-    @property
-    def float_withnan_pser(self):
-        return pd.Series([1, 2, np.nan])
-
-    @property
-    def float_withnan_psser(self):
-        return ps.from_pandas(self.float_withnan_pser)
-
-    @property
     def numeric_pser_psser_pairs(self):
         return zip(self.numeric_psers, self.numeric_pssers)
-
-    @property
-    def numeric_withnan_pser_psser_pairs(self):
-        return zip(
-            self.numeric_psers + [self.decimal_withnan_pser, self.float_withnan_pser],
-            self.numeric_pssers + [self.decimal_withnan_psser, self.float_withnan_psser],
-        )
 
     @property
     def non_numeric_psers(self):
@@ -240,9 +219,7 @@ class TestCasesUtils(object):
         This utility is to adjust an issue for comparing numeric ExtensionDtypes in specific
         pandas versions. Please refer to https://github.com/pandas-dev/pandas/issues/39410.
         """
-        if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-            self.assert_eq(left, right, check_exact=False)
-            self.assertTrue(isinstance(left.dtype, extension_dtypes))
-            self.assertTrue(isinstance(right.dtype, extension_dtypes))
-        else:
-            self.assert_eq(left, right)
+        self.assert_eq(left, right)
+
+    def ignore_null(self, col):
+        return LooseVersion(pd.__version__) >= LooseVersion("3.0") and col == "decimal_nan"

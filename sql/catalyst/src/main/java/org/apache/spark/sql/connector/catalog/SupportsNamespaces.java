@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException;
 
 import java.util.Map;
 
@@ -52,6 +53,12 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * will be returned in the result of "DESCRIBE NAMESPACE" command.
    */
   String PROP_COMMENT = "comment";
+
+  /**
+   * A reserved property to specify the collation of the namespace. The collation
+   * will be returned in the result of "DESCRIBE NAMESPACE" command.
+   */
+  String PROP_COLLATION = "collation";
 
   /**
    * A reserved property to specify the owner of the namespace.
@@ -136,15 +143,20 @@ public interface SupportsNamespaces extends CatalogPlugin {
       NamespaceChange... changes) throws NoSuchNamespaceException;
 
   /**
-   * Drop a namespace from the catalog, recursively dropping all objects within the namespace.
+   * Drop a namespace from the catalog with cascade mode, recursively dropping all objects
+   * within the namespace if cascade is true.
    * <p>
    * If the catalog implementation does not support this operation, it may throw
    * {@link UnsupportedOperationException}.
    *
    * @param namespace a multi-part namespace
+   * @param cascade When true, deletes all objects under the namespace
    * @return true if the namespace was dropped
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
+   * @throws NonEmptyNamespaceException If the namespace is non-empty and cascade is false
    * @throws UnsupportedOperationException If drop is not a supported operation
    */
-  boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException;
+  boolean dropNamespace(
+      String[] namespace,
+      boolean cascade) throws NoSuchNamespaceException, NonEmptyNamespaceException;
 }

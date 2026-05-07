@@ -31,7 +31,7 @@ private [spark] class JobDuration(val value: AtomicLong) extends Gauge[Long] {
 
 private[spark] class AppStatusSource extends Source {
 
-  override implicit val metricRegistry = new MetricRegistry()
+  override implicit val metricRegistry: MetricRegistry = new MetricRegistry()
 
   override val sourceName = "appStatus"
 

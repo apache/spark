@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
 import org.dmg.pmml.regression.RegressionModel
 
@@ -35,7 +35,7 @@ class BinaryClassificationPMMLModelExportSuite extends SparkFunSuite {
 
     // assert that the PMML format is as expected
     assert(logisticModelExport.isInstanceOf[PMMLModelExport])
-    val pmml = logisticModelExport.asInstanceOf[PMMLModelExport].getPmml
+    val pmml = logisticModelExport.getPmml()
     assert(pmml.getHeader.getDescription === "logistic regression")
     // check that the number of fields match the weights size
     assert(pmml.getDataDictionary.getNumberOfFields === logisticRegressionModel.weights.size + 1)
@@ -62,7 +62,7 @@ class BinaryClassificationPMMLModelExportSuite extends SparkFunSuite {
 
     // assert that the PMML format is as expected
     assert(svmModelExport.isInstanceOf[PMMLModelExport])
-    val pmml = svmModelExport.getPmml
+    val pmml = svmModelExport.getPmml()
     assert(pmml.getHeader.getDescription
       === "linear SVM")
     // check that the number of fields match the weights size

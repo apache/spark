@@ -19,7 +19,7 @@ WholeStageCodegen (11)
                                     Filter [i_manager_id,i_item_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.item [i_item_sk,i_brand_id,i_brand,i_manager_id]
+                                          Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_brand,i_manager_id]
                             InputAdapter
                               Union
                                 WholeStageCodegen (3)
@@ -28,7 +28,7 @@ WholeStageCodegen (11)
                                       Filter [ws_item_sk,ws_sold_time_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.web_sales [ws_sold_time_sk,ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                            Scan parquet spark_catalog.default.web_sales [ws_sold_time_sk,ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
                                                 BroadcastExchange #4
                                                   WholeStageCodegen (1)
@@ -36,7 +36,7 @@ WholeStageCodegen (11)
                                                       Filter [d_moy,d_year,d_date_sk]
                                                         ColumnarToRow
                                                           InputAdapter
-                                                            Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                            Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #4
                                 WholeStageCodegen (5)
@@ -45,7 +45,7 @@ WholeStageCodegen (11)
                                       Filter [cs_item_sk,cs_sold_time_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.catalog_sales [cs_sold_time_sk,cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
+                                            Scan parquet spark_catalog.default.catalog_sales [cs_sold_time_sk,cs_item_sk,cs_ext_sales_price,cs_sold_date_sk]
                                               ReusedSubquery [d_date_sk] #1
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #4
@@ -55,7 +55,7 @@ WholeStageCodegen (11)
                                       Filter [ss_item_sk,ss_sold_time_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.store_sales [ss_sold_time_sk,ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                            Scan parquet spark_catalog.default.store_sales [ss_sold_time_sk,ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
                                               ReusedSubquery [d_date_sk] #1
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #4
@@ -66,4 +66,4 @@ WholeStageCodegen (11)
                                 Filter [t_meal_time,t_time_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.time_dim [t_time_sk,t_hour,t_minute,t_meal_time]
+                                      Scan parquet spark_catalog.default.time_dim [t_time_sk,t_hour,t_minute,t_meal_time]

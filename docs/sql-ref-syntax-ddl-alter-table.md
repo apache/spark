@@ -75,6 +75,52 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 
     Specifies the columns to be added.
 
+### DROP COLUMNS
+
+`ALTER TABLE DROP COLUMNS` statement drops mentioned columns from an existing table.
+Note that this statement is only supported with v2 tables.
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier DROP { COLUMN | COLUMNS } [ ( ] col_name [ , ... ] [ ) ]
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **col_name**
+
+  Specifies the name of the column.
+
+### RENAME COLUMN
+
+`ALTER TABLE RENAME COLUMN` statement changes the column name of an existing table.
+Note that this statement is only supported with v2 tables.
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier RENAME COLUMN col_name TO col_name
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **col_name**
+
+  Specifies the name of the column.
+
 ### ALTER OR CHANGE COLUMN
 
 `ALTER TABLE ALTER COLUMN` or `ALTER TABLE CHANGE COLUMN` statement changes column's definition.
@@ -82,7 +128,7 @@ ALTER TABLE table_identifier ADD COLUMNS ( col_spec [ , ... ] )
 #### Syntax
 
 ```sql
-ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnAction
+ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_name alterColumnAction
 ```
 
 #### Parameters
@@ -93,13 +139,45 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
     **Syntax:** `[ database_name. ] table_name`
 
-* **COLUMNS ( col_spec )**
+* **col_name**
 
-    Specifies the column to be altered or be changed.
+    Specifies the name of the column.
 
 * **alterColumnAction**
 
     Change column's definition.
+
+### REPLACE COLUMNS
+
+`ALTER TABLE REPLACE COLUMNS` statement removes all existing columns and adds the new set of columns.
+Note that this statement is only supported with v2 tables.
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier [ partition_spec ] REPLACE COLUMNS  
+  [ ( ] qualified_col_type_with_position_list [ ) ]
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **partition_spec**
+
+  Partition to be replaced. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
+
+  **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+* **qualified_col_type_with_position_list**
+
+  The list of the column(s) to be added
+
+  **Syntax:** `col_name col_type [ col_comment ] [ col_position ] [ , ... ]`
 
 ### ADD AND DROP PARTITION
 
@@ -155,24 +233,58 @@ ALTER TABLE table_identifier DROP [ IF EXISTS ] partition_spec [PURGE]
     Partition to be dropped. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
-     
-### SET AND UNSET
 
-#### SET TABLE PROPERTIES
+#### CLUSTER BY
 
-`ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
-this overrides the old value with the new one.
-
-`ALTER TABLE UNSET` is used to drop the table property. 
+`ALTER TABLE CLUSTER BY` command can also be used for changing or removing the clustering columns for existing tables.
 
 ##### Syntax
 
 ```sql
--- Set Table Properties 
-ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
+-- Changing Clustering Columns
+ALTER TABLE table_identifier CLUSTER BY ( col_name [ , ... ] )
 
--- Unset Table Properties
-ALTER TABLE table_identifier UNSET TBLPROPERTIES [ IF EXISTS ] ( key1, key2, ... )
+-- Removing Clustering Columns
+ALTER TABLE table_identifier CLUSTER BY NONE
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
+
+* **col_name**
+
+  Specifies the name of the column.
+     
+### SET AND UNSET
+
+#### SET PROPERTIES
+
+`ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
+this overrides the old value with the new one.
+
+##### Syntax
+
+```sql
+-- Set Properties
+ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
+```
+
+#### UNSET PROPERTIES
+
+`ALTER TABLE UNSET` command is used to drop the table property.
+
+**Note:** If the specified property key does not exist, whether specify `IF EXISTS` or not, the command will ignore it and finally succeed.
+
+##### Syntax
+
+```sql
+-- Unset Properties
+ALTER TABLE table_identifier UNSET TBLPROPERTIES ( key1, key2, ... )
 ```
 
 #### SET SERDE
@@ -224,6 +336,25 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 * **SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )**
 
     Specifies the SERDE properties to be set.
+
+### RECOVER PARTITIONS
+
+`ALTER TABLE RECOVER PARTITIONS` statement recovers all the partitions in the directory of a table and updates the Hive metastore.
+Another way to recover partitions is to use `MSCK REPAIR TABLE`.
+
+#### Syntax
+
+```sql
+ALTER TABLE table_identifier RECOVER PARTITIONS
+```
+
+#### Parameters
+
+* **table_identifier**
+
+  Specifies a table name, which may be optionally qualified with a database name.
+
+  **Syntax:** `[ database_name. ] table_name`
 
 ### Examples
 
@@ -309,6 +440,118 @@ DESC StudentInfo;
 |                    age|      int|   NULL|
 +-----------------------+---------+-------+
 
+-- Drop columns of a table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|               LastName|   string|   NULL|
+|                    DOB|timestamp|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+ALTER TABLE StudentInfo DROP columns (LastName, DOB);
+
+-- After dropping columns of the table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+-- Rename a column of a table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|                   name|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+ALTER TABLE StudentInfo RENAME COLUMN name TO FirstName;
+
+-- After renaming a column of the table
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|              FirstName|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+-- ALTER OR CHANGE COLUMNS
+DESC StudentInfo;
++-----------------------+---------+-------+
+|               col_name|data_type|comment|
++-----------------------+---------+-------+
+|              FirstName|   string|   NULL|
+|                 rollno|      int|   NULL|
+|                    age|      int|   NULL|
+|# Partition Information|         |       |
+|             # col_name|data_type|comment|
+|                    age|      int|   NULL|
++-----------------------+---------+-------+
+
+ALTER TABLE StudentInfo ALTER COLUMN FirstName COMMENT "new comment";
+
+-- After ALTER or CHANGE COLUMNS
+DESC StudentInfo;
++-----------------------+---------+-----------+
+|               col_name|data_type|    comment|
++-----------------------+---------+-----------+
+|              FirstName|   string|new comment|
+|                 rollno|      int|       NULL|
+|                    age|      int|       NULL|
+|# Partition Information|         |           |
+|             # col_name|data_type|    comment|
+|                    age|      int|       NULL|
++-----------------------+---------+-----------+
+
+-- REPLACE COLUMNS
+DESC StudentInfo;
++-----------------------+---------+-----------+
+|               col_name|data_type|    comment|
++-----------------------+---------+-----------+
+|              FirstName|   string|new comment|
+|                 rollno|      int|       NULL|
+|                    age|      int|       NULL|
+|# Partition Information|         |           |
+|             # col_name|data_type|    comment|
+|                    age|      int|       NULL|
++-----------------------+---------+-----------+
+
+ALTER TABLE StudentInfo REPLACE COLUMNS (name string, ID int COMMENT 'new comment');
+
+-- After replacing COLUMNS
+DESC StudentInfo;
++-----=---------+---------+-----------+
+|       col_name|data_type|    comment|
++---------------+---------+-----------+
+|           name|   string|       NULL|
+|             ID|      int|new comment|
+| # Partitioning|         |           |
+|Not partitioned|         |           |
++---------------+---------+-----------+
+
 -- Add a new partition to a table 
 SHOW PARTITIONS StudentInfo;
 +---------+
@@ -379,37 +622,50 @@ SHOW PARTITIONS StudentInfo;
 |   age=20|
 +---------+
 
--- ALTER OR CHANGE COLUMNS
-DESC StudentInfo;
-+-----------------------+---------+-------+
-|               col_name|data_type|comment|
-+-----------------------+---------+-------+
-|                   name|   string|   NULL|
-|                 rollno|      int|   NULL|
-|               LastName|   string|   NULL|
-|                    DOB|timestamp|   NULL|
-|                    age|      int|   NULL|
-|# Partition Information|         |       |
-|             # col_name|data_type|comment|
-|                    age|      int|   NULL|
-+-----------------------+---------+-------+
+-- CLUSTER BY
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
+|              # col_name|data_type|comment|
+|                  gender|   string|   NULL|
++------------------------+---------+-------+
 
-ALTER TABLE StudentInfo ALTER COLUMN name COMMENT "new comment";
+ALTER TABLE Teacher CLUSTER BY (gender, country);
 
---After ALTER or CHANGE COLUMNS
-DESC StudentInfo;
-+-----------------------+---------+-----------+
-|               col_name|data_type|    comment|
-+-----------------------+---------+-----------+
-|                   name|   string|new comment|
-|                 rollno|      int|       NULL|
-|               LastName|   string|       NULL|
-|                    DOB|timestamp|       NULL|
-|                    age|      int|       NULL|
-|# Partition Information|         |           |
-|             # col_name|data_type|    comment|
-|                    age|      int|       NULL|
-+-----------------------+---------+-----------+
+-- After changing clustering columns
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
+|              # col_name|data_type|comment|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
++------------------------+---------+-------+
+
+ALTER TABLE Teacher CLUSTER BY NONE;
+
+-- After removing clustering columns
+DESC Teacher;
++------------------------+---------+-------+
+|                col_name|data_type|comment|
++------------------------+---------+-------+
+|                    name|   string|   NULL|
+|                  gender|   string|   NULL|
+|                 country|   string|   NULL|
+|                     age|      int|   NULL|
+|# Clustering Information|         |       |
++------------------------+---------+-------+
 
 -- Change the fileformat
 ALTER TABLE loc_orc SET fileformat orc;
@@ -417,12 +673,12 @@ ALTER TABLE loc_orc SET fileformat orc;
 ALTER TABLE p1 partition (month=2, day=2) SET fileformat parquet;
 
 -- Change the file Location
-ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'
+ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways';
 
 -- SET SERDE/ SERDE Properties
 ALTER TABLE test_tab SET SERDE 'org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe';
 
-ALTER TABLE dbx.tab1 SET SERDE 'org.apache.hadoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')
+ALTER TABLE dbx.tab1 SET SERDE 'org.apache.hadoop' WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee');
 
 -- SET TABLE PROPERTIES
 ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('winner' = 'loser');
@@ -435,6 +691,9 @@ ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('comment' = 'This is a new comment.');
 
 -- DROP TABLE PROPERTIES
 ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('winner');
+
+-- RECOVER PARTITIONS
+ALTER TABLE dbx.tab1 RECOVER PARTITIONS;
 ```
 
 ### Related Statements

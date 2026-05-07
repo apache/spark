@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import java.net.URI
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
@@ -125,6 +125,29 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
           catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
         }
       }
+    }
+  }
+
+  test("deserializePathEntries parses valid payloads") {
+    val stored =
+      """[["spark_catalog","default"],["system","builtin"],["spark_catalog","db1","ns1"]]"""
+    assert(CatalogManager.deserializePathEntries(stored).contains(Seq(
+      Seq("spark_catalog", "default"),
+      Seq("system", "builtin"),
+      Seq("spark_catalog", "db1", "ns1"))))
+    assert(CatalogManager.deserializePathEntries("[]").contains(Seq.empty))
+  }
+
+  test("deserializePathEntries returns None for malformed payloads") {
+    val malformedPayloads = Seq(
+      "",
+      "not_json",
+      "{}",
+      """["spark_catalog"]""",
+      """[["spark_catalog"], 1]""",
+      """[[1]]""")
+    malformedPayloads.foreach { payload =>
+      assert(CatalogManager.deserializePathEntries(payload).isEmpty, s"payload=$payload")
     }
   }
 }

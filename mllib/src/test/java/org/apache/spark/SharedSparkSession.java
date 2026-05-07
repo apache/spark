@@ -20,8 +20,8 @@ package org.apache.spark;
 import java.io.IOException;
 import java.io.Serializable;
 
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
@@ -31,7 +31,7 @@ public abstract class SharedSparkSession implements Serializable {
   protected transient SparkSession spark;
   protected transient JavaSparkContext jsc;
 
-  @Before
+  @BeforeEach
   public void setUp() throws IOException {
     spark = SparkSession.builder()
       .master("local[2]")
@@ -40,7 +40,7 @@ public abstract class SharedSparkSession implements Serializable {
     jsc = new JavaSparkContext(spark.sparkContext());
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     try {
       spark.stop();

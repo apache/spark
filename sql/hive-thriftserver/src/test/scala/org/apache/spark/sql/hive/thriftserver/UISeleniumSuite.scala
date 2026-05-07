@@ -18,26 +18,26 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+@WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
-  with WebBrowser with Matchers with BeforeAndAfterAll {
+  with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
@@ -69,28 +69,28 @@ class UISeleniumSuite
     }
 
     val driverClassPath = {
-      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // Writes a temporary log4j2.properties and prepend it to driver classpath, so that it
       // overrides all other potential log4j configurations contained in other dependency jar files.
       val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
 
-      Files.write(
-        """log4j.rootCategory=INFO, console
-          |log4j.appender.console=org.apache.log4j.ConsoleAppender
-          |log4j.appender.console.target=System.err
-          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
-          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
-        """.stripMargin,
-        new File(s"$tempLog4jConf/log4j.properties"),
-        StandardCharsets.UTF_8)
+      Files.writeString(new File(s"$tempLog4jConf/log4j2.properties").toPath,
+        """rootLogger.level = info
+          |rootLogger.appenderRef.file.ref = console
+          |appender.console.type = Console
+          |appender.console.name = console
+          |appender.console.target = SYSTEM_ERR
+          |appender.console.layout.type = PatternLayout
+          |appender.console.layout.pattern = %d{HH:mm:ss.SSS} %p %c: %maxLen{%m}{512}%n%ex{8}%n
+        """.stripMargin)
 
       tempLog4jConf
     }
 
     s"""$startScript
         |  --master local
-        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
+        |  --hiveconf javax.jdo.option.ConnectionURL=$metastoreJdbcUri
+        |  --hiveconf hive.metastore.warehouse.dir=$warehousePath
+        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=$localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=0
         |  --driver-class-path $driverClassPath
@@ -101,10 +101,10 @@ class UISeleniumSuite
 
   test("thrift server ui test") {
     withJdbcStatement("test_map") { statement =>
-      val baseURL = s"http://localhost:$uiPort"
+      val baseURL = s"http://$localhost:$uiPort"
 
       val queries = Seq(
-        "CREATE TABLE test_map(key INT, value STRING)",
+        "CREATE TABLE test_map (key INT, value STRING) USING HIVE",
         s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
 
       queries.foreach(statement.execute)
@@ -123,6 +123,51 @@ class UISeleniumSuite
         queries.foreach { line =>
           findAll(cssSelector("span.description-input")).map(_.text).toList should contain (line)
         }
+      }
+    }
+  }
+
+  test("SPARK-36400: Redact sensitive information in UI by config") {
+    withJdbcStatement("test_tbl1", "test_tbl2") { statement =>
+      val baseURL = s"http://$localhost:$uiPort"
+
+      val Seq(nonMaskedQuery, maskedQuery) = Seq("test_tbl1", "test_tbl2").map (tblName =>
+        s"CREATE TABLE $tblName(a int) " +
+          s"OPTIONS(url='jdbc:postgresql://$localhost:5432/$tblName', " +
+          "user='test_user', password='abcde')")
+      statement.execute(nonMaskedQuery)
+
+      statement.execute("SET spark.sql.redaction.string.regex=((?i)(?<=password=))('.*')")
+      statement.execute(maskedQuery)
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to (baseURL + "/sqlserver")
+        // Take description of 2 statements executed within this test.
+        val statements = findAll(cssSelector("span.description-input"))
+          .map(_.text).filter(_.startsWith("CREATE")).take(2).toSeq
+
+        val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
+        nonMaskedStatement.size should be (1)
+        nonMaskedStatement.head should be (nonMaskedQuery)
+        val maskedStatement = statements.filter(_.contains("test_tbl2"))
+        maskedStatement.size should be (1)
+        maskedStatement.head should be (maskedQuery.replace("'abcde'", "*********(redacted)"))
+      }
+
+      val sessionLink =
+        find(cssSelector("table#sessionstat td a")).head.underlying.getDomProperty("href")
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        go to sessionLink
+        val statements = findAll(
+          cssSelector("span.description-input")).map(_.text).filter(_.startsWith("CREATE")).toSeq
+        statements.size should be (2)
+
+        val nonMaskedStatement = statements.filter(_.contains("test_tbl1"))
+        nonMaskedStatement.size should be (1)
+        nonMaskedStatement.head should be (nonMaskedQuery)
+        val maskedStatement = statements.filter(_.contains("test_tbl2"))
+        maskedStatement.size should be (1)
+        maskedStatement.head should be (maskedQuery.replace("'abcde'", "*********(redacted)"))
       }
     }
   }

@@ -53,12 +53,27 @@ abstract class JdbcConnectionProvider {
   def canHandle(driver: Driver, options: Map[String, String]): Boolean
 
   /**
-   * Opens connection toward the database. Since global JVM security configuration change may needed
-   * this API is called synchronized by `SecurityConfigurationLock` to avoid race.
+   * Opens connection to the database. Since global JVM security configuration change may be
+   * needed this API is called synchronized by `SecurityConfigurationLock` to avoid race when
+   * `modifiesSecurityContext` returns true for the given driver with the given options.
    *
    * @param driver  Java driver which initiates the connection
    * @param options Driver options which initiates the connection
    * @return a `Connection` object that represents a connection to the URL
    */
   def getConnection(driver: Driver, options: Map[String, String]): Connection
+
+  /**
+   * Checks if this connection provider instance needs to modify global security configuration to
+   * handle authentication and thus should synchronize access to the security configuration while
+   * the given driver is initiating a connection with the given options.
+   *
+   * @param driver  Java driver which initiates the connection
+   * @param options Driver options which initiates the connection
+   * @return True if the connection provider will need to modify the security configuration when
+   * initiating a connection with the given driver with the given options.
+   *
+   * @since 3.1.3
+   */
+  def modifiesSecurityContext(driver: Driver, options: Map[String, String]): Boolean
 }

@@ -25,9 +25,11 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DataType, IntegralType, LongType}
 
 /**
  * @param relationTerm variable name for HashedRelation
@@ -40,6 +42,9 @@ private[joins] case class HashedRelationInfo(
     isEmpty: Boolean)
 
 trait HashJoin extends JoinCodegenSupport {
+  assert(leftKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
+  assert(rightKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
+
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
@@ -51,7 +56,7 @@ trait HashJoin extends JoinCodegenSupport {
     joinType match {
       case _: InnerLike =>
         left.output ++ right.output
-      case LeftOuter =>
+      case LeftOuter | LeftSingle =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -74,7 +79,7 @@ trait HashJoin extends JoinCodegenSupport {
       }
     case BuildRight =>
       joinType match {
-        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+        case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputPartitioning
         case x =>
           throw new IllegalArgumentException(
@@ -92,7 +97,7 @@ trait HashJoin extends JoinCodegenSupport {
       }
     case BuildRight =>
       joinType match {
-        case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin =>
+        case _: InnerLike | LeftOuter | LeftSingle | LeftSemi | LeftAnti | _: ExistenceJoin =>
           left.outputOrdering
         case x =>
           throw new IllegalArgumentException(
@@ -109,7 +114,7 @@ trait HashJoin extends JoinCodegenSupport {
     require(leftKeys.length == rightKeys.length &&
       leftKeys.map(_.dataType)
         .zip(rightKeys.map(_.dataType))
-        .forall(types => types._1.sameType(types._2)),
+        .forall(types => DataType.equalsStructurally(types._1, types._2, ignoreNullability = true)),
       "Join keys from two sides should have same length and types")
     buildSide match {
       case BuildLeft => (leftKeys, rightKeys)
@@ -130,16 +135,15 @@ trait HashJoin extends JoinCodegenSupport {
   @transient protected lazy val streamedBoundKeys =
     bindReferences(HashJoin.rewriteKeyExpr(streamedKeys), streamedOutput)
 
-  protected def buildSideKeyGenerator(): Projection =
+  protected def buildSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(buildBoundKeys)
 
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
 
   @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
-    if (joinType == FullOuter && buildSide == BuildLeft) {
-      // Put join left side before right side. This is to be consistent with
-      // `ShuffledHashJoinExec.fullOuterJoin`.
+    if ((joinType == FullOuter || joinType == LeftOuter) && buildSide == BuildLeft) {
+      // Put join left side before right side.
       Predicate.create(condition.get, buildPlan.output ++ streamedPlan.output).eval _
     } else {
       Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
@@ -191,7 +195,8 @@ trait HashJoin extends JoinCodegenSupport {
 
   private def outerJoin(
       streamedIter: Iterator[InternalRow],
-      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+      hashedRelation: HashedRelation,
+      singleJoin: Boolean = false): Iterator[InternalRow] = {
     val joinedRow = new JoinedRow()
     val keyGenerator = streamSideKeyGenerator()
     val nullRow = new GenericInternalRow(buildPlan.output.length)
@@ -218,6 +223,9 @@ trait HashJoin extends JoinCodegenSupport {
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
               if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+                if (found && singleJoin) {
+                  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+                }
                 found = true
                 return true
               }
@@ -329,6 +337,8 @@ trait HashJoin extends JoinCodegenSupport {
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
         outerJoin(streamedIter, hashed)
+      case LeftSingle =>
+        outerJoin(streamedIter, hashed, singleJoin = true)
       case LeftSemi =>
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
@@ -340,7 +350,7 @@ trait HashJoin extends JoinCodegenSupport {
           s"HashJoin should not take $x as the JoinType")
     }
 
-    val resultProj = createResultProjection
+    val resultProj = createResultProjection()
     joinedIter.map { r =>
       numOutputRows += 1
       resultProj(r)
@@ -354,7 +364,7 @@ trait HashJoin extends JoinCodegenSupport {
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     joinType match {
       case _: InnerLike => codegenInner(ctx, input)
-      case LeftOuter | RightOuter => codegenOuter(ctx, input)
+      case LeftOuter | RightOuter | LeftSingle => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
       case LeftAnti => codegenAnti(ctx, input)
       case _: ExistenceJoin => codegenExistence(ctx, input)
@@ -444,7 +454,7 @@ trait HashJoin extends JoinCodegenSupport {
     val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
@@ -492,6 +502,17 @@ trait HashJoin extends JoinCodegenSupport {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
+      // For LeftSingle joins generate the check on the number of build rows that match every
+      // probe row. Return an error for >1 matches.
+      val evaluateSingleCheck = if (joinType == LeftSingle) {
+        s"""
+           |if ($found) {
+           |  throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
+           |}
+           |""".stripMargin
+      } else {
+        ""
+      }
 
       s"""
          |// generate join key for stream side
@@ -505,6 +526,7 @@ trait HashJoin extends JoinCodegenSupport {
          |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
          |  if ($conditionPassed) {
+         |    $evaluateSingleCheck
          |    $found = true;
          |    $numOutput.add(1);
          |    ${consume(ctx, resultVars)}
@@ -646,7 +668,7 @@ trait HashJoin extends JoinCodegenSupport {
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
+    val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = false)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
@@ -705,6 +727,25 @@ trait HashJoin extends JoinCodegenSupport {
 }
 
 object HashJoin extends CastSupport with SQLConfHelper {
+
+  /**
+   * Normalize join keys by injecting `CollationKey` when the keys are collated.
+   */
+  def normalizeJoinKeys(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    (
+      leftKeys.map(CollationKey.injectCollationKey),
+      rightKeys.map(CollationKey.injectCollationKey)
+    )
+  }
+
+  private def canRewriteAsLongType(keys: Seq[Expression]): Boolean = {
+    // TODO: support BooleanType, DateType and TimestampType
+    keys.forall(_.dataType.isInstanceOf[IntegralType]) &&
+      keys.map(_.dataType.defaultSize).sum <= 8
+  }
+
   /**
    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
    *
@@ -712,9 +753,7 @@ object HashJoin extends CastSupport with SQLConfHelper {
    */
   def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     assert(keys.nonEmpty)
-    // TODO: support BooleanType, DateType and TimestampType
-    if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
-      || keys.map(_.dataType.defaultSize).sum > 8) {
+    if (!canRewriteAsLongType(keys)) {
       return keys
     }
 
@@ -736,18 +775,28 @@ object HashJoin extends CastSupport with SQLConfHelper {
    * determine the number of bits to shift
    */
   def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+    assert(canRewriteAsLongType(keys))
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)
-      cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+      Cast(
+        child = BoundReference(0, LongType, nullable = false),
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     } else {
       val shiftedBits =
         keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
       val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
       // build the schema for unpacking the required key
-      cast(BitwiseAnd(
+      val castChild = BitwiseAnd(
         ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
-        Literal(mask)), keys(index).dataType)
+        Literal(mask))
+      Cast(
+        child = castChild,
+        dataType = keys(index).dataType,
+        timeZoneId = Option(conf.sessionLocalTimeZone),
+        ansiEnabled = false)
     }
   }
 }

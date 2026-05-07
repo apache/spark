@@ -44,7 +44,7 @@ trait PMMLReadWriteTest extends TempDirectory { self: Suite =>
       instance.write.format("pmml").save(path)
     }
     instance.write.format("pmml").overwrite().save(path)
-    val pmmlStr = sc.textFile(path).collect.mkString("\n")
+    val pmmlStr = sc.textFile(path).collect().mkString("\n")
     val pmmlModel = PMMLUtils.loadFromString(pmmlStr)
     assert(pmmlModel.getHeader().getApplication().getName().startsWith("Apache Spark"))
     checkModelData(pmmlModel)

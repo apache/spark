@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.net.URI
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -29,11 +27,13 @@ import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * A set of tests that validates support for Hive SerDe.
  */
-class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfterAll {
+@SlowHiveTest
+class HiveSerDeSuite extends HiveComparisonTest with PlanTest {
   override def beforeAll(): Unit = {
     import TestHive._
     import org.apache.hadoop.hive.serde2.RegexSerDe
@@ -82,7 +82,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
   }
 
   // Make sure we set the config values to TestHive.conf.
-  override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit =
+  override def withSQLConf[T](pairs: (String, String)*)(f: => T): T =
     SQLConf.withExistingConf(TestHive.conf)(super.withSQLConf(pairs: _*)(f))
 
   test("Test the default fileformat for Hive-serde tables") {
@@ -143,7 +143,7 @@ class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfte
       .add("id", "int")
       .add("name", "string", nullable = true, comment = "blabla"))
     assert(table.provider == Some(DDLUtils.HIVE_PROVIDER))
-    assert(table.storage.locationUri == Some(new URI("/tmp/file")))
+    assert(table.storage.locationUri == Some(new URI("file:///tmp/file")))
     assert(table.storage.properties == Map("my_prop" -> "1"))
     assert(table.comment == Some("BLABLA"))
 

@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.TPCDSQuerySuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Final}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, LocalRelation, LogicalPlan, Range, Sample, Union, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, LocalRelation, LogicalPlan, Range, Sample, Union, Window, WithCTE}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
@@ -48,6 +48,7 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiv
 
   // A scan plan tree is a plan tree that has a leaf node under zero or more Project/Filter nodes.
   // We may add `ColumnarToRowExec` and `InputAdapter` above the scan node after planning.
+  @scala.annotation.tailrec
   private def isScanPlanTree(plan: SparkPlan): Boolean = plan match {
     case ColumnarToRowExec(i: InputAdapter) => isScanPlanTree(i.child)
     case p: ProjectExec => isScanPlanTree(p.child)
@@ -107,7 +108,11 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiv
         //   logical = Project(Filter(Scan A))
         //   physical = ProjectExec(ScanExec A)
         // we only check that leaf modes match between logical and physical plan.
-        val logicalLeaves = getLogicalPlan(actualPlan).collectLeaves()
+        val logicalPlan = getLogicalPlan(actualPlan) match {
+          case w: WithCTE => w.plan
+          case o => o
+        }
+        val logicalLeaves = logicalPlan.collectLeaves()
         val physicalLeaves = plan.collectLeaves()
         assert(logicalLeaves.length == 1)
         assert(physicalLeaves.length == 1)

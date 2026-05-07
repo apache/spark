@@ -48,7 +48,7 @@ class KryoSerializerDistributedSuite extends SparkFunSuite with LocalSparkContex
     val shuffledRDD = cachedRDD.map { case (i, o) => (i * i * i - 10 * i * i, o)}
 
     // Join the two RDDs, and force evaluation
-    assert(shuffledRDD.join(cachedRDD).collect().size == 1)
+    assert(shuffledRDD.join(cachedRDD).collect().length == 1)
   }
 }
 

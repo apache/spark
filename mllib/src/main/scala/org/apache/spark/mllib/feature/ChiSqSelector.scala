@@ -32,6 +32,7 @@ import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Chi Squared selector model.
@@ -135,17 +136,18 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val dataArray = Array.tabulate(model.selectedFeatures.length) { i =>
         Data(model.selectedFeatures(i))
       }
-      spark.createDataFrame(sc.makeRDD(dataArray, 1)).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(sc.makeRDD(dataArray.toImmutableArraySeq, 1))
+        .write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
-      implicit val formats = DefaultFormats
+      implicit val formats: Formats = DefaultFormats
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)

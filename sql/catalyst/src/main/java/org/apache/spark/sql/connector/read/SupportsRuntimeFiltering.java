@@ -19,7 +19,9 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.internal.connector.PredicateUtils;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface if they can
@@ -30,7 +32,7 @@ import org.apache.spark.sql.sources.Filter;
  * @since 3.2.0
  */
 @Experimental
-public interface SupportsRuntimeFiltering extends Scan {
+public interface SupportsRuntimeFiltering extends SupportsRuntimeV2Filtering {
   /**
    * Returns attributes this scan can be filtered by at runtime.
    * <p>
@@ -47,14 +49,19 @@ public interface SupportsRuntimeFiltering extends Scan {
    * <p>
    * If the scan also implements {@link SupportsReportPartitioning}, it must preserve
    * the originally reported partitioning during runtime filtering. While applying runtime filters,
-   * the scan may detect that some {@link InputPartition}s have no matching data. It can omit
-   * such partitions entirely only if it does not report a specific partitioning. Otherwise,
-   * the scan can replace the initially planned {@link InputPartition}s that have no matching
-   * data with empty {@link InputPartition}s but must preserve the overall number of partitions.
+   * the scan may detect that some {@link InputPartition}s have no matching data, in which case
+   * it can either replace the initially planned {@link InputPartition}s that have no matching data
+   * with empty {@link InputPartition}s, or report only a subset of the original partition values
+   * (omitting those with no data) via {@link Batch#planInputPartitions()}. The scan must not report
+   * new partition values that were not present in the original partitioning.
    * <p>
    * Note that Spark will call {@link Scan#toBatch()} again after filtering the scan at runtime.
    *
    * @param filters data source filters used to filter the scan at runtime
    */
   void filter(Filter[] filters);
+
+  default void filter(Predicate[] predicates) {
+    this.filter(PredicateUtils.toV1(predicates));
+  }
 }

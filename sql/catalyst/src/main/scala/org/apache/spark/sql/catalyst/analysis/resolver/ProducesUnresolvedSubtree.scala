@@ -1,0 +1,126 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis.resolver
+
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+
+/**
+ * A mixin trait for expression resolvers that as part of their resolution, replace single node
+ * with a subtree of nodes. This step is necessary because the underlying legacy code that is being
+ * called produces partially-unresolved subtrees. In order to resolve the subtree a callback
+ * resolver is called recursively. This callback must ensure that no node is resolved twice in
+ * order to not break the single-pass invariant. This is done by tagging the limits of this
+ * traversal with [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag. This tag is applied to the
+ * original expression's non-literal children, which are guaranteed to be resolved at the time of
+ * given expression's resolution. When callback resolver encounters the node that is tagged, it
+ * should return identity instead of trying to resolve it.
+ *
+ * Note: [[Literal]] children are excluded from tagging to drastically reduce the chance of a data
+ * race (see ES-1725904). Unlike other expression nodes, literals are not reallocated during
+ * resolution (resolved and unresolved literals are physically the same object), so mutating their
+ * tags can cause a data race when the same literal is used concurrently across threads. Since
+ * literals are leaf nodes, the boundary tag is unnecessary for them anyway.
+ */
+trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
+
+  /**
+   * Helper method used to resolve a subtree that is generated as part of the resolution of some
+   * node. Method ensures that the downwards traversal never visits previously resolved nodes by
+   * tracking the limits of the traversal with a tag. Invokes a resolver callback to resolve
+   * children, but DOES NOT resolve the root of the subtree.
+   *
+   * If the result of the callback is the same object as the source `expression`, we don't perform
+   * the downwards traversal. This is both more optimal and a fail-safe mechanism in case we
+   * accidentally lose the [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag.
+   */
+  protected def withResolvedSubtree(
+      expression: Expression,
+      expressionResolver: Expression => Expression)(body: => Expression): Expression = {
+    expression.children.foreach {
+      case _: Literal =>
+      case child => child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+    }
+
+    val resultExpression = body
+
+    if (resultExpression.eq(expression)) {
+      expression.children.foreach { child =>
+        child.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
+      }
+      resultExpression
+    } else {
+      withResolvedChildren(resultExpression, expressionResolver)
+    }
+  }
+
+  /**
+   * Variant of [[withResolvedSubtree]] where transformation with [[expressionResolver]] starts
+   * from parent expression rather than its children and where boundary tag cleanup is performed
+   * manually.
+   *
+   * In general, tag cleanup is performed by [[ExpressionResolver]] when an already resolved node
+   * is encountered. However, in case of function resolution, [[handlePartiallyResolvedFunction]]
+   * will not always invoke [[ExpressionResolver]], so boundary tags will need to be cleaned up
+   * manually.
+   */
+  protected def withResolvedSubtreeWithManualTagCleanup(
+      expression: Expression,
+      expressionResolver: Expression => Expression)(body: => Expression): Expression = {
+    expression.children.foreach {
+      case _: Literal =>
+      case child => child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+    }
+
+    val withBodyApplied = body
+
+    val resolvedExpression = expressionResolver(withBodyApplied)
+    val resolvedExpressionWithTagCleanup = unsetBoundaryTagsWithPruning(resolvedExpression)
+
+    resolvedExpressionWithTagCleanup
+  }
+
+  /**
+   * Try to pop the tag that marks the boundary of the single-pass subtree resolution.
+   * [[ExpressionResolver]] calls this method to check if the subtree traversal needs to be stopped
+   * because lower subtree is already resolved.
+   */
+  protected def tryPopSinglePassSubtreeBoundary(unresolvedExpression: Expression): Boolean = {
+    if (unresolvedExpression
+        .getTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
+        .isDefined) {
+      unresolvedExpression.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
+      true
+    } else {
+      false
+    }
+  }
+
+  /**
+   * Recursively unsets [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tags from the expression tree.
+   * Stops recursion once a tagged node is found (after unsetting its tag), since children of
+   * tagged nodes are already resolved and don't need further traversal.
+   */
+  private def unsetBoundaryTagsWithPruning(expression: Expression): Expression = {
+    if (expression.getTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY).isDefined) {
+      expression.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
+      expression
+    } else {
+      expression.mapChildren(child => unsetBoundaryTagsWithPruning(child.asInstanceOf[Expression]))
+    }
+  }
+}

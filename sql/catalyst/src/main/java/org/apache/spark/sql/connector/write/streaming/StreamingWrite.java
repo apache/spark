@@ -59,6 +59,16 @@ public interface StreamingWrite {
   StreamingDataWriterFactory createStreamingWriterFactory(PhysicalWriteInfo info);
 
   /**
+   * Returns whether Spark should use the commit coordinator to ensure that at most one task for
+   * each partition commits.
+   *
+   * @return true if commit coordinator should be used, false otherwise.
+   */
+  default boolean useCommitCoordinator() {
+    return true;
+  }
+
+  /**
    * Commits this writing job for the specified epoch with a list of commit messages. The commit
    * messages are collected from successful data writers and are produced by
    * {@link DataWriter#commit()}.
@@ -70,6 +80,12 @@ public interface StreamingWrite {
    * The execution engine may call {@code commit} multiple times for the same epoch in some
    * circumstances. To support exactly-once data semantics, implementations must ensure that
    * multiple commits for the same epoch are idempotent.
+   * <p>
+   * Note: this method signals that all data for this write operation has been successfully written.
+   * It is NOT a transactional commit. When this write is part of a
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction}, the transaction is
+   * committed separately via
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#commit()}.
    */
   void commit(long epochId, WriterCommitMessage[] messages);
 

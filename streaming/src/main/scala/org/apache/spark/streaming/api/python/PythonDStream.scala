@@ -21,7 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.existentials
 
 import py4j.Py4JException

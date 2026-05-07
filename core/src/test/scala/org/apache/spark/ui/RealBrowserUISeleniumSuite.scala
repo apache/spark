@@ -18,7 +18,6 @@
 package org.apache.spark.ui
 
 import org.openqa.selenium.{By, JavascriptExecutor, WebDriver}
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -35,7 +34,7 @@ import org.apache.spark.util.CallSite
  * Selenium tests for the Spark Web UI with real web browsers.
  */
 abstract class RealBrowserUISeleniumSuite(val driverProp: String)
-  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+  extends SparkFunSuite with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver with JavascriptExecutor
   private val driverPropPrefix = "spark.test."
@@ -58,31 +57,31 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
     withSpark(newSparkContext()) { sc =>
       sc.setLocalProperty(CallSite.LONG_FORM, "collect at <console>:25")
       sc.setLocalProperty(CallSite.SHORT_FORM, "collect at <console>:25")
-      sc.parallelize(1 to 10).collect
+      sc.parallelize(1 to 10).collect()
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
 
         val jobDesc =
           webDriver.findElement(By.cssSelector("div[class='application-timeline-content']"))
-        jobDesc.getAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
+        jobDesc.getDomAttribute("data-title") should include  ("collect at &lt;console&gt;:25")
 
         goToUi(sc, "/jobs/job/?id=0")
         webDriver.get(sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/?id=0")
         val stageDesc = webDriver.findElement(By.cssSelector("div[class='job-timeline-content']"))
-        stageDesc.getAttribute("data-title") should include ("collect at &lt;console&gt;:25")
+        stageDesc.getDomAttribute("data-title") should include ("collect at &lt;console&gt;:25")
 
         // Open DAG Viz.
         webDriver.findElement(By.id("job-dag-viz")).click()
-        val nodeDesc = webDriver.findElement(By.cssSelector("g[class='node_0 node']"))
-        nodeDesc.getAttribute("name") should include ("collect at &lt;console&gt;:25")
+        val nodeDesc = webDriver.findElement(By.cssSelector("g[id='node_0']"))
+        nodeDesc.getDomProperty("innerHTML") should include ("collect at &lt;console&gt;:25")
       }
     }
   }
 
   test("SPARK-31882: Link URL for Stage DAGs should not depend on paged table.") {
     withSpark(newSparkContext()) { sc =>
-      sc.parallelize(1 to 100).map(v => (v, v)).repartition(10).reduceByKey(_ + _).collect
+      sc.parallelize(1 to 100).map(v => (v, v)).repartition(10).reduceByKey(_ + _).collect()
 
       eventually(timeout(10.seconds), interval(50.microseconds)) {
         val pathWithPagedTable =
@@ -95,44 +94,42 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
         val stages = webDriver.findElements(By.cssSelector("svg[class='job'] > a"))
         stages.size() should be (3)
 
-        stages.get(0).getAttribute("href") should include ("/stages/stage/?id=0&attempt=0")
-        stages.get(1).getAttribute("href") should include ("/stages/stage/?id=1&attempt=0")
-        stages.get(2).getAttribute("href") should include ("/stages/stage/?id=2&attempt=0")
+        stages.get(0).getDomProperty("href") should include ("/stages/stage/?id=0&attempt=0")
+        stages.get(1).getDomProperty("href") should include ("/stages/stage/?id=1&attempt=0")
+        stages.get(2).getDomProperty("href") should include ("/stages/stage/?id=2&attempt=0")
       }
     }
   }
 
   test("SPARK-31886: Color barrier execution mode RDD correctly") {
     withSpark(newSparkContext()) { sc =>
-      sc.parallelize(1 to 10).barrier.mapPartitions(identity).repartition(1).collect()
+      sc.parallelize(1 to 10).barrier().mapPartitions(identity).repartition(1).collect()
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs/job/?id=0")
         webDriver.findElement(By.id("job-dag-viz")).click()
 
-        val stage0 = webDriver.findElement(By.cssSelector("g[id='graph_0']"))
-        val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_1']"))
+        val stage0 = webDriver.findElement(By.cssSelector("g[id='graph_stage_0']"))
+          .findElement(By.xpath(".."))
+        val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_stage_1']"))
+          .findElement(By.xpath(".."))
         val barrieredOps = webDriver.findElements(By.className("barrier-rdd")).iterator()
+        val id1 = barrieredOps.next().getDomProperty("innerHTML")
+        val id2 = barrieredOps.next().getDomProperty("innerHTML")
+        assert(!barrieredOps.hasNext())
 
-        while (barrieredOps.hasNext) {
-          val barrieredOpId = barrieredOps.next().getAttribute("innerHTML")
-          val foundInStage0 =
-            stage0.findElements(
-              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
-          assert(foundInStage0.size === 1)
-
-          val foundInStage1 =
-            stage1.findElements(
-              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
-          assert(foundInStage1.size === 0)
-        }
+        val prefix = "g[class='cluster barrier']#cluster_"
+        assert(stage0.findElements(By.cssSelector(s"${prefix}$id1")).size === 1)
+        assert(stage0.findElements(By.cssSelector(s"${prefix}$id2")).size === 1)
+        assert(stage1.findElements(By.cssSelector(s"${prefix}$id1")).size === 0)
+        assert(stage1.findElements(By.cssSelector(s"${prefix}$id2")).size === 1)
       }
     }
   }
 
   test("Search text for paged tables should not be saved") {
     withSpark(newSparkContext()) { sc =>
-      sc.parallelize(1 to 10).collect
+      sc.parallelize(1 to 10).collect()
 
       eventually(timeout(10.seconds), interval(1.seconds)) {
         val taskSearchBox = "$(\"input[aria-controls='active-tasks-table']\")"

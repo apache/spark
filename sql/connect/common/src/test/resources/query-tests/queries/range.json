@@ -1,0 +1,11 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "range": {
+    "start": "1",
+    "end": "10",
+    "step": "1",
+    "numPartitions": 2
+  }
+}

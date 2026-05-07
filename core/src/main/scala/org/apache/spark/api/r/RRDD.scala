@@ -18,10 +18,10 @@
 package org.apache.spark.api.r
 
 import java.io.{File, OutputStream}
-import java.net.Socket
+import java.nio.channels.{Channels, SocketChannel}
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark._
@@ -30,6 +30,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.SocketAuthServer
+import org.apache.spark.util.ArrayImplicits._
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
@@ -149,7 +150,7 @@ private[spark] object RRDD {
    * called from R.
    */
   def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    JavaRDD.fromRDD(jsc.sc.parallelize(arr, arr.length))
+    JavaRDD.fromRDD(jsc.sc.parallelize(arr.toImmutableArraySeq, arr.length))
   }
 
   /**
@@ -178,8 +179,8 @@ private[spark] class RParallelizeServer(sc: JavaSparkContext, parallelism: Int)
     extends SocketAuthServer[JavaRDD[Array[Byte]]](
       new RAuthHelper(SparkEnv.get.conf), "sparkr-parallelize-server") {
 
-  override def handleConnection(sock: Socket): JavaRDD[Array[Byte]] = {
-    val in = sock.getInputStream()
+  override def handleConnection(sock: SocketChannel): JavaRDD[Array[Byte]] = {
+    val in = Channels.newInputStream(sock)
     JavaRDD.readRDDFromInputStream(sc.sc, in, parallelism)
   }
 }

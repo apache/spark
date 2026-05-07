@@ -60,7 +60,8 @@ object AggregateEstimation {
         outputRows.min(childStats.rowCount.get)
       }
 
-      val aliasStats = EstimationUtils.getAliasStats(agg.expressions, childStats.attributeStats)
+      val aliasStats = EstimationUtils.getAliasStats(
+        agg.expressions, childStats.attributeStats, outputRows)
 
       val outputAttrStats = getOutputMap(
         AttributeMap(childStats.attributeStats.toSeq ++ aliasStats), agg.output)

@@ -26,10 +26,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
+import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -144,12 +147,13 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     // Find new files
     val newFiles = findNewFiles(validTime.milliseconds)
-    logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
+    logInfo(log"New files at time ${MDC(LogKeys.BATCH_TIMESTAMP, validTime)}:\n" +
+      log"${MDC(LogKeys.FILE_NAME, newFiles.mkString("\n"))}")
     batchTimeToSelectedFiles.synchronized {
       batchTimeToSelectedFiles += ((validTime, newFiles))
     }
     recentlySelectedFiles ++= newFiles
-    val rdds = Some(filesToRDD(newFiles))
+    val rdds = Some(filesToRDD(newFiles.toImmutableArraySeq))
     // Copy newFiles to immutable.List to prevent from being modified by the user
     val metadata = Map(
       "files" -> newFiles.toList,
@@ -166,8 +170,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
       batchTimeToSelectedFiles --= oldFiles.keys
       recentlySelectedFiles --= oldFiles.values.flatten
-      logInfo("Cleared " + oldFiles.size + " old files that were older than " +
-        (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
+      logInfo(log"Cleared ${MDC(LogKeys.COUNT, oldFiles.size)} old files that were older " +
+        log"than ${MDC(LogKeys.TIME, time - rememberDuration)}: " +
+        log"${MDC(LogKeys.FILES, oldFiles.keys.mkString(", "))}")
       logDebug("Cleared files are:\n" +
         oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
     }
@@ -202,19 +207,18 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logDebug(s"Finding new files took $timeTaken ms")
       if (timeTaken > slideDuration.milliseconds) {
-        logWarning(
-          s"Time taken to find new files $timeTaken exceeds the batch size. " +
-            "Consider increasing the batch size or reducing the number of " +
-            "files in the monitored directories."
+        logWarning(log"Time taken to find new files ${MDC(ELAPSED_TIME, timeTaken)} exceeds the " +
+          log"batch size. Consider increasing the batch size or reducing the number of files in " +
+          log"the monitored directories."
         )
       }
       newFiles
     } catch {
       case e: FileNotFoundException =>
-        logWarning(s"No directory to scan: $directoryPath: $e")
+        logWarning(log"No directory to scan: ${MDC(PATH, directoryPath)}:", e)
         Array.empty
       case e: Exception =>
-        logWarning(s"Error finding new files under $directoryPath", e)
+        logWarning(log"Error finding new files under ${MDC(PATH, directoryPath)}", e)
         reset()
         Array.empty
     }
@@ -271,7 +275,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       return false
     }
     logDebug(s"$pathStr accepted with mod time $modTime")
-    return true
+    true
   }
 
   /** Generate one RDD from an array of files */
@@ -287,9 +291,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
         case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
       }
       if (rdd.partitions.isEmpty) {
-        logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
-          "files that have been \"moved\" to the directory assigned to the file stream. " +
-          "Refer to the streaming programming guide for more details.")
+        logError(log"File ${MDC(PATH, file)} has no data in it. Spark Streaming can only ingest " +
+          log"""files that have been "moved" to the directory assigned to the file stream. """ +
+          log"Refer to the streaming programming guide for more details.")
       }
       rdd
     }
@@ -339,11 +343,11 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
         case (t, f) =>
           // Restore the metadata in both files and generatedRDDs
-          logInfo("Restoring files for time " + t + " - " +
-            f.mkString("[", ", ", "]") )
+          logInfo(log"Restoring files for time ${MDC(LogKeys.TIME, t)} - " +
+            log"${MDC(LogKeys.FILES, f.mkString("[", ", ", "]"))}")
           batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles += ((t, f)) }
           recentlySelectedFiles ++= f
-          generatedRDDs += ((t, filesToRDD(f)))
+          generatedRDDs += ((t, filesToRDD(f.toImmutableArraySeq)))
       }
     }
 

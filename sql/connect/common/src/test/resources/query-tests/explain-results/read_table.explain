@@ -1,0 +1,2 @@
+SubqueryAlias spark_catalog.tempdb.myTable
++- RelationV2[id#0L] spark_catalog.tempdb.myTable

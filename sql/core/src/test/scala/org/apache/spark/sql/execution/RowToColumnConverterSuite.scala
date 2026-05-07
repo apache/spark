@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, Generic
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 
 class RowToColumnConverterSuite extends SparkFunSuite {
   def convertRows(rows: Seq[InternalRow], schema: StructType): Seq[WritableColumnVector] = {
@@ -32,7 +33,7 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     for (row <- rows) {
       converter.convert(row, vectors)
     }
-    vectors
+    vectors.toImmutableArraySeq
   }
 
   test("integer column") {

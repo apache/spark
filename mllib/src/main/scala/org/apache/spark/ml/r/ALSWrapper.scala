@@ -94,7 +94,9 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
       val rMetadata = ("class" -> instance.getClass.getName) ~
         ("ratingCol" -> instance.ratingCol)
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      // Note that we should write single file. If there are more than one row
+      // it produces more partitions.
+      sparkSession.createDataFrame(Seq(Tuple1(rMetadataJson))).write.text(rMetadataPath)
 
       instance.alsModel.save(modelPath)
     }
@@ -103,11 +105,12 @@ private[r] object ALSWrapper extends MLReadable[ALSWrapper] {
   class ALSWrapperReader extends MLReader[ALSWrapper] {
 
     override def load(path: String): ALSWrapper = {
-      implicit val format = DefaultFormats
+      implicit val format: Formats = DefaultFormats
       val rMetadataPath = new Path(path, "rMetadata").toString
       val modelPath = new Path(path, "model").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath)
+        .first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val ratingCol = (rMetadata \ "ratingCol").extract[String]
       val alsModel = ALSModel.load(modelPath)

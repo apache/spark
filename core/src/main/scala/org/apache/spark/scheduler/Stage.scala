@@ -21,7 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
 /**
@@ -70,6 +70,27 @@ private[scheduler] abstract class Stage(
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
+  private[scheduler] def getNextAttemptId: Int = nextAttemptId
+
+  /**
+   * Whether checksum mismatches have been detected across different attempt of the stage, where
+   * checksum mismatches typically indicates that different stage attempts have produced different
+   * data.
+   */
+  private[scheduler] var isChecksumMismatched: Boolean = false
+
+  /**
+   * The maximum of task attempt id where checksum mismatches are detected.
+   */
+  private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
+
+  /**
+   * The max attempt id we should ignore results for this stage, indicating there are ancestor
+   * stages having been detected with checksum mismatches. This stage is probably also
+   * indeterminate, so we need to avoid completing the stage and the job with incorrect result
+   * by ignoring the task output from previous attempts which might consume inconsistent data
+   */
+  private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
 
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
@@ -95,6 +116,14 @@ private[scheduler] abstract class Stage(
     failedAttemptIds.clear()
   }
 
+  /** Mark the latest attempt as rollback */
+  private[scheduler] def markAsRollingBack(): Unit = {
+    // Only if the stage has been submitted
+    if (getNextAttemptId > 0) {
+      maxAttemptIdToIgnore = Some(latestInfo.attemptNumber())
+    }
+  }
+
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
   def makeNewStageAttempt(
       numPartitionsToCompute: Int,
@@ -105,6 +134,13 @@ private[scheduler] abstract class Stage(
       this, nextAttemptId, Some(numPartitionsToCompute), metrics, taskLocalityPreferences,
       resourceProfileId = resourceProfileId)
     nextAttemptId += 1
+  }
+
+  /** Forward the nextAttemptId if skipped and get visited for the first time. */
+  def increaseAttemptIdOnFirstSkip(): Unit = {
+    if (nextAttemptId == 0) {
+      nextAttemptId = 1
+    }
   }
 
   /** Returns the StageInfo for the most recent attempt for this stage. */
@@ -119,8 +155,4 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
-
-  def isIndeterminate: Boolean = {
-    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
-  }
 }

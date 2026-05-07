@@ -21,7 +21,6 @@ import java.io.{BufferedInputStream, InputStream}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.hdfs.DFSInputStream
 
@@ -29,6 +28,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventLogFileWriter.codecName
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /** The base class of reader which will read the information of event log file(s). */
@@ -51,7 +51,7 @@ abstract class EventLogFileReader(
       entryName: String): Unit = {
     Utils.tryWithResource(fileSystem.open(path, 1 * 1024 * 1024)) { inputStream =>
       zipStream.putNextEntry(new ZipEntry(entryName))
-      ByteStreams.copy(inputStream, zipStream)
+      inputStream.transferTo(zipStream)
       zipStream.closeEntry()
     }
   }
@@ -119,7 +119,9 @@ object EventLogFileReader extends Logging {
     if (isSingleEventLog(status)) {
       Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
     } else if (isRollingEventLogs(status)) {
-      if (fs.listStatus(status.getPath).exists(RollingEventLogFilesWriter.isEventLogFile)) {
+      val files = fs.listStatus(status.getPath)
+      if (files.exists(RollingEventLogFilesWriter.isEventLogFile) &&
+          files.exists(RollingEventLogFilesWriter.isAppStatusFile)) {
         Some(new RollingEventLogFilesFileReader(fs, status.getPath))
       } else {
         logDebug(s"Rolling event log directory have no event log file at ${status.getPath}")
@@ -218,7 +220,7 @@ private[history] class RollingEventLogFilesFileReader(
   import RollingEventLogFilesWriter._
 
   private lazy val files: Seq[FileStatus] = {
-    val ret = fs.listStatus(rootPath).toSeq
+    val ret = fs.listStatus(rootPath).toImmutableArraySeq
     require(ret.exists(isEventLogFile), "Log directory must contain at least one event log file!")
     require(ret.exists(isAppStatusFile), "Log directory must contain an appstatus file!")
     ret

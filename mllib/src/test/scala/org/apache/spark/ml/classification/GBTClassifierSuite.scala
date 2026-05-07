@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite.generateSVMInput
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.loss.LogLoss
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -58,13 +59,17 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    data = sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100), 2)
+    data = sc
+      .parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 10, 100)
+        .toImmutableArraySeq, 2)
       .map(_.asML)
     trainData =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120), 2)
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 120)
+          .toImmutableArraySeq, 2)
         .map(_.asML)
     validationData =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80), 2)
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 20, 80)
+          .toImmutableArraySeq, 2)
         .map(_.asML)
     binaryDataset = generateSVMInput(0.01, Array[Double](-1.5, 1.0), 1000, seed).toDF()
   }
@@ -101,6 +106,12 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(model.hasParent)
 
     MLTestingUtils.checkCopyAndUids(gbt, model)
+  }
+
+  test("GBTClassifier validate input dataset") {
+    testInvalidClassificationLabels(new GBTClassifier().fit(_), Some(2))
+    testInvalidWeights(new GBTClassifier().setWeightCol("weight").fit(_))
+    testInvalidVectors(new GBTClassifier().fit(_))
   }
 
   test("setThreshold, getThreshold") {
@@ -264,7 +275,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val data = TreeTests.getTwoTreesLeafData
     data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
-    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    val df = sc.parallelize(data.toImmutableArraySeq, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
       .collect()
       .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
@@ -302,36 +313,6 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.featureImportanceData(sc).toDF()
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
     gbt.fit(df)
-  }
-
-  test("extractLabeledPoints with bad data") {
-    def getTestData(labels: Seq[Double]): DataFrame = {
-      labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
-    }
-
-    val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
-    // Invalid datasets
-    val df1 = getTestData(Seq(0.0, -1.0, 1.0, 0.0))
-    withClue("Classifier should fail if label is negative") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df1)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
-    val df2 = getTestData(Seq(0.0, 0.1, 1.0, 0.0))
-    withClue("Classifier should fail if label is not an integer") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df2)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
-    val df3 = getTestData(Seq(0.0, 2.0, 1.0, 0.0))
-    withClue("Classifier should fail if label is >= 2") {
-      val e: SparkException = intercept[SparkException] {
-        gbt.fit(df3)
-      }
-      assert(e.getMessage.contains("currently only supports binary classification"))
-    }
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -393,13 +374,13 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxIter(3)
       .setLossType("logistic")
-    val model3 = gbt.fit(trainData.toDF)
+    val model3 = gbt.fit(trainData.toDF())
     val model1 = new GBTClassificationModel("gbt-cls-model-test1",
       model3.trees.take(1), model3.treeWeights.take(1), model3.numFeatures, model3.numClasses)
     val model2 = new GBTClassificationModel("gbt-cls-model-test2",
       model3.trees.take(2), model3.treeWeights.take(2), model3.numFeatures, model3.numClasses)
 
-    val evalArr = model3.evaluateEachIteration(validationData.toDF)
+    val evalArr = model3.evaluateEachIteration(validationData.toDF())
     val remappedValidationData = validationData.map {
       case LabeledPoint(label, features) =>
         Instance(label * 2 - 1, 1.0, features)

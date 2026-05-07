@@ -17,7 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -36,8 +41,21 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
 abstract class PartitionTransformExpression extends Expression with Unevaluable
   with UnaryLike[Expression] {
   override def nullable: Boolean = true
-}
 
+  override def eval(input: InternalRow): Any =
+    throw new SparkException(
+      errorClass = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
+      messageParameters = Map("expression" -> toSQLExpr(this)),
+      cause = null
+    )
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new SparkException(
+      errorClass = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
+      messageParameters = Map("expression" -> toSQLExpr(this)),
+      cause = null
+    )
+}
 /**
  * Expression for the v2 partition transform years.
  */
@@ -74,6 +92,17 @@ case class Hours(child: Expression) extends PartitionTransformExpression {
  * Expression for the v2 partition transform bucket.
  */
 case class Bucket(numBuckets: Literal, child: Expression) extends PartitionTransformExpression {
+  def this(numBuckets: Expression, child: Expression) =
+    this(Bucket.expressionToNumBuckets(numBuckets, child), child)
+
   override def dataType: DataType = IntegerType
   override protected def withNewChildInternal(newChild: Expression): Bucket = copy(child = newChild)
+}
+
+private[sql] object Bucket {
+  def expressionToNumBuckets(numBuckets: Expression, e: Expression): Literal = numBuckets match {
+    case l @ Literal(_, IntegerType) => l
+    case _ =>
+      throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
+  }
 }

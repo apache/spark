@@ -32,6 +32,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A feature transformer that merges multiple columns into a vector column.
@@ -86,16 +87,17 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Schema transformation.
     val schema = dataset.schema
 
-    val vectorCols = $(inputCols).filter { c =>
-      schema(c).dataType match {
-        case _: VectorUDT => true
-        case _ => false
-      }
+    val inputColsWithField = $(inputCols).map { c =>
+      c -> SchemaUtils.getSchemaField(schema, c)
     }
-    val vectorColsLengths = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
 
-    val featureAttributesMap = $(inputCols).map { c =>
-      val field = schema(c)
+    val vectorCols = inputColsWithField.collect {
+      case (c, field) if field.dataType.isInstanceOf[VectorUDT] => c
+    }
+    val vectorColsLengths = VectorAssembler.getLengths(
+      dataset, vectorCols.toImmutableArraySeq, $(handleInvalid))
+
+    val featureAttributesMap = inputColsWithField.map { case (c, field) =>
       field.dataType match {
         case DoubleType =>
           val attribute = Attribute.fromStructField(field)
@@ -111,7 +113,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _: VectorUDT =>
           val attributeGroup = AttributeGroup.fromStructField(field)
           if (attributeGroup.attributes.isDefined) {
-            attributeGroup.attributes.get.zipWithIndex.toSeq.map { case (attr, i) =>
+            attributeGroup.attributes.get.zipWithIndex.toImmutableArraySeq.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
@@ -142,15 +144,16 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val assembleFunc = udf { r: Row =>
       VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
-    val args = $(inputCols).map { c =>
-      schema(c).dataType match {
+    val args = inputColsWithField.map { case (c, field) =>
+      field.dataType match {
         case DoubleType => dataset(c)
         case _: VectorUDT => dataset(c)
         case _: NumericType | BooleanType => dataset(c).cast(DoubleType).as(s"${c}_double_$uid")
       }
     }
-
-    filteredDataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
+    import org.apache.spark.util.ArrayImplicits._
+    filteredDataset.select(col("*"),
+      assembleFunc(struct(args.toImmutableArraySeq: _*)).as($(outputCol), metadata))
   }
 
   @Since("1.4.0")
@@ -158,7 +161,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
     val incorrectColumns = inputColNames.flatMap { name =>
-      schema(name).dataType match {
+      SchemaUtils.getSchemaFieldType(schema, name) match {
         case _: NumericType | BooleanType => None
         case t if t.isInstanceOf[VectorUDT] => None
         case other => Some(s"Data type ${other.catalogString} of column $name is not supported.")
@@ -223,7 +226,8 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
       columns: Seq[String],
       handleInvalid: String): Map[String, Int] = {
     val groupSizes = columns.map { c =>
-      c -> AttributeGroup.fromStructField(dataset.schema(c)).size
+      val field = SchemaUtils.getSchemaField(dataset.schema, c)
+      c -> AttributeGroup.fromStructField(field).size
     }.toMap
     val missingColumns = groupSizes.filter(_._2 == -1).keys.toSeq
     val firstSizes = (missingColumns.nonEmpty, handleInvalid) match {
@@ -279,8 +283,8 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         featureIndex += vec.size
       case null =>
         if (keepInvalid) {
-          val length: Int = lengths(inputColumnIndex)
-          Array.range(0, length).foreach { i =>
+          val length = lengths(inputColumnIndex)
+          Iterator.range(0, length).foreach { i =>
             indices += featureIndex + i
             values += Double.NaN
           }
@@ -295,6 +299,10 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    Vectors.sparse(featureIndex, indices.result(), values.result()).compressed
+
+    val idxArray = indices.result()
+    val valArray = values.result()
+    Vectors.sparse(featureIndex, idxArray, valArray)
+      .compressedWithNNZ(idxArray.length)
   }
 }

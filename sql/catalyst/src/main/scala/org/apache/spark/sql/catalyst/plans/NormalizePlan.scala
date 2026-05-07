@@ -1,0 +1,314 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.plans
+
+import java.util.HashMap
+
+import org.apache.spark.sql.catalyst.analysis.NormalizeableRelation
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+
+/**
+ * Object that handles normalization of operators and expressions. Used when comparing plans.
+ */
+object NormalizePlan extends PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedExpressions = normalizeExpressions(plan)
+    val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
+    normalizePlan(withNormalizedExprIds)
+  }
+
+  /**
+   * Normalizes expressions in a plan, needed because of differences between fixed-point and
+   * single-pass resolver, due to the nature of bottom-up resolution. Before normalization,
+   * pre-process the plan by replacing all [[RuntimeReplaceable]] nodes with their replacements.
+   * Normalization includes:
+   * - Replacing [[SubqueryExpression]] plans with normalized versions.
+   * - Replacing [[CommonExpressionDef]] and [[CommonExpressionRef]] ids with 0 - needed because
+   *   these ids are different for every node.
+   * - Replacing [[ExpressionWithRandomSeed]] seeds with 0 - needed because these seeds are
+   *   randomly generated.
+   */
+  def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
+    val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
+    withNormalizedRuntimeReplaceable.transformAllExpressions {
+      case subqueryExpression: SubqueryExpression =>
+        val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
+        subqueryExpression.withNewPlan(normalizedPlan)
+      case commonExpressionDef: CommonExpressionDef =>
+        commonExpressionDef.copy(id = new CommonExpressionId(id = 0))
+      case commonExpressionRef: CommonExpressionRef =>
+        commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
+      case expressionWithRandomSeed: ExpressionWithRandomSeed =>
+        expressionWithRandomSeed.withNewSeed(0)
+    }
+  }
+
+  /**
+   * Normalize [[RuntimeReplaceable]] nodes by replacing them with their replacement expressions.
+   * This is necessary because fixed-point analyzer may produce non-deterministic results when
+   * resolving original expressions. For example, in a query like:
+   *
+   * {{{ SELECT assert_true(1) }}}
+   *
+   * Before resolution, we have [[UnresolvedFunction]] whose child is Literal(1). This child will
+   * first be converted to Cast(Literal(1), BooleanType) by type coercion. Because in this case
+   * [[Cast]] doesn't require timezone, the expression will be implicitly resolved. Because the
+   * child of initially unresolved function is resolved, the function can be converted to
+   * [[AssertTrue]], which is of type [[InheritAnalysisRules]]. However, because the only child of
+   * [[InheritAnalysisRules]] is the replacement expression, the original expression will be lost
+   * and timezone will never be applied. This causes inconsistencies, because fixed-point semantic
+   * is to ALWAYS apply timezone, regardless of whether the Cast actually needs it.
+   */
+  def normalizeRuntimeReplaceable(plan: LogicalPlan): LogicalPlan = ReplaceExpressions(plan)
+
+  /**
+   * Since attribute references are given globally unique ids during analysis,
+   * we must normalize them to check if two different queries are identical.
+   */
+  def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressions {
+      case s: ScalarSubquery =>
+        s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
+      case s: LateralSubquery =>
+        s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
+      case e: Exists =>
+        e.copy(plan = normalizeExprIds(e.plan), exprId = ExprId(0))
+      case l: ListQuery =>
+        l.copy(plan = normalizeExprIds(l.plan), exprId = ExprId(0))
+      case a: AttributeReference =>
+        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+      case OuterReference(a: AttributeReference) =>
+        OuterReference(AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0)))
+      case a: Alias =>
+        Alias(a.child, a.name)(exprId = ExprId(0))
+      case OuterReference(a: Alias) =>
+        OuterReference(Alias(a.child, a.name)(exprId = ExprId(0)))
+      case ae: AggregateExpression =>
+        ae.copy(resultId = ExprId(0))
+      case lv: NamedLambdaVariable =>
+        lv.copy(exprId = ExprId(0), value = null)
+      case udf: PythonUDF =>
+        udf.copy(resultId = ExprId(0))
+      case udaf: PythonUDAF =>
+        udaf.copy(resultId = ExprId(0))
+      case a: FunctionTableSubqueryArgumentExpression =>
+        a.copy(plan = normalizeExprIds(a.plan), exprId = ExprId(0))
+    }
+  }
+
+  /**
+   * Normalizes plans:
+   * - Filter the filter conditions that appear in a plan. For instance,
+   *   ((expr 1 && expr 2) && expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2)
+   *   etc., will all now be equivalent.
+   * - Sample the seed will replaced by 0L.
+   * - Join conditions will be resorted by hashCode.
+   * - CTERelationDef ids will be rewritten using a monitonically increasing counter from 0.
+   * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
+   *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
+   *   refs.
+   * - Normalizes inner [[Project]] and [[Aggregate]] nodes by sorting their output lists
+   *   alphabetically when they are descendants of another [[Project]] or [[Aggregate]], provided no
+   *   schema boundary ([[SubqueryAlias]], [[View]], [[CTERelationDef]]) or non-unary node boundary
+   *   intervenes.
+   */
+  def normalizePlan(plan: LogicalPlan): LogicalPlan = {
+    normalizeRecursive(plan, normalizeProjectList = false, new CteIdNormalizer())
+  }
+
+  /**
+   * Recursively normalizes the plan. The `normalizeProjectList` flag is propagated top-down: it
+   * starts as false. When a [[Project]] or [[Aggregate]] is encountered, the flag is set to true
+   * for children. The flag is reset to false at schema boundary nodes ([[SubqueryAlias]], [[View]],
+   * [[CTERelationDef]]) and at non-unary nodes (e.g. [[Join]], [[Union]], [[Intersect]],
+   * [[Except]]) where column position is semantically significant. Unary nodes like [[Sort]] and
+   * [[Filter]] pass the flag through unchanged.
+   *
+   * When the flag is true and we encounter a [[Project]] or [[Aggregate]], we normalize its output
+   * list order.
+   *
+   * Deduplication projects (tagged with [[ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION]])
+   * are removed and recursion continues with their child. This case must be handled before child
+   * processing because the deduplication project should pass the flag through unchanged, whereas a
+   * regular [[Project]] would set it to true.
+   *
+   * Children are recursed into before the current node is normalized (bottom-up processing order),
+   * except for deduplication projects which are removed top-down before child processing. This
+   * bottom-up ordering preserves CTE ID normalization. Plan expressions within the current node's
+   * expressions are normalized with the flag reset to false (independent scope).
+   */
+  private def normalizeRecursive(
+      plan: LogicalPlan,
+      normalizeProjectList: Boolean,
+      cteIdNormalizer: CteIdNormalizer): LogicalPlan = plan match {
+    case project: Project
+        if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
+      normalizeRecursive(project.child, normalizeProjectList, cteIdNormalizer)
+    case _ =>
+      val shouldNormalizeChildProjectList = plan match {
+        case _: Project | _: Aggregate => true
+        case _: SubqueryAlias | _: View | _: CTERelationDef => false
+        case _ if plan.children.length != 1 => false
+        case _ => normalizeProjectList
+      }
+
+      val withNormalizedChildren = plan.mapChildren { child =>
+        normalizeRecursive(child, shouldNormalizeChildProjectList, cteIdNormalizer)
+      }
+
+      val withNormalizedSubqueries =
+        withNormalizedChildren.transformExpressionsWithPruning(
+          _.containsPattern(PLAN_EXPRESSION)) {
+          case subqueryExpression: SubqueryExpression =>
+            subqueryExpression.withNewPlan(
+              normalizeRecursive(subqueryExpression.plan, normalizeProjectList = false,
+                cteIdNormalizer))
+        }
+
+      withNormalizedSubqueries match {
+        case Filter(condition: Expression, child: LogicalPlan) =>
+          Filter(
+            splitConjunctivePredicates(condition)
+              .map(rewriteBinaryComparison)
+              .sortBy(_.hashCode())
+              .reduce(And),
+            child
+          )
+        case sample: Sample =>
+          sample.copy(seed = sample.seed.map(_ => 0L))
+        case Join(left, right, joinType, condition, hint) if condition.isDefined =>
+          val newJoinType = joinType match {
+            case ExistenceJoin(a: Attribute) =>
+              val newAttr =
+                AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+              ExistenceJoin(newAttr)
+            case other => other
+          }
+
+          val newCondition =
+            splitConjunctivePredicates(condition.get)
+              .map(rewriteBinaryComparison)
+              .sortBy(_.hashCode())
+              .reduce(And)
+          Join(left, right, newJoinType, Some(newCondition), hint)
+        case project: Project if normalizeProjectList =>
+          normalizeProjectListOrder(project)
+        case aggregate: Aggregate if normalizeProjectList =>
+          normalizeAggregateListOrder(aggregate)
+        case c: KeepAnalyzedQuery => c.storeAnalyzedQuery()
+        case localRelation: LocalRelation if !localRelation.data.isEmpty =>
+          /**
+           * A substitute for the [[LocalRelation.data]]. [[GenericInternalRow]] is incomparable
+           * for maps, because [[ArrayBasedMapData]] doesn't define [[equals]].
+           */
+          val unsafeProjection = UnsafeProjection.create(localRelation.schema)
+          localRelation.copy(data = localRelation.data.map { row =>
+            unsafeProjection(row)
+          })
+        case cteRelationDef: CTERelationDef =>
+          cteIdNormalizer.normalizeDef(cteRelationDef)
+        case unionLoop: UnionLoop =>
+          cteIdNormalizer.normalizeUnionLoop(
+            unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
+          )
+        case cteRelationRef: CTERelationRef =>
+          cteIdNormalizer.normalizeRef(cteRelationRef)
+        case unionLoopRef: UnionLoopRef =>
+          cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
+        case normalizeableRelation: NormalizeableRelation =>
+          normalizeableRelation.normalize()
+        case other => other
+      }
+  }
+
+  /**
+   * Rewrite [[BinaryComparison]] operator to keep order. The following cases will be
+   * equivalent:
+   * 1. (a = b), (b = a);
+   * 2. (a <=> b), (b <=> a).
+   * 3. (a > b), (b < a)
+   */
+  private def rewriteBinaryComparison(condition: Expression): Expression = condition match {
+    case EqualTo(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualTo)
+    case EqualNullSafe(l, r) => Seq(l, r).sortBy(_.hashCode()).reduce(EqualNullSafe)
+    case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
+    case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+    case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
+    case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+    case _ => condition // Don't reorder.
+  }
+
+  private def normalizeProjectListOrder(project: Project): Project = {
+    project.copy(projectList = project.projectList.sortBy(_.name))
+  }
+
+  private def normalizeAggregateListOrder(aggregate: Aggregate): Aggregate = {
+    aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.sortBy(_.name))
+  }
+}
+
+/**
+ * Helper class used for normalization of CTE ids in the plan.
+ */
+class CteIdNormalizer {
+  private var cteIdCounter: Long = 0
+  private val oldToNewIdMapping = new HashMap[Long, Long]
+
+  def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
+    try {
+      if (oldToNewIdMapping.containsKey(cteRelationDef.id)) {
+        cteRelationDef.copy(id = oldToNewIdMapping.get(cteRelationDef.id))
+      } else {
+        oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
+        cteRelationDef.copy(id = cteIdCounter)
+      }
+    } finally {
+      cteIdCounter += 1
+    }
+  }
+
+  def normalizeRef(cteRelationRef: CTERelationRef): CTERelationRef = {
+    if (oldToNewIdMapping.containsKey(cteRelationRef.cteId)) {
+      cteRelationRef.copy(cteId = oldToNewIdMapping.get(cteRelationRef.cteId))
+    } else {
+      cteRelationRef
+    }
+  }
+
+  def normalizeUnionLoop(unionLoop: UnionLoop): UnionLoop = {
+    if (oldToNewIdMapping.containsKey(unionLoop.id)) {
+      unionLoop.copy(id = oldToNewIdMapping.get(unionLoop.id))
+    } else {
+      unionLoop
+    }
+  }
+
+  def normalizeUnionLoopRef(unionLoopRef: UnionLoopRef): UnionLoopRef = {
+    try {
+      oldToNewIdMapping.put(unionLoopRef.loopId, cteIdCounter)
+      unionLoopRef.copy(loopId = cteIdCounter)
+    } finally {
+      cteIdCounter += 1
+    }
+  }
+}

@@ -20,12 +20,12 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveUdfsJar}
 import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class HiveUDFDynamicLoadSuite extends QueryTest with TestHiveSingleton {
 
   case class UDFTestInformation(
       identifier: String,
@@ -51,7 +51,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udf.example.UDFExampleAdd2"),
           Array(
             AttributeReference("a", IntegerType, nullable = false)(),
-            AttributeReference("b", IntegerType, nullable = false)()))
+            AttributeReference("b", IntegerType, nullable = false)()).toImmutableArraySeq)
       }),
 
     // GenericUDF
@@ -67,7 +67,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveGenericUDF(
           "default.generic_udf_trim2",
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udf.example.GenericUDFTrim2"),
-          Array(AttributeReference("a", StringType, nullable = false)())
+          Array(AttributeReference("a", StringType, nullable = false)()).toImmutableArraySeq
         )
       }
     ),
@@ -89,7 +89,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveUDAFFunction(
           "default.generic_udaf_sum2",
           HiveFunctionWrapper("org.apache.hadoop.hive.ql.udf.generic.GenericUDAFSum2"),
-          Array(AttributeReference("a", IntegerType, nullable = false)())
+          Array(AttributeReference("a", IntegerType, nullable = false)()).toImmutableArraySeq
         )
       }
     ),
@@ -111,7 +111,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveUDAFFunction(
           "default.udaf_max2",
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax2"),
-          Array(AttributeReference("a", IntegerType, nullable = false)()),
+          Array(AttributeReference("a", IntegerType, nullable = false)()).toImmutableArraySeq,
           isUDAFBridgeRequired = true
         )
       }
@@ -133,20 +133,18 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
         HiveGenericUDTF(
           "default.udtf_count3",
           HiveFunctionWrapper("org.apache.hadoop.hive.contrib.udtf.example.GenericUDTFCount3"),
-          Array.empty[Expression]
+          Array.empty[Expression].toImmutableArraySeq
         )
       }
     )
-  )
+  ).toImmutableArraySeq
 
   udfTestInfos.foreach { udfInfo =>
-    // The test jars are built from below commit:
+    // The test jar is generated at runtime from Java sources originally from:
     // https://github.com/HeartSaVioR/hive/commit/12f3f036b6efd0299cd1d457c0c0a65e0fd7e5f2
-    // which contain new UDF classes to be dynamically loaded and tested via Spark.
 
     // This jar file should not be placed to the classpath.
-    val jarPath = "src/test/noclasspath/hive-test-udfs.jar"
-    val jarUrl = s"file://${System.getProperty("user.dir")}/$jarPath"
+    val jarUrl = s"file://${TestHiveUdfsJar.jar.getAbsolutePath}"
 
     test("Spark should be able to run Hive UDF using jar regardless of " +
       s"current thread context classloader (${udfInfo.identifier}") {
@@ -165,7 +163,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
           assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
           assert(Thread.currentThread().getContextClassLoader eq
-            spark.sqlContext.sharedState.jarClassLoader)
+            spark.sharedState.jarClassLoader)
 
           val udfExpr = udfInfo.fnCreateHiveUDFExpression()
           // force initializing - this is what we do in HiveSessionCatalog

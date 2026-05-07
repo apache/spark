@@ -49,6 +49,8 @@ desc formatted char_tbl1;
 create table char_part(c1 char(5), c2 char(2), v1 varchar(6), v2 varchar(2)) using parquet partitioned by (v2, c2);
 desc formatted char_part;
 
+alter table char_part change column c1 comment 'char comment';
+alter table char_part change column v1 comment 'varchar comment';
 alter table char_part add partition (v2='ke', c2='nt') location 'loc1';
 desc formatted char_part;
 
@@ -113,3 +115,12 @@ drop table char_tbl1;
 drop table char_tbl2;
 drop table char_tbl3;
 drop table char_tbl4;
+
+-- ascii value for Latin-1 Supplement characters
+select ascii('§'), ascii('÷'), ascii('×10');
+select chr(167), chr(247), chr(215);
+
+-- to_varchar is an alias for to_char
+SELECT to_varchar(78.12, '$99.99');
+SELECT to_varchar(111.11, '99.9');
+SELECT to_varchar(12454.8, '99,999.9S');

@@ -18,21 +18,23 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{Duration, LocalDateTime, Period}
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * End-to-end tests for approximate percentile aggregate function.
  */
-class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
+@SlowSQLTest
+class ApproximatePercentileQuerySuite extends SharedSparkSession {
   import testImplicits._
 
-  private val table = "percentile_test"
+  private val table = "percentile_approx"
 
   test("percentile_approx, single percentile value") {
     withTempView(table) {
@@ -318,5 +320,66 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
              |FROM $table""".stripMargin),
         Row(18, 17, 17, 17))
     }
+  }
+
+  test("SPARK-37138: Support Ansi Interval type in ApproximatePercentile") {
+    withTempView(table) {
+      Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
+        (Period.ofMonths(200), Duration.ofSeconds(200L)),
+        (Period.ofMonths(300), Duration.ofSeconds(300L)))
+        .toDF("col1", "col2").createOrReplaceTempView(table)
+        checkAnswer(
+          spark.sql(
+            s"""SELECT
+               |  percentile_approx(col1, 0.5),
+               |  SUM(null),
+               |  percentile_approx(col2, 0.5)
+               |FROM $table
+           """.stripMargin),
+          Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
+    }
+  }
+
+  test("SPARK-45079: NULL arguments of percentile_approx") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT percentile_approx(col, array(0.5, 0.4, 0.1), NULL)
+            |FROM VALUES (0), (1), (2), (10) AS tab(col);
+            |""".stripMargin).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "accuracy",
+        "sqlExpr" -> "\"percentile_approx(col, array(0.5, 0.4, 0.1), NULL)\""),
+      context = ExpectedContext(
+        "", "", 8, 57, "percentile_approx(col, array(0.5, 0.4, 0.1), NULL)"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT percentile_approx(col, NULL, 100)
+            |FROM VALUES (0), (1), (2), (10) AS tab(col);
+            |""".stripMargin).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map(
+        "exprName" -> "percentage",
+        "sqlExpr" -> "\"percentile_approx(col, NULL, 100)\""),
+      context = ExpectedContext(
+        "", "", 8, 40, "percentile_approx(col, NULL, 100)"))
+  }
+
+  test("SPARK-54750: percentile_approx returns NULL for certain decimal values") {
+    // Regression test: ROUND(PERCENTILE_APPROX(2150/1000.0, 0.95), 3) should return 2.15
+    checkAnswer(
+      spark.sql("SELECT ROUND(PERCENTILE_APPROX(2150 / 1000.0, 0.95), 3) as p95"),
+      Row(2.15)
+    )
+    checkAnswer(
+      spark.sql("SELECT ROUND(PERCENTILE_APPROX(2151 / 1000.0, 0.95), 3) as p95"),
+      Row(2.151)
+    )
   }
 }

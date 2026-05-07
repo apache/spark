@@ -1,0 +1,60 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,bytes:binary\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "hll_sketch_agg",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "bytes"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
+          }
+        }],
+        "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.functions$",
+              "methodName": "hll_sketch_agg",
+              "fileName": "functions.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+              "methodName": "~~trimmed~anonfun~~",
+              "fileName": "PlanGenerationTestSuite.scala"
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

@@ -25,10 +25,9 @@ import java.util.UUID;
 
 import scala.Tuple2$;
 
-import org.hamcrest.MatcherAssert;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -46,9 +45,7 @@ import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
@@ -90,10 +87,14 @@ public class UnsafeExternalSorterSuite {
   private final long pageSizeBytes = conf.getSizeAsBytes(
           package$.MODULE$.BUFFER_PAGESIZE().key(), "4m");
 
-  private final int spillThreshold =
+  private final int spillElementsThreshold =
     (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
 
-  @Before
+  private final long spillSizeThreshold =
+    (long) conf.get(package$.MODULE$.SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD());
+
+
+  @BeforeEach
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
@@ -127,7 +128,7 @@ public class UnsafeExternalSorterSuite {
       });
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     try {
       assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
@@ -139,8 +140,8 @@ public class UnsafeExternalSorterSuite {
 
   private void assertSpillFilesWereCleanedUp() {
     for (File spillFile : spillFilesCreated) {
-      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
-        spillFile.exists());
+      assertFalse(spillFile.exists(),
+        "Spill file " + spillFile.getPath() + " was not cleaned up");
     }
   }
 
@@ -166,7 +167,9 @@ public class UnsafeExternalSorterSuite {
       prefixComparator,
       /* initialSize */ 1024,
       pageSizeBytes,
-      spillThreshold,
+      spillElementsThreshold,
+      spillSizeThreshold,
+      /* spillMergeFactor */ -1,
       shouldUseRadixSort());
   }
 
@@ -225,7 +228,7 @@ public class UnsafeExternalSorterSuite {
 
     sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    MatcherAssert.assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    assertTrue(sorter.getSortTimeNanos() > prevSortTime);
     prevSortTime = sorter.getSortTimeNanos();
 
     sorter.spill();  // no sort needed
@@ -233,7 +236,7 @@ public class UnsafeExternalSorterSuite {
 
     sorter.insertRecord(null, 0, 0, 0, false);
     UnsafeSorterIterator iter = sorter.getSortedIterator();
-    MatcherAssert.assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    assertTrue(sorter.getSortTimeNanos() > prevSortTime);
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -252,7 +255,7 @@ public class UnsafeExternalSorterSuite {
     // The insertion of this record should trigger a spill:
     insertNumber(sorter, 0);
     // Ensure that spill files were created
-    MatcherAssert.assertThat(tempDir.listFiles().length, greaterThanOrEqualTo(1));
+    assertTrue(tempDir.listFiles().length >= 1);
     // Read back the sorted data:
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
@@ -456,7 +459,9 @@ public class UnsafeExternalSorterSuite {
       null,
       /* initialSize */ 1024,
       pageSizeBytes,
-      spillThreshold,
+      spillElementsThreshold,
+      spillSizeThreshold,
+      /* spillMergeFactor */ -1,
       shouldUseRadixSort());
     long[] record = new long[100];
     int recordSize = record.length * 8;
@@ -518,7 +523,9 @@ public class UnsafeExternalSorterSuite {
       prefixComparator,
       1024,
       pageSizeBytes,
-      spillThreshold,
+      spillElementsThreshold,
+      spillSizeThreshold,
+      /* spillMergeFactor */ -1,
       shouldUseRadixSort());
 
     // Peak memory should be monotonically increasing. More specifically, every time
@@ -587,7 +594,7 @@ public class UnsafeExternalSorterSuite {
     }
 
     // Check that spilling still succeeds when the task is starved for memory.
-    memoryManager.markconsequentOOM(Integer.MAX_VALUE);
+    memoryManager.markConsequentOOM(Integer.MAX_VALUE);
     sorter.spill();
     memoryManager.resetConsequentOOM();
 
@@ -605,9 +612,278 @@ public class UnsafeExternalSorterSuite {
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {
-      assert (iter.hasNext());
+      assertTrue(iter.hasNext());
       iter.loadNext();
-      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()), i);
     }
+  }
+
+  @Test
+  public void testBoundedMergeWithSmallMergeFactor() throws Exception {
+    // Set merge factor to 3 so bounded merge is triggered with just a few spills
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(3);
+
+    // Insert records and spill multiple times to create 6 spill files
+    for (int spill = 0; spill < 6; spill++) {
+      for (int i = spill * 10; i < (spill + 1) * 10; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    // Verify bounded merge was triggered with 1 intermediate round
+    // 6 spills, factor 3: round 1 merges [3,3] → 2 files, then final merge
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(1, sorter.getSpillMergeRounds());
+    verifyIntIterator(iter, 0, 60);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeDisabled() throws Exception {
+    // Set merge factor to -1 to disable bounded merge (legacy behavior)
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(-1);
+
+    for (int spill = 0; spill < 5; spill++) {
+      for (int i = spill * 5; i < (spill + 1) * 5; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(0, sorter.getSpillMergeRounds());
+    verifyIntIterator(iter, 0, 25);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeWithInMemoryData() throws Exception {
+    // Set merge factor to 2 to force multi-round merge
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    // Create 4 spill files
+    for (int spill = 0; spill < 4; spill++) {
+      for (int i = spill * 5; i < (spill + 1) * 5; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+    // Leave some data in memory (not spilled)
+    insertNumber(sorter, 20);
+    insertNumber(sorter, 21);
+    insertNumber(sorter, 22);
+
+    // 4 spills, factor 2: round 1 merges [2,2] → 2 files, then final merge
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(1, sorter.getSpillMergeRounds());
+    verifyIntIterator(iter, 0, 23);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeMergeFactor2StressTest() throws Exception {
+    // Merge factor 2 is the worst case — maximizes number of intermediate rounds
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    int numSpills = 8;
+    int recordsPerSpill = 10;
+    int totalRecords = numSpills * recordsPerSpill;
+
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int i = spill * recordsPerSpill; i < (spill + 1) * recordsPerSpill; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    // 8 spills, factor 2: round 1 [2,2,2,2]→4, round 2 [2,2]→2, then final
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(2, sorter.getSpillMergeRounds());
+    verifyIntIterator(iter, 0, totalRecords);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeOddSpillCountWithCarryForward() throws Exception {
+    // 7 spills with factor 2: exercises carry-forward of original file across rounds.
+    // Round 1: [S1,S2]->T1, [S3,S4]->T2, [S5,S6]->T3, [S7]->carry
+    // Round 2: [T1,T2]->T4, [T3,S7]->T5 (S7 is original, must not be deleted by merger)
+    // Final:   [T4,T5] -> sorted
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    int numSpills = 7;
+    int recordsPerSpill = 8;
+    int totalRecords = numSpills * recordsPerSpill;
+
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int i = spill * recordsPerSpill; i < (spill + 1) * recordsPerSpill; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    verifyIntIterator(iter, 0, totalRecords);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeSpillCountExactlyEqualsFactor() throws Exception {
+    // When spill count == merge factor, should use single-round path (not bounded merge)
+    // because the condition is spillWriters.size() > spillMergeFactor
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(5);
+
+    for (int spill = 0; spill < 5; spill++) {
+      for (int i = spill * 6; i < (spill + 1) * 6; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    // 5 spills == factor 5: single-round merge, no bounded merge triggered
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(0, sorter.getSpillMergeRounds());
+    verifyIntIterator(iter, 0, 30);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeMultipleIntermediateRounds() throws Exception {
+    // 20 spills with factor 3: exercises multiple intermediate rounds.
+    // Round 1: 20 -> 7 (6 groups of 3 + 1 group of 2)
+    // Round 2: 7 -> 3 (2 groups of 3 + 1 group of 1)
+    // Final:   3 -> sorted
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(3);
+
+    int numSpills = 20;
+    int recordsPerSpill = 5;
+    int totalRecords = numSpills * recordsPerSpill;
+
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int i = spill * recordsPerSpill; i < (spill + 1) * recordsPerSpill; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    // 20 spills, factor 3: round 1 → 7 files, round 2 → 3 files, then final
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertEquals(2, sorter.getSpillMergeRounds());
+    verifyIntIterator(iter, 0, totalRecords);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeSingleSpillWithBoundedMergeEnabled() throws Exception {
+    // Single spill file with bounded merge enabled — should use single-round path
+    // since 1 > 2 is false.
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    for (int i = 0; i < 10; i++) {
+      insertNumber(sorter, i);
+    }
+    sorter.spill();
+
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    verifyIntIterator(iter, 0, 10);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeWithInterleavedData() throws Exception {
+    // Each spill has data that interleaves with other spills' data.
+    // This verifies that intermediate merge actually sorts (not just concatenates).
+    // Spill 0: [0, 4, 8, 12, 16]  Spill 1: [1, 5, 9, 13, 17]
+    // Spill 2: [2, 6, 10, 14, 18] Spill 3: [3, 7, 11, 15, 19]
+    // With factor 2:
+    //   Round 1: merge(S0,S1)->[0,1,4,5,8,9,12,13,16,17], merge(S2,S3)->[2,3,6,7,...]
+    //   Final:   merge both -> [0,1,2,...,19]
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    int numSpills = 4;
+    int recordsPerSpill = 5;
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int j = 0; j < recordsPerSpill; j++) {
+        insertNumber(sorter, spill + j * numSpills);
+      }
+      sorter.spill();
+    }
+
+    int totalRecords = numSpills * recordsPerSpill;
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    verifyIntIterator(iter, 0, totalRecords);
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeWithDuplicateKeys() throws Exception {
+    // Multiple spills contain identical keys. Verifies that all duplicates are
+    // preserved through intermediate merge rounds and the full comparator chain
+    // (prefix + record) works correctly.
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    int numSpills = 4;
+    int valuesPerSpill = 5;
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int i = 0; i < valuesPerSpill; i++) {
+        insertNumber(sorter, i);
+      }
+      sorter.spill();
+    }
+
+    // All 20 records should come back, sorted with duplicates adjacent:
+    // [0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4]
+    int totalRecords = numSpills * valuesPerSpill;
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    for (int i = 0; i < totalRecords; i++) {
+      assertTrue(iter.hasNext());
+      iter.loadNext();
+      int expectedValue = i / numSpills;
+      assertEquals(expectedValue, iter.getKeyPrefix());
+      assertEquals(expectedValue,
+          Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    }
+    assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
   }
 }

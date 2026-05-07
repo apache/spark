@@ -217,17 +217,22 @@ private[json] trait TestJsonData {
 
   def floatingValueRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""{"a": 0.${"0" * 38}1, "b": 0.01}""" :: Nil))(Encoders.STRING)
+      s"""{"a": 0.${"0".repeat(38)}1, "b": 0.01}""" :: Nil))(Encoders.STRING)
 
   def bigIntegerRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil))(Encoders.STRING)
+      s"""{"a": 1${"0".repeat(38)}, "b": 92233720368547758070}""" :: Nil))(Encoders.STRING)
 
   def datesRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
       """{"date": "26/08/2015 18:00"}""" ::
       """{"date": "27/10/2014 18:30"}""" ::
       """{"date": "28/01/2016 20:00"}""" :: Nil))(Encoders.STRING)
+
+  def oldDatesRecord: Dataset[String] =
+    spark.createDataset(spark.sparkContext.parallelize(
+      """{"date": "01/01/1800 18:00Z"}""" ::
+      """{"date": "01/01/1885 18:30Z"}""":: Nil))(Encoders.STRING)
 
   lazy val singleRow: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize("""{"a":123}""" :: Nil))(Encoders.STRING)

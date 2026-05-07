@@ -1,5 +1,8 @@
-Forward Secure Auth Protocol
+Forward Secure Auth Protocol v2.0
 ==============================================
+
+Summary
+-------
 
 This file describes a forward secure authentication protocol which may be used by Spark. This
 protocol is essentially ephemeral Diffie-Hellman key exchange using Curve25519, referred to as
@@ -77,6 +80,7 @@ Now that the server has the client's ephemeral public key, it can generate its o
 keypair and compute a shared secret.
 
     sharedSecret = X25519.computeSharedSecret(clientPublicKey, serverKeyPair.privateKey())
+    derivedKey = HKDF(sharedSecret, salt=transcript, info="deriveKey")
 
 With the shared secret, the server will also generate two initialization vectors to be used for
 inbound and outbound streams. These IVs are not secret and will be bound to the preceding protocol
@@ -99,3 +103,14 @@ sessions. It would, however, allow impersonation of future sessions.
 In the event of a pre-shared key compromise, messages would still be confidential from a passive
 observer. Only active adversaries spoofing a session would be able to recover plaintext.
 
+Security Changes & Compatibility
+-------------
+
+The original version of this protocol, retroactively called v1.0, did not apply an HKDF to `sharedSecret` to derive
+a key (i.e. `derivedKey`) and was directly using the encoded X coordinate as key material. This is atypical and
+standard practice is to pass that shared coordinate through an HKDF. The latest version adds this additional
+HKDF to derive `derivedKey`.
+
+Consequently, Apache Spark instances using v1.0 of this protocol will not negotiate the same key as
+instances using v2.0 and will be **unable to send encrypted RPCs** across incompatible versions. For this reason, v1.0
+remains the default to preserve backward-compatibility.

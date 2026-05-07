@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types._
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
@@ -51,6 +51,28 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     assert(res1 == res2)
   }
 
+  test("write and get geography through UnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.setNullAt(0)
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getGeography(0) === null)
+    val geography = GeographyVal.fromBytes(Array[Byte](1, 2, 3))
+    rowWriter.write(1, geography)
+    assert(rowWriter.getRow.getGeography(1).getBytes sameElements geography.getBytes)
+  }
+
+  test("write and get geometry through UnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.setNullAt(0)
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getGeometry(0) === null)
+    val geometry = GeometryVal.fromBytes(Array[Byte](1, 2, 3))
+    rowWriter.write(1, geometry)
+    assert(rowWriter.getRow.getGeometry(1).getBytes sameElements geometry.getBytes)
+  }
+
   test("write and get calendar intervals through UnsafeRowWriter") {
     val rowWriter = new UnsafeRowWriter(2)
     rowWriter.resetRowWriter()
@@ -60,5 +82,16 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     val interval = new CalendarInterval(0, 1, 0)
     rowWriter.write(1, interval)
     assert(rowWriter.getRow.getInterval(1) === interval)
+  }
+
+  test("write and get variant through UnsafeRowWriter") {
+    val rowWriter = new UnsafeRowWriter(2)
+    rowWriter.resetRowWriter()
+    rowWriter.setNullAt(0)
+    assert(rowWriter.getRow.isNullAt(0))
+    assert(rowWriter.getRow.getVariant(0) === null)
+    val variant = new VariantVal(Array[Byte](1, 2, 3), Array[Byte](-1, -2, -3, -4))
+    rowWriter.write(1, variant)
+    assert(rowWriter.getRow.getVariant(1).debugString() == variant.debugString())
   }
 }

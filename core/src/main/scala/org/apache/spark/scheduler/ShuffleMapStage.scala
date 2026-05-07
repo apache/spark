@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.{MapOutputTrackerMaster, ShuffleDependency}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.util.CallSite
 
 /**
@@ -93,5 +93,21 @@ private[spark] class ShuffleMapStage(
     mapOutputTrackerMaster
       .findMissingPartitions(shuffleDep.shuffleId)
       .getOrElse(0 until numPartitions)
+  }
+
+  /**
+   * Whether the stage is statically declared as indeterminate based on the RDD's
+   * outputDeterministicLevel property. This is known at RDD creation time.
+   */
+  def isStaticallyIndeterminate: Boolean = {
+    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
+
+  /**
+   * Whether the stage has been detected as indeterminate at runtime via checksum mismatch.
+   * This means different stage attempts have produced different data for the same partition.
+   */
+  def isRuntimeIndeterminate: Boolean = {
+    !rdd.isReliablyCheckpointed && isChecksumMismatched
   }
 }

@@ -23,20 +23,43 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.TestUtils
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
-import org.apache.spark.sql.test.SQLTestUtils
 
 
-trait SQLMetricsTestUtils extends SQLTestUtils {
+trait SQLMetricsTestUtils extends QueryTest {
   import testImplicits._
+
+  protected val BOOLEAN_DOMAIN: Seq[Boolean] = Seq(true, false)
+
+  /**
+   * @return An `Expression` that increments a SQL metric and
+   *         evaluates to true. Can be used in a filter.
+   */
+  protected def incrementMetric(
+      metric: SQLMetric): Expression = {
+    udf { () =>
+      { metric += 1; true }
+    }.asNondeterministic().apply().expr
+  }
+
+  /** @return An `Expression` to increment multiple SQL metrics */
+  protected def incrementMetrics(metrics: Seq[SQLMetric]): Expression = {
+    metrics.map(incrementMetric(_)).fold(
+      org.apache.spark.sql.catalyst.expressions.Literal(true): Expression) {
+      (acc, incrMetric) =>
+        org.apache.spark.sql.catalyst.expressions.And(acc, incrMetric)
+    }
+  }
 
   protected def currentExecutionIds(): Set[Long] = {
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
-    statusStore.executionsList.map(_.executionId).toSet
+    statusStore.executionsList().map(_.executionId).toSet
   }
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
@@ -216,13 +239,13 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])],
       enableWholeStage: Boolean = false): Unit = {
-    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
-      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+    val expectedMetricsPredicates = expectedMetrics.transform { case (_, (nodeName, nodeMetrics)) =>
+      (nodeName, nodeMetrics.transform((_, expectedMetricValue) =>
         (actualMetricValue: Any) => {
           actualMetricValue.toString.matches(expectedMetricValue.toString)
-        }).toMap)
+        }))
     }
-    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates.toMap,
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates,
       enableWholeStage)
   }
 
@@ -311,8 +334,8 @@ object InputOutputMetricsHelper {
       res.shuffleRecordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
 
       var maxOutputRows = 0L
-      for (accum <- taskEnd.taskMetrics.externalAccums) {
-        val info = accum.toInfo(Some(accum.value), None)
+      taskEnd.taskMetrics.withExternalAccums(_.foreach { accum =>
+        val info = accum.toInfoUpdate
         if (info.name.toString.contains("number of output rows")) {
           info.update match {
             case Some(n: Number) =>
@@ -322,7 +345,7 @@ object InputOutputMetricsHelper {
             case _ => // Ignore.
           }
         }
-      }
+      })
       res.sumMaxOutputRows += maxOutputRows
     }
   }

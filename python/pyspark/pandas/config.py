@@ -18,14 +18,14 @@
 """
 Infrastructure of options for pandas-on-Spark.
 """
+
 from contextlib import contextmanager
 import json
-from typing import Any, Callable, Dict, Iterator, List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import Any, Callable, Dict, Iterator, List, Tuple, Union, Optional
 
 from pyspark._globals import _NoValue, _NoValueType
-
+from pyspark.sql.session import SparkSession
 from pyspark.pandas.utils import default_session
-
 
 __all__ = ["get_option", "set_option", "reset_option", "options", "option_context"]
 
@@ -51,7 +51,7 @@ class Option:
         default is str. It defines the expected types for this option. It is
         used with `isinstance` to validate the given value to this option.
     check_func: Tuple[Callable[[Any], bool], str], keyword-only argument
-        default is a function that always returns `True` with a empty string.
+        default is a function that always returns `True` with an empty string.
         It defines:
           - a function to check the given value to this option
           - the error message to show when this check is failed
@@ -88,7 +88,7 @@ class Option:
         doc: str,
         default: Any,
         types: Union[Tuple[type, ...], type] = str,
-        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, "")
+        check_func: Tuple[Callable[[Any], bool], str] = (lambda v: True, ""),
     ):
         self.key = key
         self.doc = doc
@@ -112,11 +112,12 @@ class Option:
 # Available options.
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
-#     copy & paste the results into show_options 'docs/source/user_guide/options.rst' as well.
+#     copy & paste the results into show_options
+#     'python/docs/source/tutorial/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
-_options = [
+_options: List[Option] = [
     Option(
         key="display.max_rows",
         doc=(
@@ -151,7 +152,7 @@ _options = [
         key="compute.shortcut_limit",
         doc=(
             "'compute.shortcut_limit' sets the limit for a shortcut. "
-            "It computes specified number of rows and use its schema. When the dataframe "
+            "It computes the specified number of rows and uses its schema. When the dataframe "
             "length is larger than this limit, pandas-on-Spark uses PySpark to compute."
         ),
         default=1000,
@@ -169,17 +170,54 @@ _options = [
             "can be expensive in general. So, if `compute.ops_on_diff_frames` variable is not "
             "True, that method throws an exception."
         ),
-        default=False,
+        default=True,
         types=bool,
     ),
     Option(
         key="compute.default_index_type",
         doc=("This sets the default index type: sequence, distributed and distributed-sequence."),
-        default="sequence",
+        default="distributed-sequence",
         types=str,
         check_func=(
             lambda v: v in ("sequence", "distributed", "distributed-sequence"),
             "Index type should be one of 'sequence', 'distributed', 'distributed-sequence'.",
+        ),
+    ),
+    Option(
+        key="compute.default_index_cache",
+        doc=(
+            "This sets the default storage level for temporary RDDs cached in "
+            "distributed-sequence indexing: 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
+            "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
+            "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'."
+        ),
+        default="MEMORY_AND_DISK_SER",
+        types=str,
+        check_func=(
+            lambda v: v
+            in (
+                "NONE",
+                "DISK_ONLY",
+                "DISK_ONLY_2",
+                "DISK_ONLY_3",
+                "MEMORY_ONLY",
+                "MEMORY_ONLY_2",
+                "MEMORY_ONLY_SER",
+                "MEMORY_ONLY_SER_2",
+                "MEMORY_AND_DISK",
+                "MEMORY_AND_DISK_2",
+                "MEMORY_AND_DISK_SER",
+                "MEMORY_AND_DISK_SER_2",
+                "OFF_HEAP",
+                "LOCAL_CHECKPOINT",
+            ),
+            "Index type should be one of 'NONE', 'DISK_ONLY', 'DISK_ONLY_2', "
+            "'DISK_ONLY_3', 'MEMORY_ONLY', 'MEMORY_ONLY_2', 'MEMORY_ONLY_SER', "
+            "'MEMORY_ONLY_SER_2', 'MEMORY_AND_DISK', 'MEMORY_AND_DISK_2', "
+            "'MEMORY_AND_DISK_SER', 'MEMORY_AND_DISK_SER_2', 'OFF_HEAP', "
+            "'LOCAL_CHECKPOINT'.",
         ),
     ),
     Option(
@@ -195,6 +233,64 @@ _options = [
         types=bool,
     ),
     Option(
+        key="compute.eager_check",
+        doc=(
+            "'compute.eager_check' sets whether or not to launch some Spark jobs just for the sake "
+            "of validation. If 'compute.eager_check' is set to True, pandas-on-Spark performs the "
+            "validation beforehand, but it will cause a performance overhead. Otherwise, "
+            "pandas-on-Spark skip the validation and will be slightly different from pandas. "
+            "Affected APIs: `Series.dot`, `Series.asof`, `Series.compare`, "
+            "`FractionalExtensionOps.astype`, `IntegralExtensionOps.astype`, "
+            "`FractionalOps.astype`, `DecimalOps.astype`, `skipna of statistical functions`."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
+        key="compute.isin_limit",
+        doc=(
+            "'compute.isin_limit' sets the limit for filtering by 'Column.isin(list)'. "
+            "If the length of the 'list' is above the limit, broadcast join is used instead "
+            "for better performance."
+        ),
+        default=80,
+        types=int,
+        check_func=(
+            lambda v: v >= 0,
+            "'compute.isin_limit' should be greater than or equal to 0.",
+        ),
+    ),
+    Option(
+        key="compute.pandas_fallback",
+        doc=(
+            "'compute.pandas_fallback' sets whether or not to fallback automatically "
+            "to Pandas' implementation."
+        ),
+        default=False,
+        types=bool,
+    ),
+    Option(
+        key="compute.fail_on_ansi_mode",
+        doc=(
+            "'compute.fail_on_ansi_mode' sets whether or not work with ANSI mode. "
+            "If True, pandas API on Spark raises an exception if the underlying Spark is "
+            "working with ANSI mode enabled and the option 'compute.ansi_mode_support' is False."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
+        key="compute.ansi_mode_support",
+        doc=(
+            "'compute.ansi_mode_support' sets whether or not to support the ANSI mode of "
+            "the underlying Spark. "
+            "If False, pandas API on Spark may hit unexpected results or errors. "
+            "The default is False."
+        ),
+        default=True,
+        types=bool,
+    ),
+    Option(
         key="plotting.max_rows",
         doc=(
             "'plotting.max_rows' sets the visual limit on top-n-based plots such as `plot.bar` "
@@ -204,7 +300,7 @@ _options = [
         default=1000,
         types=int,
         check_func=(
-            lambda v: v is v >= 0,
+            lambda v: v >= 0,
             "'plotting.max_rows' should be greater than or equal to 0.",
         ),
     ),
@@ -213,7 +309,8 @@ _options = [
         doc=(
             "'plotting.sample_ratio' sets the proportion of data that will be plotted for sample-"
             "based plots such as `plot.line` and `plot.area`. "
-            "This option defaults to 'plotting.max_rows' option."
+            "If not set, it is derived from 'plotting.max_rows', by calculating the ratio of "
+            "'plotting.max_rows' to the total data size."
         ),
         default=None,
         types=(float, type(None)),
@@ -232,9 +329,9 @@ _options = [
         default="plotly",
         types=str,
     ),
-]  # type: List[Option]
+]
 
-_options_dict = dict(zip((option.key for option in _options), _options))  # type: Dict[str, Option]
+_options_dict: Dict[str, Option] = dict(zip((option.key for option in _options), _options))
 
 _key_format = "pandas_on_Spark.{}".format
 
@@ -262,21 +359,26 @@ def show_options() -> None:
     import textwrap
 
     header = ["Option", "Default", "Description"]
-    row_format = "{:<31} {:<14} {:<53}"
+    row_format = "{:<31} {:<23} {:<53}"
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
     print(row_format.format(*header))
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
     for option in _options:
         doc = textwrap.fill(option.doc, 53)
-        formatted = "".join([line + "\n" + (" " * 47) for line in doc.split("\n")]).rstrip()
+        formatted = "".join([line + "\n" + (" " * 56) for line in doc.split("\n")]).rstrip()
         print(row_format.format(option.key, repr(option.default), formatted))
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
-def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
+def get_option(
+    key: str,
+    default: Union[Any, _NoValueType] = _NoValue,
+    *,
+    spark_session: Optional[SparkSession] = None,
+) -> Any:
     """
     Retrieves the value of the specified option.
 
@@ -286,6 +388,9 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
         The key which should match a single option.
     default : object
         The default value if the option is not set yet. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to get the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -299,11 +404,12 @@ def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:
     if default is _NoValue:
         default = _options_dict[key].default
     _options_dict[key].validate(default)
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
-    return json.loads(default_session().conf.get(_key_format(key), default=json.dumps(default)))
+    return json.loads(spark_session.conf.get(_key_format(key), default=json.dumps(default)))
 
 
-def set_option(key: str, value: Any) -> None:
+def set_option(key: str, value: Any, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Sets the value of the specified option.
 
@@ -313,6 +419,9 @@ def set_option(key: str, value: Any) -> None:
         The key which should match a single option.
     value : object
         New value of option. The value should be JSON serializable.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to set the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
@@ -320,27 +429,32 @@ def set_option(key: str, value: Any) -> None:
     """
     _check_option(key)
     _options_dict[key].validate(value)
+    spark_session = spark_session or default_session(check_ansi_mode=False)
 
-    default_session().conf.set(_key_format(key), json.dumps(value))
+    spark_session.conf.set(_key_format(key), json.dumps(value))
 
 
-def reset_option(key: str) -> None:
+def reset_option(key: str, *, spark_session: Optional[SparkSession] = None) -> None:
     """
     Reset one option to their default value.
 
-    Pass "all" as argument to reset all options.
+    Pass "all" as an argument to reset all options.
 
     Parameters
     ----------
     key : str
         If specified only option will be reset.
+    spark_session : :class:`SparkSession`, optional
+        The explicit :class:`SparkSession` object to reset the option.
+        If not specified, the default session will be used.
 
     Returns
     -------
     None
     """
     _check_option(key)
-    default_session().conf.unset(_key_format(key))
+    spark_session = spark_session or default_session(check_ansi_mode=False)
+    spark_session.conf.unset(_key_format(key))
 
 
 @contextmanager
@@ -348,7 +462,7 @@ def option_context(*args: Any) -> Iterator[None]:
     """
     Context manager to temporarily set options in the `with` statement context.
 
-    You need to invoke as ``option_context(pat, val, [(pat, val), ...])``.
+    You need to invoke ``option_context(pat, val, [(pat, val), ...])``.
 
     Examples
     --------
@@ -394,9 +508,7 @@ class DictWrapper:
             prefix += "."
         canonical_key = prefix + key
 
-        candidates = [
-            k for k in d.keys() if all(x in k.split(".") for x in canonical_key.split("."))
-        ]
+        candidates = [k for k in d if all(x in k.split(".") for x in canonical_key.split("."))]
         if len(candidates) == 1 and candidates[0] == canonical_key:
             set_option(canonical_key, val)
         else:
@@ -413,9 +525,7 @@ class DictWrapper:
             prefix += "."
         canonical_key = prefix + key
 
-        candidates = [
-            k for k in d.keys() if all(x in k.split(".") for x in canonical_key.split("."))
-        ]
+        candidates = [k for k in d if all(x in k.split(".") for x in canonical_key.split("."))]
         if len(candidates) == 1 and candidates[0] == canonical_key:
             return get_option(canonical_key)
         elif len(candidates) == 0:
@@ -435,7 +545,7 @@ class DictWrapper:
             candidates = d.keys()
             offset = 0
         else:
-            candidates = [k for k in d.keys() if all(x in k.split(".") for x in prefix.split("."))]
+            candidates = [k for k in d if all(x in k.split(".") for x in prefix.split("."))]
             offset = len(prefix) + 1  # prefix (e.g. "compute.") to trim.
         return [c[offset:] for c in candidates]
 
@@ -457,7 +567,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.config tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.config,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

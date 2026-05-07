@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.sources
 import java.util
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -28,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -49,7 +48,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
   override def schema(): StructType = StructType(Nil)
 
   override def capabilities(): util.Set[TableCapability] = {
-    Set(TableCapability.STREAMING_WRITE).asJava
+    util.EnumSet.of(TableCapability.STREAMING_WRITE)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -144,6 +143,8 @@ class MemoryStreamingWrite(
     MemoryWriterFactory(schema)
   }
 
+  override def useCommitCoordinator(): Boolean = false
+
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
@@ -178,7 +179,7 @@ class MemoryDataWriter(partition: Int, schema: StructType)
 
   private val data = mutable.Buffer[Row]()
 
-  private val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
+  private val fromRow = ExpressionEncoder(schema).resolveAndBind().createDeserializer()
 
   override def write(row: InternalRow): Unit = {
     data.append(fromRow(row))

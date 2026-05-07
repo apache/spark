@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 
 
-class PartitionBatchPruningSuite extends SharedSparkSession {
+class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
-  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE)
+  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE.key)
   private lazy val originalInMemoryPartitionPruning =
-    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING)
+    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING.key)
   private val testArrayData = (1 to 100).map { key =>
     Tuple1(Array.fill(key)(key))
   }
@@ -180,7 +181,7 @@ class PartitionBatchPruningSuite extends SharedSparkSession {
     val result = df.collect().map(_(0)).toArray
     assert(result.length === 1)
 
-    val (readPartitions, readBatches) = df.queryExecution.executedPlan.collect {
+    val (readPartitions, readBatches) = collect(df.queryExecution.executedPlan) {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
     assert(readPartitions === 5)
@@ -201,7 +202,7 @@ class PartitionBatchPruningSuite extends SharedSparkSession {
         df.collect().map(_(0)).toArray
       }
 
-      val (readPartitions, readBatches) = df.queryExecution.executedPlan.collect {
+      val (readPartitions, readBatches) = collect(df.queryExecution.executedPlan) {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
 

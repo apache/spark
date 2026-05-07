@@ -43,62 +43,73 @@ public final class Platform {
 
   public static final int DOUBLE_ARRAY_OFFSET;
 
+  // Field offset for java.nio.Buffer.address — used to read the native memory address
+  // of a DirectByteBuffer without going through sun.nio.ch.DirectBuffer.
+  private static final long DIRECT_BUFFER_ADDRESS_OFFSET;
+
   private static final boolean unaligned;
-
-  // Access fields and constructors once and store them, for performance:
-
-  private static final Constructor<?> DBB_CONSTRUCTOR;
-  private static final Field DBB_CLEANER_FIELD;
-  static {
-    try {
-      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
-      constructor.setAccessible(true);
-      Field cleanerField = cls.getDeclaredField("cleaner");
-      cleanerField.setAccessible(true);
-      DBB_CONSTRUCTOR = constructor;
-      DBB_CLEANER_FIELD = cleanerField;
-    } catch (ClassNotFoundException | NoSuchMethodException | NoSuchFieldException e) {
-      throw new IllegalStateException(e);
-    }
-  }
 
   // Split java.version on non-digit chars:
   private static final int majorVersion =
     Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
 
+  // Access fields and constructors once and store them, for performance:
+  private static final Constructor<?> DBB_CONSTRUCTOR;
+  private static final Field DBB_CLEANER_FIELD;
   private static final Method CLEANER_CREATE_METHOD;
-  static {
-    // The implementation of Cleaner changed from JDK 8 to 9
-    String cleanerClassName;
-    if (majorVersion < 9) {
-      cleanerClassName = "sun.misc.Cleaner";
-    } else {
-      cleanerClassName = "jdk.internal.ref.Cleaner";
-    }
-    try {
-      Class<?> cleanerClass = Class.forName(cleanerClassName);
-      Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
-      // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
-      // unfortunately, unless the user has allowed access with something like
-      // --add-opens java.base/java.lang=ALL-UNNAMED  If not, we can't really use the Cleaner
-      // hack below. It doesn't break, just means the user might run into the default JVM limit
-      // on off-heap memory and increase it or set the flag above. This tests whether it's
-      // available:
-      try {
-        createMethod.invoke(null, null, null);
-      } catch (IllegalAccessException e) {
-        // Don't throw an exception, but can't log here?
-        createMethod = null;
-      } catch (InvocationTargetException ite) {
-        // shouldn't happen; report it
-        throw new IllegalStateException(ite);
-      }
-      CLEANER_CREATE_METHOD = createMethod;
-    } catch (ClassNotFoundException | NoSuchMethodException e) {
-      throw new IllegalStateException(e);
-    }
 
+  static {
+    // At the end of this block, CLEANER_CREATE_METHOD should be non-null iff it's possible to use
+    // reflection to invoke it, which is not necessarily possible by default in Java 9+.
+    // Code below can test for null to see whether to use it.
+
+    try {
+      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor<?> constructor = (majorVersion < 21) ?
+        cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE) :
+        cls.getDeclaredConstructor(Long.TYPE, Long.TYPE);
+      Field cleanerField = cls.getDeclaredField("cleaner");
+      if (!constructor.trySetAccessible()) {
+        constructor = null;
+      }
+      if (!cleanerField.trySetAccessible()) {
+        cleanerField = null;
+      }
+      // Have to set these values no matter what:
+      DBB_CONSTRUCTOR = constructor;
+      DBB_CLEANER_FIELD = cleanerField;
+
+      // no point continuing if the above failed:
+      if (DBB_CONSTRUCTOR != null && DBB_CLEANER_FIELD != null) {
+        Class<?> cleanerClass = Class.forName("jdk.internal.ref.Cleaner");
+        Method createMethod = cleanerClass.getMethod("create", Object.class, Runnable.class);
+        // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9+,
+        // unfortunately, unless the user has allowed access with something like
+        // --add-opens java.base/jdk.internal.ref=ALL-UNNAMED  If not, we can't use the Cleaner
+        // hack below. It doesn't break, just means the user might run into the default JVM limit
+        // on off-heap memory and increase it or set the flag above. This tests whether it's
+        // available:
+        try {
+          createMethod.invoke(null, null, null);
+        } catch (IllegalAccessException e) {
+          // Don't throw an exception, but can't log here?
+          createMethod = null;
+        }
+        CLEANER_CREATE_METHOD = createMethod;
+      } else {
+        CLEANER_CREATE_METHOD = null;
+      }
+    } catch (ClassNotFoundException | NoSuchMethodException | NoSuchFieldException e) {
+      // These are all fatal in any Java version - rethrow (have to wrap as this is a static block)
+      throw new IllegalStateException(e);
+    } catch (InvocationTargetException ite) {
+      throw new IllegalStateException(ite.getCause());
+    }
+  }
+
+  // Visible for testing
+  public static boolean cleanerCreateMethodIsDefined() {
+    return CLEANER_CREATE_METHOD != null;
   }
 
   /**
@@ -223,6 +234,14 @@ public final class Platform {
     throw new IllegalStateException("unreachable");
   }
 
+  /**
+   * Returns the native memory address of a direct {@link ByteBuffer}.
+   * The buffer must be direct; passing a heap buffer produces an undefined result.
+   */
+  public static long getDirectBufferAddress(ByteBuffer buffer) {
+    return _UNSAFE.getLong(buffer, DIRECT_BUFFER_ADDRESS_OFFSET);
+  }
+
   public static void setMemory(Object object, long offset, long size, byte value) {
     _UNSAFE.setMemory(object, offset, size, value);
   }
@@ -289,6 +308,12 @@ public final class Platform {
       LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
+      try {
+        DIRECT_BUFFER_ADDRESS_OFFSET =
+          _UNSAFE.objectFieldOffset(java.nio.Buffer.class.getDeclaredField("address"));
+      } catch (NoSuchFieldException e) {
+        throw new IllegalStateException(e);
+      }
     } else {
       BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
@@ -297,10 +322,11 @@ public final class Platform {
       LONG_ARRAY_OFFSET = 0;
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
+      DIRECT_BUFFER_ADDRESS_OFFSET = 0;
     }
   }
 
-  // This requires `majorVersion` and `_UNSAFE`.
+  // This requires `_UNSAFE`.
   static {
     boolean _unaligned;
     String arch = System.getProperty("os.arch", "");
@@ -312,10 +338,8 @@ public final class Platform {
       try {
         Class<?> bitsClass =
           Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-        if (_UNSAFE != null && majorVersion >= 9) {
-          // Java 9/10 and 11/12 have different field names.
-          Field unalignedField =
-            bitsClass.getDeclaredField(majorVersion >= 11 ? "UNALIGNED" : "unaligned");
+        if (_UNSAFE != null) {
+          Field unalignedField = bitsClass.getDeclaredField("UNALIGNED");
           _unaligned = _UNSAFE.getBoolean(
             _UNSAFE.staticFieldBase(unalignedField), _UNSAFE.staticFieldOffset(unalignedField));
         } else {

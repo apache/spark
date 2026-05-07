@@ -17,15 +17,17 @@
 
 package org.apache.spark.status.api.v1.sql
 
-import java.util.Date
-import javax.ws.rs._
-import javax.ws.rs.core.MediaType
+import java.util.{Date, HashMap}
 
 import scala.util.{Failure, Success, Try}
+
+import jakarta.ws.rs._
+import jakarta.ws.rs.core.{Context, MediaType, UriInfo}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphNode, SQLAppStatusStore, SQLExecutionUIData}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
+import org.apache.spark.ui.UIUtils
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class SqlResource extends BaseAppResource {
@@ -37,10 +39,15 @@ private[v1] class SqlResource extends BaseAppResource {
       @DefaultValue("true") @QueryParam("details") details: Boolean,
       @DefaultValue("true") @QueryParam("planDescription") planDescription: Boolean,
       @DefaultValue("0") @QueryParam("offset") offset: Int,
-      @DefaultValue("20") @QueryParam("length") length: Int): Seq[ExecutionData] = {
+      @DefaultValue("-1") @QueryParam("length") length: Int): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      sqlStore.executionsList(offset, length).map { exec =>
+      val execs = if (length <= 0) {
+        sqlStore.executionsList()
+      } else {
+        sqlStore.executionsList(offset, length)
+      }
+      execs.map { exec =>
         val graph = sqlStore.planGraph(exec.executionId)
         prepareExecutionData(exec, graph, details, planDescription)
       }
@@ -56,12 +63,125 @@ private[v1] class SqlResource extends BaseAppResource {
       planDescription: Boolean): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      val graph = sqlStore.planGraph(execId)
       sqlStore
         .execution(execId)
-        .map(prepareExecutionData(_, graph, details, planDescription))
+        .map(prepareExecutionData(_, sqlStore.planGraph(execId), details, planDescription))
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
+  }
+
+  /**
+   * Server-side DataTables endpoint for SQL executions listing.
+   * Accepts DataTables server-side parameters (start, length, order, search)
+   * and returns paginated results with recordsTotal/recordsFiltered counts.
+   */
+  @GET
+  @Path("sqlTable")
+  def sqlTable(@Context uriInfo: UriInfo): HashMap[String, Object] = {
+    withUI { ui =>
+      val sqlStore = new SQLAppStatusStore(ui.store.store)
+      val uriParams = UIUtils.decodeURLParameter(uriInfo.getQueryParameters(true))
+
+      // Echo draw counter to prevent stale responses
+      val draw = Option(uriParams.getFirst("draw")).map(_.toInt).getOrElse(0)
+
+      val totalRecords = sqlStore.executionsCount()
+
+      // Search and status filter
+      val searchValue = Option(uriParams.getFirst("search[value]"))
+        .filter(_.nonEmpty)
+      val statusFilter = Option(uriParams.getFirst("status"))
+        .filter(_.nonEmpty)
+      val needsFilter = searchValue.isDefined || statusFilter.isDefined
+
+      val filteredExecs = if (needsFilter) {
+        // When filtering, we must load all and filter in memory
+        val allExecs = sqlStore.executionsList()
+        allExecs.filter { exec =>
+          val matchesSearch = searchValue.forall { search =>
+            val lower = search.toLowerCase(java.util.Locale.ROOT)
+            exec.description.toLowerCase(java.util.Locale.ROOT).contains(lower) ||
+              exec.executionStatus.toLowerCase(java.util.Locale.ROOT).contains(lower) ||
+              exec.executionId.toString.contains(lower)
+          }
+          val matchesStatus = statusFilter.forall { status =>
+            exec.executionStatus.equalsIgnoreCase(status)
+          }
+          matchesSearch && matchesStatus
+        }
+      } else {
+        // No filter — will use KVStore pagination below
+        Seq.empty
+      }
+      val filteredRecords = if (needsFilter) filteredExecs.size else totalRecords
+
+      // Sort
+      val sortCol = Option(uriParams.getFirst("order[0][column]"))
+        .flatMap(c => Option(uriParams.getFirst(s"columns[$c][name]")))
+        .getOrElse("id")
+      val sortDir = Option(uriParams.getFirst("order[0][dir]")).getOrElse("desc")
+
+      // Paginate
+      val start = Option(uriParams.getFirst("start")).map(_.toInt).getOrElse(0)
+      val length = Option(uriParams.getFirst("length")).map(_.toInt).getOrElse(20)
+
+      val page = if (needsFilter) {
+        // Filter/search: sort and paginate in memory
+        val sorted = sortExecs(filteredExecs, sortCol, sortDir)
+        if (length > 0) sorted.slice(start, start + length) else sorted
+      } else {
+        // No filter: use KVStore-level pagination for efficiency
+        // KVStore returns in insertion order; sort in memory for the page
+        val execs = sqlStore.executionsList()
+        val sorted = sortExecs(execs, sortCol, sortDir)
+        if (length > 0) sorted.slice(start, start + length) else sorted
+      }
+
+      // Convert to Java-compatible row data
+      val aaData = page.map(execToRow)
+
+      val ret = new HashMap[String, Object]()
+      ret.put("draw", Integer.valueOf(draw))
+      ret.put("aaData", aaData)
+      ret.put("recordsTotal", java.lang.Long.valueOf(filteredRecords))
+      ret.put("recordsFiltered", java.lang.Long.valueOf(filteredRecords))
+      ret
+    }
+  }
+
+  private def sortExecs(
+      execs: Seq[SQLExecutionUIData],
+      sortCol: String,
+      sortDir: String): Seq[SQLExecutionUIData] = {
+    val sorted = sortCol match {
+      case "id" => execs.sortBy(_.executionId)
+      case "status" => execs.sortBy(_.executionStatus)
+      case "description" => execs.sortBy(_.description)
+      case "submissionTime" => execs.sortBy(_.submissionTime)
+      case "duration" =>
+        execs.sortBy(e =>
+          e.completionTime.getOrElse(new Date()).getTime - e.submissionTime)
+      case _ => execs.sortBy(_.executionId)
+    }
+    if (sortDir == "asc") sorted else sorted.reverse
+  }
+
+  private def execToRow(exec: SQLExecutionUIData): java.util.LinkedHashMap[String, Object] = {
+    val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
+    val jobIds = exec.jobs.collect {
+      case (id, JobExecutionStatus.SUCCEEDED) => id
+    }.toSeq.sorted
+    val row = new java.util.LinkedHashMap[String, Object]()
+    row.put("id", java.lang.Long.valueOf(exec.executionId))
+    row.put("status", exec.executionStatus)
+    row.put("description", exec.description)
+    row.put("submissionTime", new Date(exec.submissionTime))
+    row.put("duration", java.lang.Long.valueOf(duration))
+    row.put("jobIds", jobIds)
+    row.put("queryId", if (exec.queryId != null) exec.queryId.toString else null)
+    row.put("errorMessage", exec.errorMessage.orNull)
+    row.put("rootExecutionId", java.lang.Long.valueOf(exec.rootExecutionId))
+    row
   }
 
   private def prepareExecutionData(
@@ -84,22 +204,18 @@ private[v1] class SqlResource extends BaseAppResource {
       case _ =>
     }
 
-    val status = if (exec.jobs.size == completed.size) {
-      "COMPLETED"
-    } else if (failed.nonEmpty) {
-      "FAILED"
-    } else {
-      "RUNNING"
-    }
-
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (planDescription) exec.physicalPlanDescription else ""
-    val nodes = if (details) printableMetrics(graph.allNodes, exec.metricValues) else Seq.empty
+    val nodes = if (details) {
+      printableMetrics(graph.allNodes, Option(exec.metricValues).getOrElse(Map.empty))
+    } else {
+      Seq.empty
+    }
     val edges = if (details) graph.edges else Seq.empty
 
     new ExecutionData(
       exec.executionId,
-      status,
+      exec.executionStatus,
       exec.description,
       planDetails,
       new Date(exec.submissionTime),
@@ -108,11 +224,14 @@ private[v1] class SqlResource extends BaseAppResource {
       completed,
       failed,
       nodes,
-      edges)
+      edges,
+      if (exec.queryId != null) exec.queryId.toString else null,
+      exec.errorMessage.orNull,
+      exec.rootExecutionId)
   }
 
-  private def printableMetrics(allNodes: Seq[SparkPlanGraphNode],
-    metricValues: Map[Long, String]): Seq[Node] = {
+  private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
+    metricValues: Map[Long, String]): collection.Seq[Node] = {
 
     def getMetric(metricValues: Map[Long, String], accumulatorId: Long,
       metricName: String): Option[Metric] = {
@@ -134,7 +253,8 @@ private[v1] class SqlResource extends BaseAppResource {
     nodes.sortBy(_.nodeId).reverse
   }
 
-  private def getNodeIdAndWSCGIdMap(allNodes: Seq[SparkPlanGraphNode]): Map[Long, Option[Long]] = {
+  private def getNodeIdAndWSCGIdMap(
+      allNodes: collection.Seq[SparkPlanGraphNode]): Map[Long, Option[Long]] = {
     val wscgNodes = allNodes.filter(_.name.trim.startsWith(WHOLE_STAGE_CODEGEN))
     val nodeIdAndWSCGIdMap: Map[Long, Option[Long]] = wscgNodes.flatMap {
       _ match {

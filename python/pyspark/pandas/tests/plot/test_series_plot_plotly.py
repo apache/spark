@@ -16,7 +16,6 @@
 #
 
 import unittest
-from distutils.version import LooseVersion
 import pprint
 
 import pandas as pd
@@ -25,12 +24,8 @@ import numpy as np
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.pandas.utils import name_like_string
-from pyspark.testing.pandasutils import (
-    have_plotly,
-    plotly_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_plotly, plotly_requirement_message
 
 if have_plotly:
     from plotly import express
@@ -38,11 +33,7 @@ if have_plotly:
 
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
-@unittest.skipIf(
-    LooseVersion(pd.__version__) < "1.0.0",
-    "pandas<1.0; pandas<1.0 does not support latest plotly and/or 'plotting.backend' option.",
-)
-class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
+class SeriesPlotPlotlyTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -75,7 +66,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     @property
     def pdf2(self):
-        return self.psdf2.to_pandas()
+        return self.psdf2._to_pandas()
 
     def test_bar_plot(self):
         pdf = self.pdf1
@@ -104,7 +95,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
                 "signups": [5, 5, 6, 12, 14, 13],
                 "visits": [20, 42, 28, 62, 81, 50],
             },
-            index=pd.date_range(start="2018/01/01", end="2018/07/01", freq="M"),
+            index=pd.date_range(start="2018/01/01", end="2018/07/01", freq="ME"),
         )
         psdf = ps.from_pandas(pdf)
 
@@ -116,7 +107,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
 
     def test_pie_plot(self):
         psdf = self.psdf1
-        pdf = psdf.to_pandas()
+        pdf = psdf._to_pandas()
         self.assertEqual(
             psdf["a"].plot(kind="pie"),
             express.pie(pdf, values=pdf.columns[0], names=pdf.index),
@@ -139,7 +130,7 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         #     },
         #     index=pd.MultiIndex.from_tuples([("x", "y")] * 11),
         # )
-        # pdf = psdf.to_pandas()
+        # pdf = psdf._to_pandas()
         # self.assertEqual(
         #     psdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
         # )
@@ -236,13 +227,11 @@ class SeriesPlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         self.assertEqual(pprint.pformat(actual.to_dict()), pprint.pformat(expected.to_dict()))
 
 
+class SeriesPlotPlotlyTests(SeriesPlotPlotlyTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.pandas.tests.plot.test_series_plot_plotly import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

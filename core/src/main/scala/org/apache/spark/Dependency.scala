@@ -17,13 +17,19 @@
 
 package org.apache.spark
 
+import java.util.concurrent.ScheduledFuture
+
 import scala.reflect.ClassTag
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
+import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -54,6 +60,9 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
   override def rdd: RDD[T] = _rdd
 }
 
+object ShuffleDependency {
+  private[spark] val EMPTY_ROW_BASED_CHECKSUMS: Array[RowBasedChecksum] = Array.empty
+}
 
 /**
  * :: DeveloperApi ::
@@ -69,6 +78,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  * @param shuffleWriterProcessor the processor to control the write behavior in ShuffleMapTask
+ * @param rowBasedChecksums the row-based checksums for each shuffle partition
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -78,8 +88,31 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS,
+    private val _checksumMismatchFullRetryEnabled: Boolean = false,
+    val checksumMismatchQueryLevelRollbackEnabled: Boolean = false)
   extends Dependency[Product2[K, V]] with Logging {
+
+  def this(
+      rdd: RDD[_ <: Product2[K, V]],
+      partitioner: Partitioner,
+      serializer: Serializer,
+      keyOrdering: Option[Ordering[K]],
+      aggregator: Option[Aggregator[K, V, C]],
+      mapSideCombine: Boolean,
+      shuffleWriterProcessor: ShuffleWriteProcessor) = {
+    this(
+      rdd,
+      partitioner,
+      serializer,
+      keyOrdering,
+      aggregator,
+      mapSideCombine,
+      shuffleWriterProcessor,
+      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
+    )
+  }
 
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
@@ -95,20 +128,25 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleId: Int = _rdd.context.newShuffleId()
 
+  private[this] val numPartitions = rdd.partitions.length
+
+  // By default, shuffle merge is allowed for ShuffleDependency if push based shuffle
+  // is enabled
+  private[this] var _shuffleMergeAllowed = canShuffleMergeBeEnabled()
+
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
 
-  private[this] val numPartitions = rdd.partitions.length
-
-  // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
-  // is enabled
-  private[this] var _shuffleMergeEnabled = canShuffleMergeBeEnabled()
-
-  private[spark] def setShuffleMergeEnabled(shuffleMergeEnabled: Boolean): Unit = {
-    _shuffleMergeEnabled = shuffleMergeEnabled
+  private[spark] def setShuffleMergeAllowed(shuffleMergeAllowed: Boolean): Unit = {
+    _shuffleMergeAllowed = shuffleMergeAllowed
   }
 
-  def shuffleMergeEnabled : Boolean = _shuffleMergeEnabled
+  def shuffleMergeEnabled : Boolean = shuffleMergeAllowed && mergerLocs.nonEmpty
+
+  def shuffleMergeAllowed : Boolean = _shuffleMergeAllowed
+
+  def checksumMismatchFullRetryEnabled: Boolean =
+    _checksumMismatchFullRetryEnabled && !canShuffleMergeBeEnabled()
 
   /**
    * Stores the location of the list of chosen external shuffle services for handling the
@@ -120,7 +158,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * Stores the information about whether the shuffle merge is finalized for the shuffle map stage
    * associated with this shuffle dependency
    */
-  private[this] var _shuffleMergedFinalized: Boolean = false
+  private[this] var _shuffleMergeFinalized: Boolean = false
 
   /**
    * shuffleMergeId is used to uniquely identify merging process of shuffle
@@ -131,45 +169,88 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   def shuffleMergeId: Int = _shuffleMergeId
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
-    if (mergerLocs != null) {
-      this.mergerLocs = mergerLocs
-    }
+    assert(shuffleMergeAllowed)
+    this.mergerLocs = mergerLocs
   }
 
   def getMergerLocs: Seq[BlockManagerId] = mergerLocs
 
   private[spark] def markShuffleMergeFinalized(): Unit = {
-    _shuffleMergedFinalized = true
+    _shuffleMergeFinalized = true
+  }
+
+  private[spark] def isShuffleMergeFinalizedMarked: Boolean = {
+    _shuffleMergeFinalized
   }
 
   /**
-   * Returns true if push-based shuffle is disabled for this stage or empty RDD,
-   * or if the shuffle merge for this stage is finalized, i.e. the shuffle merge
-   * results for all partitions are available.
+   * Returns true if push-based shuffle is disabled or if the shuffle merge for
+   * this shuffle is finalized.
    */
   def shuffleMergeFinalized: Boolean = {
-    // Empty RDD won't be computed therefore shuffle merge finalized should be true by default.
-    if (shuffleMergeEnabled && numPartitions > 0) {
-      _shuffleMergedFinalized
+    if (shuffleMergeEnabled) {
+      isShuffleMergeFinalizedMarked
     } else {
       true
     }
   }
 
   def newShuffleMergeState(): Unit = {
-    _shuffleMergedFinalized = false
+    _shuffleMergeFinalized = false
     mergerLocs = Nil
     _shuffleMergeId += 1
+    finalizeTask = None
+    shufflePushCompleted.clear()
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {
-    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
+    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.conf,
+      // invoked at driver
+      isDriver = true)
     if (isPushShuffleEnabled && rdd.isBarrier()) {
       logWarning("Push-based shuffle is currently not supported for barrier stages")
     }
-    isPushShuffleEnabled &&
+    isPushShuffleEnabled && numPartitions > 0 &&
       // TODO: SPARK-35547: Push based shuffle is currently unsupported for Barrier stages
       !rdd.isBarrier()
+  }
+
+  @transient private[this] val shufflePushCompleted = new RoaringBitmap()
+
+  /**
+   * Mark a given map task as push completed in the tracking bitmap.
+   * Using the bitmap ensures that the same map task launched multiple times due to
+   * either speculation or stage retry is only counted once.
+   * @param mapIndex Map task index
+   * @return number of map tasks with block push completed
+   */
+  private[spark] def incPushCompleted(mapIndex: Int): Int = {
+    shufflePushCompleted.add(mapIndex)
+    shufflePushCompleted.getCardinality
+  }
+
+  // Only used by DAGScheduler to coordinate shuffle merge finalization
+  @transient private[this] var finalizeTask: Option[ScheduledFuture[_]] = None
+
+  private[spark] def getFinalizeTask: Option[ScheduledFuture[_]] = finalizeTask
+
+  private[spark] def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
+    finalizeTask = Option(task)
+  }
+
+  // Set the threshold to 1 billion which leads to an 128MB bitmap and
+  // the actual size of `HighlyCompressedMapStatus` can be much larger than 128MB.
+  // This may crash the driver with an OOM error.
+  if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
+    logWarning(
+      log"The number of shuffle blocks " +
+        log"(${MDC(NUM_PARTITIONS, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
+        log" for shuffleId ${MDC(SHUFFLE_ID, shuffleId)} " +
+        log"for ${MDC(RDD_DESCRIPTION, _rdd)} " +
+        log"with ${MDC(NUM_PARTITIONS2, numPartitions)} partitions" +
+        log" is possibly too large, which could cause the driver to crash with an out-of-memory" +
+        log" error. Consider decreasing the number of partitions in this shuffle stage."
+    )
   }
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))

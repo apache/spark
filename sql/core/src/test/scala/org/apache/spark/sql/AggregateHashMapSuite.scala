@@ -21,7 +21,9 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.SlowSQLTest
 
+@SlowSQLTest
 class SingleLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeAndAfter {
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.CODEGEN_FALLBACK.key, "false")
@@ -37,6 +39,7 @@ class SingleLevelAggregateHashMapSuite extends DataFrameAggregateSuite with Befo
   }
 }
 
+@SlowSQLTest
 class TwoLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeAndAfter {
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.CODEGEN_FALLBACK.key, "false")
@@ -52,6 +55,7 @@ class TwoLevelAggregateHashMapSuite extends DataFrameAggregateSuite with BeforeA
   }
 }
 
+@SlowSQLTest
 class TwoLevelAggregateHashMapWithVectorizedMapSuite
   extends DataFrameAggregateSuite
   with BeforeAndAfter {

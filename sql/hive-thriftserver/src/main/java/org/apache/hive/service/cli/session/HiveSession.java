@@ -23,6 +23,8 @@ import java.util.Map;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.*;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TTableSchema;
 
 public interface HiveSession extends HiveSessionBase {
 
@@ -182,10 +184,10 @@ public interface HiveSession extends HiveSessionBase {
 
   void closeOperation(OperationHandle opHandle) throws HiveSQLException;
 
-  TableSchema getResultSetMetadata(OperationHandle opHandle)
+  TTableSchema getResultSetMetadata(OperationHandle opHandle)
       throws HiveSQLException;
 
-  RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
+  TRowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
       long maxRows, FetchType fetchType) throws HiveSQLException;
 
   String getDelegationToken(HiveAuthFactory authFactory, String owner,

@@ -64,27 +64,58 @@ class DataSourceV2SQLSessionCatalogSuite
     }
   }
 
-  test("SPARK-31624: SHOW TBLPROPERTIES working with V2 tables and the session catalog") {
-    val t1 = "tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format TBLPROPERTIES " +
-        "(key='v', key2='v2')")
-
-      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1"), Seq(Row("key", "v"), Row("key2", "v2")))
-
-      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1('key')"), Row("key", "v"))
-
-      checkAnswer(
-        sql(s"SHOW TBLPROPERTIES $t1('keyX')"),
-        Row("keyX", s"Table default.$t1 does not have property: keyX"))
-    }
-  }
-
   test("SPARK-33651: allow CREATE EXTERNAL TABLE without LOCATION") {
     withTable("t") {
       val prop = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY + "=true"
       // The following should not throw AnalysisException.
       sql(s"CREATE EXTERNAL TABLE t (i INT) USING $v2Format TBLPROPERTIES($prop)")
+    }
+  }
+
+  test("SPARK-49152: partition columns should be put at the end") {
+    withTable("t") {
+      sql("CREATE TABLE t (c1 INT, c2 INT) USING json PARTITIONED BY (c1)")
+      // partition columns should be put at the end.
+      assert(getTableMetadata("default.t").columns().map(_.name()) === Seq("c2", "c1"))
+    }
+  }
+
+  test("SPARK-54760: DelegatingCatalogExtension supports both V1 and V2 functions") {
+    sessionCatalog.createFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
+    checkAnswer(
+      sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"),
+      Row(5, 5))
+  }
+
+  test("SPARK-55024: data source metadata tables with multi-part identifiers") {
+    // This test querying data source tables with multi part identifiers,
+    // with the example of Iceberg's metadata table, eg db.table.snapshots
+    val t1 = "metadata_test_tbl"
+
+    def verifySnapshots(snapshots: DataFrame, expectedCount: Int, queryDesc: String): Unit = {
+      assert(snapshots.count() == expectedCount,
+        s"$queryDesc: expected $expectedCount snapshots")
+      assert(snapshots.schema.fieldNames.toSeq == Seq("committed_at", "snapshot_id"),
+        s"$queryDesc: expected schema [committed_at, snapshot_id], " +
+          s"got: ${snapshots.schema.fieldNames.toSeq}")
+      val snapshotIds = snapshots.select("snapshot_id").collect().map(_.getLong(0))
+      assert(snapshotIds.forall(_ > 0),
+        s"$queryDesc: all snapshot IDs should be positive, got: ${snapshotIds.toSeq}")
+    }
+
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'first')")
+      sql(s"INSERT INTO $t1 VALUES (2, 'second')")
+      sql(s"INSERT INTO $t1 VALUES (3, 'third')")
+
+      Seq(
+        s"$t1.snapshots",
+        s"default.$t1.snapshots",
+        s"spark_catalog.default.$t1.snapshots"
+      ).foreach { snapshotTable =>
+        verifySnapshots(sql(s"SELECT * FROM $snapshotTable"), 3, snapshotTable)
+      }
     }
   }
 }

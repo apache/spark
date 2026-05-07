@@ -19,13 +19,16 @@ package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
 
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
-import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, MapObjects, NewInstance}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -80,6 +83,13 @@ case class GenericData[A](
 object GenericData {
   type IntData = GenericData[Int]
 }
+
+case class NestedGeneric[T](
+  generic: GenericData[T])
+
+case class SeqNestedGeneric[T](
+  generic: Seq[T])
+
 
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
@@ -171,12 +181,16 @@ class ScalaReflectionSuite extends SparkFunSuite {
   import TestingValueClass._
 
   // A helper method used to test `ScalaReflection.serializerForType`.
-  private def serializerFor[T: TypeTag]: Expression =
-    serializerForType(ScalaReflection.localTypeOf[T])
+  private def serializerFor[T: TypeTag]: Expression = {
+    val enc = ScalaReflection.encoderFor[T]
+    SerializerBuildHelper.createSerializer(enc)
+  }
 
   // A helper method used to test `ScalaReflection.deserializerForType`.
-  private def deserializerFor[T: TypeTag]: Expression =
-    deserializerForType(ScalaReflection.localTypeOf[T])
+  private def deserializerFor[T: TypeTag]: Expression = {
+    val enc = ScalaReflection.encoderFor[T]
+    DeserializerBuildHelper.createDeserializer(enc)
+  }
 
   test("isSubtype") {
     assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
@@ -295,6 +309,40 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
+  test("SPARK-38681: Nested generic data") {
+    val schema = schemaFor[NestedGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          StructType(Seq(
+            StructField("genericField", IntegerType, nullable = false))),
+          nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: List nested generic") {
+    val schema = schemaFor[SeqNestedGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          ArrayType(IntegerType, false),
+          nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-38681: List nested generic with value class") {
+    val schema = schemaFor[SeqNestedGeneric[IntWrapper]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField(
+          "generic",
+          ArrayType(StructType(Seq(StructField("i", IntegerType, false))), true),
+          nullable = true))),
+      nullable = true))
+  }
+
   test("tuple data") {
     val schema = schemaFor[(Int, String)]
     assert(schema === Schema(
@@ -343,11 +391,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-15062: Get correct serializer for List[_]") {
-    val list = List(1, 2, 3)
     val serializer = serializerFor[List[Int]]
-    assert(serializer.isInstanceOf[NewInstance])
-    assert(serializer.asInstanceOf[NewInstance]
-      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
+    assert(serializer.isInstanceOf[MapObjects])
+    val mapObjects = serializer.asInstanceOf[MapObjects]
+    assert(mapObjects.customCollectionCls.isEmpty)
   }
 
   test("SPARK 16792: Get correct deserializer for List[_]") {
@@ -443,17 +490,22 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
-    val e = intercept[UnsupportedOperationException] {
-      schemaFor[TraitProductWithoutCompanion]
-    }
-    assert(e.getMessage.contains("Unable to find constructor"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        schemaFor[TraitProductWithoutCompanion]
+      },
+      condition = "_LEGACY_ERROR_TEMP_2144",
+      parameters = Map("tpe" -> "org.apache.spark.sql.catalyst.TraitProductWithoutCompanion"))
   }
 
   test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
-    val e = intercept[UnsupportedOperationException] {
-      schemaFor[TraitProductWithNoConstructorCompanion]
-    }
-    assert(e.getMessage.contains("Unable to find constructor"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        schemaFor[TraitProductWithNoConstructorCompanion]
+      },
+      condition = "_LEGACY_ERROR_TEMP_2144",
+      parameters = Map("tpe" ->
+        "org.apache.spark.sql.catalyst.TraitProductWithNoConstructorCompanion"))
   }
 
   test("SPARK-27625: annotated data types") {
@@ -552,4 +604,21 @@ class ScalaReflectionSuite extends SparkFunSuite {
         ),
         nullable = true))
   }
+
+  test("encoder for row") {
+    assert(encoderForWithRowEncoderSupport[Row] === UnboundRowEncoder)
+    assert(encoderForWithRowEncoderSupport[Option[Row]] === OptionEncoder(UnboundRowEncoder))
+    assert(encoderForWithRowEncoderSupport[Array[Row]] === ArrayEncoder(UnboundRowEncoder, true))
+    assert(encoderForWithRowEncoderSupport[Map[Row, Row]] ===
+      MapEncoder(
+        ClassTag(getClassFromType(typeTag[Map[Row, Row]].tpe)),
+        UnboundRowEncoder, UnboundRowEncoder, true))
+    assert(encoderForWithRowEncoderSupport[MyClass] ===
+      ProductEncoder(
+        ClassTag(getClassFromType(typeTag[MyClass].tpe)),
+        Seq(EncoderField("row", UnboundRowEncoder, true, Metadata.empty)),
+        None))
+  }
+
+  case class MyClass(row: Row)
 }

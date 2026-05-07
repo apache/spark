@@ -84,6 +84,6 @@ class UDTRegistrationSuite extends SparkFunSuite {
 
   test("query unregistered user class") {
     assert(!UDTRegistration.exists(classOf[TestUserClass3].getName))
-    assert(!UDTRegistration.getUDTFor(classOf[TestUserClass3].getName).isDefined)
+    assert(UDTRegistration.getUDTFor(classOf[TestUserClass3].getName).isEmpty)
   }
 }

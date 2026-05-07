@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap, NoSuchElementException}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
@@ -32,10 +33,11 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.{OpenHashSet, Utils}
 
 /** Private trait for params for VectorIndexer and VectorIndexerModel */
 private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOutputCol
@@ -140,7 +142,7 @@ class VectorIndexer @Since("1.4.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
-    val numFeatures = MetadataUtils.getNumFeatures(dataset, $(inputCol))
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(inputCol))
     val vectorDataset = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val maxCats = $(maxCategories)
     val categoryStats: VectorIndexer.CategoryStats = vectorDataset.mapPartitions { iter =>
@@ -235,7 +237,7 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
           if (zeroExists) {
             sortedFeatureValues = 0.0 +: sortedFeatureValues
           }
-          val categoryMap: Map[Double, Int] = sortedFeatureValues.zipWithIndex.toMap
+          val categoryMap: Map[Double, Int] = Utils.toMapWithIndex(sortedFeatureValues)
           (featureIndex, categoryMap)
       }.toMap
     }
@@ -297,10 +299,22 @@ class VectorIndexerModel private[ml] (
 
   import VectorIndexerModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", -1, Map.empty)
+
   /** Java-friendly version of [[categoryMaps]] */
   @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
-    categoryMaps.mapValues(_.asJava).toMap.asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
+    categoryMaps.map { case (k, v) => (k, v.asJava) }
+      .asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
+  }
+
+  private[spark] def categoryMapsDF: DataFrame = {
+    val data = categoryMaps.iterator.flatMap {
+      case (idx, map) => map.iterator.map(t => (idx, t._1, t._2))
+    }.toArray.toImmutableArraySeq
+    SparkSession.builder().getOrCreate().createDataFrame(data)
+      .toDF("featureIndex", "originalValue", "categoryIndex")
   }
 
   /**
@@ -444,7 +458,9 @@ class VectorIndexerModel private[ml] (
     SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
 
     // If the input metadata specifies numFeatures, compare with expected numFeatures.
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))
+    val origAttrGroup = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(schema, $(inputCol))
+    )
     val origNumFeatures: Option[Int] = if (origAttrGroup.attributes.nonEmpty) {
       Some(origAttrGroup.attributes.get.length)
     } else {
@@ -465,7 +481,9 @@ class VectorIndexerModel private[ml] (
    * @return  Output column field.  This field does not contain non-ML metadata.
    */
   private def prepOutputField(schema: StructType): StructField = {
-    val origAttrGroup = AttributeGroup.fromStructField(schema($(inputCol)))
+    val origAttrGroup = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(schema, $(inputCol))
+    )
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       // Convert original attributes to modified attributes
       val origAttrs: Array[Attribute] = origAttrGroup.attributes.get
@@ -511,17 +529,43 @@ class VectorIndexerModel private[ml] (
 
 @Since("1.6.0")
 object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
+  private[ml] case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeInt(data.numFeatures)
+    serializeMap[Int, Map[Double, Int]](
+      data.categoryMaps, dos,
+      (k, dos) => dos.writeInt(k),
+      (v, dos) => {
+        serializeMap[Double, Int](
+          v, dos,
+          (kk, dos) => dos.writeDouble(kk),
+          (vv, dos) => dos.writeInt(vv)
+        )
+      }
+    )
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val numFeatures = dis.readInt()
+    val categoryMaps = deserializeMap[Int, Map[Double, Int]](
+      dis,
+      dis => dis.readInt(),
+      dis => deserializeMap[Double, Int](dis, dis => dis.readDouble(), dis => dis.readInt())
+    )
+    Data(numFeatures, categoryMaps)
+  }
 
   private[VectorIndexerModel]
   class VectorIndexerModelWriter(instance: VectorIndexerModel) extends MLWriter {
 
-    private case class Data(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]])
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.numFeatures, instance.categoryMaps)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -530,14 +574,10 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
     private val className = classOf[VectorIndexerModel].getName
 
     override def load(path: String): VectorIndexerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("numFeatures", "categoryMaps")
-        .head()
-      val numFeatures = data.getAs[Int](0)
-      val categoryMaps = data.getAs[Map[Int, Map[Double, Int]]](1)
-      val model = new VectorIndexerModel(metadata.uid, numFeatures, categoryMaps)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new VectorIndexerModel(metadata.uid, data.numFeatures, data.categoryMaps)
       metadata.getAndSetParams(model)
       model
     }

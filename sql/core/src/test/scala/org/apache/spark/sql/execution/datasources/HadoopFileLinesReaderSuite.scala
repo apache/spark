@@ -23,6 +23,7 @@ import java.nio.file.Files
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -37,7 +38,11 @@ class HadoopFileLinesReaderSuite extends SharedSparkSession {
     Files.write(path.toPath, text.getBytes(StandardCharsets.UTF_8))
 
     val lines = ranges.flatMap { case (start, length) =>
-      val file = PartitionedFile(InternalRow.empty, path.getCanonicalPath, start, length)
+      val file = PartitionedFile(
+        InternalRow.empty,
+        SparkPath.fromPathString(path.getCanonicalPath),
+        start,
+        length)
       val hadoopConf = conf.getOrElse(spark.sessionState.newHadoopConf())
       val reader = new HadoopFileLinesReader(file, delimOpt, hadoopConf)
 

@@ -19,9 +19,10 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.status.PoolData
@@ -36,12 +37,12 @@ private[ui] class PoolTable(pools: Map[Schedulable, PoolData], parent: StagesTab
         <tr>
           <th>Pool Name</th>
           <th>
-            <span data-toggle="tooltip" data-placement="top" title="Pool's minimum share of CPU
-             cores">Minimum Share</span>
+            {UIUtils.tooltipSpan(<xml:group>Minimum Share</xml:group>,
+              "Pool's minimum share of CPU cores")}
           </th>
           <th>
-            <span data-toggle="tooltip" data-placement="top" title="Pool's share of cluster
-             resources relative to others">Pool Weight</span>
+            {UIUtils.tooltipSpan(<xml:group>Pool Weight</xml:group>,
+              "Pool's share of cluster resources relative to others")}
           </th>
           <th>Active Stages</th>
           <th>Running Tasks</th>

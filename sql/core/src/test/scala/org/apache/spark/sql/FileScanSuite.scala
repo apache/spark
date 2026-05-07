@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.util.{Map => JMap}
+
 import scala.collection.mutable
 
-import com.google.common.collect.ImmutableMap
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -81,14 +82,15 @@ trait FileScanSuiteBase extends SharedSparkSession {
       Array[Filter](sources.And(sources.IsNull("data"), sources.LessThan("data", 0)))
     val pushedFiltersNotEqual =
       Array[Filter](sources.And(sources.IsNull("data"), sources.LessThan("data", 1)))
-    val optionsMap = ImmutableMap.of("key", "value")
-    val options = new CaseInsensitiveStringMap(ImmutableMap.copyOf(optionsMap))
+    val optionsMap = JMap.of("key", "value")
+    val options = new CaseInsensitiveStringMap(JMap.copyOf(optionsMap))
     val optionsNotEqual =
-      new CaseInsensitiveStringMap(ImmutableMap.copyOf(ImmutableMap.of("key2", "value2")))
-    val partitionFilters = Seq(And(IsNull('data.int), LessThan('data.int, 0)))
-    val partitionFiltersNotEqual = Seq(And(IsNull('data.int), LessThan('data.int, 1)))
-    val dataFilters = Seq(And(IsNull('data.int), LessThan('data.int, 0)))
-    val dataFiltersNotEqual = Seq(And(IsNull('data.int), LessThan('data.int, 1)))
+      new CaseInsensitiveStringMap(JMap.copyOf(JMap.of("key2", "value2")))
+    val partitionFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
+    val partitionFiltersNotEqual = Seq(And(IsNull($"data".int),
+      LessThan($"data".int, 1)))
+    val dataFilters = Seq(And(IsNull($"data".int), LessThan($"data".int, 0)))
+    val dataFiltersNotEqual = Seq(And(IsNull($"data".int), LessThan($"data".int, 1)))
 
     scanBuilders.foreach { case (name, scanBuilder, exclusions) =>
       test(s"SPARK-33482: Test $name equals") {
@@ -112,7 +114,7 @@ trait FileScanSuiteBase extends SharedSparkSession {
           readDataSchema.copy(),
           readPartitionSchema.copy(),
           pushedFilters.clone(),
-          new CaseInsensitiveStringMap(ImmutableMap.copyOf(optionsMap)),
+          new CaseInsensitiveStringMap(JMap.copyOf(optionsMap)),
           Seq(partitionFilters: _*),
           Seq(dataFilters: _*))
 
@@ -354,11 +356,11 @@ class FileScanSuite extends FileScanSuiteBase {
   val scanBuilders = Seq[(String, ScanBuilder, Seq[String])](
     ("ParquetScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, pf, df),
+        ParquetScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, f, o, None, pf, df),
       Seq.empty),
     ("OrcScan",
       (s, fi, ds, rds, rps, f, o, pf, df) =>
-        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, f, pf, df),
+        OrcScan(s, s.sessionState.newHadoopConf(), fi, ds, rds, rps, o, None, f, pf, df),
       Seq.empty),
     ("CSVScan",
       (s, fi, ds, rds, rps, f, o, pf, df) => CSVScan(s, fi, ds, rds, rps, o, f, pf, df),

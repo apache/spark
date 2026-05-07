@@ -17,11 +17,9 @@
 
 package org.apache.spark.shuffle
 
-import java.io.{DataInputStream, File, FileInputStream}
-import java.util.zip.CheckedInputStream
+import java.io.File
 
-import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
-import org.apache.spark.network.util.LimitedInputStream
+import org.apache.spark.shuffle.checksum.{OutputStreamRowBasedChecksum, RowBasedChecksum}
 
 trait ShuffleChecksumTestHelper {
 
@@ -38,46 +36,19 @@ trait ShuffleChecksumTestHelper {
     assert(data.exists(), "Data file doesn't exist")
     assert(index.exists(), "Index file doesn't exist")
 
-    var checksumIn: DataInputStream = null
-    val expectChecksums = Array.ofDim[Long](numPartition)
-    try {
-      checksumIn = new DataInputStream(new FileInputStream(checksum))
-      (0 until numPartition).foreach(i => expectChecksums(i) = checksumIn.readLong())
-    } finally {
-      if (checksumIn != null) {
-        checksumIn.close()
-      }
-    }
+    assert(ShuffleChecksumUtils.compareChecksums(numPartition, algorithm, checksum, data, index),
+      "checksum must be consistent at both write and read sides")
+  }
 
-    var dataIn: FileInputStream = null
-    var indexIn: DataInputStream = null
-    var checkedIn: CheckedInputStream = null
-    try {
-      dataIn = new FileInputStream(data)
-      indexIn = new DataInputStream(new FileInputStream(index))
-      var prevOffset = indexIn.readLong
-      (0 until numPartition).foreach { i =>
-        val curOffset = indexIn.readLong
-        val limit = (curOffset - prevOffset).toInt
-        val bytes = new Array[Byte](limit)
-        val checksumCal = ShuffleChecksumHelper.getChecksumByAlgorithm(algorithm)
-        checkedIn = new CheckedInputStream(
-          new LimitedInputStream(dataIn, curOffset - prevOffset), checksumCal)
-        checkedIn.read(bytes, 0, limit)
-        prevOffset = curOffset
-        // checksum must be consistent at both write and read sides
-        assert(checkedIn.getChecksum.getValue == expectChecksums(i))
-      }
-    } finally {
-      if (dataIn != null) {
-        dataIn.close()
-      }
-      if (indexIn != null) {
-        indexIn.close()
-      }
-      if (checkedIn != null) {
-        checkedIn.close()
-      }
+  def getRowBasedChecksumValues(rowBasedChecksums: Array[RowBasedChecksum]): Array[Long] = {
+    if (rowBasedChecksums.isEmpty) {
+      Array.empty
+    } else {
+      rowBasedChecksums.map(_.getValue)
     }
+  }
+
+  def createPartitionRowBasedChecksums(numPartitions: Int): Array[RowBasedChecksum] = {
+    Array.tabulate(numPartitions)(_ => new OutputStreamRowBasedChecksum("ADLER32"))
   }
 }

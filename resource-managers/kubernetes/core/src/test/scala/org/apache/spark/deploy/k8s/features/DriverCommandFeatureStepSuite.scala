@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -79,7 +79,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
         (
           envPy.map(v => ENV_PYSPARK_PYTHON -> v :: Nil) ++
           envDriverPy.map(v => ENV_PYSPARK_DRIVER_PYTHON -> v :: Nil)
-        ).flatten.toArray: _*)
+        ).flatten.toSeq: _*)
 
       val spec = applyFeatureStep(
         PythonMainAppResource(mainResource),
@@ -110,6 +110,27 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
       "--properties-file", SPARK_CONF_PATH,
       "--class", KubernetesTestConf.MAIN_CLASS,
       mainResource, "5", "7", "9"))
+  }
+
+  test("SPARK-56303: java resource with Java-friendly factory methods") {
+    val mainResource = "local:/main.jar"
+    val spec1 = applyFeatureStep(
+      JavaMainAppResource.of(mainResource),
+      appArgs = Array("5", "7"))
+    assert(spec1.pod.container.getArgs.asScala === List(
+      "driver",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      mainResource, "5", "7"))
+
+    val spec2 = applyFeatureStep(
+      JavaMainAppResource.create(),
+      appArgs = Array("5", "7"))
+    assert(spec2.pod.container.getArgs.asScala === List(
+      "driver",
+      "--properties-file", SPARK_CONF_PATH,
+      "--class", KubernetesTestConf.MAIN_CLASS,
+      "spark-internal", "5", "7"))
   }
 
   test("SPARK-25355: java resource args with proxy-user") {
@@ -175,7 +196,7 @@ class DriverCommandFeatureStepSuite extends SparkFunSuite {
     }
     val pod = step.configurePod(SparkPod.initialPod())
     val props = step.getAdditionalPodSystemProperties()
-    KubernetesDriverSpec(pod, Nil, props)
+    KubernetesDriverSpec(pod, Nil, Nil, props)
   }
 
 }

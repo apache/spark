@@ -38,7 +38,7 @@ object SparkKMeans {
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
-    for (i <- 0 until centers.length) {
+    for (i <- centers.indices) {
       val tempDist = squaredDistance(p, centers(i))
       if (tempDist < closest) {
         closest = tempDist
@@ -67,7 +67,7 @@ object SparkKMeans {
     showWarning()
 
     val spark = SparkSession
-      .builder
+      .builder()
       .appName("SparkKMeans")
       .getOrCreate()
 
@@ -79,7 +79,7 @@ object SparkKMeans {
     val kPoints = data.takeSample(withReplacement = false, K, 42)
     var tempDist = 1.0
 
-    while(tempDist > convergeDist) {
+    while (tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
       val pointStats = closest.reduceByKey(mergeResults)

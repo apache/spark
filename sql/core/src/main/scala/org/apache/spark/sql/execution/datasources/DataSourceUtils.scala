@@ -17,38 +17,85 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.SparkUpgradeException
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.sql.{sources, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
-import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, RebaseDateTime, TypeUtils}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 
-object DataSourceUtils {
+object DataSourceUtils extends PredicateHelper {
+
+  /**
+   * Merges write options into a Hadoop configuration. Keys "path" and "paths" are excluded.
+   * This ensures per-write options are present in the conf even if they were added to the
+   * options map after the Hadoop conf was originally created.
+   */
+  def mergeWriteOptionsIntoHadoopConf(
+      options: Map[String, String], conf: Configuration): Unit = {
+    // CaseInsensitiveMap.iterator yields lowercased keys, but Hadoop Configuration is
+    // case-sensitive. Use the original map to preserve the user's key casing.
+    val rawOptions = options match {
+      case ci: CaseInsensitiveMap[String @unchecked] => ci.originalMap
+      case other => other
+    }
+    rawOptions.foreach { case (k, v) =>
+      if ((v ne null) && k != "path" && k != "paths") {
+        conf.set(k, v)
+      }
+    }
+  }
+
+  /**
+   * Sets a key in the Hadoop configuration only if it is not already present. Per-write
+   * options should be merged into the conf first (via [[mergeWriteOptionsIntoHadoopConf]]),
+   * so a non-null value means the user explicitly set a per-write option which should take
+   * precedence over the session-level SQLConf default.
+   */
+  def setConfIfAbsent(conf: Configuration, key: String, value: => String): Unit = {
+    if (conf.get(key) == null) {
+      conf.set(key, value)
+    }
+  }
+
   /**
    * The key to use for storing partitionBy columns as options.
    */
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
 
   /**
+   * The key to use for specifying partition overwrite mode when
+   * INSERT OVERWRITE a partitioned data source table.
+   */
+  val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
+
+  /**
+   * The key to use for storing clusterBy columns as options.
+   */
+  val CLUSTERING_COLUMNS_KEY = "__clustering_columns"
+
+  /**
    * Utility methods for converting partitionBy columns to options and back.
    */
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   def encodePartitioningColumns(columns: Seq[String]): String = {
     Serialization.write(columns)
@@ -65,7 +112,8 @@ object DataSourceUtils {
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportFieldName(field.name)) {
-        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(field.name)
+        throw QueryCompilationErrors.invalidColumnNameAsPathError(
+          format.getClass.getSimpleName, field.name)
       }
       field.dataType match {
         case s: StructType => checkFieldNames(format, s)
@@ -78,13 +126,18 @@ object DataSourceUtils {
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
-  def verifySchema(format: FileFormat, schema: StructType): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
+    TypeUtils.failUnsupportedDataType(schema, SQLConf.get)
     schema.foreach { field =>
-      if (!format.supportDataType(field.dataType)) {
+      val supported = if (readOnly) {
+        format.supportReadDataType(field.dataType)
+      } else {
+        format.supportDataType(field.dataType)
+      }
+      if (!supported) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
-    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be
@@ -108,44 +161,53 @@ object DataSourceUtils {
       case _ => false
     }
 
-  def datetimeRebaseMode(
+  private def getRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      return LegacyBehaviorPolicy.CORRECTED
+      modeByConfig: String,
+      minVersion: String,
+      metadataKey: String): RebaseSpec = {
+    val policy = if (Utils.isTesting &&
+      SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
+      LegacyBehaviorPolicy.CORRECTED
+    } else {
+      // If there is no version, we return the mode specified by the config.
+      Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
+        // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
+        // rebase the datetime values.
+        // Files written by `minVersion` and latter may also need the rebase if they were written
+        // with the "LEGACY" rebase mode.
+        if (version < minVersion || lookupFileMeta(metadataKey) != null) {
+          LegacyBehaviorPolicy.LEGACY
+        } else {
+          LegacyBehaviorPolicy.CORRECTED
+        }
+      }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
     }
-    // If there is no version, we return the mode specified by the config.
-    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-      // Files written by Spark 2.4 and earlier follow the legacy hybrid calendar and we need to
-      // rebase the datetime values.
-      // Files written by Spark 3.0 and latter may also need the rebase if they were written with
-      // the "LEGACY" rebase mode.
-      if (version < "3.0.0" || lookupFileMeta(SPARK_LEGACY_DATETIME) != null) {
-        LegacyBehaviorPolicy.LEGACY
-      } else {
-        LegacyBehaviorPolicy.CORRECTED
-      }
-    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+    policy match {
+      case LegacyBehaviorPolicy.LEGACY =>
+        RebaseSpec(LegacyBehaviorPolicy.LEGACY, Option(lookupFileMeta(SPARK_TIMEZONE_METADATA_KEY)))
+      case _ => RebaseSpec(policy)
+    }
   }
 
-  def int96RebaseMode(
+  def datetimeRebaseSpec(
       lookupFileMeta: String => String,
-      modeByConfig: String): LegacyBehaviorPolicy.Value = {
-    if (Utils.isTesting && SQLConf.get.getConfString("spark.test.forceNoRebase", "") == "true") {
-      return LegacyBehaviorPolicy.CORRECTED
-    }
-    // If there is no version, we return the mode specified by the config.
-    Option(lookupFileMeta(SPARK_VERSION_METADATA_KEY)).map { version =>
-      // Files written by Spark 3.0 and earlier follow the legacy hybrid calendar and we need to
-      // rebase the INT96 timestamp values.
-      // Files written by Spark 3.1 and latter may also need the rebase if they were written with
-      // the "LEGACY" rebase mode.
-      if (version < "3.1.0" || lookupFileMeta(SPARK_LEGACY_INT96) != null) {
-        LegacyBehaviorPolicy.LEGACY
-      } else {
-        LegacyBehaviorPolicy.CORRECTED
-      }
-    }.getOrElse(LegacyBehaviorPolicy.withName(modeByConfig))
+      modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(
+      lookupFileMeta,
+      modeByConfig,
+      "3.0.0",
+      SPARK_LEGACY_DATETIME_METADATA_KEY)
+  }
+
+  def int96RebaseSpec(
+      lookupFileMeta: String => String,
+      modeByConfig: String): RebaseSpec = {
+    getRebaseSpec(
+      lookupFileMeta,
+      modeByConfig,
+      "3.1.0",
+      SPARK_LEGACY_INT96_METADATA_KEY)
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
@@ -156,7 +218,7 @@ object DataSourceUtils {
         (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
       case "Avro" =>
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
-      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
@@ -166,12 +228,17 @@ object DataSourceUtils {
       case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
       case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
       case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
-      case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
+      case _ => throw SparkException.internalError(s"Unrecognized format $format.")
     }
     QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
-  def creteDateRebaseFuncInRead(
+  def shouldIgnoreCorruptFileException(e: Throwable): Boolean = e match {
+    case _: RuntimeException | _: IOException | _: InternalError => true
+    case _ => false
+  }
+
+  def createDateRebaseFuncInRead(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -183,7 +250,7 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteDateRebaseFuncInWrite(
+  def createDateRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Int => Int = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => days: Int =>
@@ -195,19 +262,20 @@ object DataSourceUtils {
     case LegacyBehaviorPolicy.CORRECTED => identity[Int]
   }
 
-  def creteTimestampRebaseFuncInRead(
-      rebaseMode: LegacyBehaviorPolicy.Value,
-      format: String): Long => Long = rebaseMode match {
+  def createTimestampRebaseFuncInRead(
+      rebaseSpec: RebaseSpec,
+      format: String): Long => Long = rebaseSpec.mode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
       if (micros < RebaseDateTime.lastSwitchJulianTs) {
         throw DataSourceUtils.newRebaseExceptionInRead(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseJulianToGregorianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      RebaseDateTime.rebaseJulianToGregorianMicros(rebaseSpec.timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
-  def creteTimestampRebaseFuncInWrite(
+  def createTimestampRebaseFuncInWrite(
       rebaseMode: LegacyBehaviorPolicy.Value,
       format: String): Long => Long = rebaseMode match {
     case LegacyBehaviorPolicy.EXCEPTION => micros: Long =>
@@ -215,7 +283,9 @@ object DataSourceUtils {
         throw DataSourceUtils.newRebaseExceptionInWrite(format)
       }
       micros
-    case LegacyBehaviorPolicy.LEGACY => RebaseDateTime.rebaseGregorianToJulianMicros
+    case LegacyBehaviorPolicy.LEGACY =>
+      val timeZone = SQLConf.get.sessionLocalTimeZone
+      RebaseDateTime.rebaseGregorianToJulianMicros(timeZone, _)
     case LegacyBehaviorPolicy.CORRECTED => identity[Long]
   }
 
@@ -240,6 +310,58 @@ object DataSourceUtils {
       }.toMap ++ options
     } else {
       options
+    }
+  }
+
+  /**
+   * Splits `normalizedFilters` into partition filters and data filters by matching
+   * [[AttributeReference]] against the given `partitionSchema` by their names.
+   *
+   * This is suitable for the V1 path where partition columns have non-nested names.
+   */
+  def getPartitionFiltersAndDataFilters(
+      partitionSchema: StructType,
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    val partitionColumns = normalizedFilters.flatMap { expr =>
+      expr.collect {
+        case attr: AttributeReference if partitionSchema.names.contains(attr.name) =>
+          attr
+      }
+    }
+    getPartitionFiltersAndDataFilters(AttributeSet(partitionColumns), normalizedFilters)
+  }
+
+  /**
+   * Splits `normalizedFilters` into partition filters and data filters by matching
+   * [[AttributeReference]] against the given `partitionAttributes` by their `ExprId`s.
+   */
+  def getPartitionFiltersAndDataFilters(
+      partitionAttributes: Seq[AttributeReference],
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    getPartitionFiltersAndDataFilters(AttributeSet(partitionAttributes), normalizedFilters)
+  }
+
+  private def getPartitionFiltersAndDataFilters(
+      partitionSet: AttributeSet,
+      normalizedFilters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+    val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
+      f.references.nonEmpty && f.references.subsetOf(partitionSet)
+    )
+    val extraPartitionFilter =
+      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+    (ExpressionSet(partitionFilters ++ extraPartitionFilter).toSeq, dataFilters)
+  }
+
+  def containsFiltersWithCollation(filter: sources.Filter): Boolean = {
+    filter match {
+      case sources.And(left, right) =>
+        containsFiltersWithCollation(left) || containsFiltersWithCollation(right)
+      case sources.Or(left, right) =>
+        containsFiltersWithCollation(left) || containsFiltersWithCollation(right)
+      case sources.Not(child) =>
+        containsFiltersWithCollation(child)
+      case _: sources.CollatedFilter => true
+      case _ => false
     }
   }
 }

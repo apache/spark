@@ -24,19 +24,26 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType}
 
 class ResolveAliasesSuite extends AnalysisTest {
 
   private lazy val t1 = LocalRelation("a".attr.int)
   private lazy val t2 = LocalRelation("b".attr.long)
+  private lazy val intAttr = AttributeReference("x", IntegerType)()
 
   private def checkAliasName(plan: LogicalPlan, expected: String): Unit = {
     val analyzed = getAnalyzer.execute(plan)
     val actual = analyzed.find(_.isInstanceOf[Project]).get.asInstanceOf[Project]
       .projectList.head.asInstanceOf[Alias].name
     assert(actual == expected)
+  }
+
+  private def checkAliasName(sql: String, expected: String): Unit = {
+    checkAliasName(CatalystSqlParser.parsePlan(sql), expected)
   }
 
   private def checkSubqueryAliasName(plan: LogicalPlan, expected: String): Unit = {
@@ -87,5 +94,143 @@ class ResolveAliasesSuite extends AnalysisTest {
     checkAliasName(t1.select(Rand(Literal(null))), "rand(NULL)")
     checkAliasName(t1.select(DateSub(Literal(Date.valueOf("2021-01-18")), Literal(null))),
       "date_sub(DATE '2021-01-18', NULL)")
+  }
+
+  test("SPARK-40822: Stable derived column aliases") {
+    withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> "true") {
+      Seq(
+        // Literals
+        "' 1'" -> "' 1'",
+        """"abc"""" -> """"abc"""",
+        """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
+        "1l" -> "1L", "1S" -> "1S",
+        "date'-0001-1-28'" -> "DATE'-0001-1-28'",
+        "interval 3 year 1 month" -> "INTERVAL3YEAR1MONTH",
+        "x'00'" -> "X'00'",
+        // Preserve case
+        "CAST(1 as tinyint)" -> "CAST(1ASTINYINT)",
+        // Brackets
+        "getbit(11L, 2 + 1)" -> "getbit(11L,2+1)",
+        "string(int(shiftleft(int(-1), 31))+1)" -> "string(int(shiftleft(int(-1),31))+1)",
+        "map(1, 'a') [ 5 ]" -> "map(1,'a')[5]",
+        // Preserve type
+        "CAST('123.a' AS long)" -> "CAST('123.a'ASLONG)",
+        // Spaces
+        "'1' = 1" -> "'1'=1",
+        "upper('a') = upper('A')" -> "upper('a')=upper('A')",
+        "FLOOR(5, 0)" -> "FLOOR(5,0)",
+        "-1" -> "-1",
+        "1 in (1.0)" -> "1IN(1.0)",
+        "CAST(null AS ARRAY<String>)" -> "CAST(NULLASARRAY<STRING>)",
+        """(
+          |  WITH t AS (SELECT 1)
+          |  SELECT * FROM t
+          |)""".stripMargin -> "(WITHtAS(SELECT1)SELECT*FROMt)",
+        // Function invokes
+        "like('a', 'Spark_')" -> "like('a','Spark_')",
+        "substring('abcdef', 2)" -> "substring('abcdef',2)",
+        "split('bcdef', 'e')" -> "split('bcdef','e')",
+        "current_timestamp = current_timestamp" -> "CURRENT_TIMESTAMP=CURRENT_TIMESTAMP",
+        "'a' || 'b' || 'c'" -> "'a'||'b'||'c'"
+      ).foreach { case (selectExpr, expected) =>
+        checkAliasName(s"select $selectExpr", expected)
+      }
+    }
+  }
+
+  test("OuterReference in UnresolvedAlias is wrapped in Alias with default name") {
+    val outerRef = OuterReference(intAttr)
+    val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+    assert(result.isInstanceOf[Alias])
+    val alias = result.asInstanceOf[Alias]
+    assert(alias.child == outerRef)
+    assert(alias.name == "x")
+  }
+
+  test("OuterReference in UnresolvedAlias uses SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE") {
+    val outerRef = OuterReference(intAttr)
+    outerRef.setTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, "min(x)")
+    val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+    assert(result.isInstanceOf[Alias])
+    val alias = result.asInstanceOf[Alias]
+    assert(alias.child == outerRef)
+    assert(alias.name == "min(x)")
+  }
+
+  test("OuterReference in UnresolvedAlias without tag falls back to toPrettySQL") {
+    val qualifiedAttr = AttributeReference("col", LongType)(qualifier = Seq("t1"))
+    val outerRef = OuterReference(qualifiedAttr)
+    val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+    assert(result.isInstanceOf[Alias])
+    val alias = result.asInstanceOf[Alias]
+    assert(alias.child == outerRef)
+    assert(alias.name == "col")
+  }
+
+  test("SINGLE_PASS_SQL_STRING_OVERRIDE alone does not affect OuterReference alias name") {
+    val outerRef = OuterReference(intAttr)
+    outerRef.setTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE, "sum(x)")
+    val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+    val alias = result.asInstanceOf[Alias]
+    assert(alias.name == "x")
+  }
+
+  test("Both SQL and alias override tags set - alias name uses alias override") {
+    val outerRef = OuterReference(intAttr)
+    outerRef.setTagValue(OuterReference.SINGLE_PASS_SQL_STRING_OVERRIDE, "sql_override")
+    outerRef.setTagValue(
+      OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, "alias_override")
+    val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+    val alias = result.asInstanceOf[Alias]
+    assert(alias.name == "alias_override")
+  }
+
+  test("OuterReference is wrapped in Alias rather than passed through as NamedExpression") {
+    val outerRef = OuterReference(intAttr)
+    val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+    assert(result.isInstanceOf[Alias],
+      "OuterReference should be wrapped in Alias, not passed through as NamedExpression")
+  }
+
+  test("OuterReference is handled correctly by assignAliases") {
+    val outerRef = OuterReference(intAttr)
+    outerRef.setTagValue(OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, "max(x)")
+    val exprs: Seq[NamedExpression] = Seq(UnresolvedAlias(outerRef, None))
+    val result = AliasResolution.assignAliases(exprs)
+    assert(result.length == 1)
+    val alias = result.head.asInstanceOf[Alias]
+    assert(alias.child == outerRef)
+    assert(alias.name == "max(x)")
+  }
+
+  test("assignAliases with mixed OuterReference and regular expressions") {
+    val outerRef = OuterReference(intAttr)
+    outerRef.setTagValue(
+      OuterReference.SINGLE_PASS_OUTER_AGGREGATE_ALIAS_NAME_OVERRIDE, "count(x)")
+    val regularAttr = AttributeReference("y", LongType)()
+    val exprs: Seq[NamedExpression] = Seq(
+      UnresolvedAlias(outerRef, None),
+      regularAttr
+    )
+    val result = AliasResolution.assignAliases(exprs)
+    assert(result.length == 2)
+    val alias = result.head.asInstanceOf[Alias]
+    assert(alias.name == "count(x)")
+    assert(result(1) == regularAttr, "Regular attribute should be unchanged")
+  }
+
+  test("OuterReference with different data types") {
+    Seq(
+      ("str_col", StringType),
+      ("long_col", LongType),
+      ("dbl_col", DoubleType)
+    ).foreach { case (colName, dataType) =>
+      val attr = AttributeReference(colName, dataType)()
+      val outerRef = OuterReference(attr)
+      val result = AliasResolution.resolve(UnresolvedAlias(outerRef, None))
+      val alias = result.asInstanceOf[Alias]
+      assert(alias.child == outerRef)
+      assert(alias.name == colName)
+    }
   }
 }

@@ -35,13 +35,18 @@ import org.apache.spark.{Partition, TaskContext}
  * @param isOrderSensitive whether or not the function is order-sensitive. If it's order
  *                         sensitive, it may return totally different result when the input order
  *                         is changed. Mostly stateful functions are order-sensitive.
+ * @param preservesPartitionSizes Whether the input function preserves the number of rows in each
+ *                                partition. This is true for 1:1 element mappings like `map`.
+ *                                Used to optimize `RDD.zipWithIndex` by counting rows on a
+ *                                cheaper ancestor RDD instead of the immediate parent.
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false,
     isFromBarrier: Boolean = false,
-    isOrderSensitive: Boolean = false)
+    isOrderSensitive: Boolean = false,
+    val preservesPartitionSizes: Boolean = false)
   extends RDD[U](prev) {
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None

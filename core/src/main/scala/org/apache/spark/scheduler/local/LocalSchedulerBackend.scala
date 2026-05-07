@@ -23,13 +23,17 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{TaskThreadDump, UpdateDelegationTokens}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.util.Utils
 
 private case class ReviveOffers()
@@ -76,12 +80,18 @@ private[spark] class LocalEndpoint(
 
     case KillTask(taskId, interruptThread, reason) =>
       executor.killTask(taskId, interruptThread, reason)
+
+    case UpdateDelegationTokens(tokenBytes) =>
+      logInfo(log"Received tokens of ${MDC(LogKeys.NUM_BYTES, tokenBytes.length)} bytes")
+      SparkHadoopUtil.get.addDelegationTokens(tokenBytes, scheduler.conf)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case StopExecutor =>
       executor.stop()
       context.reply(true)
+    case TaskThreadDump(taskId) =>
+      context.reply(executor.getTaskThreadDump(taskId))
   }
 
   def reviveOffers(): Unit = {
@@ -104,15 +114,23 @@ private[spark] class LocalSchedulerBackend(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
     val totalCores: Int)
-  extends SchedulerBackend with ExecutorBackend with Logging {
+  extends SchedulerBackend with ExecutorBackend with SupportsDelegationToken with Logging {
 
-  private val appId = "local-" + System.currentTimeMillis
+  private val appId = conf.get("spark.test.appId", "local-" + System.currentTimeMillis)
   private var localEndpoint: RpcEndpointRef = null
   private val userClassPath = getUserClasspath(conf)
   private val listenerBus = scheduler.sc.listenerBus
   private val launcherBackend = new LauncherBackend() {
     override def conf: SparkConf = LocalSchedulerBackend.this.conf
     override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
+  }
+
+  override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
+    Some(new HadoopDelegationTokenManager(conf, scheduler.sc.hadoopConfiguration, localEndpoint))
+  }
+
+  override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+    SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
   }
 
   /**
@@ -131,6 +149,10 @@ private[spark] class LocalSchedulerBackend(
     val rpcEnv = SparkEnv.get.rpcEnv
     val executorEndpoint = new LocalEndpoint(rpcEnv, userClassPath, scheduler, this, totalCores)
     localEndpoint = rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", executorEndpoint)
+
+    // call this after localEndpoint is assigned
+    setupTokenManager()
+
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
@@ -138,6 +160,7 @@ private[spark] class LocalSchedulerBackend(
         Map.empty)))
     launcherBackend.setAppId(appId)
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
+    reviveOffers()
   }
 
   override def stop(): Unit = {
@@ -149,7 +172,7 @@ private[spark] class LocalSchedulerBackend(
   }
 
   override def defaultParallelism(): Int =
-    scheduler.conf.getInt("spark.default.parallelism", totalCores)
+    scheduler.conf.getInt(config.DEFAULT_PARALLELISM.key, totalCores)
 
   override def killTask(
       taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
@@ -171,6 +194,7 @@ private[spark] class LocalSchedulerBackend(
 
   private def stop(finalState: SparkAppHandle.State): Unit = {
     localEndpoint.ask(StopExecutor)
+    stopTokenManager()
     try {
       launcherBackend.setState(finalState)
     } finally {
@@ -178,4 +202,7 @@ private[spark] class LocalSchedulerBackend(
     }
   }
 
+  override def getTaskThreadDump(taskId: Long, executorId: String): Option[ThreadStackTrace] = {
+    localEndpoint.askSync[Option[ThreadStackTrace]](TaskThreadDump(taskId))
+  }
 }

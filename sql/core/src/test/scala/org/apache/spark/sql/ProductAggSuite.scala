@@ -23,8 +23,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, ShortType}
 
 
-class ProductAggSuite extends QueryTest
-  with SharedSparkSession {
+class ProductAggSuite extends SharedSparkSession {
 
   // Sequence of integers small enough that factorial is representable exactly as DoubleType:
   private lazy val data16 = spark.range(1, 17).toDF("x")
@@ -69,7 +68,7 @@ class ProductAggSuite extends QueryTest
 
     val prodFactorials = data16.withColumn("f", product(col("x")).over(win)).orderBy(col("x"))
 
-    assert(prodFactorials.count === 16)
+    assert(prodFactorials.count() === 16)
 
     checkAnswer(
       prodFactorials.limit(5),

@@ -30,13 +30,16 @@ class ExecutionData private[spark] (
     val runningJobIds: Seq[Int],
     val successJobIds: Seq[Int],
     val failedJobIds: Seq[Int],
-    val nodes: Seq[Node],
-    val edges: Seq[SparkPlanGraphEdge])
+    val nodes: collection.Seq[Node],
+    val edges: collection.Seq[SparkPlanGraphEdge],
+    val queryId: String = null,
+    val errorMessage: String = null,
+    val rootExecutionId: Long = -1)
 
 case class Node private[spark](
     nodeId: Long,
     nodeName: String,
     wholeStageCodegenId: Option[Long] = None,
-    metrics: Seq[Metric])
+    metrics: collection.Seq[Metric])
 
 case class Metric private[spark] (name: String, value: String)

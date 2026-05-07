@@ -62,6 +62,9 @@ case class SortExec(
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
+  // WARNING: This is a shared mutable var on the SortExec instance. Do not access it from
+  // multiple threads concurrently - Spark operators do not guarantee thread-safety and one
+  // task's sorter could overwrite another's, causing a race condition.
   private[sql] var rowSorter: UnsafeExternalRowSorter = _
 
   /**
@@ -151,9 +154,12 @@ case class SortExec(
       forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
+    // Pass `partitionIndex` as a parameter so bare references in the child's
+    // produce resolve to the local, not the protected superclass field.
+    // Required when `addNewFunction` spills this helper to a nested class.
     val addToSorterFuncName = ctx.addNewFunction(addToSorter,
       s"""
-        | private void $addToSorter() throws java.io.IOException {
+        | private void $addToSorter(int partitionIndex) throws java.io.IOException {
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
         | }
       """.stripMargin.trim)
@@ -166,7 +172,7 @@ case class SortExec(
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   $addToSorterFuncName();
+       |   $addToSorterFuncName(partitionIndex);
        |   $sortedIterator = $sorterVariable.sort();
        |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
@@ -191,13 +197,13 @@ case class SortExec(
   }
 
   /**
-   * In SortExec, we overwrites cleanupResources to close UnsafeExternalRowSorter.
+   * In SortExec, we overwrite cleanupResources to close UnsafeExternalRowSorter.
+   * There's possible for rowSorter to be null here, for example, in the scenario of empty iterator
+   * in the current task, the downstream physical node (like SortMergeJoinExec) will trigger
+   * cleanupResources before rowSorter is initialized in createSorter.
    */
   override protected[sql] def cleanupResources(): Unit = {
     if (rowSorter != null) {
-      // There's possible for rowSorter is null here, for example, in the scenario of empty
-      // iterator in the current task, the downstream physical node(like SortMergeJoinExec) will
-      // trigger cleanupResources before rowSorter initialized in createSorter.
       rowSorter.cleanupResources()
     }
     super.cleanupResources()

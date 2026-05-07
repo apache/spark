@@ -26,10 +26,10 @@ to transform the inputs by running a user-specified command or script.
 
 Spark's script transform supports two modes:
 
-  1. Hive support disabled: Spark script transform can run without `spark.sql.catalogImplementation=true` 
-  or `SparkSession.builder.enableHiveSupport()`. In this case, now Spark only uses the script transform with 
+  1. Hive support disabled: Spark script transform can run with `spark.sql.catalogImplementation=in-memory`
+  or without `SparkSession.builder.enableHiveSupport()`. In this case, now Spark only uses the script transform with
   `ROW FORMAT DELIMITED` and treats all values passed to the script as strings. 
-  2. Hive support enabled: When Spark is run with `spark.sql.catalogImplementation=true` or Spark SQL is started
+  2. Hive support enabled: When Spark is run with `spark.sql.catalogImplementation=hive` or Spark SQL is started
   with `SparkSession.builder.enableHiveSupport()`, Spark can use the script transform with both Hive SerDe and 
   `ROW FORMAT DELIMITED`.
 
@@ -238,17 +238,17 @@ SELECT TRANSFORM(zip_code, name, age)
     USING 'cat'
 FROM person
 WHERE zip_code > 94500;
-+-------+---------------------+
-|    key|                value|
-+-------+---------------------+
-|  94588|	  Anil K    27|
-|  94588|	  John V    \N|
-|  94511|	Aryan B.    18|
-|  94511|	 David K    42|
-|  94588|	 Zen Hui    50|
-|  94588|	  Dan Li    18|
-|  94511|	Lalit B.    \N|
-+-------+---------------------+
++-------+----------------+
+|    key|           value|
++-------+----------------+
+|  94588|    Anil K    27|
+|  94588|    John V    \N|
+|  94511|  Aryan B.    18|
+|  94511|   David K    42|
+|  94588|   Zen Hui    50|
+|  94588|    Dan Li    18|
+|  94511|  Lalit B.    \N|
++-------+----------------+
 ```
 
 ### Related Statements
@@ -261,6 +261,8 @@ WHERE zip_code > 94500;
 * [SORT BY Clause](sql-ref-syntax-qry-select-sortby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [OFFSET Clause](sql-ref-syntax-qry-select-offset.html)
 * [CASE Clause](sql-ref-syntax-qry-select-case.html)
 * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [UNPIVOT Clause](sql-ref-syntax-qry-select-unpivot.html)
 * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

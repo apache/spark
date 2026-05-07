@@ -28,6 +28,7 @@ import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class NaiveBayesWrapper private (
     val pipeline: PipelineModel,
@@ -98,10 +99,12 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labels" -> instance.labels.toSeq) ~
-        ("features" -> instance.features.toSeq)
+        ("labels" -> instance.labels.toImmutableArraySeq) ~
+        ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      // Note that we should write single file. If there are more than one row
+      // it produces more partitions.
+      sparkSession.createDataFrame(Seq(Tuple1(rMetadataJson))).write.text(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
     }
@@ -114,7 +117,8 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath)
+        .first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val labels = (rMetadata \ "labels").extract[Array[String]]
       val features = (rMetadata \ "features").extract[Array[String]]

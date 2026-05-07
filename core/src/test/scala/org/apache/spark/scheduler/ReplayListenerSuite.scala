@@ -24,8 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.json4s.JsonAST.JValue
-import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
@@ -60,8 +58,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
       // scalastyle:off println
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
       // scalastyle:on println
     }
 
@@ -76,8 +74,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       logData.close()
     }
     assert(eventMonster.loggedEvents.size === 2)
-    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
-    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
   }
 
   /**
@@ -99,8 +97,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       val applicationEnd = SparkListenerApplicationEnd(1000L)
 
       // scalastyle:off println
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
       // scalastyle:on println
     }
 
@@ -144,9 +142,9 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val applicationEnd = SparkListenerApplicationEnd(1000L)
     Utils.tryWithResource(new PrintWriter(fwriter)) { writer =>
       // scalastyle:off println
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationStart))
       writer.println("""{"Event":"UnrecognizedEventOnlyForTest","Timestamp":1477593059313}""")
-      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      writer.println(JsonProtocol.sparkEventToJsonString(applicationEnd))
       // scalastyle:on println
     }
 
@@ -161,8 +159,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       logData.close()
     }
     assert(eventMonster.loggedEvents.size === 2)
-    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
-    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJsonString(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJsonString(applicationEnd))
   }
 
   // This assumes the correctness of EventLoggingListener
@@ -226,9 +224,9 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
     val originalEvents = sc.eventLogger.get.loggedEvents
-      .map(JsonProtocol.sparkEventFromJson(_))
+      .map(JsonProtocol.sparkEventFromJson)
     val replayedEvents = eventMonster.loggedEvents
-      .map(JsonProtocol.sparkEventFromJson(_))
+      .map(JsonProtocol.sparkEventFromJson)
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       JsonProtocolSuite.assertEquals(e1, e1)
     }
@@ -245,10 +243,10 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    */
   private class EventBufferingListener extends SparkFirehoseListener {
 
-    private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
+    private[scheduler] val loggedEvents = new ArrayBuffer[String]
 
     override def onEvent(event: SparkListenerEvent): Unit = {
-      val eventJson = JsonProtocol.sparkEventToJson(event)
+      val eventJson = JsonProtocol.sparkEventToJsonString(event)
       loggedEvents += eventJson
     }
   }

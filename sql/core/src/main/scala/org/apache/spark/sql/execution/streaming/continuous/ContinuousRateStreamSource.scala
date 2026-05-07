@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, ContinuousPartitionReaderFactory, ContinuousStream, Offset, PartitionOffset}
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
+import org.apache.spark.sql.execution.streaming.runtime.{RateStreamOffset, ValueRunTimeMsPair}
 
 case class RateStreamPartitionOffset(
    partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
@@ -42,7 +42,8 @@ class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extend
       case RateStreamPartitionOffset(i, currVal, nextRead) =>
         (i, ValueRunTimeMsPair(currVal, nextRead))
     }
-    RateStreamOffset(Map(tuples: _*))
+    import org.apache.spark.util.ArrayImplicits._
+    RateStreamOffset(Map(tuples.toImmutableArraySeq: _*))
   }
 
   override def deserializeOffset(json: String): Offset = {

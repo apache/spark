@@ -19,15 +19,18 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
 
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.Hex.unhexDigits
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -38,7 +41,7 @@ object ExternalCatalogUtils {
   // The following string escaping code is mainly copied from Hive (o.a.h.h.common.FileUtils).
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
-  val charToEscape = {
+  final val (charToEscape, sizeOfCharToEscape) = {
     val bitSet = new java.util.BitSet(128)
 
     /**
@@ -58,54 +61,77 @@ object ExternalCatalogUtils {
       Array(' ', '<', '>', '|').foreach(bitSet.set(_))
     }
 
-    bitSet
+    (bitSet, bitSet.size)
   }
 
-  def needsEscaping(c: Char): Boolean = {
-    c >= 0 && c < charToEscape.size() && charToEscape.get(c)
+  private final val HEX_CHARS = "0123456789ABCDEF".toCharArray
+
+  @inline final def needsEscaping(c: Char): Boolean = {
+    c < sizeOfCharToEscape && charToEscape.get(c)
   }
 
   def escapePathName(path: String): String = {
-    val builder = new StringBuilder()
-    path.foreach { c =>
-      if (needsEscaping(c)) {
-        builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02X")
-      } else {
-        builder.append(c)
-      }
+    if (path == null || path.isEmpty) {
+      return path
     }
-
-    builder.toString()
-  }
-
-
-  def unescapePathName(path: String): String = {
-    val sb = new StringBuilder
-    var i = 0
-
-    while (i < path.length) {
-      val c = path.charAt(i)
-      if (c == '%' && i + 2 < path.length) {
-        val code: Int = try {
-          Integer.parseInt(path.substring(i + 1, i + 3), 16)
-        } catch {
-          case _: Exception => -1
-        }
-        if (code >= 0) {
-          sb.append(code.asInstanceOf[Char])
-          i += 3
+    val length = path.length
+    var firstIndex = 0
+    while (firstIndex < length && !needsEscaping(path.charAt(firstIndex))) {
+      firstIndex += 1
+    }
+    if (firstIndex == length) {
+      path
+    } else {
+      val sb = new java.lang.StringBuilder(length + 16)
+      if (firstIndex != 0) sb.append(path, 0, firstIndex)
+      while (firstIndex < length) {
+        val c = path.charAt(firstIndex)
+        if (needsEscaping(c)) {
+          sb.append('%').append(HEX_CHARS((c & 0xF0) >> 4)).append(HEX_CHARS(c & 0x0F))
         } else {
           sb.append(c)
-          i += 1
         }
-      } else {
-        sb.append(c)
-        i += 1
+        firstIndex += 1
       }
+      sb.toString
     }
+  }
 
-    sb.toString()
+  def unescapePathName(path: String): String = {
+    if (path == null || path.isEmpty) {
+      return path
+    }
+    var plaintextEndIdx = path.indexOf('%')
+    val length = path.length
+    if (plaintextEndIdx == -1 || plaintextEndIdx + 2 >= length) {
+      // fast path, no %xx encoding found then return the string identity
+      path
+    } else {
+      val sb = new java.lang.StringBuilder(length)
+      var plaintextStartIdx = 0
+      while (plaintextEndIdx != -1 && plaintextEndIdx + 2 < length) {
+        if (plaintextEndIdx > plaintextStartIdx) sb.append(path, plaintextStartIdx, plaintextEndIdx)
+        val high = path.charAt(plaintextEndIdx + 1)
+        if ((high >>> 8) == 0 && unhexDigits(high) != -1) {
+          val low = path.charAt(plaintextEndIdx + 2)
+          if ((low >>> 8) == 0 && unhexDigits(low) != -1) {
+            sb.append((unhexDigits(high) << 4 | unhexDigits(low)).asInstanceOf[Char])
+            plaintextStartIdx = plaintextEndIdx + 3
+          } else {
+            sb.append('%')
+            plaintextStartIdx = plaintextEndIdx + 1
+          }
+        } else {
+          sb.append('%')
+          plaintextStartIdx = plaintextEndIdx + 1
+        }
+        plaintextEndIdx = path.indexOf('%', plaintextStartIdx)
+      }
+      if (plaintextStartIdx < length) {
+        sb.append(path, plaintextStartIdx, length)
+      }
+      sb.toString
+    }
   }
 
   def generatePartitionPath(
@@ -156,27 +182,34 @@ object ExternalCatalogUtils {
     } else {
       val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
         catalogTable.partitionSchema)
-      val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-
-      val nonPartitionPruningPredicates = predicates.filterNot {
-        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-      }
-      if (nonPartitionPruningPredicates.nonEmpty) {
-        throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
-          nonPartitionPruningPredicates)
-      }
-
-      val boundPredicate =
-        Predicate.createInterpreted(predicates.reduce(And).transform {
-          case att: AttributeReference =>
-            val index = partitionSchema.indexWhere(_.name == att.name)
-            BoundReference(index, partitionSchema(index).dataType, nullable = true)
-        })
+      val boundPredicate = generatePartitionPredicateByFilter(catalogTable,
+        partitionSchema, predicates)
 
       inputPartitions.filter { p =>
         boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
       }
     }
+  }
+
+  def generatePartitionPredicateByFilter(
+      catalogTable: CatalogTable,
+      partitionSchema: StructType,
+      predicates: Seq[Expression]): BasePredicate = {
+    val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+    val nonPartitionPruningPredicates = predicates.filterNot {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+    if (nonPartitionPruningPredicates.nonEmpty) {
+      throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
+        nonPartitionPruningPredicates)
+    }
+
+    Predicate.createInterpreted(predicates.reduce(And).transform {
+      case att: AttributeReference =>
+        val index = partitionSchema.indexWhere(_.name == att.name)
+        BoundReference(index, partitionSchema(index).dataType, nullable = true)
+    })
   }
 
   private def isNullPartitionValue(value: String): Boolean = {
@@ -198,7 +231,7 @@ object ExternalCatalogUtils {
   }
 
   def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
-    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity).toMap
+    spec.transform((_, v) => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity)
   }
 }
 
@@ -248,6 +281,32 @@ object CatalogUtils {
    */
   def stringToURI(str: String): URI = {
     new Path(str).toUri
+  }
+
+  def makeQualifiedDBObjectPath(
+      locationUri: URI,
+      warehousePath: String,
+      hadoopConf: Configuration): URI = {
+    if (locationUri.isAbsolute) {
+      locationUri
+    } else {
+      val fullPath = new Path(warehousePath, CatalogUtils.URIToString(locationUri))
+      makeQualifiedPath(fullPath.toUri, hadoopConf)
+    }
+  }
+
+  def makeQualifiedDBObjectPath(
+      warehouse: String,
+      location: String,
+      hadoopConf: Configuration): String = {
+    val nsPath = makeQualifiedDBObjectPath(stringToURI(location), warehouse, hadoopConf)
+    URIToString(nsPath)
+  }
+
+  def makeQualifiedPath(path: URI, hadoopConf: Configuration): URI = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(hadoopConf)
+    fs.makeQualified(hadoopPath).toUri
   }
 
   private def normalizeColumnName(

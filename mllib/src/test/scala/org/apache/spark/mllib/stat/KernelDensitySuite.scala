@@ -22,10 +22,11 @@ import org.apache.commons.math3.distribution.NormalDistribution
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.ArrayImplicits._
 
 class KernelDensitySuite extends SparkFunSuite with MLlibTestSparkContext {
   test("kernel density single sample") {
-    val rdd = sc.parallelize(Array(5.0))
+    val rdd = sc.parallelize(Array(5.0).toImmutableArraySeq)
     val evaluationPoints = Array(5.0, 6.0)
     val densities = new KernelDensity().setSample(rdd).setBandwidth(3.0).estimate(evaluationPoints)
     val normal = new NormalDistribution(5.0, 3.0)
@@ -35,7 +36,7 @@ class KernelDensitySuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("kernel density multiple samples") {
-    val rdd = sc.parallelize(Array(5.0, 10.0))
+    val rdd = sc.parallelize(Array(5.0, 10.0).toImmutableArraySeq)
     val evaluationPoints = Array(5.0, 6.0)
     val densities = new KernelDensity().setSample(rdd).setBandwidth(3.0).estimate(evaluationPoints)
     val normal1 = new NormalDistribution(5.0, 3.0)

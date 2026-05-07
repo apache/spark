@@ -15,22 +15,41 @@
  * limitations under the License.
  */
 
-/* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
-/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, uiRoot */
+/* global $, uiRoot */
+
+import {
+  ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getBaseURI, getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export {setTaskThreadDumpEnabled};
+
+function setTooltip(selector, text) {
+  $(selector).attr("data-bs-toggle", "tooltip")
+    .attr("title", text);
+}
 
 var shouldBlockUI = true;
+var taskThreadDumpEnabled = false;
+
+/* eslint-disable no-unused-vars */
+function setTaskThreadDumpEnabled(enabled){
+  taskThreadDumpEnabled = enabled;
+}
+/* eslint-enable no-unused-vars */
 
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
-    $.unblockUI();
+    $("#loading-overlay").addClass("d-none");
     shouldBlockUI = false;
   }
 });
 
 $(document).ajaxStart(function () {
   if (shouldBlockUI) {
-    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
+    $("#loading-overlay").removeClass("d-none");
   }
 });
 
@@ -71,8 +90,8 @@ $.extend( $.fn.dataTable.ext.type.order, {
 // e.g. (history) https://domain:50509/history/application_1536254569791_3806251/1/stages/stage/?id=4&attempt=1
 // e.g. (proxy) https://domain:50505/proxy/application_1502220952225_59143/stages/stage?id=4&attempt=1
 function stageEndPoint(appId) {
-  var queryString = document.baseURI.split('?');
-  var words = document.baseURI.split('/');
+  var queryString = getBaseURI().split('?');
+  var words = getBaseURI().split('/');
   var indexOfProxy = words.indexOf("proxy");
   var stageId = queryString[1].split("&").filter(word => word.includes("id="))[0].split("=")[1];
   var newBaseURI;
@@ -136,8 +155,8 @@ function getColumnNameForTaskMetricSummary(columnKey) {
     case "executorDeserializeTime":
       return "Task Deserialization Time";
 
-    case "shuffleReadBlockedTime":
-      return "Shuffle Read Blocked Time";
+    case "shuffleReadFetchWaitTime":
+      return "Shuffle Read Fetch Wait Time";
 
     case "shuffleRemoteReads":
       return "Shuffle Remote Reads";
@@ -168,7 +187,7 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
         row.data.readRecords[columnIndex];
       return str;
  
-    case 'shuffleReadBlockedTime':
+    case 'shuffleReadFetchWaitTime':
       str = formatDuration(row.data.fetchWaitTime[columnIndex]);
       return str;
  
@@ -235,11 +254,7 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
         }
       ],
       "columnDefs": [
-        { "type": "duration", "targets": 1 },
-        { "type": "duration", "targets": 2 },
-        { "type": "duration", "targets": 3 },
-        { "type": "duration", "targets": 4 },
-        { "type": "duration", "targets": 5 }
+        { "type": "duration", "targets": [1, 2, 3, 4, 5] }
       ],
       "paging": false,
       "info": false,
@@ -304,7 +319,7 @@ function reselectCheckboxesBasedOnTaskTableState() {
 }
 
 function getStageAttemptId() {
-  var words = document.baseURI.split('?');
+  var words = getBaseURI().split('?');
   var digitsRegex = /[0-9]+/;
   // We are using regex here to extract the stage attempt id as there might be certain url's with format
   // like /proxy/application_1539986433979_27115/stages/stage/?id=0&attempt=0#tasksTitle
@@ -334,7 +349,7 @@ $(document).ready(function () {
     "<div id='select_all' class='select-all-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
     "<div id='scheduler_delay' class='scheduler-delay-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-11' data-column='11' data-metrics-type='task'> Scheduler Delay</div>" +
     "<div id='task_deserialization_time' class='task-deserialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-12' data-column='12' data-metrics-type='task'> Task Deserialization Time</div>" +
-    "<div id='shuffle_read_blocked_time' class='shuffle-read-blocked-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' data-metrics-type='task'> Shuffle Read Blocked Time</div>" +
+    "<div id='shuffle_read_fetch_wait_time' class='shuffle-read-fetch-wait-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-13' data-column='13' data-metrics-type='task'> Shuffle Read Fetch Wait Time</div>" +
     "<div id='shuffle_remote_reads' class='shuffle-remote-reads-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-14' data-column='14' data-metrics-type='task'> Shuffle Remote Reads</div>" +
     "<div id='shuffle_write_time' class='shuffle-write-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-21' data-column='21' data-metrics-type='task'> Shuffle Write Time</div>" +
     "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' data-metrics-type='task'> Result Serialization Time</div>" +
@@ -346,41 +361,24 @@ $(document).ready(function () {
     "<div id='executor_direct_mapped_pool_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-18' data-column='18' data-metrics-type='executor'> Peak Pool Memory Direct / Mapped</div>" +
     "</div>");
 
-  $('#scheduler_delay').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
-      "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
-  $('#task_deserialization_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
-  $('#shuffle_read_blocked_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
-  $('#shuffle_remote_reads').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
-  $('#shuffle_write_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Time that the task spent writing shuffle data.");
-  $('#result_serialization_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Time spent serializing the task result on the executor before sending it back to the driver.");
-  $('#getting_result_time').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
-  $('#peak_execution_memory').attr("data-toggle", "tooltip")
-    .attr("data-placement", "top")
-    .attr("title", "Execution memory refers to the memory used by internal data structures created during " +
-      "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
-      "should be approximately the sum of the peak sizes across all such data structures created " +
-      "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
-      "external sort.");
-  $('[data-toggle="tooltip"]').tooltip();
+  setTooltip('#scheduler_delay', "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
+    "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
+  setTooltip('#task_deserialization_time', "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
+  setTooltip('#shuffle_read_fetch_wait_time', "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
+  setTooltip('#shuffle_remote_reads', "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
+  setTooltip('#shuffle_write_time', "Time that the task spent writing shuffle data.");
+  setTooltip('#result_serialization_time', "Time spent serializing the task result on the executor before sending it back to the driver.");
+  setTooltip('#getting_result_time', "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
+  setTooltip('#peak_execution_memory', "Execution memory refers to the memory used by internal data structures created during " +
+    "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
+    "should be approximately the sum of the peak sizes across all such data structures created " +
+    "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
+    "external sort.");
   var tasksSummary = $("#parent-container");
   getStandAloneAppId(function (appId) {
     // rendering the UI page
     $.get(createTemplateURI(appId, "stagespage"), function(template) {
-      tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html()));
+      tasksSummary.append($(template).filter("#stages-summary-template").html());
 
       $("#additionalMetrics").click(function(){
         $("#arrowtoggle1").toggleClass("arrow-open arrow-closed");
@@ -404,8 +402,8 @@ $(document).ready(function () {
   
         var responseBody = response;
         var dataToShow = {};
-        dataToShow.showInputData = responseBody.inputBytes > 0;
-        dataToShow.showOutputData = responseBody.outputBytes > 0;
+        dataToShow.showInputData = responseBody.inputBytes > 0 || responseBody.inputRecords > 0 ;
+        dataToShow.showOutputData = responseBody.outputBytes > 0 || responseBody.outputRecords > 0;
         dataToShow.showShuffleReadData = responseBody.shuffleReadBytes > 0;
         dataToShow.showShuffleWriteData = responseBody.shuffleWriteBytes > 0;
         dataToShow.showBytesSpilledData =
@@ -413,7 +411,7 @@ $(document).ready(function () {
   
         var columnIndicesToRemove = [];
         if (!dataToShow.showShuffleReadData) {
-          $('#shuffle_read_blocked_time').remove();
+          $('#shuffle_read_fetch_wait_time').remove();
           $('#shuffle_remote_reads').remove();
           columnIndicesToRemove.push(2);
           columnIndicesToRemove.push(3);
@@ -592,22 +590,16 @@ $(document).ready(function () {
                 // The targets: $id represents column id which comes from stagespage-template.html
                 // #summary-executor-table.If the relative position of the columns in the table
                 // #summary-executor-table has changed,please be careful to adjust the column index here
-                // Input Size / Records
-                {"type": "size", "targets": 9},
-                // Output Size / Records
-                {"type": "size", "targets": 10},
-                // Shuffle Read Size / Records
-                {"type": "size", "targets": 11},
-                // Shuffle Write Size / Records
-                {"type": "size", "targets": 12},
+                // Input Size / Records - 9
+                // Output Size / Records - 10
+                // Shuffle Read Size / Records - 11
+                // Shuffle Write Size / Records - 12
+                {"type": "size", "targets": [9, 10, 11, 12]},
                 // Peak JVM Memory OnHeap / OffHeap
-                {"visible": false, "targets": 15},
                 // Peak Execution Memory OnHeap / OffHeap
-                {"visible": false, "targets": 16},
                 // Peak Storage Memory OnHeap / OffHeap
-                {"visible": false, "targets": 17},
                 // Peak Pool Memory Direct / Mapped
-                {"visible": false, "targets": 18}
+                {"visible": false, "targets": executorOptionalColumns},
               ],
               "deferRender": true,
               "order": [[0, "asc"]],
@@ -618,39 +610,59 @@ $(document).ready(function () {
             };
             executorSummaryTableSelector =
               $("#summary-executor-table").DataTable(executorSummaryConf);
-            $('#parent-container [data-toggle="tooltip"]').tooltip();
   
             executorSummaryTableSelector.column(9).visible(dataToShow.showInputData);
             if (dataToShow.showInputData) {
-              $('#executor-summary-input').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
-                .attr("title", "Bytes and records read from Hadoop or from Spark storage.");
-              $('#executor-summary-input').tooltip(true);
+              setTooltip('#executor-summary-input', "Bytes and records read from Hadoop or from Spark storage.");
             }
             executorSummaryTableSelector.column(10).visible(dataToShow.showOutputData);
             if (dataToShow.showOutputData) {
-              $('#executor-summary-output').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
-                .attr("title", "Bytes and records written to Hadoop.");
-              $('#executor-summary-output').tooltip(true);
+              setTooltip('#executor-summary-output', "Bytes and records written to Hadoop.");
             }
             executorSummaryTableSelector.column(11).visible(dataToShow.showShuffleReadData);
             if (dataToShow.showShuffleReadData) {
-              $('#executor-summary-shuffle-read').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
-                .attr("title", "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
-              $('#executor-summary-shuffle-read').tooltip(true);
+              setTooltip('#executor-summary-shuffle-read', "Total shuffle bytes and records read (includes both data read locally and data read from remote executors).");
             }
             executorSummaryTableSelector.column(12).visible(dataToShow.showShuffleWriteData);
             if (dataToShow.showShuffleWriteData) {
-              $('#executor-summary-shuffle-write').attr("data-toggle", "tooltip")
-                .attr("data-placement", "top")
-                .attr("title", "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
-              $('#executor-summary-shuffle-write').tooltip(true);
+              setTooltip('#executor-summary-shuffle-write', "Bytes and records written to disk in order to be read by a shuffle in a future stage.");
             }
             executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
             executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
+            reselectCheckboxesBasedOnTaskTableState();
           });
+
+        // Prepare data for speculation metrics
+        $("#speculationSummaryTitle").addClass("d-none");
+        $("#speculationSummary").addClass("d-none");
+        var speculationSummaryInfo = responseBody.speculationSummary;
+        var speculationData;
+        if(speculationSummaryInfo) {
+          speculationData = [[
+            speculationSummaryInfo.numTasks,
+            speculationSummaryInfo.numActiveTasks,
+            speculationSummaryInfo.numCompletedTasks,
+            speculationSummaryInfo.numFailedTasks,
+            speculationSummaryInfo.numKilledTasks
+          ]];
+          if (speculationSummaryInfo.numTasks > 0) {
+            // Show speculationSummary if there is atleast one speculated task that ran
+            $("#speculationSummaryTitle").removeClass("d-none");
+            $("#speculationSummary").removeClass("d-none");
+          }
+        }
+        var speculationMetricsTableConf = {
+          "data": speculationData,
+          "paging": false,
+          "searching": false,
+          "order": [[0, "asc"]],
+          "bSort": false,
+          "bAutoWidth": false,
+          "oLanguage": {
+            "sEmptyTable": "No speculation metrics yet"
+          }
+        }
+        $("#speculation-metrics-table").DataTable(speculationMetricsTableConf);
 
         // prepare data for accumulatorUpdates
         var accumulatorTable = responseBody.accumulatorUpdates.filter(accumUpdate =>
@@ -670,7 +682,7 @@ $(document).ready(function () {
                   row1 = createRowMetadataForColumn(
                     columnKey, taskMetricsResponse[columnKey], 3);
                   row2 = createRowMetadataForColumn(
-                    "shuffleReadBlockedTime", taskMetricsResponse[columnKey], 13);
+                    "shuffleReadFetchWaitTime", taskMetricsResponse[columnKey], 13);
                   row3 = createRowMetadataForColumn(
                     "shuffleRemoteReads", taskMetricsResponse[columnKey], 14);
                   if (dataToShow.showShuffleReadData) {
@@ -812,11 +824,7 @@ $(document).ready(function () {
                 data.length = totalTasksToShow;
               }
             },
-            "dataSrc": function (jsons) {
-              var jsonStr = JSON.stringify(jsons);
-              var tasksToShow = JSON.parse(jsonStr);
-              return tasksToShow.aaData;
-            },
+            "dataSrc": (jsons) => jsons.aaData,
             "error": function (_ignored_jqXHR, _ignored_textStatus, _ignored_errorThrown) {
               alert("Unable to connect to the server. Looks like the Spark " +
                 "application must have ended. Please Switch to the history UI.");
@@ -824,15 +832,21 @@ $(document).ready(function () {
             }
           },
           "columns": [
-            {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.index) ? 0 : row.index ) : row.index;
-              },
-              name: "Index"
-            },
+            {data: "partitionId", name: "Index"},
             {data : "taskId", name: "ID"},
             {data : "attempt", name: "Attempt"},
-            {data : "status", name: "Status"},
+            {
+              data : (row, _ignored_type) => {
+                if (taskThreadDumpEnabled && row.status === "RUNNING") {
+                  var threadUrl =
+                    uiRoot + "/stages/taskThreadDump?executorId=" + row.executorId + "&taskId=" + row.taskId
+                  return '<div><a href=' + threadUrl + '>' + row.status + '</a></div>'
+                } else {
+                  return row.status
+                }
+              },
+              name: "Status"
+            },
             {data : "taskLocality", name: "Locality Level"},
             {data : "executorId", name: "Executor ID"},
             {data : "host", name: "Host"},
@@ -886,7 +900,7 @@ $(document).ready(function () {
                   return "";
                 }
               },
-              name: "Shuffle Read Blocked Time"
+              name: "Shuffle Read Fetch Wait Time"
             },
             {
               data : function (row, type) {
@@ -944,7 +958,7 @@ $(document).ready(function () {
             },
             {
               data : function (row, type) {
-                if (row.taskMetrics && row.taskMetrics.inputMetrics && row.taskMetrics.inputMetrics.bytesRead > 0) {
+                if (row.taskMetrics && row.taskMetrics.inputMetrics && (row.taskMetrics.inputMetrics.bytesRead > 0 || row.taskMetrics.inputMetrics.recordsRead > 0)) {
                   if (type === 'display') {
                     return formatBytes(row.taskMetrics.inputMetrics.bytesRead, type) + " / " + row.taskMetrics.inputMetrics.recordsRead;
                   } else {
@@ -958,7 +972,7 @@ $(document).ready(function () {
             },
             {
               data : function (row, type) {
-                if (row.taskMetrics && row.taskMetrics.outputMetrics && row.taskMetrics.outputMetrics.bytesWritten > 0) {
+                if (row.taskMetrics && row.taskMetrics.outputMetrics && (row.taskMetrics.outputMetrics.bytesWritten > 0 || row.taskMetrics.outputMetrics.recordsWritten > 0)) {
                   if (type === 'display') {
                     return formatBytes(row.taskMetrics.outputMetrics.bytesWritten, type) + " / " + row.taskMetrics.outputMetrics.recordsWritten;
                   } else {
@@ -1036,26 +1050,15 @@ $(document).ready(function () {
                 if (typeof msg === 'undefined') {
                   return "";
                 } else {
-                  var indexOfLineSeparator = msg.indexOf("\n");
-                  var formHead = indexOfLineSeparator > 0 ? msg.substring(0, indexOfLineSeparator) : (msg.length > 100 ? msg.substring(0, 100) : msg);
-                  var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                  var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                  return formHead + form + formMsg;
+                  return errorMessageCell(msg)
                 }
               },
               name: "Errors"
             }
           ],
           "columnDefs": [
-            { "visible": false, "targets": 11 },
-            { "visible": false, "targets": 12 },
-            { "visible": false, "targets": 13 },
-            { "visible": false, "targets": 14 },
-            { "visible": false, "targets": 15 },
-            { "visible": false, "targets": 16 },
-            { "visible": false, "targets": 17 },
-            { "visible": false, "targets": 18 },
-            { "visible": false, "targets": 21 }
+            { "visible": false, "targets": optionalColumns },
+            { "visible": false, "targets": 18 }, // accumulators
           ],
           "deferRender": true
         };
@@ -1123,10 +1126,10 @@ $(document).ready(function () {
 
         // hide or show the accumulate update table
         if (accumulatorTable.length == 0) {
-          $("#accumulator-update-table").hide();
+          $("#accumulator-update-table").addClass("d-none");
         } else {
           taskTableSelector.column(18).visible(true);
-          $("#accumulator-update-table").show();
+          $("#accumulator-update-table").removeClass("d-none");
         }
         // Showing relevant stage data depending on stage type for task table and executor
         // summary table

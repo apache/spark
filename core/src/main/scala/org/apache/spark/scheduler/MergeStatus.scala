@@ -23,6 +23,7 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -57,15 +58,6 @@ private[spark] class MergeStatus(
   def totalSize: Long = size
 
   def tracker: RoaringBitmap = mapTracker
-
-  /**
-   * Get the list of mapper IDs for missing mapper partition blocks that are not merged.
-   * The reducer will use this information to decide which shuffle partition blocks to
-   * fetch in the original way.
-   */
-  def getMissingMaps(numMaps: Int): Seq[Int] = {
-    (0 until numMaps).filter(i => !mapTracker.contains(i))
-  }
 
   /**
    * Get the number of missing map outputs for missing mapper partition blocks that are not merged.
@@ -111,7 +103,7 @@ private[spark] object MergeStatus {
         val mergeStatus = new MergeStatus(mergerLoc, shuffleMergeId, bitmap,
           mergeStatuses.sizes(index))
         (mergeStatuses.reduceIds(index), mergeStatus)
-    }
+    }.toImmutableArraySeq
   }
 
   def apply(

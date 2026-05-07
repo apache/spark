@@ -108,19 +108,19 @@ class TestMemoryManager(conf: SparkConf)
    * memory (returning `0`), simulating low-on-memory / out-of-memory conditions.
    */
   def markExecutionAsOutOfMemoryOnce(): Unit = {
-    markconsequentOOM(1)
+    markConsequentOOM(1)
   }
 
   /**
    * Causes the next `n` calls to [[acquireExecutionMemory()]] to fail to allocate
    * memory (returning `0`), simulating low-on-memory / out-of-memory conditions.
    */
-  def markconsequentOOM(n: Int): Unit = synchronized {
+  def markConsequentOOM(n: Int): Unit = synchronized {
     consequentOOM += n
   }
 
   /**
-   * Undos the effects of [[markExecutionAsOutOfMemoryOnce]] and [[markconsequentOOM]] and lets
+   * Undos the effects of [[markExecutionAsOutOfMemoryOnce]] and [[markConsequentOOM]] and lets
    * calls to [[acquireExecutionMemory()]] (if there is enough memory available).
    */
   def resetConsequentOOM(): Unit = synchronized {

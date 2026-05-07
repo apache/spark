@@ -18,7 +18,7 @@
 package org.apache.spark.util.collection
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 
@@ -58,6 +58,10 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   private[this] val numElementsForceSpillThreshold: Int =
     SparkEnv.get.conf.get(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD)
 
+  // Force this collection to spill when its size is greater than this threshold
+  private[this] val maxSizeForceSpillThreshold: Long =
+    SparkEnv.get.conf.get(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
+
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
   @volatile private[this] var myMemoryThreshold = initialMemoryThreshold
@@ -80,21 +84,25 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * @return true if `collection` was spilled to disk; false otherwise
    */
   protected def maybeSpill(collection: C, currentMemory: Long): Boolean = {
-    var shouldSpill = false
-    if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
+    val shouldSpill = if (_elementsRead > numElementsForceSpillThreshold
+      || currentMemory > maxSizeForceSpillThreshold) {
+      // Check number of elements or memory usage limits, whichever is hit first
+      true
+    } else if (_elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
       val granted = acquireMemory(amountToRequest)
       myMemoryThreshold += granted
       // If we were granted too little memory to grow further (either tryToAcquire returned 0,
       // or we already had more memory than myMemoryThreshold), spill the current collection
-      shouldSpill = currentMemory >= myMemoryThreshold
+      currentMemory >= myMemoryThreshold
+    } else {
+      false
     }
-    shouldSpill = shouldSpill || _elementsRead > numElementsForceSpillThreshold
     // Actually spill
     if (shouldSpill) {
       _spillCount += 1
-      logSpillage(currentMemory)
+      logSpillage(currentMemory, _elementsRead)
       spill(collection)
       _elementsRead = 0
       _memoryBytesSpilled += currentMemory
@@ -140,11 +148,14 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * Prints a standard log message detailing spillage.
    *
    * @param size number of bytes spilled
+   * @param elements number of elements read from input since last spill
    */
-  @inline private def logSpillage(size: Long): Unit = {
+  @inline private def logSpillage(size: Long, elements: Int): Unit = {
     val threadId = Thread.currentThread().getId
-    logInfo("Thread %d spilling in-memory map of %s to disk (%d time%s so far)"
-      .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
-        _spillCount, if (_spillCount > 1) "s" else ""))
+    logInfo(log"Thread ${MDC(LogKeys.THREAD_ID, threadId)} " +
+      log"spilling in-memory map of ${MDC(LogKeys.BYTE_SIZE,
+        org.apache.spark.util.Utils.bytesToString(size))} " +
+      log"(elements: ${MDC(LogKeys.NUM_ELEMENTS_SPILL_RECORDS, elements)}) to disk " +
+      log"(${MDC(LogKeys.NUM_SPILLS, _spillCount)} times so far)")
   }
 }

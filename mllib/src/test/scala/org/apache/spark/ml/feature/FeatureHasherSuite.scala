@@ -24,7 +24,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -212,6 +212,30 @@ class FeatureHasherSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("myOutputCol")
       .setNumFeatures(10)
     testDefaultReadWrite(t)
+  }
+
+  test("FeatureHasher with nested input columns") {
+    val df = Seq(5.0, 10.0, 15.0).toDF("real")
+    val nestDf = df.select(struct(col("real")).as("nest"))
+
+    val hasher = new FeatureHasher()
+      .setInputCols("nest.real")
+      .setOutputCol("features")
+
+    val expectedResult = hasher.transform(nestDf).select("features").as[Vector].collect()
+    // check all numeric types work as expected. String & boolean types are tested in default case
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+    types.foreach { t =>
+      val castDF = df.select(col("real").cast(t))
+        .select(struct(col("real")).as("nest"))
+      val castResult = hasher.transform(castDF).select("features").as[Vector].collect()
+      withClue(s"FeatureHasher works for all numeric types (testing $t): ") {
+        assert(castResult.zip(expectedResult).forall { case (actual, expected) =>
+          actual ~== expected absTol 1e-14
+        })
+      }
+    }
   }
 }
 

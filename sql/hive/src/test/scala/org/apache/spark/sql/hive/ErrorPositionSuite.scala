@@ -19,13 +19,11 @@ package org.apache.spark.sql.hive
 
 import scala.util.Try
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton {
   import spark.implicits._
 
   override protected def beforeEach(): Unit = {
@@ -165,7 +163,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
           |
           |Actual: $actualStart, Expected: $expectedStart
           |$line
-          |${" " * actualStart}^
+          |${" ".repeat(actualStart)}^
           |0123456789 123456789 1234567890
           |          2         3
         """.stripMargin)

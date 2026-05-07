@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<ROWSET>
+    <ROW>
+        <name>alice</name>
+        <age>35</age>
+    </ROW>
+    <ROW>
+        <name>bob</name>
+        <age>    </age>
+    </ROW>
+    <ROW>
+        <name>coc</name>
+        <age>24</age>
+    </ROW>
+</ROWSET>

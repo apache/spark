@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 
 class DateTimeFormatterHelperSuite extends SparkFunSuite {
@@ -38,32 +38,59 @@ class DateTimeFormatterHelperSuite extends SparkFunSuite {
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'HH:mm:ss.SSSz G")
       === "yyyy-MM-dd'T'HH:mm:ss.SSSz G")
     weekBasedLetters.foreach { l =>
-      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
-      assert(e.getMessage.contains("week-based"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $l G")
+        },
+        condition = "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_WEEK_BASED_PATTERN",
+        parameters = Map("c" -> l.toString))
     }
     unsupportedLetters.foreach { l =>
-      val e = intercept[IllegalArgumentException](convertIncompatiblePattern(s"yyyy-MM-dd $l G"))
-      assert(e.getMessage === s"Illegal pattern character: $l")
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $l G")
+        },
+        condition = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+        parameters = Map(
+          "c" -> l.toString,
+          "pattern" -> s"yyyy-MM-dd $l G"))
     }
     unsupportedLettersForParsing.foreach { l =>
-      val e = intercept[IllegalArgumentException] {
-        DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
-      }
-      assert(e.getMessage === s"Illegal pattern character: $l")
-      assert(convertIncompatiblePattern(s"$l").nonEmpty)
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          DateTimeFormatterHelper.convertIncompatiblePattern(s"$l", isParsing = true)
+        },
+        condition = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
+        parameters = Map(
+          "c" -> l.toString,
+          "pattern" -> s"$l"))
     }
     unsupportedPatternLengths.foreach { style =>
-      val e1 = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"yyyy-MM-dd $style")
-      }
-      assert(e1.getMessage === s"Too many pattern letters: ${style.head}")
-      val e2 = intercept[IllegalArgumentException] {
-        convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
-      }
-      assert(e2.getMessage === s"Too many pattern letters: ${style.head}")
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $style")
+        },
+        condition = "INVALID_DATETIME_PATTERN.LENGTH",
+        parameters = Map("pattern" -> style))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          convertIncompatiblePattern(s"yyyy-MM-dd $style${style.head}")
+        },
+        condition = "INVALID_DATETIME_PATTERN.LENGTH",
+        parameters = Map("pattern" -> style))
     }
     assert(convertIncompatiblePattern("yyyy-MM-dd EEEE") === "uuuu-MM-dd EEEE")
     assert(convertIncompatiblePattern("yyyy-MM-dd'e'HH:mm:ss") === "uuuu-MM-dd'e'HH:mm:ss")
     assert(convertIncompatiblePattern("yyyy-MM-dd'T'") === "uuuu-MM-dd'T'")
+  }
+
+  test("SPARK-49583: invalid var length second fraction") {
+    val pattern = "\nSSSS\r"
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        createBuilderWithVarLengthSecondFraction(pattern)
+      },
+      condition = "INVALID_DATETIME_PATTERN.SECONDS_FRACTION",
+      parameters = Map("pattern" -> pattern))
   }
 }

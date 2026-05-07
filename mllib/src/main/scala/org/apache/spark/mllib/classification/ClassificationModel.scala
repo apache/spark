@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.{DefaultFormats, Formats, JValue}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -65,7 +65,7 @@ private[mllib] object ClassificationModel {
    * @return (numFeatures, numClasses)
    */
   def getNumFeaturesClasses(metadata: JValue): (Int, Int) = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     ((metadata \ "numFeatures").extract[Int], (metadata \ "numClasses").extract[Int])
   }
 }

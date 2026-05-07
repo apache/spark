@@ -20,8 +20,6 @@ package org.apache.spark.network.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
@@ -72,8 +70,7 @@ public final class RpcResponse extends AbstractResponseMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof RpcResponse) {
-      RpcResponse o = (RpcResponse) other;
+    if (other instanceof RpcResponse o) {
       return requestId == o.requestId && super.equals(o);
     }
     return false;
@@ -81,9 +78,6 @@ public final class RpcResponse extends AbstractResponseMessage {
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("requestId", requestId)
-      .append("body", body())
-      .toString();
+    return "RpcResponse[requestId=" + requestId + ",body=" + body() + "]";
   }
 }

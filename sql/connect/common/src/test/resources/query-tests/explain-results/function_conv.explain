@@ -1,0 +1,2 @@
+Project [conv(cast(b#0 as string), 10, 16, false) AS conv(b, 10, 16)#0]
++- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

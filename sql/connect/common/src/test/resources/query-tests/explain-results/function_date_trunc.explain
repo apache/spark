@@ -1,0 +1,2 @@
+Project [trunc(cast(t#0 as date), minute) AS trunc(t, minute)#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]

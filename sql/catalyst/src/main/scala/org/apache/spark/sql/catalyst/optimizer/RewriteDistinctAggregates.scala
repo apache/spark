@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPl
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.util.collection.Utils
 
 /**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
@@ -196,6 +197,17 @@ import org.apache.spark.sql.types.IntegerType
  * techniques.
  */
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
+  private def mustRewrite(
+      distinctAggs: Seq[AggregateExpression],
+      groupingExpressions: Seq[Expression]): Boolean = {
+    // If there are any distinct AggregateExpressions with filter, we need to rewrite the query.
+    // Also, if there are no grouping expressions and all distinct aggregate expressions are
+    // foldable, we need to rewrite the query, e.g. SELECT COUNT(DISTINCT 1). Without this case,
+    // non-grouping aggregation queries with distinct aggregate expressions will be incorrectly
+    // handled by the aggregation strategy, causing wrong results when working with empty tables.
+    distinctAggs.exists(_.filter.isDefined) || (groupingExpressions.isEmpty &&
+      distinctAggs.exists(_.aggregateFunction.children.forall(_.foldable)))
+  }
 
   private def mayNeedtoRewrite(a: Aggregate): Boolean = {
     val aggExpressions = collectAggregateExprs(a)
@@ -203,8 +215,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     // We need at least two distinct aggregates or the single distinct aggregate group exists filter
     // clause for this rule because aggregation strategy can handle a single distinct aggregate
     // group without filter clause.
-    // This check can produce false-positives, e.g., SUM(DISTINCT a) & COUNT(DISTINCT a).
-    distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
+    distinctAggs.size > 1 || mustRewrite(distinctAggs, a.groupingExpressions)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
@@ -219,7 +230,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
     // Extract distinct aggregate expressions.
     val distinctAggGroups = aggExpressions.filter(_.isDistinct).groupBy { e =>
-        val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+        val unfoldableChildren = ExpressionSet(e.aggregateFunction.children.filter(!_.foldable))
         if (unfoldableChildren.nonEmpty) {
           // Only expand the unfoldable children
           unfoldableChildren
@@ -230,12 +241,12 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // count(distinct 1) will be explained to count(1) after the rewrite function.
           // Generally, the distinct aggregateFunction should not run
           // foldable TypeCheck for the first child.
-          e.aggregateFunction.children.take(1).toSet
+          ExpressionSet(e.aggregateFunction.children.take(1))
         }
     }
 
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
-    if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
+    if (distinctAggGroups.size > 1 || mustRewrite(distinctAggs, a.groupingExpressions)) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)()
       val groupByMap = a.groupingExpressions.collect {
@@ -253,7 +264,9 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
-      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
+      val distinctAggChildAttrMap = distinctAggChildren.map { e =>
+        e.canonicalized -> AttributeReference(e.sql, e.dataType, nullable = true)()
+      }
       val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
       // Setup all the filters in distinct aggregate.
       val (distinctAggFilters, distinctAggFilterAttrs, maxConds) = distinctAggs.collect {
@@ -264,8 +277,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       }.unzip3
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
-      val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
-      val distinctAggFilterAttrLookup = distinctAggFilters.zip(maxConds.map(_.toAttribute)).toMap
+      val distinctAggChildAttrLookup = distinctAggChildAttrMap.filter(!_._1.foldable).toMap
+      val distinctAggFilterAttrLookup = Utils.toMap(distinctAggFilters, maxConds.map(_.toAttribute))
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
@@ -291,7 +304,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               af
             } else {
               patchAggregateFunctionChildren(af) { x =>
-                distinctAggChildAttrLookup.get(x)
+                distinctAggChildAttrLookup.get(x.canonicalized)
               }
             }
             val newCondition = if (condition.isDefined) {
@@ -330,11 +343,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         val operator = Alias(e.copy(aggregateFunction = af, filter = filterOpt), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
-        val result = AggregateExpression(
-          aggregate.First(operator.toAttribute, ignoreNulls = true),
-          mode = Complete,
-          isDistinct = false,
-          filter = Some(EqualTo(gid, regularGroupId)))
+        val result = aggregate.First(operator.toAttribute, ignoreNulls = true)
+          .toAggregateExpression(isDistinct = false, filter = Some(EqualTo(gid, regularGroupId)))
 
         // Some aggregate functions (COUNT) have the special property that they can return a
         // non-null result without any input. We need to make sure we return a result in this case.
@@ -390,13 +400,14 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         (distinctAggOperatorMap.flatMap(_._2) ++
           regularAggOperatorMap.map(e => (e._1, e._3))).toMap
 
+      val groupByMapNonFoldable = groupByMap.filter(!_._1.foldable)
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case e: Expression =>
             // The same GROUP BY clauses can have different forms (different names for instance) in
             // the groupBy and aggregate expressions of an aggregate. This makes a map lookup
             // tricky. So we do a linear search for a semantically equal group by expression.
-            groupByMap
+            groupByMapNonFoldable
               .find(ge => e.semanticEquals(ge._1))
               .map(_._2)
               .getOrElse(transformations.getOrElse(e, e))

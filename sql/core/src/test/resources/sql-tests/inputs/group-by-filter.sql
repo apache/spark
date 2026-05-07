@@ -32,6 +32,12 @@ CREATE OR REPLACE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
   (70, "dept 7", "FL")
 AS DEPT(dept_id, dept_name, state);
 
+CREATE OR REPLACE TEMPORARY VIEW FilterExpressionTestData AS SELECT * FROM VALUES
+  (1, 2, "asd"),
+  (3, 4, "fgh"),
+  (5, 6, "jkl")
+AS FilterExpressionTestData(num1, num2, str);
+
 -- Aggregate with filter and empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData;
 SELECT COUNT(a) FILTER (WHERE a = 1), COUNT(b) FILTER (WHERE a > 1) FROM testData;
@@ -162,3 +168,12 @@ GROUP BY dept_id;
 
 -- Aggregate with filter is subquery
 SELECT t1.b FROM (SELECT COUNT(b) FILTER (WHERE a >= 2) AS b FROM testData) t1;
+
+-- SPARK-47256: Wrong use of FILTER expression in aggregate functions
+SELECT count(num1) FILTER (WHERE rand(int(num2)) > 1) FROM FilterExpressionTestData;
+
+SELECT sum(num1) FILTER (WHERE str) FROM FilterExpressionTestData;
+
+SELECT sum(num1) FILTER (WHERE max(num2) > 1) FROM FilterExpressionTestData;
+
+SELECT sum(num1) FILTER (WHERE nth_value(num2, 2) OVER(ORDER BY num2) > 1) FROM FilterExpressionTestData;

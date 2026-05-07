@@ -18,16 +18,15 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
-import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.input.WholeTextFileRecordReader
+import org.apache.spark.util.Utils
 
 /**
  * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which is all of the lines
@@ -37,17 +36,20 @@ class HadoopFileWholeTextReader(file: PartitionedFile, conf: Configuration)
   extends Iterator[Text] with Closeable {
   private val _iterator = {
     val fileSplit = new CombineFileSplit(
-      Array(new Path(new URI(file.filePath))),
+      Array(file.toPath),
       Array(file.start),
       Array(file.length),
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.
       Array.empty[String])
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-    val reader = new WholeTextFileRecordReader(fileSplit, hadoopAttemptContext, 0)
-    reader.setConf(hadoopAttemptContext.getConfiguration)
-    reader.initialize(fileSplit, hadoopAttemptContext)
-    new RecordReaderIterator(reader)
+    Utils.tryInitializeResource(
+      new WholeTextFileRecordReader(fileSplit, hadoopAttemptContext, 0)
+    ) { reader =>
+      reader.setConf(hadoopAttemptContext.getConfiguration)
+      reader.initialize(fileSplit, hadoopAttemptContext)
+      new RecordReaderIterator(reader)
+    }
   }
 
   override def hasNext: Boolean = _iterator.hasNext

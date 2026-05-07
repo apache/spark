@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.types._
 
 class TypeUtilsSuite extends SparkFunSuite {
@@ -28,7 +28,8 @@ class TypeUtilsSuite extends SparkFunSuite {
   }
 
   private def typeCheckFail(types: Seq[DataType]): Unit = {
-    assert(TypeUtils.checkForSameTypeInputExpr(types, "a").isInstanceOf[TypeCheckFailure])
+    assert(TypeUtils.checkForSameTypeInputExpr(types, "a")
+      .isInstanceOf[DataTypeMismatch])
   }
 
   test("checkForSameTypeInputExpr") {
@@ -42,23 +43,5 @@ class TypeUtilsSuite extends SparkFunSuite {
     // Should also work on arrays. See SPARK-14990
     typeCheckPass(ArrayType(StringType, containsNull = true) ::
       ArrayType(StringType, containsNull = false) :: Nil)
-  }
-
-  test("compareBinary") {
-    val x1 = Array[Byte]()
-    val y1 = Array(1, 2, 3).map(_.toByte)
-    assert(TypeUtils.compareBinary(x1, y1) < 0)
-
-    val x2 = Array(200, 100).map(_.toByte)
-    val y2 = Array(100, 100).map(_.toByte)
-    assert(TypeUtils.compareBinary(x2, y2) > 0)
-
-    val x3 = Array(100, 200, 12).map(_.toByte)
-    val y3 = Array(100, 200).map(_.toByte)
-    assert(TypeUtils.compareBinary(x3, y3) > 0)
-
-    val x4 = Array(100, 200).map(_.toByte)
-    val y4 = Array(100, 200).map(_.toByte)
-    assert(TypeUtils.compareBinary(x4, y4) == 0)
   }
 }

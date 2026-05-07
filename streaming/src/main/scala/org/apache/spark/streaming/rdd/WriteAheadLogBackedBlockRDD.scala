@@ -24,10 +24,12 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
 import org.apache.spark.util._
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
@@ -155,8 +157,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           s"Could not read data from write ahead log record ${partition.walRecordHandle}, " +
             s"read returned null")
       }
-      logInfo(s"Read partition data of $this from write ahead log, record handle " +
-        partition.walRecordHandle)
+      logInfo(log"Read partition data of ${MDC(LogKeys.RDD, this)} from write ahead log, " +
+        log"record handle ${MDC(LogKeys.WRITE_AHEAD_LOG_RECORD_HANDLE, partition.walRecordHandle)}")
       if (storeInBlockManager) {
         blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
@@ -195,6 +197,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
           try {
             HdfsUtils.getFileSegmentLocations(
               fileSegment.path, fileSegment.offset, fileSegment.length, hadoopConfig)
+              .toImmutableArraySeq
           } catch {
             case NonFatal(e) =>
               logError("Error getting WAL file segment locations", e)

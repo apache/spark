@@ -17,12 +17,14 @@
 
 from typing import Any, Union, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegralType, StringType
-
+from pyspark.sql.utils import pyspark_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
@@ -32,9 +34,11 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
-from pyspark.sql import Column
+from pyspark.pandas.typedef import (
+    handle_dtype_as_extension_dtype,
+    is_str_dtype,
+    pandas_on_spark_type,
+)
 from pyspark.sql.types import BooleanType
 
 
@@ -53,7 +57,7 @@ class StringOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    F.concat(left.spark.column, SF.lit(right)), field=left._internal.data_fields[0]
+                    F.concat(left.spark.column, F.lit(right)), field=left._internal.data_fields[0]
                 ),
             )
         elif isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
@@ -67,7 +71,7 @@ class StringOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    SF.repeat(left.spark.column, right), field=left._internal.data_fields[0]
+                    F.repeat(left.spark.column, right), field=left._internal.data_fields[0]
                 ),
             )
         elif (
@@ -75,7 +79,7 @@ class StringOps(DataTypeOps):
             and isinstance(right.spark.data_type, IntegralType)
             and not isinstance(right.dtype, CategoricalDtype)
         ):
-            return column_op(SF.repeat)(left, right)
+            return column_op(F.repeat)(left, right)
         else:
             raise TypeError("Multiplication can not be applied to given types.")
 
@@ -85,7 +89,7 @@ class StringOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    F.concat(SF.lit(right), left.spark.column), field=left._internal.data_fields[0]
+                    F.concat(F.lit(right), left.spark.column), field=left._internal.data_fields[0]
                 ),
             )
         else:
@@ -97,35 +101,27 @@ class StringOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left._with_new_scol(
-                    SF.repeat(left.spark.column, right), field=left._internal.data_fields[0]
+                    F.repeat(left.spark.column, right), field=left._internal.data_fields[0]
                 ),
             )
         else:
             raise TypeError("Multiplication can not be applied to given types.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        return pyspark_column_op("__lt__", left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        return pyspark_column_op("__le__", left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        return pyspark_column_op("__ge__", left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        return pyspark_column_op("__gt__", left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
@@ -134,10 +130,13 @@ class StringOps(DataTypeOps):
             return _as_categorical_type(index_ops, dtype, spark_type)
 
         if isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
+            if handle_dtype_as_extension_dtype(dtype):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
+                # pandas 3 maps `str` to StringDtype, where astype(bool)
+                # treats missing values as True.
+                null_value = F.lit(True) if is_str_dtype(self.dtype) else F.lit(False)
+                scol = F.when(index_ops.spark.column.isNull(), null_value).otherwise(
                     F.length(index_ops.spark.column) > 0
                 )
             return index_ops._with_new_scol(
@@ -149,6 +148,16 @@ class StringOps(DataTypeOps):
             return _as_string_type(index_ops, dtype, null_str=null_str)
         else:
             return _as_other_type(index_ops, dtype, spark_type)
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return super().restore(col)
+        else:
+            if is_str_dtype(col.dtype) and not is_str_dtype(self.dtype):
+                # treat missing values as None for string dtype
+                col = col.replace({np.nan: None})
+            return col.astype(self.dtype)
 
 
 class StringExtensionOps(StringOps):

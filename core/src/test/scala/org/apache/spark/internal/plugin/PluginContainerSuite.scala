@@ -18,18 +18,17 @@
 package org.apache.spark.internal.plugin
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{Map => JMap}
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import com.codahale.metrics.Gauge
-import com.google.common.io.Files
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
@@ -37,12 +36,15 @@ import org.apache.spark.TestUtils._
 import org.apache.spark.api.plugin._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.memory.MemoryMode
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils.GPU
 import org.apache.spark.resource.TestResourceIDs.{DRIVER_GPU_ID, EXECUTOR_GPU_ID, WORKER_GPU_ID}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util.Utils
 
-class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with LocalSparkContext {
+class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     TestSparkPlugin.reset()
@@ -215,11 +217,11 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       }
       val execFiles =
         children.filter(_.getName.startsWith(NonLocalModeSparkPlugin.executorFileStr))
-      assert(execFiles.size === 1)
-      val allLines = Files.readLines(execFiles(0), StandardCharsets.UTF_8)
+      assert(execFiles.length === 1)
+      val allLines = Files.readAllLines(execFiles(0).toPath)
       assert(allLines.size === 1)
       val addrs = NonLocalModeSparkPlugin.extractGpuAddrs(allLines.get(0))
-      assert(addrs.size === 2)
+      assert(addrs.length === 2)
       assert(addrs.sorted === Array("3", "4"))
 
       assert(NonLocalModeSparkPlugin.driverContext != null)
@@ -229,6 +231,118 @@ class PluginContainerSuite extends SparkFunSuite with BeforeAndAfterEach with Lo
       assert(driverResources.get(GPU).name === GPU)
     }
   }
+
+  test("memory override in plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local-cluster[2,1,1024]")
+      .set(EXECUTOR_MEMORY.key, "1024M")
+      .set(PLUGINS, Seq(classOf[MemoryOverridePlugin].getName()))
+
+    var sc: SparkContext = null
+    try {
+      sc = new SparkContext(conf)
+      val memoryManager = sc.env.memoryManager
+
+      assert(memoryManager.tungstenMemoryMode == MemoryMode.OFF_HEAP)
+      assert(memoryManager.maxOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)
+
+      val defaultResourceProfile = sc.resourceProfileManager.defaultResourceProfile
+      assert(512L ==
+        defaultResourceProfile.executorResources
+          .get(ResourceProfile.MEMORY).map(_.amount).getOrElse(-1L))
+      assert(512L ==
+        defaultResourceProfile.executorResources
+          .get(ResourceProfile.OFFHEAP_MEM).map(_.amount).getOrElse(-1L))
+
+      // Ensure all executors has started
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+
+      // Check executor memory is also updated
+      val execInfo = sc.statusTracker.getExecutorInfos.head
+      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+    } finally {
+      if (sc != null) {
+        sc.stop()
+      }
+    }
+  }
+
+  test("The plugin should be shutdown before the listener bus is stopped") {
+
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(PLUGINS, Seq(classOf[TestSparkPlugin].getName()))
+
+    val sc = new SparkContext(conf)
+
+    val countDownLatch = new CountDownLatch(1)
+    sc.addSparkListener(new SparkListener {
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case _: TestSparkPluginEvent =>
+            // Count down upon receiving the event sent from the plugin during shutdown.
+            countDownLatch.countDown()
+        }
+      }
+    })
+
+    TestSparkPlugin.driverPluginShutdownHook = () => {
+      // The listener bus should still be active when the plugin is shutdown
+      sc.listenerBus.post(TestSparkPluginEvent())
+    }
+
+    // Stop the context
+    sc.stop()
+    countDownLatch.await()
+    // The listener should receive the event posted by the plugin on shutdown.
+    // If the listener bus is stopped before the plugin is shutdown,
+    // then the event will be dropped and won't be delivered to the listener.
+  }
+
+  test("SPARK-52548: override shuffle manager in plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+      .set(SHUFFLE_MANAGER, "sort")
+      .set(PLUGINS, Seq(classOf[SetShuffleManagerPlugin].getName()))
+
+    sc = new SparkContext(conf)
+
+    // Ensures the shuffle manager specified in configuration was
+    // overridden by the Spark plugin.
+    assert(sc.env.shuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
+  }
+}
+
+class MemoryOverridePlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin {
+      override def init(sc: SparkContext, pluginContext: PluginContext): JMap[String, String] = {
+        // Take the original executor memory, and set `spark.memory.offHeap.size` to be the
+        // same value. Also set `spark.memory.offHeap.enabled` to true.
+        val originalExecutorMem =
+          sc.conf.getSizeAsMb(EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
+        val newExecutorMem = originalExecutorMem / 2
+        val offHeapSize = originalExecutorMem - newExecutorMem
+        sc.conf.set(EXECUTOR_MEMORY.key, s"${newExecutorMem}M")
+        sc.conf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
+        sc.conf.set(MEMORY_OFFHEAP_SIZE.key, s"${offHeapSize}M")
+        MemoryOverridePlugin.offHeapMemory = sc.conf.getSizeAsBytes(MEMORY_OFFHEAP_SIZE.key)
+        Map.empty[String, String].asJava
+      }
+    }
+  }
+
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin {}
+  }
+}
+
+object MemoryOverridePlugin {
+  var offHeapMemory: Long = _
 }
 
 class NonLocalModeSparkPlugin extends SparkPlugin {
@@ -265,7 +379,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): String = {
     // try to keep this simple and only write the gpus addresses, if we add more resources need to
     // make more complex
-    val resourcesString = resources.filterKeys(_.equals(GPU)).map {
+    val resourcesString = resources.filter { case (k, _) => k.equals(GPU) }.map {
       case (_, ri) =>
         s"${ri.addresses.mkString(",")}"
     }.mkString(",")
@@ -295,7 +409,7 @@ object NonLocalModeSparkPlugin {
       resources: Map[String, ResourceInformation]): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val strToWrite = createFileStringWithGpuAddrs(id, resources)
-    Files.write(strToWrite, new File(path, s"$filePrefix$id"), StandardCharsets.UTF_8)
+    Files.writeString(new File(path, s"$filePrefix$id").toPath, strToWrite)
   }
 
   def reset(): Unit = {
@@ -303,19 +417,39 @@ object NonLocalModeSparkPlugin {
   }
 }
 
+class SetShuffleManagerPlugin extends SparkPlugin {
+  import SetShuffleManagerPlugin._
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin {
+      override def init(sc: SparkContext, ctx: PluginContext): JMap[String, String] = {
+        sc.conf.set(SHUFFLE_MANAGER, classOf[MyShuffleManager].getName)
+        Map.empty[String, String].asJava
+      }
+    }
+  }
+
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin {}
+  }
+}
+
+private object SetShuffleManagerPlugin {
+  class MyShuffleManager(conf: SparkConf) extends SortShuffleManager(conf)
+}
+
 class TestSparkPlugin extends SparkPlugin {
 
   override def driverPlugin(): DriverPlugin = {
     val p = new TestDriverPlugin()
     require(TestSparkPlugin.driverPlugin == null, "Driver plugin already initialized.")
-    TestSparkPlugin.driverPlugin = spy(p)
+    TestSparkPlugin.driverPlugin = spy[TestDriverPlugin](p)
     TestSparkPlugin.driverPlugin
   }
 
   override def executorPlugin(): ExecutorPlugin = {
     val p = new TestExecutorPlugin()
     require(TestSparkPlugin.executorPlugin == null, "Executor plugin already initialized.")
-    TestSparkPlugin.executorPlugin = spy(p)
+    TestSparkPlugin.executorPlugin = spy[TestExecutorPlugin](p)
     TestSparkPlugin.executorPlugin
   }
 
@@ -338,6 +472,12 @@ private class TestDriverPlugin extends DriverPlugin {
     case "oneway" => null
     case "ask" => "reply"
     case other => throw new IllegalArgumentException(s"unknown: $other")
+  }
+
+  override def shutdown(): Unit = {
+    if (TestSparkPlugin.driverPluginShutdownHook != null) {
+      TestSparkPlugin.driverPluginShutdownHook()
+    }
   }
 
 }
@@ -368,9 +508,12 @@ private class TestExecutorPlugin extends ExecutorPlugin {
   }
 }
 
+case class TestSparkPluginEvent() extends SparkListenerEvent
+
 private object TestSparkPlugin {
   var driverPlugin: TestDriverPlugin = _
   var driverContext: PluginContext = _
+  var driverPluginShutdownHook: () => Unit = _
 
   var executorPlugin: TestExecutorPlugin = _
   var executorContext: PluginContext = _
@@ -380,6 +523,7 @@ private object TestSparkPlugin {
   def reset(): Unit = {
     driverPlugin = null
     driverContext = null
+    driverPluginShutdownHook = null
     executorPlugin = null
     executorContext = null
     extraConf = null

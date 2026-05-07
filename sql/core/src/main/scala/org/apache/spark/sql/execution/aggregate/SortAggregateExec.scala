@@ -17,30 +17,36 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{AliasAwareOutputOrdering, SparkPlan}
+import org.apache.spark.sql.execution.{OrderPreservingUnaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Sort-based aggregate operator.
  */
 case class SortAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends BaseAggregateExec
-  with AliasAwareOutputOrdering {
+  extends AggregateCodegenSupport
+  with OrderPreservingUnaryExecNode {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"))
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
@@ -52,6 +58,7 @@ case class SortAggregateExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val aggTime = longMetric("aggTime")
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
@@ -72,7 +79,8 @@ case class SortAggregateExec(
           resultExpressions,
           (expressions, inputSchema) =>
             MutableProjection.create(expressions, inputSchema),
-          numOutputRows)
+          numOutputRows,
+          aggTime)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
@@ -83,6 +91,22 @@ case class SortAggregateExec(
         }
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    // TODO(SPARK-32750): Support sort aggregate code-gen with grouping keys
+    super.supportCodegen && conf.getConf(SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN) &&
+      groupingExpressions.isEmpty
+  }
+
+  protected override def needHashTable: Boolean = false
+
+  protected override def doProduceWithKeys(ctx: CodegenContext): String = {
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3170")
+  }
+
+  protected override def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3170")
   }
 
   override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)

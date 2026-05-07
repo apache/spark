@@ -19,16 +19,14 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.IntegerType
 
-class InMemoryTableMetricSuite
-  extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class InMemoryTableMetricSuite extends SharedSparkSession with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -41,7 +39,7 @@ class InMemoryTableMetricSuite
     spark.sessionState.conf.clear()
   }
 
-  private def testMetricOnDSv2(func: String => Unit, checker: Map[Long, String] => Unit): Unit = {
+  private def testMetricOnDSv2(func: String => Unit, checker: Map[String, String] => Unit): Unit = {
     withTable("testcat.table_name") {
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsList().size
@@ -50,24 +48,11 @@ class InMemoryTableMetricSuite
 
       testCatalog.createTable(
         Identifier.of(Array(), "table_name"),
-        new StructType().add("i", "int"),
-        Array.empty, Collections.emptyMap[String, String])
+        Array(Column.create("i", IntegerType)),
+        Array.empty[Transform], Collections.emptyMap[String, String])
 
-      func("testcat.table_name")
+      val metrics = runAndFetchMetrics(func("testcat.table_name")).map(m => m._1._3 -> m._2)
 
-      // Wait until the new execution is started and being tracked.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsCount() >= oldCount)
-      }
-
-      // Wait for listener to finish computing the metrics for the execution.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsList().nonEmpty &&
-          statusStore.executionsList().last.metricValues != null)
-      }
-
-      val execId = statusStore.executionsList().last.executionId
-      val metrics = statusStore.executionMetrics(execId)
       checker(metrics)
     }
   }
@@ -78,8 +63,8 @@ class InMemoryTableMetricSuite
       val v2Writer = df.writeTo(table)
       v2Writer.append()
     }, metrics => {
-      val customMetric = metrics.find(_._2 == "in-memory rows: 1")
-      assert(customMetric.isDefined)
+      assert(metrics.get("number of rows in buffer").contains("in-memory rows: 1"))
+      assert(metrics.get("number of rows from driver").contains("1"))
     })
   }
 
@@ -89,8 +74,23 @@ class InMemoryTableMetricSuite
       val v2Writer = df.writeTo(table)
       v2Writer.overwrite(lit(true))
     }, metrics => {
-      val customMetric = metrics.find(_._2 == "in-memory rows: 3")
-      assert(customMetric.isDefined)
+      assert(metrics.get("number of rows in buffer").contains("in-memory rows: 3"))
+      assert(metrics.get("number of rows from driver").contains("3"))
+    })
+  }
+
+  test("Report metrics for aborted command") {
+    testMetricOnDSv2(table => {
+      assertThrows[IllegalArgumentException] {
+        val df = spark
+          .range(start = InMemoryTable.uncommittableValue(),
+            end = InMemoryTable.uncommittableValue() + 1)
+          .toDF("i")
+        val v2Writer = df.writeTo(table)
+        v2Writer.overwrite(lit(true))
+      }
+    }, metrics => {
+      assert(metrics.get("number of rows from driver").contains("1"))
     })
   }
 }

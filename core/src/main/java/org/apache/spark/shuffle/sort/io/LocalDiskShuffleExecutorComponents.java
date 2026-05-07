@@ -19,6 +19,7 @@ package org.apache.spark.shuffle.sort.io;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -56,7 +57,10 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
     if (blockManager == null) {
       throw new IllegalStateException("No blockManager available from the SparkEnv.");
     }
-    blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager);
+    blockResolver =
+      new IndexShuffleBlockResolver(
+        sparkConf, blockManager, new ConcurrentHashMap<>() /* Shouldn't be accessed */
+      );
   }
 
   @Override

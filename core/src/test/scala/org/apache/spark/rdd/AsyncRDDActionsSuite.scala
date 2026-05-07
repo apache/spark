@@ -20,17 +20,18 @@ package org.apache.spark.rdd
 import java.util.concurrent.Semaphore
 
 import scala.concurrent._
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.duration.Duration
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.util.ThreadUtils
 
-class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with TimeLimits {
+class AsyncRDDActionsSuite extends SparkFunSuite with TimeLimits {
 
   @transient private var sc: SparkContext = _
 
@@ -90,7 +91,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       val expected = input.take(num)
       val saw = rdd.takeAsync(num).get()
       assert(saw == expected, "incorrect result for rdd with %d partitions (expected %s, saw %s)"
-        .format(rdd.partitions.size, expected, saw))
+        .format(rdd.partitions.length, expected, saw))
     }
     val input = Range(1, 1000)
 
@@ -200,15 +201,15 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
 
   test("FutureAction result, timeout") {
     val f = sc.parallelize(1 to 100, 4)
-              .mapPartitions(itr => { Thread.sleep(20); itr })
+              .mapPartitions(itr => { Thread.sleep(200); itr })
               .countAsync()
     intercept[TimeoutException] {
-      ThreadUtils.awaitResult(f, Duration(20, "milliseconds"))
+      ThreadUtils.awaitResult(f, Duration(2, "milliseconds"))
     }
   }
 
   private def testAsyncAction[R](action: RDD[Int] => FutureAction[R]): Unit = {
-    val executionContextInvoked = Promise[Unit]
+    val executionContextInvoked = Promise[Unit]()
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
         executionContextInvoked.success(())

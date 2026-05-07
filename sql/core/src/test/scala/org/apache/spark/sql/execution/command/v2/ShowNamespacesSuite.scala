@@ -40,33 +40,23 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
 
   test("default v2 catalog doesn't support namespace") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat_no_namespace") {
-      val errMsg = intercept[AnalysisException] {
-        sql("SHOW NAMESPACES")
-      }.getMessage
-      assert(errMsg.contains("does not support namespaces"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SHOW NAMESPACES")
+        },
+        condition = "MISSING_CATALOG_ABILITY.NAMESPACES",
+        parameters = Map("plugin" -> "testcat_no_namespace")
+      )
     }
   }
 
   test("v2 catalog doesn't support namespace") {
-    val errMsg = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namespace")
-    }.getMessage
-    assert(errMsg.contains("does not support namespaces"))
-  }
-
-  test("case sensitivity") {
-    Seq(true, false).foreach { caseSensitive =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
-          sql(s"CREATE NAMESPACE $catalog.AAA")
-          sql(s"CREATE NAMESPACE $catalog.bbb")
-          runShowNamespacesSql(
-            s"SHOW NAMESPACES IN $catalog",
-            Seq("AAA", "bbb") ++ builtinTopNamespaces)
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("AAA"))
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("AAA"))
-        }
-      }
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SHOW NAMESPACES in testcat_no_namespace")
+      },
+      condition = "MISSING_CATALOG_ABILITY.NAMESPACES",
+      parameters = Map("plugin" -> "testcat_no_namespace")
+    )
   }
 }

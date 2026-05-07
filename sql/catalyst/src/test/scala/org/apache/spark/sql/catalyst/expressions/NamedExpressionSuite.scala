@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
 
 class NamedExpressionSuite extends SparkFunSuite {
 
@@ -50,5 +50,18 @@ class NamedExpressionSuite extends SparkFunSuite {
     assert(attr12.sql === "`c``d`.`a.b` AS `g.h`.`e``f`")
     val attr13 = UnresolvedAttribute("`a.b`")
     assert(attr13.sql === "`a.b`")
+  }
+
+  test("SPARK-34805: non inheritable metadata should be removed from child struct in Alias") {
+    val nonInheritableMetadataKey = "non-inheritable-key"
+    val metadata = new MetadataBuilder()
+      .putString(nonInheritableMetadataKey, "value1")
+      .putString("key", "value2")
+      .build()
+    val structType = StructType(Seq(StructField("value", StringType, metadata = metadata)))
+    val alias = Alias(GetStructField(AttributeReference("a", structType)(), 0), "my-alias")(
+      nonInheritableMetadataKeys = Seq(nonInheritableMetadataKey))
+    assert(!alias.metadata.contains(nonInheritableMetadataKey))
+    assert(alias.metadata.contains("key"))
   }
 }

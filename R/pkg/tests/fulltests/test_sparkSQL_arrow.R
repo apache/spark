@@ -249,4 +249,19 @@ test_that("SPARK-32478: gapply() Arrow optimization - error message for schema m
     "expected IntegerType, IntegerType, got IntegerType, StringType")
 })
 
+test_that("SPARK-43789: Automatically pick the number of partitions based on Arrow batch size", {
+  skip_if_not_installed("arrow")
+
+  conf <- callJMethod(sparkSession, "conf")
+  maxRecordsPerBatch <- sparkR.conf("spark.sql.execution.arrow.maxRecordsPerBatch")[[1]]
+
+  callJMethod(conf, "set", "spark.sql.execution.arrow.maxRecordsPerBatch", "10")
+  tryCatch({
+    expect_equal(getNumPartitionsRDD(toRDD(createDataFrame(mtcars))), 4)
+  },
+  finally = {
+    callJMethod(conf, "set", "spark.sql.execution.arrow.maxRecordsPerBatch", maxRecordsPerBatch)
+  })
+})
+
 sparkR.session.stop()

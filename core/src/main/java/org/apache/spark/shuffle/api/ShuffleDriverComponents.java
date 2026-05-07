@@ -61,4 +61,13 @@ public interface ShuffleDriverComponents {
    * @param blocking Whether this call should block on the deletion of the data.
    */
   default void removeShuffle(int shuffleId, boolean blocking) {}
+
+  /**
+   * Does this shuffle component support reliable storage - external to the lifecycle of the
+   * executor host ? For example, writing shuffle data to a distributed filesystem or
+   * persisting it in a remote shuffle service.
+   */
+  default boolean supportsReliableStorage() {
+    return false;
+  }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -127,6 +129,9 @@ class PCAModel private[ml] (
 
   import PCAModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Matrices.empty, Vectors.empty)
+
   /** @group setParam */
   @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -178,16 +183,28 @@ class PCAModel private[ml] (
 
 @Since("1.6.0")
 object PCAModel extends MLReadable[PCAModel] {
+  private[ml] case class Data(pc: Matrix, explainedVariance: Vector)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeMatrix(data.pc, dos)
+    serializeVector(data.explainedVariance, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val pc = deserializeMatrix(dis)
+    val explainedVariance = deserializeVector(dis)
+    Data(pc, explainedVariance)
+  }
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
 
-    private case class Data(pc: DenseMatrix, explainedVariance: DenseVector)
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.pc, instance.explainedVariance)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -205,15 +222,12 @@ object PCAModel extends MLReadable[PCAModel] {
      * @return a [[PCAModel]]
      */
     override def load(path: String): PCAModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val model = if (majorVersion(metadata.sparkVersion) >= 2) {
-        val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
-          sparkSession.read.parquet(dataPath)
-            .select("pc", "explainedVariance")
-            .head()
-        new PCAModel(metadata.uid, pc, explainedVariance)
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+        new PCAModel(metadata.uid, data.pc.toDense, data.explainedVariance.toDense)
       } else {
         // pc field is the old matrix format in Spark <= 1.6
         // explainedVariance field is not present in Spark <= 1.6

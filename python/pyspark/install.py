@@ -17,25 +17,37 @@
 import os
 import re
 import tarfile
+import time
 import traceback
 import urllib.request
 from shutil import rmtree
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from http.client import HTTPResponse
+
+
 # NOTE that we shouldn't import pyspark here because this is used in
 # setup.py, and assume there's no PySpark imported.
 
-DEFAULT_HADOOP = "hadoop3.2"
+DEFAULT_HADOOP = "hadoop3"
 DEFAULT_HIVE = "hive2.3"
-SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.2", "without-hadoop"]
+SUPPORTED_HADOOP_VERSIONS = ["hadoop3", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
-UNSUPPORTED_COMBINATIONS = [  # type: ignore
-]
+UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
 
-def checked_package_name(spark_version, hadoop_version, hive_version):
+def checked_package_name(spark_version: str, hadoop_version: str, hive_version: str) -> str:
+    """
+    Check the generated package name, here we need to use the final hadoop version.
+    """
     return "%s-bin-%s" % (spark_version, hadoop_version)
 
 
-def checked_versions(spark_version, hadoop_version, hive_version):
+def checked_versions(
+    spark_version: str, hadoop_version: str, hive_version: str
+) -> tuple[str, str, str]:
     """
     Check the valid combinations of supported versions in Spark distributions.
 
@@ -44,7 +56,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     spark_version : str
         Spark version. It should be X.X.X such as '3.0.0' or spark-3.0.0.
     hadoop_version : str
-        Hadoop version. It should be X.X such as '2.7' or 'hadoop2.7'.
+        Hadoop version. It should be X such as '2' or 'hadoop2'.
         'without' and 'without-hadoop' are supported as special keywords for Hadoop free
         distribution.
     hive_version : str
@@ -54,25 +66,25 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     ----------
     tuple
         fully-qualified versions of Spark, Hadoop and Hive in a tuple.
-        For example, spark-3.0.0, hadoop3.2 and hive2.3.
+        For example, spark-3.2.0, hadoop3 and hive2.3.
     """
-    if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+$", spark_version):
+    if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.dev[0-9]+)?$", spark_version):
         spark_version = "spark-%s" % spark_version
     if not spark_version.startswith("spark-"):
         raise RuntimeError(
-            "Spark version should start with 'spark-' prefix; however, "
-            "got %s" % spark_version)
+            "Spark version should start with 'spark-' prefix; however, got %s" % spark_version
+        )
 
     if hadoop_version == "without":
         hadoop_version = "without-hadoop"
-    elif re.match("^[0-9]+\\.[0-9]+$", hadoop_version):
+    elif re.match("^[0-9]+$", hadoop_version):
         hadoop_version = "hadoop%s" % hadoop_version
 
     if hadoop_version not in SUPPORTED_HADOOP_VERSIONS:
         raise RuntimeError(
             "Spark distribution of %s is not supported. Hadoop version should be "
-            "one of [%s]" % (hadoop_version, ", ".join(
-                SUPPORTED_HADOOP_VERSIONS)))
+            "one of [%s]" % (hadoop_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
+        )
 
     if re.match("^[0-9]+\\.[0-9]+$", hive_version):
         hive_version = "hive%s" % hive_version
@@ -80,13 +92,32 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     if hive_version not in SUPPORTED_HIVE_VERSIONS:
         raise RuntimeError(
             "Spark distribution of %s is not supported. Hive version should be "
-            "one of [%s]" % (hive_version, ", ".join(
-                SUPPORTED_HADOOP_VERSIONS)))
+            "one of [%s]" % (hive_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
+        )
 
-    return spark_version, hadoop_version, hive_version
+    return spark_version, convert_old_hadoop_version(spark_version, hadoop_version), hive_version
 
 
-def install_spark(dest, spark_version, hadoop_version, hive_version):
+def convert_old_hadoop_version(spark_version: str, hadoop_version: str) -> str:
+    # check if Spark version <= 3.2, if so, convert hadoop3 to hadoop3.2 and hadoop2 to hadoop2.7
+    version_dict = {
+        "hadoop3": "hadoop3.2",
+        "hadoop2": "hadoop2.7",
+        "without": "without",
+        "without-hadoop": "without-hadoop",
+    }
+    spark_version_parts = re.search(
+        "^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+(?:\\.dev[0-9]+)?$", spark_version
+    )
+    assert spark_version_parts is not None
+    spark_major_version = int(spark_version_parts.group(1))
+    spark_minor_version = int(spark_version_parts.group(2))
+    if spark_major_version < 3 or (spark_major_version == 3 and spark_minor_version <= 2):
+        hadoop_version = version_dict[hadoop_version]
+    return hadoop_version
+
+
+def install_spark(dest: str, spark_version: str, hadoop_version: str, hive_version: str) -> None:
     """
     Installs Spark that corresponds to the given Hadoop version in the current
     library directory.
@@ -114,7 +145,8 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
 
     pretty_pkg_name = "%s for Hadoop %s" % (
         spark_version,
-        "Free build" if hadoop_version == "without" else hadoop_version)
+        "Free build" if hadoop_version == "without" else hadoop_version,
+    )
 
     for site in sites:
         os.makedirs(dest, exist_ok=True)
@@ -123,7 +155,7 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
         tar = None
         try:
             print("Downloading %s from:\n- %s" % (pretty_pkg_name, url))
-            download_to_file(urllib.request.urlopen(url), package_local_path)
+            _download_with_retries(url, package_local_path)
 
             print("Installing to %s" % dest)
             tar = tarfile.open(package_local_path, "r:gz")
@@ -143,27 +175,65 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
                 tar.close()
             if os.path.exists(package_local_path):
                 os.remove(package_local_path)
-    raise IOError("Unable to download %s." % pretty_pkg_name)
+    raise OSError("Unable to download %s." % pretty_pkg_name)
 
 
-def get_preferred_mirrors():
+def get_preferred_mirrors() -> list[str]:
     mirror_urls = []
     for _ in range(3):
         try:
             response = urllib.request.urlopen(
-                "https://www.apache.org/dyn/closer.lua?preferred=true")
-            mirror_urls.append(response.read().decode('utf-8'))
+                "https://www.apache.org/dyn/closer.lua?preferred=true", timeout=10
+            )
+            mirror_urls.append(response.read().decode("utf-8"))
         except Exception:
             # If we can't get a mirror URL, skip it. No retry.
             pass
 
     default_sites = [
-        "https://archive.apache.org/dist", "https://dist.apache.org/repos/dist/release"]
-    return list(set(mirror_urls)) + default_sites
+        "https://dlcdn.apache.org/",
+        "https://archive.apache.org/dist",
+        "https://dist.apache.org/repos/dist/release",
+    ]
+    return list(set(mirror_urls)) + [x for x in default_sites if x not in mirror_urls]
 
 
-def download_to_file(response, path, chunk_size=1024 * 1024):
-    total_size = int(response.info().get('Content-Length').strip())
+def _download_with_retries(url: str, path: str, max_retries: int = 3, timeout: int = 600) -> None:
+    """
+    Download a file from a URL with retry logic and timeout handling.
+
+    Parameters
+    ----------
+    url : str
+        The URL to download from.
+    path : str
+        The local file path to save the downloaded file.
+    max_retries : int
+        Maximum number of retry attempts per URL.
+    timeout : int
+        Timeout in seconds for the HTTP request.
+    """
+    for attempt in range(max_retries):
+        try:
+            response = urllib.request.urlopen(url, timeout=timeout)
+            download_to_file(response, path)
+            return
+        except Exception as e:
+            if os.path.exists(path):
+                os.remove(path)
+            if attempt < max_retries - 1:
+                wait = 2**attempt * 5
+                print(
+                    "Download attempt %d/%d failed: %s. Retrying in %d seconds..."
+                    % (attempt + 1, max_retries, str(e), wait)
+                )
+                time.sleep(wait)
+            else:
+                raise
+
+
+def download_to_file(response: "HTTPResponse", path: str, chunk_size: int = 1024 * 1024) -> None:
+    total_size = int(response.info().get("Content-Length", "0").strip())
     bytes_so_far = 0
 
     with open(path, mode="wb") as dest:
@@ -173,7 +243,7 @@ def download_to_file(response, path, chunk_size=1024 * 1024):
             if not chunk:
                 break
             dest.write(chunk)
-            print("Downloaded %d of %d bytes (%0.2f%%)" % (
-                bytes_so_far,
-                total_size,
-                round(float(bytes_so_far) / total_size * 100, 2)))
+            print(
+                "Downloaded %d of %d bytes (%0.2f%%)"
+                % (bytes_so_far, total_size, round(float(bytes_so_far) / total_size * 100, 2))
+            )

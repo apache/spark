@@ -15,21 +15,176 @@
  * limitations under the License.
  */
 
-/* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
-/* global jQuery, setDataTableDefaults */
+/* global $, sorttable */
+
+import {
+  createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export { setHeapHistogramEnabled, setThreadDumpEnabled };
 
 var threadDumpEnabled = false;
+var heapHistogramEnabled = false;
 
 /* eslint-disable no-unused-vars */
 function setThreadDumpEnabled(val) {
   threadDumpEnabled = val;
+}
+function setHeapHistogramEnabled(val) {
+  heapHistogramEnabled = val;
 }
 /* eslint-enable no-unused-vars */
 
 function getThreadDumpEnabled() {
   return threadDumpEnabled;
 }
+
+function getHeapHistogramEnabled() {
+  return heapHistogramEnabled;
+}
+
+function loadScript(src) {
+  return new Promise(function(resolve, reject) {
+    if (document.querySelector('script[src="' + src + '"]')) {
+      resolve();
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+function openDetailOffcanvas(url, title) {
+  var offcanvasEl = document.getElementById('executor-detail-offcanvas');
+  var offcanvasBody = document.getElementById('executor-detail-offcanvas-body');
+  var offcanvasLabel = document.getElementById('executor-detail-offcanvas-label');
+  offcanvasLabel.textContent = title;
+  offcanvasBody.innerHTML = '<div class="d-flex justify-content-center p-5">' +
+    '<div class="spinner-border text-primary" role="status">' +
+    '<span class="visually-hidden">Loading...</span></div></div>';
+  var bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl);
+  bsOffcanvas.show();
+  $.get(url, function(html) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(html, 'text/html');
+    var container = doc.querySelector('.container-fluid');
+    if (container) {
+      // Strip script/link tags from fetched content before injecting
+      container.querySelectorAll('script, link').forEach(function(el) { el.remove(); });
+      offcanvasBody.innerHTML = container.innerHTML;
+    } else {
+      offcanvasBody.innerHTML = '<p class="text-danger">Failed to load content.</p>';
+    }
+    // Add "Open in new tab" link at the top
+    var openLink = document.createElement('div');
+    openLink.className = 'mb-3';
+    openLink.innerHTML = '<a href="' + url + '" target="_blank" ' +
+      'class="btn btn-sm btn-outline-secondary">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" ' +
+      'class="bi bi-box-arrow-up-right me-1" viewBox="0 0 16 16">' +
+      '<path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5' +
+      ' 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h' +
+      '-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5"/>' +
+      '<path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146' +
+      'a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0z"/></svg>' +
+      'Open in new tab</a>';
+    offcanvasBody.insertBefore(openLink, offcanvasBody.firstChild);
+    // Re-init Bootstrap tooltips in the injected content
+    offcanvasBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+      new bootstrap.Tooltip(el);
+    });
+    // Re-init sorttable for injected tables
+    if (typeof sorttable !== 'undefined') {
+      offcanvasBody.querySelectorAll('table.sortable').forEach(function(table) {
+        sorttable.makeSortable(table);
+      });
+    }
+    // Re-init flamegraph if data is present
+    var fgData = offcanvasBody.querySelector('#executor-flamegraph-data');
+    var fgChartEl = offcanvasBody.querySelector('#executor-flamegraph-chart');
+    if (fgData && fgChartEl) {
+      initOffcanvasFlamegraph(fgData, fgChartEl, offcanvasEl);
+    }
+  }).fail(function() {
+    offcanvasBody.innerHTML = '<p class="text-danger">Error loading content. ' +
+      '<a href="' + url + '">Open in new page</a></p>';
+  });
+}
+
+function initOffcanvasFlamegraph(fgData, fgChart, offcanvasEl) {
+  // Load CSS
+  if (!document.querySelector('link[href="/static/d3-flamegraph.css"]')) {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/static/d3-flamegraph.css';
+    document.head.appendChild(link);
+  }
+  // Load d3 then d3-flamegraph, then render
+  loadScript('/static/d3.min.js').then(function() {
+    return loadScript('/static/d3-flamegraph.min.js');
+  }).then(function() {
+    /* global d3, flamegraph */
+    var width = offcanvasEl.offsetWidth - 60;
+    var chart = flamegraph()
+      .width(width)
+      .cellHeight(18)
+      .transitionEase(d3.easeCubic)
+      .sort(true)
+      .title('');
+    var jsonData = JSON.parse(fgData.textContent.trim());
+    d3.select(fgChart).datum(jsonData).call(chart);
+    // Toggle visibility
+    var header = document.getElementById('executor-flamegraph-header');
+    if (header) {
+      $(header).off('click').on('click', function() {
+        var arrow = $('#executor-flamegraph-arrow');
+        arrow.toggleClass('arrow-open arrow-closed');
+        $(fgChart).toggleClass('d-none', !arrow.hasClass('arrow-open'));
+      });
+    }
+  });
+}
+
+// Delegated click handler for offcanvas links (CSP blocks inline onclick)
+$(document).on('click', '.offcanvas-link', function(e) {
+  e.preventDefault();
+  var url = $(this).data('detail-url');
+  var title = $(this).data('detail-title');
+  openDetailOffcanvas(url, title);
+});
+
+// Drag-to-resize offcanvas from left edge
+$(document).ready(function() {
+  var handle = document.getElementById('offcanvas-resize-handle');
+  var offcanvas = document.getElementById('executor-detail-offcanvas');
+  if (!handle || !offcanvas) return;
+  var startX, startWidth;
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    startX = e.clientX;
+    startWidth = offcanvas.offsetWidth;
+    handle.classList.add('resizing');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+  function onMouseMove(e) {
+    var newWidth = startWidth - (e.clientX - startX);
+    newWidth = Math.max(300, Math.min(newWidth, window.innerWidth - 50));
+    offcanvas.style.width = newWidth + 'px';
+    offcanvas.style.maxWidth = 'none';
+  }
+  function onMouseUp() {
+    handle.classList.remove('resizing');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+});
 
 function formatLossReason(removeReason) {
   if (removeReason) {
@@ -45,7 +200,7 @@ function formatStatus(status, type, row) {
   }
 
   if (status) {
-    if (row.excludedInStages.length == 0) {
+    if (typeof row.excludedInStages === "undefined" || row.excludedInStages.length == 0) {
       return "Active"
     }
     return "Active (Excluded in Stages: [" + row.excludedInStages.join(", ") + "])";
@@ -73,7 +228,7 @@ function formatResourceCells(resources) {
   return result
 }
 
-jQuery.extend(jQuery.fn.dataTableExt.oSort, {
+$.extend($.fn.dataTableExt.oSort, {
   "title-numeric-pre": function (a) {
     var x = a.match(/title="*(-?[0-9.]+)/)[1];
     return parseFloat(x);
@@ -88,9 +243,37 @@ jQuery.extend(jQuery.fn.dataTableExt.oSort, {
   }
 });
 
-$(document).ajaxStop($.unblockUI);
+$.extend($.fn.dataTableExt.oSort, {
+  "executor-id-asc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(a) - parseFloat(b);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return -1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return 1;
+    } else {
+      return a.localeCompare(b);
+    }
+  },
+
+  "executor-id-desc": function ( a, b ) {
+    if ($.isNumeric(a) && $.isNumeric(b)) {
+      return parseFloat(b) - parseFloat(a);
+    } else if (!$.isNumeric(a) && $.isNumeric(b)) {
+      return 1;
+    } else if ($.isNumeric(a) && !$.isNumeric(b)) {
+      return -1;
+    } else {
+      return b.localeCompare(a);
+    }
+  }
+});
+
+$(document).ajaxStop(function () {
+  $("#loading-overlay").addClass("d-none");
+});
 $(document).ajaxStart(function () {
-  $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
+  $("#loading-overlay").removeClass("d-none");
 });
 
 function logsExist(execs) {
@@ -126,7 +309,6 @@ function totalDurationAlpha(totalGCTime, totalDuration) {
     (Math.min(totalGCTime / totalDuration + 0.5, 1)) : 1;
 }
 
-// When GCTimePercent is edited change ToolTips.TASK_TIME to match
 var GCTimePercent = 0.1;
 
 function totalDurationStyle(totalGCTime, totalDuration) {
@@ -136,11 +318,11 @@ function totalDurationStyle(totalGCTime, totalDuration) {
 }
 
 function totalDurationColor(totalGCTime, totalDuration) {
-  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
+  return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "var(--bs-body-color)";
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 26];
 var execDataTable;
 var sumDataTable;
 
@@ -387,18 +569,16 @@ $(document).ready(function () {
         "allTotalExcluded": deadTotalExcluded
       };
 
-      var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
-        executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
+        executorsSummary.append($(template).filter("#executors-summary-template").html());
         var selector = "#active-executors-table";
         var conf = {
           "data": response,
           "columns": [
             {
-              data: function (row, type) {
-                return type !== 'display' ? (isNaN(row.id) ? 0 : row.id ) : row.id;
-              }
+              data: "id",
+              type: "executor-id"
             },
             {data: 'hostPort'},
             {
@@ -548,26 +728,34 @@ $(document).ready(function () {
             {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
             {
               name: 'threadDumpCol',
-              data: 'id', render: function (data, type) {
-                return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
+              data: function (row) { return row.isActive ? row.id : '' },
+              render: function (data, type) {
+                return data != '' && type === 'display' ? ("<a href='#' class='offcanvas-link' data-detail-url='threadDump/?executorId=" + encodeURIComponent(data) + "' data-detail-title='Thread Dump for Executor " + data + "'>Thread Dump</a>" ) : data;
+              }
+            },
+            {
+              name: 'heapHistogramCol',
+              data: function (row) { return row.isActive ? row.id : '' },
+              render: function (data, type) {
+                return data != '' && type === 'display' ? ("<a href='#' class='offcanvas-link' data-detail-url='heapHistogram/?executorId=" + encodeURIComponent(data) + "' data-detail-title='Heap Histogram for Executor " + data + "'>Heap Histogram</a>") : data;
               }
             },
             {
               data: 'removeReason',
               render: formatLossReason
+            },
+            {
+              data: 'addTime',
+              render: formatDate
+            },
+            {
+              data: 'removeTime',
+              render: formatDate
             }
           ],
           "order": [[0, "asc"]],
           "columnDefs": [
-            {"visible": false, "targets": 5},
-            {"visible": false, "targets": 6},
-            {"visible": false, "targets": 7},
-            {"visible": false, "targets": 8},
-            {"visible": false, "targets": 9},
-            {"visible": false, "targets": 10},
-            {"visible": false, "targets": 13},
-            {"visible": false, "targets": 14},
-            {"visible": false, "targets": 25}
+            {"visible": false, "targets": execOptionalColumns}
           ],
           "deferRender": true
         };
@@ -575,10 +763,10 @@ $(document).ready(function () {
         execDataTable = $(selector).DataTable(conf);
         execDataTable.column('executorLogsCol:name').visible(logsExist(response));
         execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
-        $('#active-executors [data-toggle="tooltip"]').tooltip();
+        execDataTable.column('heapHistogramCol:name').visible(getHeapHistogramEnabled());
     
         // This section should be visible once API gives the response.
-        $('.active-process-container').hide();
+        $('.active-process-container').addClass('d-none');
         var endPoint = createRESTEndPointForMiscellaneousProcess(appId);
         $.getJSON(endPoint, function( response, _ignored_status, _ignored_jqXHR ) {
           if (response.length) {
@@ -614,7 +802,7 @@ $(document).ready(function () {
               }
             };
             $("#active-process-table").DataTable(processSummaryConf);
-            $('.active-process-container').show()
+            $('.active-process-container').removeClass('d-none')
           }
         });
 
@@ -698,14 +886,11 @@ $(document).ready(function () {
           "searching": false,
           "info": false,
           "columnDefs": [
-            {"visible": false, "targets": 3},
-            {"visible": false, "targets": 4}
+            {"visible": false, "targets": sumOptionalColumns}
           ]
-
         };
 
         sumDataTable = $(sumSelector).DataTable(sumConf);
-        $('#execSummary [data-toggle="tooltip"]').tooltip();
   
         $("#showAdditionalMetrics").append(
           "<div><a id='additionalMetrics' class='collapse-table'>" +
@@ -722,7 +907,7 @@ $(document).ready(function () {
           "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
           "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
           "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
-          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
+          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='26'> Exec Loss Reason</div>" +
           "</div>");
 
         reselectCheckboxesBasedOnTaskTableState();

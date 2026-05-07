@@ -25,13 +25,17 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.internal.io.FileNameSpec
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.util.Utils
 
 private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
@@ -39,12 +43,12 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+      taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     throw new Exception("there should be no custom partition path")
   }
 }
 
-class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
+class PartitionedWriteSuite extends SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {
@@ -124,13 +128,14 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  private def checkPartitionValues(file: File, expected: String): Unit = {
+    val dir = file.getParentFile()
+    val value = ExternalCatalogUtils.unescapePathName(
+      dir.getName.substring(dir.getName.indexOf("=") + 1))
+    assert(value == expected)
+  }
+
   test("timeZone setting in dynamic partition writes") {
-    def checkPartitionValues(file: File, expected: String): Unit = {
-      val dir = file.getParentFile()
-      val value = ExternalCatalogUtils.unescapePathName(
-        dir.getName.substring(dir.getName.indexOf("=") + 1))
-      assert(value == expected)
-    }
     val ts = Timestamp.valueOf("2016-12-01 00:00:00")
     val df = Seq((1, ts)).toDF("i", "ts")
     withTempPath { f =>
@@ -160,9 +165,12 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-31968: duplicate partition columns check") {
     withTempPath { f =>
-      val e = intercept[AnalysisException](
-        Seq((3, 2)).toDF("a", "b").write.partitionBy("b", "b").csv(f.getAbsolutePath))
-      assert(e.getMessage.contains("Found duplicate column(s) b, b: `b`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq((3, 2)).toDF("a", "b").write.partitionBy("b", "b").csv(f.getAbsolutePath)
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`b`"))
     }
   }
 
@@ -189,6 +197,60 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-37231, SPARK-37240: Dynamic writes/reads of ANSI interval partitions") {
+    Seq("parquet", "json").foreach { format =>
+      Seq(
+        "INTERVAL '100' YEAR" -> YearMonthIntervalType(YEAR),
+        "INTERVAL '-1-1' YEAR TO MONTH" -> YearMonthIntervalType(YEAR, MONTH),
+        "INTERVAL '1000 02:03:04.123' DAY TO SECOND" -> DayTimeIntervalType(DAY, SECOND),
+        "INTERVAL '-10' MINUTE" -> DayTimeIntervalType(MINUTE)
+      ).foreach { case (intervalStr, intervalType) =>
+        withTempPath { f =>
+          val df = sql(s"select 0 AS id, $intervalStr AS diff")
+          assert(df.schema("diff").dataType === intervalType)
+          df.write
+            .partitionBy("diff")
+            .format(format)
+            .save(f.getAbsolutePath)
+          val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith(format))
+          assert(files.length == 1)
+          checkPartitionValues(files.head, intervalStr)
+          val schema = new StructType()
+            .add("id", IntegerType)
+            .add("diff", intervalType)
+          checkAnswer(spark.read.schema(schema).format(format).load(f.getAbsolutePath), df)
+        }
+      }
+    }
+  }
+
+  test("Dynamic writes/reads of TIME partitions") {
+    Seq(
+      "00:00:00" -> TimeType(0),
+      "00:00:00.00109" -> TimeType(5),
+      "00:01:02.999999" -> TimeType(6),
+      "12:00:00" -> TimeType(1),
+      "23:59:59.000001" -> TimeType(),
+      "23:59:59.999999" -> TimeType(6)
+    ).foreach { case (timeStr, timeType) =>
+      withTempPath { f =>
+        val df = sql(s"select 0 AS id, cast('$timeStr' as ${timeType.sql}) AS tt")
+        assert(df.schema("tt").dataType === timeType)
+        df.write
+          .partitionBy("tt")
+          .format("parquet")
+          .save(f.getAbsolutePath)
+        val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+        assert(files.length == 1)
+        checkPartitionValues(files.head, timeStr)
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("tt", timeType)
+        checkAnswer(spark.read.schema(schema).format("parquet").load(f.getAbsolutePath), df)
+      }
+    }
+  }
 }
 
 /**
@@ -203,9 +265,9 @@ private class PartitionFileExistCommitProtocol(
   override def setupJob(jobContext: JobContext): Unit = {
     super.setupJob(jobContext)
     val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")
-    stagingDir.mkdirs()
+    Utils.createDirectory(stagingDir)
     val stagingPartDir = new File(stagingDir, "p1=2")
-    stagingPartDir.mkdirs()
+    Utils.createDirectory(stagingPartDir)
     val conflictTaskFile = new File(stagingPartDir, s"part-00000-$jobId.c000.snappy.parquet")
     conflictTaskFile.createNewFile()
   }

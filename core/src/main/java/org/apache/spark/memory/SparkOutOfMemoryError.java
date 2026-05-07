@@ -20,6 +20,8 @@ import org.apache.spark.SparkThrowable;
 import org.apache.spark.SparkThrowableHelper;
 import org.apache.spark.annotation.Private;
 
+import java.util.Map;
+
 /**
  * This exception is thrown when a task can not acquire memory from the Memory manager.
  * Instead of throwing {@link OutOfMemoryError}, which kills the executor,
@@ -28,27 +30,33 @@ import org.apache.spark.annotation.Private;
 @Private
 public final class SparkOutOfMemoryError extends OutOfMemoryError implements SparkThrowable {
     String errorClass;
-    String[] messageParameters;
+    Map<String, String> messageParameters;
+    String sqlState;
 
-    public SparkOutOfMemoryError(String s) {
-        super(s);
+    public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters) {
+        this(errorClass, messageParameters, null);
     }
 
-    public SparkOutOfMemoryError(OutOfMemoryError e) {
-        super(e.getMessage());
-    }
-
-    public SparkOutOfMemoryError(String errorClass, String[] messageParameters) {
+    public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters,
+        String sqlState) {
         super(SparkThrowableHelper.getMessage(errorClass, messageParameters));
         this.errorClass = errorClass;
         this.messageParameters = messageParameters;
+        this.sqlState = sqlState;
     }
 
-    public String getErrorClass() {
+    @Override
+    public Map<String, String> getMessageParameters() {
+        return messageParameters;
+    }
+
+    @Override
+    public String getCondition() {
         return errorClass;
     }
 
+    @Override
     public String getSqlState() {
-        return SparkThrowableHelper.getSqlState(errorClass);
+        return sqlState != null ? sqlState : SparkThrowable.super.getSqlState();
     }
 }

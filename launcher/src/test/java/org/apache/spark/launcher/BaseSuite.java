@@ -19,9 +19,9 @@ package org.apache.spark.launcher;
 
 import java.time.Duration;
 
-import org.junit.After;
+import org.junit.jupiter.api.AfterEach;
 import org.slf4j.bridge.SLF4JBridgeHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Handles configuring the JUL -> SLF4J bridge, and provides some utility methods for tests.
@@ -33,7 +33,7 @@ class BaseSuite {
     SLF4JBridgeHandler.install();
   }
 
-  @After
+  @AfterEach
   public void postChecks() {
     LauncherServer server = LauncherServer.getServer();
     if (server != null) {
@@ -44,13 +44,16 @@ class BaseSuite {
         // Ignore.
       }
     }
-    assertNull(server);
+    // Re-fetch after close(): close() sets the static serverInstance to null, but the
+    // local variable above still holds the old non-null reference, so assertNull(server)
+    // would always fail here if the server was alive at cleanup time.
+    assertNull(LauncherServer.getServer());
   }
 
   protected void waitFor(final SparkAppHandle handle) throws Exception {
     try {
       eventually(Duration.ofSeconds(10), Duration.ofMillis(10), () -> {
-        assertTrue("Handle is not in final state.", handle.getState().isFinal());
+        assertTrue(handle.getState().isFinal(), "Handle is not in final state.");
       });
     } finally {
       if (!handle.getState().isFinal()) {
@@ -62,7 +65,7 @@ class BaseSuite {
     // have been performed.
     AbstractAppHandle ahandle = (AbstractAppHandle) handle;
     eventually(Duration.ofSeconds(10), Duration.ofMillis(10), () -> {
-      assertTrue("Handle is still not marked as disposed.", ahandle.isDisposed());
+      assertTrue(ahandle.isDisposed(), "Handle is still not marked as disposed.");
     });
   }
 
@@ -71,7 +74,7 @@ class BaseSuite {
    * elapses.
    */
   protected void eventually(Duration timeout, Duration period, Runnable check) throws Exception {
-    assertTrue("Timeout needs to be larger than period.", timeout.compareTo(period) > 0);
+    assertTrue(timeout.compareTo(period) > 0, "Timeout needs to be larger than period.");
     long deadline = System.nanoTime() + timeout.toNanos();
     int count = 0;
     while (true) {

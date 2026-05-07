@@ -17,8 +17,8 @@
 
 package org.apache.spark.ml.attribute;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class JavaAttributeGroupSuite {
 
@@ -35,11 +35,11 @@ public class JavaAttributeGroupSuite {
       NumericAttribute.defaultAttr()
     };
     AttributeGroup group = new AttributeGroup("user", attrs);
-    Assert.assertEquals(8, group.size());
-    Assert.assertEquals("user", group.name());
-    Assert.assertEquals(NumericAttribute.defaultAttr().withIndex(0), group.getAttr(0));
-    Assert.assertEquals(3, group.indexOf("age"));
-    Assert.assertFalse(group.hasAttr("abc"));
-    Assert.assertEquals(group, AttributeGroup.fromStructField(group.toStructField()));
+    Assertions.assertEquals(8, group.size());
+    Assertions.assertEquals("user", group.name());
+    Assertions.assertEquals(NumericAttribute.defaultAttr().withIndex(0), group.getAttr(0));
+    Assertions.assertEquals(3, group.indexOf("age"));
+    Assertions.assertFalse(group.hasAttr("abc"));
+    Assertions.assertEquals(group, AttributeGroup.fromStructField(group.toStructField()));
   }
 }

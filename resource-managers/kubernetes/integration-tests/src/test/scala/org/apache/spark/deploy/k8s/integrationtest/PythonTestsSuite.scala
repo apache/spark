@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import org.apache.spark.internal.config.SPARK_API_MODE
+
 private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
 
   import PythonTestsSuite._
@@ -67,6 +69,21 @@ private[spark] trait PythonTestsSuite { k8sSuite: KubernetesSuite =>
       isJVM = false,
       pyFiles = Some(PYSPARK_CONTAINER_TESTS))
   }
+
+  // Needs to install Spark Connect dependencies in Python Dockerfile, ignored for now.
+  ignore("Run PySpark with Spark Connect", k8sTestTag) {
+    sparkAppConf.set("spark.kubernetes.container.image", pyImage)
+    sparkAppConf.set(SPARK_API_MODE.key, "connect")
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_CONNECT_FILES,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq("Python runtime version check for executor is: True"),
+      appArgs = Array(sparkAppConf.get("spark.master")),
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
+      isJVM = false,
+      pyFiles = Some(PYSPARK_CONTAINER_TESTS))
+  }
 }
 
 private[spark] object PythonTestsSuite {
@@ -74,6 +91,7 @@ private[spark] object PythonTestsSuite {
   val PYSPARK_PI: String = CONTAINER_LOCAL_PYSPARK + "pi.py"
   val TEST_LOCAL_PYSPARK: String = "local:///opt/spark/tests/"
   val PYSPARK_FILES: String = TEST_LOCAL_PYSPARK + "pyfiles.py"
+  val PYSPARK_CONNECT_FILES: String = TEST_LOCAL_PYSPARK + "pyfiles_connect.py"
   val PYSPARK_CONTAINER_TESTS: String = TEST_LOCAL_PYSPARK + "py_container_checks.py"
   val PYSPARK_MEMORY_CHECK: String = TEST_LOCAL_PYSPARK + "worker_memory_check.py"
 }

@@ -30,10 +30,10 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  * {{{
  *   1. without sbt:
  *      bin/spark-submit --class <this class> <spark core test jar>
- *   2. build/sbt "core/test:runMain <this class>"
+ *   2. build/sbt "core/Test/runMain <this class>"
  *   3. generate result:
- *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
- *      Results will be written to "benchmarks/CoalescedRDD-results.txt".
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/Test/runMain <this class>"
+ *      Results will be written to "benchmarks/CoalescedRDDBenchmark-results.txt".
  * }}}
  * */
 object CoalescedRDDBenchmark extends BenchmarkBase {
@@ -46,7 +46,7 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
     for (numPartitions <- Seq(100, 500, 1000, 5000, 10000)) {
       for (numHosts <- Seq(1, 5, 10, 20, 40, 80)) {
 
-        import collection.mutable
+        import scala.collection.mutable
         val hosts = mutable.ArrayBuffer[String]()
         (1 to numHosts).foreach(hosts += "m" + _)
         hosts.length

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -200,7 +201,8 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
     if (0 <= idx && idx < arrayData.numElements()) {
       accessor(arrayData, idx).asInstanceOf[T]
     } else {
-      throw QueryExecutionErrors.indexOutOfBoundsOfArrayDataError(idx)
+      throw SparkException.internalError(
+        s"Index $idx must be between 0 and the length of the ArrayData.")
     }
 
   override def length: Int = arrayData.numElements()

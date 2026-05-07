@@ -19,11 +19,10 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.commons.text.StringEscapeUtils
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.thriftserver.ui.ToolTips._
@@ -89,7 +88,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           sqlTableTag).table(sqlTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-          Some(<div class="alert alert-error">
+          Some(<div class="alert alert-danger">
             <p>Error while rendering job table:</p>
             <pre>
               {Utils.exceptionString(e)}
@@ -100,15 +99,16 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       None
     }
     val content =
-      <span id="sqlstat" class="collapse-aggregated-sqlstat collapse-table"
-            onClick="collapseTable('collapse-aggregated-sqlstat',
-                'aggregated-sqlstat')">
+      <span id="sqlstat" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-sqlstat"
+            aria-expanded="true" aria-controls="aggregated-sqlstat"
+            data-collapse-name="collapse-aggregated-sqlstat">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>SQL Statistics ({numStatement})</a>
         </h4>
       </span> ++
-        <div class="aggregated-sqlstat collapsible-table">
+        <div class="collapsible-table collapse show" id="aggregated-sqlstat">
           {table.getOrElse("No statistics have been generated yet.")}
         </div>
     content
@@ -135,7 +135,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         ).table(sessionTablePage))
       } catch {
         case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-          Some(<div class="alert alert-error">
+          Some(<div class="alert alert-danger">
             <p>Error while rendering job table:</p>
             <pre>
               {Utils.exceptionString(e)}
@@ -147,15 +147,16 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-    <span id="sessionstat" class="collapse-aggregated-sessionstat collapse-table"
-          onClick="collapseTable('collapse-aggregated-sessionstat',
-                'aggregated-sessionstat')">
+    <span id="sessionstat" class="collapse-table" data-bs-toggle="collapse"
+          data-bs-target="#aggregated-sessionstat"
+          aria-expanded="true" aria-controls="aggregated-sessionstat"
+          data-collapse-name="collapse-aggregated-sessionstat">
       <h4>
         <span class="collapse-table-arrow arrow-open"></span>
         <a>Session Statistics ({numSessions})</a>
       </h4>
     </span> ++
-      <div class="aggregated-sessionstat collapsible-table">
+      <div class="collapsible-table collapse show" id="aggregated-sessionstat">
         {table.getOrElse("No statistics have been generated yet.")}
       </div>
 
@@ -232,7 +233,7 @@ private[ui] class SqlStatsPagedTable(
 
     def jobLinks(jobData: Seq[String]): Seq[Node] = {
       jobData.map { jobId =>
-        <a href={jobURL(request, jobId)}>[{jobId.toString}]</a>
+        <a href={jobURL(request, jobId)}>[{jobId}]</a>
       }
     }
 
@@ -272,21 +273,6 @@ private[ui] class SqlStatsPagedTable(
       </td>
       {errorMessageCell(sqlStatsTableRow.detail)}
     </tr>
-  }
-
-
-  private def errorMessageCell(errorMessage: String): Seq[Node] = {
-    val isMultiline = errorMessage.indexOf('\n') >= 0
-    val errorSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        errorMessage.substring(0, errorMessage.indexOf('\n'))
-      } else {
-        errorMessage
-      })
-    val details = detailsUINode(isMultiline, errorMessage)
-    <td>
-      {errorSummary}{details}
-    </td>
   }
 
   private def jobURL(request: HttpServletRequest, jobId: String): String =

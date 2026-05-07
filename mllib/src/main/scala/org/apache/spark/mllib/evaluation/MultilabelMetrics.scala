@@ -45,11 +45,13 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * and labels on one pass.
    */
   private val summary: MultilabelSummarizer = {
-    predictionAndLabels
-      .treeAggregate(new MultilabelSummarizer)(
-        (summary, sample) => summary.add(sample._1, sample._2),
-        (sum1, sum2) => sum1.merge(sum2)
-      )
+    predictionAndLabels.treeAggregate[MultilabelSummarizer](
+      zeroValue = new MultilabelSummarizer,
+      seqOp = (summary: MultilabelSummarizer,
+               sample: (Array[Double], Array[Double])) => summary.add(sample._1, sample._2),
+      combOp = (sum1: MultilabelSummarizer, sum2: MultilabelSummarizer) => sum1.merge(sum2),
+      depth = 2,
+      finalAggregateOnExecutor = true)
   }
 
 
@@ -121,7 +123,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
   def f1Measure(label: Double): Double = {
     val p = precision(label)
     val r = recall(label)
-    if((p + r) == 0) 0.0 else 2 * p * r / (p + r)
+    if ((p + r) == 0) 0.0 else 2 * p * r / (p + r)
   }
 
   private lazy val sumTp = summary.tpPerClass.values.sum

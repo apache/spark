@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -121,6 +123,9 @@ class IDFModel private[ml] (
 
   import IDFModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", null)
+
   /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -192,16 +197,30 @@ class IDFModel private[ml] (
 
 @Since("1.6.0")
 object IDFModel extends MLReadable[IDFModel] {
+  private[ml] case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeVector(data.idf, dos)
+    serializeLongArray(data.docFreq, dos)
+    dos.writeLong(data.numDocs)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val idf = deserializeVector(dis)
+    val docFreq = deserializeLongArray(dis)
+    val numDocs = dis.readLong()
+    Data(idf, docFreq, numDocs)
+  }
 
   private[IDFModel] class IDFModelWriter(instance: IDFModel) extends MLWriter {
 
-    private case class Data(idf: Vector, docFreq: Array[Long], numDocs: Long)
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.idf, instance.docFreq, instance.numDocs)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -210,16 +229,17 @@ object IDFModel extends MLReadable[IDFModel] {
     private val className = classOf[IDFModel].getName
 
     override def load(path: String): IDFModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
-        val Row(idf: Vector, df: scala.collection.Seq[_], numDocs: Long) =
-          data.select("idf", "docFreq", "numDocs").head()
-        new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf),
-          df.asInstanceOf[scala.collection.Seq[Long]].toArray, numDocs))
+        val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+        new IDFModel(
+          metadata.uid,
+          new feature.IDFModel(OldVectors.fromML(data.idf), data.docFreq, data.numDocs)
+        )
       } else {
+        val data = sparkSession.read.parquet(dataPath)
         val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
           .select("idf")
           .head()

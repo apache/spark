@@ -22,8 +22,6 @@ import java.util.Locale
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
@@ -31,11 +29,10 @@ import org.apache.spark.sql.execution.datasources.FileStatusCache
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode.{Value => InferenceMode, _}
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 class HiveSchemaInferenceSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
+  extends QueryTest with TestHiveSingleton {
 
   import HiveSchemaInferenceSuite._
   import HiveExternalCatalog.DATASOURCE_SCHEMA_PREFIX
@@ -124,7 +121,7 @@ class HiveSchemaInferenceSuite
     // properties out).
     assert(!externalCatalog.getTable(DATABASE, TEST_TABLE_NAME).schemaPreservesCase)
     val rawTable = client.getTable(DATABASE, TEST_TABLE_NAME)
-    assert(rawTable.properties.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)).isEmpty)
+    assert(!rawTable.properties.exists { case (k, _) => k.startsWith(DATASOURCE_SCHEMA_PREFIX) })
 
     // Add partition records (if specified)
     if (!partitionCols.isEmpty) {
@@ -158,12 +155,10 @@ class HiveSchemaInferenceSuite
       SQLConf.HIVE_CASE_SENSITIVE_INFERENCE.key -> mode.toString)(f)
   }
 
-  private val inferenceKey = SQLConf.HIVE_CASE_SENSITIVE_INFERENCE.key
-
   private def testFieldQuery(fields: Seq[String]): Unit = {
     if (!fields.isEmpty) {
       val query = s"SELECT * FROM ${TEST_TABLE_NAME} WHERE ${Random.shuffle(fields).head} >= 0"
-      assert(spark.sql(query).count == NUM_RECORDS)
+      assert(spark.sql(query).count() == NUM_RECORDS)
     }
   }
 

@@ -14,14 +14,14 @@ TakeOrderedAndProject [s_acctbal,n_name,s_name,p_partkey,p_mfgr,s_address,s_phon
                           Filter [p_size,p_type,p_partkey]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.part [p_partkey,p_mfgr,p_type,p_size]
+                                Scan parquet spark_catalog.default.part [p_partkey,p_mfgr,p_type,p_size]
                         InputAdapter
                           BroadcastExchange #1
                             WholeStageCodegen (1)
                               Filter [ps_partkey,ps_supplycost,ps_suppkey]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]
+                                    Scan parquet spark_catalog.default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]
                     InputAdapter
                       BroadcastExchange #2
                         WholeStageCodegen (6)
@@ -40,21 +40,21 @@ TakeOrderedAndProject [s_acctbal,n_name,s_name,p_partkey,p_mfgr,s_address,s_phon
                                                   Filter [ps_suppkey,ps_partkey]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]
+                                                        Scan parquet spark_catalog.default.partsupp [ps_partkey,ps_suppkey,ps_supplycost]
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (2)
                                                         Filter [s_suppkey,s_nationkey]
                                                           ColumnarToRow
                                                             InputAdapter
-                                                              Scan parquet default.supplier [s_suppkey,s_nationkey]
+                                                              Scan parquet spark_catalog.default.supplier [s_suppkey,s_nationkey]
                                               InputAdapter
                                                 BroadcastExchange #5
                                                   WholeStageCodegen (3)
                                                     Filter [n_nationkey,n_regionkey]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.nation [n_nationkey,n_regionkey]
+                                                          Scan parquet spark_catalog.default.nation [n_nationkey,n_regionkey]
                                           InputAdapter
                                             BroadcastExchange #6
                                               WholeStageCodegen (4)
@@ -62,20 +62,20 @@ TakeOrderedAndProject [s_acctbal,n_name,s_name,p_partkey,p_mfgr,s_address,s_phon
                                                   Filter [r_name,r_regionkey]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.region [r_regionkey,r_name]
+                                                        Scan parquet spark_catalog.default.region [r_regionkey,r_name]
                 InputAdapter
                   BroadcastExchange #7
                     WholeStageCodegen (7)
                       Filter [s_suppkey,s_nationkey]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.supplier [s_suppkey,s_name,s_address,s_nationkey,s_phone,s_acctbal,s_comment]
+                            Scan parquet spark_catalog.default.supplier [s_suppkey,s_name,s_address,s_nationkey,s_phone,s_acctbal,s_comment]
             InputAdapter
               BroadcastExchange #8
                 WholeStageCodegen (8)
                   Filter [n_nationkey,n_regionkey]
                     ColumnarToRow
                       InputAdapter
-                        Scan parquet default.nation [n_nationkey,n_name,n_regionkey]
+                        Scan parquet spark_catalog.default.nation [n_nationkey,n_name,n_regionkey]
         InputAdapter
           ReusedExchange [r_regionkey] #6

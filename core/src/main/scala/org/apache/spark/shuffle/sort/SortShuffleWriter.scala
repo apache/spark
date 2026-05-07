@@ -21,13 +21,16 @@ import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
+import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
     handle: BaseShuffleHandle[K, V, C],
     mapId: Long,
     context: TaskContext,
+    writeMetrics: ShuffleWriteMetricsReporter,
     shuffleExecutorComponents: ShuffleExecutorComponents)
   extends ShuffleWriter[K, V] with Logging {
 
@@ -46,19 +49,31 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var partitionLengths: Array[Long] = _
 
-  private val writeMetrics = context.taskMetrics().shuffleWriteMetrics
+  def getRowBasedChecksums: Array[RowBasedChecksum] = {
+    if (sorter != null) {
+      sorter.getRowBasedChecksums
+    } else {
+      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
+    }
+  }
+
+  def getAggregatedChecksumValue: Long = {
+    if (sorter != null) sorter.getAggregatedChecksumValue else 0
+  }
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
       new ExternalSorter[K, V, C](
-        context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering,
+        dep.serializer, dep.rowBasedChecksums)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
       new ExternalSorter[K, V, V](
-        context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
+        context, aggregator = None, Some(dep.partitioner), ordering = None,
+        dep.serializer, dep.rowBasedChecksums)
     }
     sorter.insertAll(records)
 
@@ -67,9 +82,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     // (see SPARK-3570).
     val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
-    sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter)
+    sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter, writeMetrics)
     partitionLengths = mapOutputWriter.commitAllPartitions(sorter.getChecksums).getPartitionLengths
-    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
+    mapStatus =
+      MapStatus(blockManager.shuffleServerId, partitionLengths, mapId, getAggregatedChecksumValue)
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -80,9 +96,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
       stopping = true
       if (success) {
-        return Option(mapStatus)
+        Option(mapStatus)
       } else {
-        return None
+        None
       }
     } finally {
       // Clean up our sorter, which may have its own intermediate files

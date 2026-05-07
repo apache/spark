@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.TestUtils.assertSpilled
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf.{WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD, WINDOW_EXEC_BUFFER_SPILL_THRESHOLD}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -28,7 +28,7 @@ case class WindowData(month: Int, area: String, product: Int)
 /**
  * Test suite for SQL window functions.
  */
-class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
+class SQLWindowFunctionSuite extends SharedSparkSession {
 
   import testImplicits._
 
@@ -501,5 +501,50 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSparkSession {
     }
 
     spark.catalog.dropTempView("nums")
+  }
+
+  test("sql parameters in window frame clause") {
+    val data = Seq(
+      WindowData(1, "d", 10),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 11)
+    )
+    val expected = Seq(
+      Row(11),
+      Row(12),
+      Row(15),
+      Row(6),
+      Row(6),
+      Row(9)
+    )
+
+    withTempView("windowData") {
+      sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
+
+      // Named parameters.
+      val namedParamSql = """
+        |SELECT
+        |  SUM(month) OVER (ORDER BY month ROWS BETWEEN CURRENT ROW AND :param1 FOLLOWING)
+        |FROM windowData
+      """.stripMargin
+      checkAnswer(spark.sql(namedParamSql, Map("param1" -> 2)), expected)
+
+      // Positional parameters.
+      val postParamSql = """
+        |SELECT
+        |  SUM(month) OVER (ORDER BY month ROWS BETWEEN CURRENT ROW AND ? FOLLOWING)
+        |FROM windowData
+      """.stripMargin
+      checkAnswer(spark.sql(postParamSql, Array(2)), expected)
+
+      // Wrong type of parameter.
+      val e = intercept[AnalysisException] {
+        spark.sql(namedParamSql, Map("param1" -> "abc")).collect()
+      }
+      assert(e.errorClass.contains("DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE"))
+    }
   }
 }

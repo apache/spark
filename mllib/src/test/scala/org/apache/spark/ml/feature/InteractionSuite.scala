@@ -25,7 +25,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, struct}
 
 class InteractionSuite extends MLTest with DefaultReadWriteTest {
 
@@ -37,8 +37,8 @@ class InteractionSuite extends MLTest with DefaultReadWriteTest {
 
   test("feature encoder") {
     def encode(cardinalities: Array[Int], value: Any): Vector = {
-      var indices = ArrayBuilder.make[Int]
-      var values = ArrayBuilder.make[Double]
+      val indices = ArrayBuilder.make[Int]
+      val values = ArrayBuilder.make[Double]
       val encoder = new FeatureEncoder(cardinalities)
       encoder.foreachNonzeroOutput(value, (i, v) => {
         indices += i
@@ -169,4 +169,37 @@ class InteractionSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("myOutputCol")
     testDefaultReadWrite(t)
   }
+
+  test("nested input columns") {
+    val data = Seq(
+      (2, Vectors.dense(3.0, 4.0), Vectors.dense(6.0, 8.0)),
+      (1, Vectors.dense(1.0, 5.0), Vectors.dense(1.0, 5.0))
+    ).toDF("a", "b", "expected")
+    val groupAttr = new AttributeGroup(
+      "b",
+      Array[Attribute](
+        NumericAttribute.defaultAttr.withName("foo"),
+        NumericAttribute.defaultAttr.withName("bar")))
+    val df = data.select(
+      col("a").as("a", NumericAttribute.defaultAttr.toMetadata()),
+      col("b").as("b", groupAttr.toMetadata()),
+      col("expected"))
+      .select(struct("a", "b").alias("nest"), col("expected"))
+    val trans = new Interaction().setInputCols(Array("nest.a", "nest.b")).setOutputCol("features")
+
+    trans.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features === expected)
+    }
+
+    val res = trans.transform(df)
+    val attrs = AttributeGroup.fromStructField(res.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("a:b_foo"), Some(1)),
+        new NumericAttribute(Some("a:b_bar"), Some(2))))
+    assert(attrs === expectedAttrs)
+  }
+
 }

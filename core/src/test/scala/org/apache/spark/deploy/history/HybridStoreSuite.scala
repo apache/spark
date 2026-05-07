@@ -21,32 +21,27 @@ import java.io.File
 import java.util.NoSuchElementException
 import java.util.concurrent.LinkedBlockingQueue
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
+import org.apache.spark.tags.ExtendedLevelDBTest
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
-class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
+abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
 
-  private var db: LevelDB = _
-  private var dbpath: File = _
-
-  before {
-    dbpath = File.createTempFile("test.", ".ldb")
-    dbpath.delete()
-    db = new LevelDB(dbpath, new KVStoreScalaSerializer())
-  }
+  var db: KVStore = _
+  var dbpath: File = _
 
   after {
     if (db != null) {
       db.close()
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath)
+      Utils.deleteQuietly(dbpath)
     }
   }
 
@@ -83,7 +78,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
     store.setMetadata(t1)
     assert(store.getMetadata(classOf[CustomType1]) === t1)
 
-    // Switch to LevelDB and set a new metadata
+    // Switch to RocksDB/LevelDB and set a new metadata
     switchHybridStore(store)
 
     val t2 = createCustomType1(2)
@@ -108,6 +103,13 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
   }
 
   test("test basic iteration") {
+
+    def head[T](view: KVStoreView[T]): T = {
+      Utils.tryWithResource(view.closeableIterator()) { iter =>
+        assert(iter.hasNext)
+        iter.next()
+      }
+    }
     val store = createHybridStore()
 
     val t1 = createCustomType1(1)
@@ -118,11 +120,11 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
     Seq(false, true).foreach { switch =>
       if (switch) switchHybridStore(store)
 
-      assert(store.view(t1.getClass()).iterator().next().id === t1.id)
-      assert(store.view(t1.getClass()).skip(1).iterator().next().id === t2.id)
-      assert(store.view(t1.getClass()).skip(1).max(1).iterator().next().id === t2.id)
-      assert(store.view(t1.getClass()).first(t1.key).max(1).iterator().next().id === t1.id)
-      assert(store.view(t1.getClass()).first(t2.key).max(1).iterator().next().id === t2.id)
+      assert(head(store.view(t1.getClass)).id === t1.id)
+      assert(head(store.view(t1.getClass()).skip(1)).id === t2.id)
+      assert(head(store.view(t1.getClass()).skip(1).max(1)).id === t2.id)
+      assert(head(store.view(t1.getClass()).first(t1.key).max(1)).id === t1.id)
+      assert(head(store.view(t1.getClass()).first(t2.key).max(1)).id === t2.id)
     }
   }
 
@@ -154,7 +156,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
 
   private def createHybridStore(): HybridStore = {
     val store = new HybridStore()
-    store.setLevelDB(db)
+    store.setDiskStore(db)
     store
   }
 
@@ -165,21 +167,21 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
   private def switchHybridStore(store: HybridStore): Unit = {
     assert(store.getStore().isInstanceOf[InMemoryStore])
     val listener = new SwitchListener()
-    store.switchToLevelDB(listener, "test", None)
+    store.switchToDiskStore(listener, "test", None)
     failAfter(2.seconds) {
       assert(listener.waitUntilDone())
     }
-    while (!store.getStore().isInstanceOf[LevelDB]) {
+    while (!store.getStore().isInstanceOf[LevelDB] && !store.getStore().isInstanceOf[RocksDB]) {
       Thread.sleep(10)
     }
   }
 
-  private class SwitchListener extends HybridStore.SwitchToLevelDBListener {
+  private class SwitchListener extends HybridStore.SwitchToDiskStoreListener {
 
     // Put true to the queue when switch succeeds, and false when fails.
     private val results = new LinkedBlockingQueue[Boolean]()
 
-    override def onSwitchToLevelDBSuccess(): Unit = {
+    override def onSwitchToDiskStoreSuccess(): Unit = {
       try {
         results.put(true)
       } catch {
@@ -188,7 +190,7 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
       }
     }
 
-    override def onSwitchToLevelDBFail(e: Exception): Unit = {
+    override def onSwitchToDiskStoreFail(e: Exception): Unit = {
       try {
         results.put(false)
       } catch {
@@ -200,6 +202,23 @@ class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits
     def waitUntilDone(): Boolean = {
       results.take()
     }
+  }
+}
+
+@ExtendedLevelDBTest
+class LevelDBHybridStoreSuite extends HybridStoreSuite {
+  before {
+    dbpath = File.createTempFile("test.", ".ldb")
+    dbpath.delete()
+    db = new LevelDB(dbpath, new KVStoreScalaSerializer())
+  }
+}
+
+class RocksDBHybridStoreSuite extends HybridStoreSuite {
+  before {
+    dbpath = File.createTempFile("test.", ".rdb")
+    dbpath.delete()
+    db = new RocksDB(dbpath, new KVStoreScalaSerializer())
   }
 }
 

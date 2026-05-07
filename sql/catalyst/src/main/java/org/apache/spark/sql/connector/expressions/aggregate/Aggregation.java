@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * Aggregation in SQL statement.
@@ -28,16 +28,7 @@ import org.apache.spark.sql.connector.expressions.FieldReference;
  * @since 3.2.0
  */
 @Evolving
-public final class Aggregation implements Serializable {
-  private final AggregateFunc[] aggregateExpressions;
-  private final FieldReference[] groupByColumns;
-
-  public Aggregation(AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
-    this.aggregateExpressions = aggregateExpressions;
-    this.groupByColumns = groupByColumns;
-  }
-
-  public AggregateFunc[] aggregateExpressions() { return aggregateExpressions; }
-
-  public FieldReference[] groupByColumns() { return groupByColumns; }
+public record Aggregation(
+    AggregateFunc[] aggregateExpressions,
+    Expression[] groupByExpressions) implements Serializable {
 }

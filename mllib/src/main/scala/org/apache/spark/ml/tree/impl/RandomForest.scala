@@ -22,6 +22,8 @@ import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{MAX_MEMORY_SIZE, MEMORY_SIZE, NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, NUM_NODES, NUM_WEIGHTED_EXAMPLES, TIMER}
+import org.apache.spark.ml.EstimatorUtils
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -35,6 +37,7 @@ import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
@@ -100,6 +103,9 @@ private[spark] object RandomForest extends Logging with Serializable {
     run(instances, strategy, numTrees, featureSubsetStrategy, seed, None)
   }
 
+  // This member is only for testing code.
+  private[spark] var lastEarlyStoppedModelSize: Long = 0
+
   /**
    * Train a random forest with metadata and splits. This method is mainly for GBT,
    * in which bagged input can be reused among trees.
@@ -108,6 +114,7 @@ private[spark] object RandomForest extends Logging with Serializable {
    * @param metadata Learning and dataset metadata for DecisionTree.
    * @return an unweighted set of trees
    */
+  // scalastyle:off
   def runBagged(
       baggedInput: RDD[BaggedPoint[TreePoint]],
       metadata: DecisionTreeMetadata,
@@ -117,7 +124,14 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
+<<<<<<< HEAD
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+=======
+      prune: Boolean = true, // exposed for testing only, real trees are always pruned
+      parentUID: Option[String] = None,
+      earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
+    lastEarlyStoppedModelSize = 0
+>>>>>>> master
     val timer = new TimeTracker()
     timer.start("total")
 
@@ -130,10 +144,11 @@ private[spark] object RandomForest extends Logging with Serializable {
         instrumentation.logNumExamples(metadata.numExamples)
         instrumentation.logSumOfWeights(metadata.weightedNumExamples)
       case None =>
-        logInfo(s"numFeatures: ${metadata.numFeatures}")
-        logInfo(s"numClasses: ${metadata.numClasses}")
-        logInfo(s"numExamples: ${metadata.numExamples}")
-        logInfo(s"weightedNumExamples: ${metadata.weightedNumExamples}")
+        logInfo(log"numFeatures: ${MDC(NUM_FEATURES, metadata.numFeatures)}")
+        logInfo(log"numClasses: ${MDC(NUM_CLASSES, metadata.numClasses)}")
+        logInfo(log"numExamples: ${MDC(NUM_EXAMPLES, metadata.numExamples)}")
+        logInfo(log"weightedNumExamples: " +
+          log"${MDC(NUM_WEIGHTED_EXAMPLES, metadata.weightedNumExamples)}")
     }
 
     timer.start("init")
@@ -163,9 +178,13 @@ private[spark] object RandomForest extends Logging with Serializable {
       // At first, all the rows belong to the root nodes (node Id == 1).
       nodeIds = baggedInput.map { _ => Array.fill(numTrees)(1) }
       nodeIdCheckpointer = new PeriodicRDDCheckpointer[Array[Int]](
+<<<<<<< HEAD
         strategy.getCheckpointInterval,
         sc,
         StorageLevel.MEMORY_AND_DISK)
+=======
+        strategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
+>>>>>>> master
       nodeIdCheckpointer.update(nodeIds)
     }
 
@@ -190,7 +209,8 @@ private[spark] object RandomForest extends Logging with Serializable {
 
     timer.stop("init")
 
-    while (nodeStack.nonEmpty) {
+    var earlyStop = false
+    while (nodeStack.nonEmpty && !earlyStop) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
@@ -223,12 +243,28 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
 
       timer.stop("findBestSplits")
-    }
 
+      if (earlyStopModelSizeThresholdInBytes > 0) {
+        val nodes = topNodes.map(_.toNode(prune))
+        val estimatedSize = SizeEstimator.estimate(nodes)
+        if (estimatedSize > earlyStopModelSizeThresholdInBytes){
+          earlyStop = true
+          val warningMessage = "The random forest training stops early because the model size " +
+            s"($estimatedSize bytes) exceeds threshold " +
+            s"($earlyStopModelSizeThresholdInBytes bytes)."
+          logWarning(warningMessage)
+          val msgBuffer = EstimatorUtils.warningMessagesBuffer.get()
+          if (msgBuffer != null) {
+            msgBuffer.append(warningMessage)
+          }
+          lastEarlyStoppedModelSize = estimatedSize
+        }
+      }
+    }
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
-    logInfo(s"$timer")
+    logInfo(log"${MDC(TIMER, timer)}")
 
     if (strategy.useNodeIdCache) {
       // Delete any remaining checkpoints used for node Id cache.
@@ -242,11 +278,16 @@ private[spark] object RandomForest extends Logging with Serializable {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
+<<<<<<< HEAD
             new DecisionTreeClassificationModel(
               uid,
               rootNode.toNode(strategy.pruneTree),
               numFeatures,
               strategy.getNumClasses)
+=======
+            new DecisionTreeClassificationModel(uid, rootNode.toNode(prune), numFeatures,
+              strategy.getNumClasses())
+>>>>>>> master
           }
         } else {
           topNodes.map { rootNode =>
@@ -256,10 +297,15 @@ private[spark] object RandomForest extends Logging with Serializable {
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
+<<<<<<< HEAD
             new DecisionTreeClassificationModel(
               rootNode.toNode(strategy.pruneTree),
               numFeatures,
               strategy.getNumClasses)
+=======
+            new DecisionTreeClassificationModel(rootNode.toNode(prune), numFeatures,
+              strategy.getNumClasses())
+>>>>>>> master
           }
         } else {
           topNodes.map(rootNode =>
@@ -267,6 +313,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         }
     }
   }
+  // scalastyle:on
 
   /**
    * Train a random forest.
@@ -282,6 +329,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+    val earlyStopModelSizeThresholdInBytes = TreeConfig.trainingEarlyStopModelSizeThresholdInBytes
     val timer = new TimeTracker()
 
     timer.start("build metadata")
@@ -320,6 +368,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName("bagged tree points")
 
+<<<<<<< HEAD
     val trees = runBagged(
       baggedInput = baggedInput,
       metadata = metadata,
@@ -330,6 +379,12 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed = seed,
       instr = instr,
       parentUID = parentUID)
+=======
+    val trees = runBagged(baggedInput = baggedInput, metadata = metadata, bcSplits = bcSplits,
+      strategy = strategy, numTrees = numTrees, featureSubsetStrategy = featureSubsetStrategy,
+      seed = seed, instr = instr, prune = prune, parentUID = parentUID,
+      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
+>>>>>>> master
 
     baggedInput.unpersist()
     bcSplits.destroy()
@@ -859,8 +914,8 @@ private[spark] object RandomForest extends Logging with Serializable {
     val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
     val rightImpurity = rightImpurityCalculator.calculate()
 
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
+    val leftWeight = leftCount / totalCount
+    val rightWeight = rightCount / totalCount
 
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 
@@ -1405,15 +1460,22 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
     if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.
+<<<<<<< HEAD
       logWarning(
         s"Tree learning is using approximately $memUsage bytes per iteration, which" +
           s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
           s" $numNodesInGroup nodes in this iteration.")
+=======
+      logWarning(log"Tree learning is using approximately ${MDC(MEMORY_SIZE, memUsage)} " +
+        log"bytes per iteration, which exceeds requested limit " +
+        log"maxMemoryUsage=${MDC(MAX_MEMORY_SIZE, maxMemoryUsage)}. This allows splitting " +
+        log"${MDC(NUM_NODES, numNodesInGroup)} nodes in this iteration.")
+>>>>>>> master
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =
-      mutableNodesForGroup.mapValues(_.toArray).toMap
-    val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.mapValues(_.toMap).toMap
+      mutableNodesForGroup.toMap.transform((_, v) => v.toArray)
+    val treeToNodeToIndexInfo = mutableTreeToNodeToIndexInfo.toMap.transform((_, v) => v.toMap)
     (nodesForGroup, treeToNodeToIndexInfo)
   }
 

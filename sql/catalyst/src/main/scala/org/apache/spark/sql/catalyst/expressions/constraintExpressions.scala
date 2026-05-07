@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{ArrayType, DataType}
 
 trait TaggingExpression extends UnaryExpression {
   override def nullable: Boolean = child.nullable
@@ -30,6 +30,17 @@ trait TaggingExpression extends UnaryExpression {
   override def eval(input: InternalRow): Any = child.eval(input)
 }
 
+case class KnownNullable(child: Expression) extends TaggingExpression {
+  override def nullable: Boolean = true
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    child.genCode(ctx)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): KnownNullable =
+    copy(child = newChild)
+}
+
 case class KnownNotNull(child: Expression) extends TaggingExpression {
   override def nullable: Boolean = false
 
@@ -38,6 +49,17 @@ case class KnownNotNull(child: Expression) extends TaggingExpression {
   }
 
   override protected def withNewChildInternal(newChild: Expression): KnownNotNull =
+    copy(child = newChild)
+}
+
+case class KnownNotContainsNull(child: Expression) extends TaggingExpression {
+  override def dataType: DataType =
+    child.dataType.asInstanceOf[ArrayType].copy(containsNull = false)
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    child.genCode(ctx)
+
+  override protected def withNewChildInternal(newChild: Expression): KnownNotContainsNull =
     copy(child = newChild)
 }
 

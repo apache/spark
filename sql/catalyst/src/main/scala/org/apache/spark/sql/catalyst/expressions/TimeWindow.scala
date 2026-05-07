@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TIME_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -71,7 +72,8 @@ case class TimeWindow(
     startTime: Long) extends UnaryExpression
   with ImplicitCastInputTypes
   with Unevaluable
-  with NonSQLExpression {
+  with NonSQLExpression
+  with QueryErrorsBase {
 
   //////////////////////////
   // SQL Constructors
@@ -95,8 +97,26 @@ case class TimeWindow(
     this(timeColumn, windowDuration, windowDuration)
   }
 
+  private def inputTypeOnTimeColumn: AbstractDataType = {
+    TypeCollection(
+      AnyTimestampType,
+      // Below two types cover both time window & session window, since they produce the same type
+      // of output as window column.
+      new StructType()
+        .add(StructField("start", TimestampType))
+        .add(StructField("end", TimestampType)),
+      new StructType()
+        .add(StructField("start", TimestampNTZType))
+        .add(StructField("end", TimestampNTZType))
+    )
+  }
+
+  // NOTE: if the window column is given as a time column, we resolve it to the point of time,
+  // which resolves to either TimestampType or TimestampNTZType. That means, timeColumn may not
+  // be "resolved", so it is safe to not rely on the data type of timeColumn directly.
+
   override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(inputTypeOnTimeColumn)
   override def dataType: DataType = new StructType()
     .add(StructField("start", child.dataType))
     .add(StructField("end", child.dataType))
@@ -114,18 +134,48 @@ case class TimeWindow(
     val dataTypeCheck = super.checkInputDataTypes()
     if (dataTypeCheck.isSuccess) {
       if (windowDuration <= 0) {
-        return TypeCheckFailure(s"The window duration ($windowDuration) must be greater than 0.")
+        return DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("window_duration"),
+            "valueRange" -> s"(0, ${Long.MaxValue}]",
+            "currentValue" -> toSQLValue(windowDuration, LongType)
+          )
+        )
       }
       if (slideDuration <= 0) {
-        return TypeCheckFailure(s"The slide duration ($slideDuration) must be greater than 0.")
+        return DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> toSQLId("slide_duration"),
+            "valueRange" -> s"(0, ${Long.MaxValue}]",
+            "currentValue" -> toSQLValue(slideDuration, LongType)
+          )
+        )
       }
       if (slideDuration > windowDuration) {
-        return TypeCheckFailure(s"The slide duration ($slideDuration) must be less than or equal" +
-          s" to the windowDuration ($windowDuration).")
+        return DataTypeMismatch(
+          errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
+          messageParameters = Map(
+            "leftExprName" -> toSQLId("slide_duration"),
+            "leftExprValue" -> toSQLValue(slideDuration, LongType),
+            "constraint" -> "<=",
+            "rightExprName" -> toSQLId("window_duration"),
+            "rightExprValue" -> toSQLValue(windowDuration, LongType)
+          )
+        )
       }
       if (startTime.abs >= slideDuration) {
-        return TypeCheckFailure(s"The absolute value of start time ($startTime) must be less " +
-          s"than the slideDuration ($slideDuration).")
+        return DataTypeMismatch(
+          errorSubClass = "PARAMETER_CONSTRAINT_VIOLATION",
+          messageParameters = Map(
+            "leftExprName" -> toSQLId("abs(start_time)"),
+            "leftExprValue" -> toSQLValue(startTime.abs, LongType),
+            "constraint" -> "<",
+            "rightExprName" -> toSQLId("slide_duration"),
+            "rightExprValue" -> toSQLValue(slideDuration, LongType)
+          )
+        )
       }
     }
     dataTypeCheck
@@ -136,6 +186,8 @@ case class TimeWindow(
 }
 
 object TimeWindow {
+  val marker = "spark.timeWindow"
+
   /**
    * Parses the interval string for a valid time duration. CalendarInterval expects interval
    * strings to start with the string `interval`. For usability, we prepend `interval` to the string
@@ -148,8 +200,9 @@ object TimeWindow {
   def getIntervalInMicroSeconds(interval: String): Long = {
     val cal = IntervalUtils.fromIntervalString(interval)
     if (cal.months != 0) {
-      throw new IllegalArgumentException(
-        s"Intervals greater than a month is not supported ($interval).")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3231",
+        messageParameters = Map("interval" -> interval))
     }
     Math.addExact(Math.multiplyExact(cal.days, MICROS_PER_DAY), cal.microseconds)
   }
@@ -159,7 +212,7 @@ object TimeWindow {
    * that we can use `window` in SQL.
    */
   def parseExpression(expr: Expression): Long = expr match {
-    case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
+    case NonNullLiteral(s, _: StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
     case NonNullLiteral(l, LongType) => l.toString.toLong
     case _ => throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
@@ -184,7 +237,8 @@ object TimeWindow {
 case class PreciseTimestampConversion(
     child: Expression,
     fromType: DataType,
-    toType: DataType) extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+    toType: DataType) extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
   override def dataType: DataType = toType
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

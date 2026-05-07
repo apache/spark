@@ -21,8 +21,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
@@ -91,8 +89,7 @@ public final class UploadStream extends AbstractMessage implements RequestMessag
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof UploadStream) {
-      UploadStream o = (UploadStream) other;
+    if (other instanceof UploadStream o) {
       return requestId == o.requestId && super.equals(o);
     }
     return false;
@@ -100,9 +97,6 @@ public final class UploadStream extends AbstractMessage implements RequestMessag
 
   @Override
   public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("requestId", requestId)
-      .append("body", body())
-      .toString();
+    return "UploadStream[requestId=" + requestId + ",body=" + body() + "]";
   }
 }

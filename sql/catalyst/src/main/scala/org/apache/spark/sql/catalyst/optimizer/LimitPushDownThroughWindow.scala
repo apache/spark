@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentRow, IntegerLiteral, NamedExpression, RankLike, RowFrame, RowNumberLike, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentRow, DenseRank, IntegerLiteral, NamedExpression, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalLimit, LogicalPlan, Project, Sort, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, WINDOW}
@@ -30,10 +30,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LIMIT, WINDOW}
  * }}}
  */
 object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
-  // The window frame of RankLike and RowNumberLike can only be UNBOUNDED PRECEDING to CURRENT ROW.
+  // The window frame of Rank, DenseRank and RowNumber can only be UNBOUNDED PRECEDING to
+  // CURRENT ROW.
   private def supportsPushdownThroughWindow(
       windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
-    case Alias(WindowExpression(_: RankLike | _: RowNumberLike, WindowSpecDefinition(Nil, _,
+    case Alias(WindowExpression(_: Rank | _: DenseRank | _: RowNumber, WindowSpecDefinition(Nil, _,
         SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _) => true
     case _ => false
   }
@@ -42,14 +43,14 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
     _.containsAllPatterns(WINDOW, LIMIT), ruleId) {
     // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
     case LocalLimit(limitExpr @ IntegerLiteral(limit),
-        window @ Window(windowExpressions, Nil, orderSpec, child))
+        window @ Window(windowExpressions, Nil, orderSpec, child, _))
       if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
     // There is a Project between LocalLimit and Window if they do not have the same output.
     case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
-        window @ Window(windowExpressions, Nil, orderSpec, child)))
+        window @ Window(windowExpressions, Nil, orderSpec, child, _)))
       if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.

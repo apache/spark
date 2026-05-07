@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Base class for computing Pearson correlation between two expressions.
@@ -55,7 +56,7 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck, xMk, yMk)
 
-  override val initialValues: Seq[Expression] = Array.fill(6)(Literal(0.0))
+  override val initialValues: Seq[Expression] = Array.fill(6)(Literal(0.0)).toImmutableArraySeq
 
   override lazy val updateExpressions: Seq[Expression] = updateExpressionsDef
 

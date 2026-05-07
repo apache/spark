@@ -16,7 +16,8 @@
  */
 package org.apache.spark.util;
 
-import com.google.common.base.Joiner;
+import java.util.StringJoiner;
+
 import org.apache.spark.annotation.Private;
 
 @Private
@@ -33,6 +34,14 @@ public class EnumUtil {
     }
     throw new IllegalArgumentException(
       String.format("Illegal type='%s'. Supported type values: %s",
-        str, Joiner.on(", ").join(constants)));
+        str, joinToString(constants)));
+  }
+
+  private static <E extends Enum<E>> String joinToString(E[] enums) {
+    StringJoiner stringJoiner = new StringJoiner(", ");
+    for (E e : enums) {
+      stringJoiner.add(e.name());
+    }
+    return stringJoiner.toString();
   }
 }

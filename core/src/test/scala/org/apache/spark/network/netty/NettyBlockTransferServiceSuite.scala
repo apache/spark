@@ -25,7 +25,6 @@ import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -34,10 +33,10 @@ import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.client.{TransportClient, TransportClientFactory}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 
 class NettyBlockTransferServiceSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
   with Matchers {
 
   private var service0: NettyBlockTransferService = _
@@ -142,10 +141,11 @@ class NettyBlockTransferServiceSuite
       rpcEndpointRef: RpcEndpointRef = null): NettyBlockTransferService = {
     val conf = new SparkConf()
       .set("spark.app.id", s"test-${getClass.getName}")
+    val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])
-    val service = new NettyBlockTransferService(conf, securityManager, "localhost", "localhost",
-      port, 1, rpcEndpointRef)
+    val service = new NettyBlockTransferService(
+      conf, securityManager, serializerManager, "localhost", "localhost", port, 1, rpcEndpointRef)
     service.init(blockDataManager)
     service
   }

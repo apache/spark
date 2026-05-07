@@ -26,6 +26,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FakeV2SessionCatalog
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -46,29 +47,29 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
       val name = invocation.getArgument[String](0)
-      catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+      catalogs.getOrElse(name, throw QueryExecutionErrors.catalogNotFoundError(name))
     })
     when(manager.currentCatalog).thenReturn(sessionCatalog)
     when(manager.v2SessionCatalog).thenReturn(sessionCatalog)
-    when(manager.currentNamespace).thenReturn(Array.empty[String])
+    when(manager.currentNamespace).thenReturn(Array("default"))
     manager
   }
 
   test("catalog and identifier") {
     Seq(
-      ("tbl", sessionCatalog, Seq.empty, "tbl"),
+      ("tbl", sessionCatalog, Seq("default"), "tbl"),
       ("db.tbl", sessionCatalog, Seq("db"), "tbl"),
       (s"$globalTempDB.tbl", sessionCatalog, Seq(globalTempDB), "tbl"),
       (s"$globalTempDB.ns1.ns2.tbl", sessionCatalog, Seq(globalTempDB, "ns1", "ns2"), "tbl"),
-      ("prod.func", catalogs("prod"), Seq.empty, "func"),
       ("ns1.ns2.tbl", sessionCatalog, Seq("ns1", "ns2"), "tbl"),
-      ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
-      ("test.db.tbl", catalogs("test"), Seq("db"), "tbl"),
-      ("test.ns1.ns2.ns3.tbl", catalogs("test"), Seq("ns1", "ns2", "ns3"), "tbl"),
-      ("`db.tbl`", sessionCatalog, Seq.empty, "db.tbl"),
+      ("`db.tbl`", sessionCatalog, Seq("default"), "db.tbl"),
       ("parquet.`file:/tmp/db.tbl`", sessionCatalog, Seq("parquet"), "file:/tmp/db.tbl"),
       ("`org.apache.spark.sql.json`.`s3://buck/tmp/abc.json`", sessionCatalog,
-        Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json")).foreach {
+        Seq("org.apache.spark.sql.json"), "s3://buck/tmp/abc.json"),
+      ("prod.func", catalogs("prod"), Seq.empty, "func"),
+      ("prod.db.tbl", catalogs("prod"), Seq("db"), "tbl"),
+      ("test.db.tbl", catalogs("test"), Seq("db"), "tbl"),
+      ("test.ns1.ns2.ns3.tbl", catalogs("test"), Seq("ns1", "ns2", "ns3"), "tbl")).foreach {
       case (sql, expectedCatalog, namespace, name) =>
         inside(parseMultipartIdentifier(sql)) {
           case CatalogAndIdentifier(catalog, ident) =>
@@ -114,7 +115,7 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
       val name = invocation.getArgument[String](0)
-      catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+      catalogs.getOrElse(name, throw QueryExecutionErrors.catalogNotFoundError(name))
     })
     when(manager.currentCatalog).thenReturn(catalogs("prod"))
     when(manager.currentNamespace).thenReturn(Array.empty[String])

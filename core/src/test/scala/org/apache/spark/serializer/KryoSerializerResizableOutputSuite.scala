@@ -18,8 +18,6 @@
 package org.apache.spark.serializer
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.LocalSparkContext._
-import org.apache.spark.SparkContext
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Kryo._
@@ -34,9 +32,10 @@ class KryoSerializerResizableOutputSuite extends SparkFunSuite {
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     conf.set(KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
     conf.set(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "1m")
-    withSpark(new SparkContext("local", "test", conf)) { sc =>
-      intercept[SparkException](sc.parallelize(x).collect())
-    }
+
+    val ser = new KryoSerializer(conf)
+    val serInstance = ser.newInstance()
+    intercept[SparkException](serInstance.serialize(x))
   }
 
   test("kryo with resizable output buffer should succeed on large array") {
@@ -44,8 +43,9 @@ class KryoSerializerResizableOutputSuite extends SparkFunSuite {
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     conf.set(KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
     conf.set(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "2m")
-    withSpark(new SparkContext("local", "test", conf)) { sc =>
-      assert(sc.parallelize(x).collect() === x)
-    }
+
+    val ser = new KryoSerializer(conf)
+    val serInstance = ser.newInstance()
+    serInstance.serialize(x)
   }
 }

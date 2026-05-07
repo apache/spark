@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, MutableProjection, NamedExpression, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -117,7 +118,12 @@ class MergingSessionsIterator(
       val inputRow = inputIterator.next()
       nextGroupingKey = groupingWithoutSessionProjection(inputRow).copy()
       val session = sessionProjection(inputRow)
-      nextGroupingSession = session.getStruct(0, 2).copy()
+      val groupingSession = session.getStruct(0, 2)
+      if (groupingSession == null) {
+        errorOnIterator = true
+        throw SparkException.internalError("Grouping Session should not be null.")
+      }
+      nextGroupingSession = groupingSession.copy()
       firstRowInNextGroup = inputRow.copy()
       sortedInputHasNewGroup = true
     } else {
@@ -148,6 +154,12 @@ class MergingSessionsIterator(
 
       val session = sessionProjection(currentRow)
       val sessionStruct = session.getStruct(0, 2)
+
+      if (sessionStruct == null) {
+        errorOnIterator = true
+        throw SparkException.internalError("Grouping Session should not be null.")
+      }
+
       val sessionStart = getSessionStart(sessionStruct)
       val sessionEnd = getSessionEnd(sessionStruct)
 
@@ -155,7 +167,7 @@ class MergingSessionsIterator(
       if (currentGroupingKey == groupingKey) {
         if (sessionStart < getSessionStart(currentSession)) {
           errorOnIterator = true
-          throw new IllegalStateException("Input iterator is not sorted based on session!")
+          throw SparkException.internalError("Input iterator is not sorted based on session!")
         } else if (sessionStart <= getSessionEnd(currentSession)) {
           // expanding session length if needed
           expandEndOfCurrentSession(sessionEnd)
@@ -208,7 +220,7 @@ class MergingSessionsIterator(
 
   override final def hasNext: Boolean = {
     if (errorOnIterator) {
-      throw new IllegalStateException("The iterator is already corrupted.")
+      throw SparkException.internalError("The iterator is already corrupted.")
     }
     sortedInputHasNewGroup
   }

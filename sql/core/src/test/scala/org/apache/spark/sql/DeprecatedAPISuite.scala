@@ -21,7 +21,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
+class DeprecatedAPISuite extends SharedSparkSession {
   import MathFunctionsTestData.DoubleData
   import testImplicits._
 
@@ -33,12 +33,12 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
         c: Column => Column,
         f: T => U): Unit = {
     checkAnswer(
-      doubleData.select(c('a)),
+      doubleData.select(c($"a")),
       (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
     )
 
     checkAnswer(
-      doubleData.select(c('b)),
+      doubleData.select(c($"b")),
       (1 to 10).map(n => Row(f((-n * 0.2 + 1).asInstanceOf[T])))
     )
 
@@ -129,10 +129,10 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
 
   test("SQLContext.setActive/clearActive") {
     val sc = spark.sparkContext
-    val sqlContext = new SQLContext(sc)
-    SQLContext.setActive(sqlContext)
+    val sqlContext = new classic.SQLContext(sc)
+    classic.SQLContext.setActive(sqlContext)
     assert(SparkSession.getActiveSession === Some(spark))
-    SQLContext.clearActive()
+    classic.SQLContext.clearActive()
     assert(SparkSession.getActiveSession === None)
   }
 

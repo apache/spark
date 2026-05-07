@@ -18,11 +18,14 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.DataWriter
 import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
@@ -59,14 +62,16 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
           var count = 0L
           while (dataIterator.hasNext) {
             if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-              CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
+              CustomMetrics.updateMetrics(
+                dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
             }
             count += 1
             dataWriter.write(dataIterator.next())
           }
-          CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
-          logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
+          CustomMetrics.updateMetrics(
+            dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
+          logInfo(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
+            log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
             CommitPartitionEpoch(
@@ -74,8 +79,8 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
               EpochTracker.getCurrentEpoch.get,
               msg)
           )
-          logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${EpochTracker.getCurrentEpoch.get} committed.")
+          logInfo(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
+            log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} committed.")
           EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>
@@ -84,11 +89,13 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
       })(catchBlock = {
         // If there is an error, abort this writer. We enter this callback in the middle of
         // rethrowing an exception, so compute() will stop executing at this point.
-        logError(s"Writer for partition ${context.partitionId()} is aborting.")
+        logError(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+          log"is aborting.")
         if (dataWriter != null) dataWriter.abort()
-        logError(s"Writer for partition ${context.partitionId()} aborted.")
+        logError(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+          log"aborted.")
       }, finallyBlock = {
-        dataWriter.close()
+        if (dataWriter != null) dataWriter.close()
       })
     }
 

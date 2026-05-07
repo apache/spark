@@ -17,26 +17,22 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A null order used in sorting expressions.
  *
  * @since 3.2.0
  */
-@Experimental
+@Evolving
 public enum NullOrdering {
   NULLS_FIRST, NULLS_LAST;
 
   @Override
   public String toString() {
-    switch (this) {
-      case NULLS_FIRST:
-        return "NULLS FIRST";
-      case NULLS_LAST:
-        return "NULLS LAST";
-      default:
-        throw new IllegalArgumentException("Unexpected null order: " + this);
-    }
+    return switch (this) {
+      case NULLS_FIRST -> "NULLS FIRST";
+      case NULLS_LAST -> "NULLS LAST";
+    };
   }
 }

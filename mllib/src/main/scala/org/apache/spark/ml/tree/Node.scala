@@ -105,6 +105,11 @@ private[ml] object Node {
         split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
     }
   }
+
+  // A dummy node used for ml connect only
+  val dummyNode: Node = {
+    new LeafNode(0.0, 0.0, ImpurityCalculator.getCalculator("gini", Array.empty, 0))
+  }
 }
 
 /**
@@ -129,7 +134,7 @@ class LeafNode private[ml] (
   override private[tree] def numDescendants: Int = 0
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
-    val prefix: String = " " * indentFactor
+    val prefix: String = " ".repeat(indentFactor)
     prefix + s"Predict: $prediction\n"
   }
 
@@ -207,7 +212,7 @@ class InternalNode private[ml] (
   }
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
-    val prefix: String = " " * indentFactor
+    val prefix: String = " ".repeat(indentFactor)
     prefix + s"If (${InternalNode.splitToString(split, left = true)})\n" +
       leftChild.subtreeToString(indentFactor + 1) +
       prefix + s"Else (${InternalNode.splitToString(split, left = false)})\n" +

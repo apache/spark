@@ -22,7 +22,7 @@ import org.apache.spark.util.collection.BitSet
 
 // A wrapper of BitSet for pattern enums.
 trait TreePatternBits {
-  protected val treePatternBits: BitSet
+  protected def treePatternBits: BitSet
 
   /**
    * @param t, the tree pattern enum to be tested.
@@ -39,7 +39,7 @@ trait TreePatternBits {
   final def containsAllPatterns(patterns: TreePattern*): Boolean = {
     val iterator = patterns.iterator
     while (iterator.hasNext) {
-      if (!containsPattern(iterator.next)) {
+      if (!containsPattern(iterator.next())) {
         return false
       }
     }
@@ -53,10 +53,25 @@ trait TreePatternBits {
   final def containsAnyPattern(patterns: TreePattern*): Boolean = {
     val iterator = patterns.iterator
     while (iterator.hasNext) {
-      if (containsPattern(iterator.next)) {
+      if (containsPattern(iterator.next())) {
         return true
       }
     }
     false
   }
 }
+
+object TreePatternBits {
+
+  // Constructs a tree pattern BitSet that contains all tree patterns in `patterns`.
+  def toPatternBits(patterns: TreePattern*): BitSet = {
+    val bits: BitSet = new BitSet(TreePattern.maxId)
+    bits.clear()
+    val iterator = patterns.iterator
+    while (iterator.hasNext) {
+      bits.set(iterator.next().id)
+    }
+    bits
+  }
+}
+

@@ -45,7 +45,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       new FakeTask(stageId, i, Nil)
     }
     new TaskSetManager(taskScheduler, new TaskSet(tasks, stageId, 0, 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID), 0)
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None), 0)
   }
 
   def scheduleTaskAndVerifyId(taskId: Int, rootPool: Pool, expectedStageId: Int): Unit = {
@@ -353,7 +353,7 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       Utils.getSparkClassLoader.getResource("fairscheduler-with-valid-data.xml").getFile)
     TestUtils.withHttpServer(xmlPath.getParent.toUri.getPath) { baseURL =>
       val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE,
-        baseURL + "fairscheduler-with-valid-data.xml")
+        baseURL.toString + "fairscheduler-with-valid-data.xml")
       sc = new SparkContext(LOCAL, APP_NAME, conf)
 
       val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
@@ -365,6 +365,46 @@ class PoolSuite extends SparkFunSuite with LocalSparkContext {
       verifyPool(rootPool, "pool2", 4, 2, FAIR)
       verifyPool(rootPool, "pool3", 2, 3, FAIR)
     }
+  }
+
+  test("SPARK-56326: Fair Scheduler addTaskSetManager logs include " +
+    "streaming query Id and batch Id") {
+    val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
+    val conf = new SparkConf().set(SCHEDULER_ALLOCATION_FILE, xmlPath)
+    sc = new SparkContext(LOCAL, APP_NAME, conf)
+    val taskScheduler = new TaskSchedulerImpl(sc)
+
+    val rootPool = new Pool("", FAIR, 0, 0)
+    val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc)
+    schedulableBuilder.buildPools()
+
+    val testQueryId = "test-query-id-5678"
+    val testBatchId = "99"
+    val properties = new Properties()
+    properties.setProperty(schedulableBuilder.FAIR_SCHEDULER_PROPERTIES, "1")
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY, testQueryId)
+    properties.setProperty(StructuredStreamingIdAwareSchedulerLogging.BATCH_ID_KEY, testBatchId)
+
+    val taskSetManager = createTaskSetManager(0, 1, taskScheduler)
+
+    val logAppender = new LogAppender("pool streaming logs", maxEvents = 1000)
+    val loggerName = classOf[FairSchedulableBuilder].getName
+
+    withLogAppender(logAppender, loggerNames = Seq(loggerName)) {
+      schedulableBuilder.addTaskSetManager(taskSetManager, properties)
+    }
+
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    // default queryIdLength is 5, so the query ID is truncated
+    val truncatedQueryId = testQueryId.take(5)
+    val expectedQueryPrefix = s"[queryId = $truncatedQueryId]"
+    val expectedBatchPrefix = s"[batchId = $testBatchId]"
+    val addedLogs = logs.filter(msg =>
+      msg.contains("Added task set") &&
+        msg.contains(expectedQueryPrefix) && msg.contains(expectedBatchPrefix))
+    assert(addedLogs.nonEmpty,
+      s"Expected 'Added task set' log to contain '$expectedQueryPrefix' " +
+        s"and '$expectedBatchPrefix'.\nCaptured logs:\n${logs.mkString("\n")}")
   }
 
   private def verifyPool(rootPool: Pool, poolName: String, expectedInitMinShare: Int,

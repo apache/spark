@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import scala.concurrent.duration.NANOSECONDS
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
@@ -37,7 +40,8 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    numOutputRows: SQLMetric)
+    numOutputRows: SQLMetric,
+    aggTime: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -89,6 +93,8 @@ class SortBasedAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: InternalRow = newBuffer
 
+  private[this] var groupKeyEqualityCheck: (UnsafeRow, UnsafeRow) => Boolean = _
+
   protected def initialize(): Unit = {
     if (inputIterator.hasNext) {
       initializeBuffer(sortBasedAggregationBuffer)
@@ -100,6 +106,15 @@ class SortBasedAggregationIterator(
       // This inputIter is empty.
       sortedInputHasNewGroup = false
     }
+
+    groupKeyEqualityCheck =
+      if (groupingExpressions.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))) {
+        (key1: UnsafeRow, key2: UnsafeRow) => key1.equals(key2)
+      } else {
+        val types = groupingAttributes.map(_.dataType).toIndexedSeq
+        val ordering = InterpretedOrdering.forSchema(types)
+        (key1: UnsafeRow, key2: UnsafeRow) => ordering.compare(key1, key2) == 0
+      }
   }
 
   initialize()
@@ -110,6 +125,7 @@ class SortBasedAggregationIterator(
     // Now, we will start to find all rows belonging to this group.
     // We create a variable to track if we see the next group.
     var findNextPartition = false
+    val startNs = System.nanoTime()
     // firstRowInNextGroup is the first row of this group. We first process it.
     processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
 
@@ -121,7 +137,7 @@ class SortBasedAggregationIterator(
       val groupingKey = groupingProjection(currentRow)
 
       // Check if the current row belongs the current input row.
-      if (currentGroupingKey == groupingKey) {
+      if (groupKeyEqualityCheck(currentGroupingKey, groupingKey)) {
         processRow(sortBasedAggregationBuffer, currentRow)
       } else {
         // We find a new group.
@@ -130,6 +146,7 @@ class SortBasedAggregationIterator(
         firstRowInNextGroup = currentRow.copy()
       }
     }
+    aggTime += NANOSECONDS.toMillis(System.nanoTime() - startNs)
     // We have not seen a new group. It means that there is no new row in the input
     // iter. The current group is the last group of the iter.
     if (!findNextPartition) {

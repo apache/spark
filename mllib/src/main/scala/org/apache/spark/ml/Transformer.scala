@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -103,7 +104,7 @@ abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer
   protected def validateInputType(inputType: DataType): Unit = {}
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
+    val inputType = SchemaUtils.getSchemaFieldType(schema, $(inputCol))
     validateInputType(inputType)
     if (schema.fieldNames.contains($(outputCol))) {
       throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")

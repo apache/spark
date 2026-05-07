@@ -17,26 +17,31 @@
 
 package org.apache.spark.sql.connector
 
+import java.util.Optional
+
+import scala.concurrent.duration.MICROSECONDS
 import scala.language.implicitConversions
 import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NoSuchTableException, TableAlreadyExistsException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
+import org.apache.spark.unsafe.types.UTF8String
 
-class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -45,6 +50,10 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   private def catalog(name: String): TableCatalog = {
     spark.sessionState.catalogManager.catalog(name).asInstanceOf[TableCatalog]
+  }
+
+  protected def sessionCatalog: InMemoryTableSessionCatalog = {
+    catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog]
   }
 
   private implicit def stringToIdentifier(value: String): Identifier = {
@@ -60,7 +69,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   override def afterEach(): Unit = {
     super.afterEach()
-    Try(catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog].clearTables())
+    Try(sessionCatalog.checkUsage())
+    Try(sessionCatalog.clearTables())
     catalog(catalogName).listTables(Array.empty).foreach(
       catalog(catalogName).dropTable(_))
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
@@ -71,7 +81,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
       saveMode: SaveMode,
       withCatalogOption: Option[String],
       partitionBy: Seq[String]): Unit = {
-    val df = spark.range(10).withColumn("part", 'id % 5)
+    val df = spark.range(10).withColumn("part", $"id" % 5)
     val dfw = df.write.format(format).mode(saveMode).option("name", "t1")
     withCatalogOption.foreach(cName => dfw.option("catalog", cName))
     dfw.partitionBy(partitionBy: _*).save()
@@ -95,7 +105,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     }
     assert(table.partitioning().map(_.references().head.fieldNames().head) === partitionBy,
       "Partitioning was incorrect")
-    assert(table.schema() === df.schema.asNullable, "Schema did not match")
+    assert(table.columns() === CatalogV2Util.structTypeToV2Columns(df.schema.asNullable),
+      "Column did not match")
 
     checkAnswer(load("t1", withCatalogOption), df.toDF())
   }
@@ -136,25 +147,27 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   test("Ignore mode if table exists - session catalog") {
     sql(s"create table t1 (id bigint) using $format")
-    val df = spark.range(10).withColumn("part", 'id % 5)
+    val df = spark.range(10).withColumn("part", $"id" % 5)
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.save()
 
-    val table = catalog(SESSION_CATALOG_NAME).loadTable(Identifier.of(Array("default"), "t1"))
+    val table = sessionCatalog.loadTable(Identifier.of(Array("default"), "t1"))
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
-    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(table.columns() sameElements
+      Array(Column.create("id", LongType)), "Schema did not match")
     assert(load("t1", None).count() === 0)
   }
 
   test("Ignore mode if table exists - testcat catalog") {
     sql(s"create table $catalogName.t1 (id bigint) using $format")
-    val df = spark.range(10).withColumn("part", 'id % 5)
+    val df = spark.range(10).withColumn("part", $"id" % 5)
     val dfw = df.write.format(format).mode(SaveMode.Ignore).option("name", "t1")
     dfw.option("catalog", catalogName).save()
 
     val table = catalog(catalogName).loadTable("t1")
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
-    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(table.columns() sameElements
+      Array(Column.create("id", LongType)), "Schema did not match")
     assert(load("t1", Some(catalogName)).count() === 0)
   }
 
@@ -207,6 +220,14 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     sql(s"create table $catalogName.t1 (id bigint) using $format")
     val df = load("t1", Some(catalogName))
     checkV2Identifiers(df.logicalPlan)
+  }
+
+  test("DataFrameReader read non-existent table") {
+    val e = intercept[NoSuchTableException] {
+      spark.read.format(format).option("name", "non_existent_table").load()
+    }
+    val currentCatalogName = spark.catalog.currentCatalog().name()
+    checkErrorTableNotFound(e, s"`$currentCatalogName`.`default`.`non_existent_table`")
   }
 
   test("DataFrameWriter creates v2Relation with identifiers") {
@@ -271,6 +292,84 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     }
   }
 
+  test("time travel") {
+    // The testing in-memory table simply append the version/timestamp to the table name when
+    // looking up tables.
+    val t1 = s"$catalogName.tSnapshot123456789"
+    val t2 = s"$catalogName.t2345678910"
+    withTable(t1, t2) {
+      sql(s"create table $t1 (id bigint) using $format")
+      sql(s"create table $t2 (id bigint) using $format")
+
+      val df1 = spark.range(10)
+      df1.write.format(format).option("name", "tSnapshot123456789").option("catalog", catalogName)
+        .mode(SaveMode.Append).save()
+
+      val df2 = spark.range(10, 20)
+      df2.write.format(format).option("name", "t2345678910").option("catalog", catalogName)
+        .mode(SaveMode.Overwrite).save()
+
+      // load with version
+      val readDF1 = load("t", Some(catalogName), version = Some("Snapshot123456789"))
+      checkAnswer(readDF1, df1.toDF())
+      checkTimeTravel(readDF1, expectedTimeTravelSpec = AsOfVersion("Snapshot123456789"))
+
+      val readDF2 = load("t", Some(catalogName), version = Some("2345678910"))
+      checkAnswer(readDF2, df2.toDF())
+      checkTimeTravel(readDF2, expectedTimeTravelSpec = AsOfVersion("2345678910"))
+    }
+
+    val ts1 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+    val ts2 = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2021-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+    val t3 = s"$catalogName.t$ts1"
+    val t4 = s"$catalogName.t$ts2"
+    withTable(t3, t4) {
+      sql(s"create table $t3 (id bigint) using $format")
+      sql(s"create table $t4 (id bigint) using $format")
+
+      val df3 = spark.range(30, 40)
+      df3.write.format(format).option("name", s"t$ts1").option("catalog", catalogName)
+        .mode(SaveMode.Append).save()
+
+      val df4 = spark.range(50, 60)
+      df4.write.format(format).option("name", s"t$ts2").option("catalog", catalogName)
+        .mode(SaveMode.Overwrite).save()
+
+      // load with timestamp
+      val readDF3 = load("t", Some(catalogName), version = None,
+        timestamp = Some("2019-01-29 00:37:58"))
+      checkAnswer(readDF3, df3.toDF())
+      checkTimeTravel(readDF3, expectedTimeTravelSpec = AsOfTimestamp(ts1))
+
+      val readDF4 = load("t", Some(catalogName), version = None,
+        timestamp = Some("2021-01-29 00:37:58"))
+      checkAnswer(readDF4, df4.toDF())
+      checkTimeTravel(readDF4, expectedTimeTravelSpec = AsOfTimestamp(ts2))
+
+      // load with timestamp in number format
+      val readDF5 = load("t", Some(catalogName), version = None,
+        timestamp = Some(MICROSECONDS.toSeconds(ts1).toString))
+      checkAnswer(readDF5, df3.toDF())
+      checkTimeTravel(readDF5, expectedTimeTravelSpec = AsOfTimestamp(ts1))
+
+      val readDF6 = load("t", Some(catalogName), version = None,
+        timestamp = Some(MICROSECONDS.toSeconds(ts2).toString))
+      checkAnswer(readDF6, df4.toDF())
+      checkTimeTravel(readDF6, expectedTimeTravelSpec = AsOfTimestamp(ts2))
+    }
+
+    val e = intercept[AnalysisException] {
+      load("t", Some(catalogName), version = Some("12345678"),
+        timestamp = Some("2019-01-29 00:37:58"))
+    }
+    assert(e.getMessage
+      .contains("Cannot specify both version and timestamp when time travelling the table."))
+  }
+
   private def checkV2Identifiers(
       plan: LogicalPlan,
       identifier: String = "t1",
@@ -281,9 +380,24 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     assert(v2.catalog.exists(_ == catalogPlugin))
   }
 
-  private def load(name: String, catalogOpt: Option[String]): DataFrame = {
+  private def checkTimeTravel(ds: Dataset[_], expectedTimeTravelSpec: TimeTravelSpec): Unit = {
+    val relation = ds.logicalPlan.asInstanceOf[DataSourceV2Relation]
+    assert(relation.timeTravelSpec.contains(expectedTimeTravelSpec))
+  }
+
+  private def load(
+      name: String,
+      catalogOpt: Option[String],
+      version: Option[String] = None,
+      timestamp: Option[String] = None): DataFrame = {
     val dfr = spark.read.format(format).option("name", name)
     catalogOpt.foreach(cName => dfr.option("catalog", cName))
+    if (version.nonEmpty) {
+      dfr.option("versionAsOf", version.get)
+    }
+    if (timestamp.nonEmpty) {
+      dfr.option("timestampAsOf", timestamp.get)
+    }
     dfr.load()
   }
 
@@ -295,7 +409,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 }
 
 class CatalogSupportingInMemoryTableProvider
-  extends FakeV2Provider
+  extends FakeV2ProviderWithCustomSchema
   with SupportsCatalogOptions {
 
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = {
@@ -311,5 +425,21 @@ class CatalogSupportingInMemoryTableProvider
 
   override def extractCatalog(options: CaseInsensitiveStringMap): String = {
     options.get("catalog")
+  }
+
+  override def extractTimeTravelVersion(options: CaseInsensitiveStringMap): Optional[String] = {
+    if (options.get("versionAsOf") != null) {
+      Optional.of(options.get("versionAsOf"))
+    } else {
+      Optional.empty[String]
+    }
+  }
+
+  override def extractTimeTravelTimestamp(options: CaseInsensitiveStringMap): Optional[String] = {
+    if (options.get("timestampAsOf") != null) {
+      Optional.of(options.get("timestampAsOf"))
+    } else {
+      Optional.empty[String]
+    }
   }
 }

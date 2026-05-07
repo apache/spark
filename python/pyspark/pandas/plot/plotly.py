@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import inspect
+import math
 from typing import TYPE_CHECKING, Union
 
 import pandas as pd
@@ -27,7 +29,7 @@ from pyspark.pandas.plot import (
 )
 
 if TYPE_CHECKING:
-    import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
+    import pyspark.pandas as ps
 
 
 def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **kwargs):
@@ -49,24 +51,48 @@ def plot_pandas_on_spark(data: Union["ps.DataFrame", "ps.Series"], kind: str, **
 
 def plot_pie(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     from plotly import express
+    from plotly.subplots import make_subplots
+    import plotly.graph_objs as go
 
     data = PandasOnSparkPlotAccessor.pandas_plot_data_map["pie"](data)
+    subplots = kwargs.pop("subplots", False)
+    col_wrap = kwargs.pop("col_wrap", None)
 
     if isinstance(data, pd.Series):
         pdf = data.to_frame()
         return express.pie(pdf, values=pdf.columns[0], names=pdf.index, **kwargs)
     elif isinstance(data, pd.DataFrame):
-        values = kwargs.pop("y", None)
-        default_names = None
-        if values is not None:
-            default_names = data.index
+        if subplots:
+            cols = list(data.columns)
+            if col_wrap is not None and col_wrap < 1:
+                raise ValueError("col_wrap must be a positive integer, got %d." % col_wrap)
+            ncols = col_wrap if col_wrap is not None else min(len(cols), 3)
+            nrows = math.ceil(len(cols) / ncols)
+            fig = make_subplots(
+                rows=nrows,
+                cols=ncols,
+                specs=[[{"type": "pie"}] * ncols for _ in range(nrows)],
+                subplot_titles=[str(c) for c in cols],
+            )
+            for i, col in enumerate(cols):
+                fig.add_trace(
+                    go.Pie(labels=data.index, values=data[col], name=str(col)),
+                    row=i // ncols + 1,
+                    col=i % ncols + 1,
+                )
+            return fig
+        else:
+            values = kwargs.pop("y", None)
+            default_names = None
+            if values is not None:
+                default_names = data.index
 
-        return express.pie(
-            data,
-            values=kwargs.pop("values", values),
-            names=kwargs.pop("names", default_names),
-            **kwargs,
-        )
+            return express.pie(
+                data,
+                values=kwargs.pop("values", values),
+                names=kwargs.pop("names", default_names),
+                **kwargs,
+            )
     else:
         raise RuntimeError("Unexpected type: [%s]" % type(data))
 
@@ -109,7 +135,11 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             )
         )
 
-    fig = go.Figure(data=bars, layout=go.Layout(barmode="stack"))
+    layout_keys = inspect.signature(go.Layout).parameters.keys()
+    layout_kwargs = {k: v for k, v in kwargs.items() if k in layout_keys}
+
+    fig = go.Figure(data=bars, layout=go.Layout(**layout_kwargs))
+    fig["layout"]["barmode"] = "stack"
     fig["layout"]["xaxis"]["title"] = "value"
     fig["layout"]["yaxis"]["title"] = "count"
     return fig
@@ -118,11 +148,7 @@ def plot_histogram(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
 def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     import plotly.graph_objs as go
     import pyspark.pandas as ps
-
-    if isinstance(data, ps.DataFrame):
-        raise RuntimeError(
-            "plotly does not support a box plot with pandas-on-Spark DataFrame. Use Series instead."
-        )
+    from pyspark.sql.types import NumericType
 
     # 'whis' isn't actually an argument in plotly (but in matplotlib). But seems like
     # plotly doesn't expose the reach of the whiskers to the beyond the first and
@@ -145,40 +171,70 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
             "Set to False." % notched
         )
 
-    colname = name_like_string(data.name)
-    spark_column_name = data._internal.spark_column_name_for(data._column_label)
-
-    # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-    col_stats, col_fences = BoxPlotBase.compute_stats(data, spark_column_name, whis, precision)
-
-    # Creates a column to flag rows as outliers or not
-    outliers = BoxPlotBase.outliers(data, spark_column_name, *col_fences)
-
-    # Computes min and max values of non-outliers - the whiskers
-    whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
-
-    fliers = None
-    if boxpoints:
-        fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, whiskers[0])
-        fliers = [fliers] if len(fliers) > 0 else None
-
     fig = go.Figure()
-    fig.add_trace(
-        go.Box(
-            name=colname,
-            q1=[col_stats["q1"]],
-            median=[col_stats["med"]],
-            q3=[col_stats["q3"]],
-            mean=[col_stats["mean"]],
-            lowerfence=[whiskers[0]],
-            upperfence=[whiskers[1]],
-            y=fliers,
-            boxpoints=boxpoints,
-            notched=notched,
-            **kwargs,  # this is for workarounds. Box takes different options from express.box.
-        )
+
+    if isinstance(data, ps.Series):
+        sdf = data._psdf._internal.resolved_copy.spark_frame
+        spark_column_name = data._internal.spark_column_name_for(data._column_label)
+        colnames = [spark_column_name]
+    else:
+        sdf = data._internal.resolved_copy.spark_frame
+        colnames = []
+        for column_label in data._internal.column_labels:
+            if isinstance(data._internal.spark_type_for(column_label), NumericType):
+                colnames.append(name_like_string(column_label))
+
+    results = BoxPlotBase.compute_box(
+        sdf,
+        colnames,
+        whis,
+        precision,
+        boxpoints is not None,
     )
-    fig["layout"]["xaxis"]["title"] = colname
+    assert len(results) == len(colnames)
+
+    if isinstance(data, ps.Series):
+        colname = name_like_string(data.name)
+        result = results[0]
+
+        fig.add_trace(
+            go.Box(
+                name=colname,
+                q1=[result["q1"]],
+                median=[result["med"]],
+                q3=[result["q3"]],
+                mean=[result["mean"]],
+                lowerfence=[result["lower_whisker"]],
+                upperfence=[result["upper_whisker"]],
+                y=[result["fliers"]] if result["fliers"] else None,
+                boxpoints=boxpoints,
+                notched=notched,
+                **kwargs,  # this is for workarounds. Box takes different options from express.box.
+            )
+        )
+        fig["layout"]["xaxis"]["title"] = colname
+
+    else:
+        for i, colname in enumerate(colnames):
+            result = results[i]
+
+            fig.add_trace(
+                go.Box(
+                    x=[i],
+                    name=colname,
+                    q1=[result["q1"]],
+                    median=[result["med"]],
+                    q3=[result["q3"]],
+                    mean=[result["mean"]],
+                    lowerfence=[result["lower_whisker"]],
+                    upperfence=[result["upper_whisker"]],
+                    y=[result["fliers"]] if result["fliers"] else None,
+                    boxpoints=boxpoints,
+                    notched=notched,
+                    **kwargs,
+                )
+            )
+
     fig["layout"]["yaxis"]["title"] = "value"
     return fig
 
@@ -196,22 +252,28 @@ def plot_kde(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
     ind = KdePlotBase.get_ind(sdf.select(*data_columns), kwargs.pop("ind", None))
     bw_method = kwargs.pop("bw_method", None)
 
-    pdfs = []
-    for label in psdf._internal.column_labels:
-        pdfs.append(
+    kde_cols = [
+        KdePlotBase.compute_kde_col(
+            input_col=psdf._internal.spark_column_for(label),
+            ind=ind,
+            bw_method=bw_method,
+        ).alias(f"kde_{i}")
+        for i, label in enumerate(psdf._internal.column_labels)
+    ]
+    kde_results = sdf.select(*kde_cols).first()
+
+    pdf = pd.concat(
+        [
             pd.DataFrame(
                 {
-                    "Density": KdePlotBase.compute_kde(
-                        sdf.select(psdf._internal.spark_column_for(label)),
-                        ind=ind,
-                        bw_method=bw_method,
-                    ),
+                    "Density": kde_result,
                     "names": name_like_string(label),
                     "index": ind,
                 }
             )
-        )
-    pdf = pd.concat(pdfs)
+            for label, kde_result in zip(psdf._internal.column_labels, list(kde_results))
+        ]
+    )
 
     fig = express.line(pdf, x="index", y="Density", **kwargs)
     fig["layout"]["xaxis"]["title"] = None

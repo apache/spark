@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.InMemoryTableSessionCatalog
 import org.apache.spark.sql.execution.command
@@ -29,12 +30,22 @@ class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
   test("purge option") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createTable(t)
-      val errMsg = intercept[UnsupportedOperationException] {
-        sql(s"DROP TABLE $catalog.ns.tbl PURGE")
-      }.getMessage
       // The default TableCatalog.purgeTable implementation throws an exception.
-      assert(errMsg.contains("Purge table is not supported"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(s"DROP TABLE $catalog.ns.tbl PURGE")
+        },
+        condition = "UNSUPPORTED_FEATURE.PURGE_TABLE",
+        parameters = Map.empty
+      )
     }
+  }
+
+  test("DROP TABLE IF EXISTS ... PURGE on a missing table is a no-op") {
+    // The default TableCatalog.purgeTable throws unconditionally, so without an upfront
+    // existence guard `IF EXISTS` would surface UNSUPPORTED_FEATURE.PURGE_TABLE for missing
+    // tables -- defeating the IF EXISTS contract on catalogs that do not support purge.
+    sql(s"DROP TABLE IF EXISTS $catalog.ns.never_existed PURGE")
   }
 
   test("table qualified with the session catalog name") {

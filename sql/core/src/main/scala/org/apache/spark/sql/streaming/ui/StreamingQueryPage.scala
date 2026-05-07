@@ -19,12 +19,11 @@ package org.apache.spark.sql.streaming.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.xml.Node
 
-import org.apache.commons.text.StringEscapeUtils
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.streaming.ui.UIUtils._
@@ -48,15 +47,17 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     if (activeQueries.nonEmpty) {
       // scalastyle:off
       content ++=
-        <span id="active" class="collapse-aggregated-activeQueries collapse-table"
-            onClick="collapseTable('collapse-aggregated-activeQueries','aggregated-activeQueries')">
+        <span id="active" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-activeQueries"
+            aria-expanded="true" aria-controls="aggregated-activeQueries"
+            data-collapse-name="collapse-aggregated-activeQueries">
           <h5 id="activequeries">
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Active Streaming Queries ({activeQueries.length})</a>
           </h5>
         </span> ++
-          <div>
-            <ul class="aggregated-activeQueries collapsible-table">
+          <div class="collapsible-table collapse show" id="aggregated-activeQueries">
+            <ul>
               {queryTable(activeQueries, request, "active")}
             </ul>
           </div>
@@ -66,15 +67,18 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
     if (inactiveQueries.nonEmpty) {
       // scalastyle:off
       content ++=
-        <span id="completed" class="collapse-aggregated-completedQueries collapse-table"
-            onClick="collapseTable('collapse-aggregated-completedQueries','aggregated-completedQueries')">
+        <span id="completed" class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#aggregated-completedQueries"
+            aria-expanded="true" aria-controls="aggregated-completedQueries"
+            data-collapse-name="collapse-aggregated-completedQueries">
           <h5 id="completedqueries">
             <span class="collapse-table-arrow arrow-open"></span>
             <a>Completed Streaming Queries ({inactiveQueries.length})</a>
           </h5>
         </span> ++
-          <div>
-            <ul class="aggregated-completedQueries collapsible-table">
+          <div class="collapsible-table collapse show"
+              id="aggregated-completedQueries">
+            <ul>
               {queryTable(inactiveQueries, request, "completed")}
             </ul>
           </div>
@@ -101,7 +105,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
       ).table(page)
     } catch {
       case e@(_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
-        <div class="alert alert-error">
+        <div class="alert alert-danger">
           <p>Error while rendering execution table:</p>
           <pre>
             {Utils.exceptionString(e)}
@@ -174,21 +178,16 @@ private[ui] class StreamingQueryPagedTable(
 
   override def row(query: StructuredStreamingRow): Seq[Node] = {
     val streamingQuery = query.streamingUIData
-    val statisticsLink = "%s/%s/statistics?id=%s"
+    val statisticsLink = "%s/%s/statistics/?id=%s"
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix,
         streamingQuery.summary.runId)
 
-    def details(detail: Any): Seq[Node] = {
+    def details: Seq[Node] = {
       if (isActive) {
-        return Seq.empty[Node]
+        Seq.empty[Node]
+      } else {
+        SparkUIUtils.errorMessageCell(streamingQuery.summary.exception.getOrElse("-"))
       }
-      val detailString = detail.asInstanceOf[String]
-      val isMultiline = detailString.indexOf('\n') >= 0
-      val summary = StringEscapeUtils.escapeHtml4(
-        if (isMultiline) detailString.substring(0, detailString.indexOf('\n')) else detailString
-      )
-      val details = SparkUIUtils.detailsUINode(isMultiline, detailString)
-      <td>{summary}{details}</td>
     }
 
     <tr>
@@ -198,10 +197,10 @@ private[ui] class StreamingQueryPagedTable(
       <td><a href={statisticsLink}>{streamingQuery.summary.runId}</a></td>
       <td>{SparkUIUtils.formatDate(streamingQuery.summary.startTimestamp)}</td>
       <td>{SparkUIUtils.formatDurationVerbose(query.duration)}</td>
-      <td>{withNoProgress(streamingQuery, {query.avgInput.formatted("%.2f")}, "NaN")}</td>
-      <td>{withNoProgress(streamingQuery, {query.avgProcess.formatted("%.2f")}, "NaN")}</td>
+      <td>{withNoProgress(streamingQuery, {"%.2f".format(query.avgInput)}, "NaN")}</td>
+      <td>{withNoProgress(streamingQuery, {"%.2f".format(query.avgProcess)}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {streamingQuery.lastProgress.batchId}, "NaN")}</td>
-      {details(streamingQuery.summary.exception.getOrElse("-"))}
+      {details}
     </tr>
   }
 }

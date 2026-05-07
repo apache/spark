@@ -31,7 +31,7 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       // `derivedFromAtt` doesn't affect the result of pruned schema.
       SchemaPruning.RootField(field = f, derivedFromAtt = true)
     }
-    val prunedSchema = SchemaPruning.pruneDataSchema(schema, requestedRootFields)
+    val prunedSchema = SchemaPruning.pruneSchema(schema, requestedRootFields)
     assert(prunedSchema === expectedSchema)
   }
 
@@ -140,7 +140,7 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     assert(field.metadata.getString("foo") == "bar")
 
     val schema = StructType(Seq(field))
-    val prunedSchema = SchemaPruning.pruneDataSchema(schema, rootFields)
+    val prunedSchema = SchemaPruning.pruneSchema(schema, rootFields)
     assert(prunedSchema.head.metadata.getString("foo") == "bar")
   }
 }

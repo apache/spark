@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
@@ -35,8 +36,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
   test("Spark's own GetSchemasOperation(SparkGetSchemasOperation)") {
     def checkResult(rs: ResultSet, dbNames: Seq[String]): Unit = {
       val expected = dbNames.iterator
-      while(rs.next() || expected.hasNext) {
-        assert(rs.getString("TABLE_SCHEM") === expected.next)
+      while (rs.next() || expected.hasNext) {
+        assert(rs.getString("TABLE_SCHEM") === expected.next())
         assert(rs.getString("TABLE_CATALOG").isEmpty)
       }
       // Make sure there are no more elements
@@ -211,18 +212,24 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
   test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
     def checkResult(rs: ResultSet, functionNames: Seq[String]): Unit = {
-      functionNames.foreach { func =>
-        val exprInfo = FunctionRegistry.expressions(func)._1
-        assert(rs.next())
-        assert(rs.getString("FUNCTION_SCHEM") === "default")
-        assert(rs.getString("FUNCTION_NAME") === exprInfo.getName)
-        assert(rs.getString("REMARKS") ===
-          s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
-        assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
-        assert(rs.getString("SPECIFIC_NAME") === exprInfo.getClassName)
+      val rows = scala.collection.mutable.ArrayBuffer[(String, String, String, Int, String)]()
+      while (rs.next()) {
+        rows += ((rs.getString("FUNCTION_SCHEM"), rs.getString("FUNCTION_NAME"),
+          rs.getString("REMARKS"), rs.getInt("FUNCTION_TYPE"), rs.getString("SPECIFIC_NAME")))
       }
-      // Make sure there are no more elements
-      assert(!rs.next())
+      val sortedRows = rows.sortBy(_._2) // by FUNCTION_NAME
+      val sortedExpected = functionNames.sorted
+      assert(sortedRows.size === sortedExpected.size,
+        s"Expected ${sortedExpected.size} functions but got ${sortedRows.size}")
+      sortedExpected.zip(sortedRows).foreach {
+        case (func, (schem, name, remarks, funcType, specificName)) =>
+          val exprInfo = FunctionRegistry.expressions(func)._1
+          assert(schem === "default")
+          assert(name === exprInfo.getName)
+          assert(remarks === s"Usage: ${exprInfo.getUsage}\nExtended Usage:${exprInfo.getExtended}")
+          assert(funcType === DatabaseMetaData.functionResultUnknown)
+          assert(specificName === exprInfo.getClassName)
+      }
     }
 
     withJdbcStatement() { statement =>
@@ -341,7 +348,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
         assert(rowSet.getInt("NULLABLE") === 1)
         assert(rowSet.getString("REMARKS") === pos.toString)
-        assert(rowSet.getInt("ORDINAL_POSITION") === pos)
+        assert(rowSet.getInt("ORDINAL_POSITION") === pos + 1)
         assert(rowSet.getString("IS_NULLABLE") === "YES")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
         pos += 1
@@ -372,8 +379,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
-        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 1)
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -400,8 +407,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
-        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 1)
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -426,8 +433,8 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 0)
         assert(rowSet.getString("REMARKS") === "")
-        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
-        assert(rowSet.getString("IS_NULLABLE") === "YES")
+        assert(rowSet.getInt("ORDINAL_POSITION") === 1)
+        assert(rowSet.getString("IS_NULLABLE") === "NO")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
     }
@@ -453,7 +460,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 1)
         assert(rowSet.getString("REMARKS") === "")
-        assert(rowSet.getInt("ORDINAL_POSITION") === 0)
+        assert(rowSet.getInt("ORDINAL_POSITION") === 1)
         assert(rowSet.getString("IS_NULLABLE") === "YES")
         assert(rowSet.getString("IS_AUTO_INCREMENT") === "NO")
       }
@@ -675,13 +682,40 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       while (rowSet.next()) {
         assert(rowSet.getString("COLUMN_NAME") === "c" + idx)
         assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.TIMESTAMP)
-        assert(rowSet.getString("TYPE_NAME") === "TIMESTAMP" + ("_NTZ" * idx))
+        assert(rowSet.getString("TYPE_NAME") === "TIMESTAMP" + "_NTZ".repeat(idx))
         assert(rowSet.getInt("COLUMN_SIZE") === 8)
         assert(rowSet.getInt("DECIMAL_DIGITS") === 6)
         assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
         assert(rowSet.getInt("NULLABLE") === 0)
-        assert(rowSet.getInt("ORDINAL_POSITION") === idx)
+        assert(rowSet.getInt("ORDINAL_POSITION") === idx + 1)
         idx += 1
+      }
+    }
+  }
+
+  test("SPARK-54350: SparkGetColumnsOperation respects useZeroBasedColumnOrdinalPosition config") {
+    Seq(true, false).foreach { zeroBasedOrdinal =>
+      val viewName = "view_column_ordinal_position"
+      val ddl = s"CREATE OR REPLACE GLOBAL TEMPORARY VIEW $viewName AS " +
+        "SELECT 1 AS id, 'foo' AS name"
+
+      withJdbcStatement(viewName) { statement =>
+        statement.execute(
+          s"SET ${HiveUtils.LEGACY_STS_ZERO_BASED_COLUMN_ORDINAL.key}=$zeroBasedOrdinal")
+        statement.execute(ddl)
+        val data = statement.getConnection.getMetaData
+        val rowSet = data.getColumns("", "global_temp", viewName, null)
+        assert(rowSet.next())
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
+        assert(rowSet.getString("COLUMN_NAME") === "id")
+        assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 0 else 1))
+        assert(rowSet.next())
+        assert(rowSet.getString("TABLE_SCHEM") === "global_temp")
+        assert(rowSet.getString("TABLE_NAME") === viewName)
+        assert(rowSet.getString("COLUMN_NAME") === "name")
+        assert(rowSet.getInt("ORDINAL_POSITION") === (if (zeroBasedOrdinal) 1 else 2))
+        assert(!rowSet.next())
       }
     }
   }

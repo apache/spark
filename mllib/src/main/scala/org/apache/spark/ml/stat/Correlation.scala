@@ -17,14 +17,14 @@
 
 package org.apache.spark.ml.stat
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types._
 
 /**
  * API for correlation functions in MLlib, compatible with DataFrames and Datasets.

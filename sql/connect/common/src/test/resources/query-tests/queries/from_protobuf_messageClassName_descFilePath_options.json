@@ -1,0 +1,167 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,bytes:binary\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "from_protobuf",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "bytes"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "col",
+                  "fileName": "functions.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.PlanGenerationTestSuite",
+                  "methodName": "~~trimmed~anonfun~~",
+                  "fileName": "PlanGenerationTestSuite.scala"
+                }]
+              }
+            }
+          }
+        }, {
+          "literal": {
+            "string": "StorageLevel"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "lit",
+                  "fileName": "functions.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.protobuf.functions$",
+                  "methodName": "from_protobuf",
+                  "fileName": "functions.scala"
+                }]
+              }
+            }
+          }
+        }, {
+          "literal": {
+            "binary": "CvwBCgxjb21tb24ucHJvdG8SDXNwYXJrLmNvbm5lY3QisAEKDFN0b3JhZ2VMZXZlbBIZCgh1c2VfZGlzaxgBIAEoCFIHdXNlRGlzaxIdCgp1c2VfbWVtb3J5GAIgASgIUgl1c2VNZW1vcnkSIAoMdXNlX29mZl9oZWFwGAMgASgIUgp1c2VPZmZIZWFwEiIKDGRlc2VyaWFsaXplZBgEIAEoCFIMZGVzZXJpYWxpemVkEiAKC3JlcGxpY2F0aW9uGAUgASgFUgtyZXBsaWNhdGlvbkIiCh5vcmcuYXBhY2hlLnNwYXJrLmNvbm5lY3QucHJvdG9QAWIGcHJvdG8z"
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.functions$",
+                  "methodName": "lit",
+                  "fileName": "functions.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.protobuf.functions$",
+                  "methodName": "from_protobuf",
+                  "fileName": "functions.scala"
+                }]
+              }
+            }
+          }
+        }, {
+          "unresolvedFunction": {
+            "functionName": "map",
+            "arguments": [{
+              "literal": {
+                "string": "recursive.fields.max.depth"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "fnWithOptions",
+                      "fileName": "Column.scala"
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.protobuf.functions$",
+                      "methodName": "from_protobuf",
+                      "fileName": "functions.scala"
+                    }]
+                  }
+                }
+              }
+            }, {
+              "literal": {
+                "string": "2"
+              },
+              "common": {
+                "origin": {
+                  "jvmOrigin": {
+                    "stackTrace": [{
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.Column$",
+                      "methodName": "fnWithOptions",
+                      "fileName": "Column.scala"
+                    }, {
+                      "classLoaderName": "app",
+                      "declaringClass": "org.apache.spark.sql.protobuf.functions$",
+                      "methodName": "from_protobuf",
+                      "fileName": "functions.scala"
+                    }]
+                  }
+                }
+              }
+            }],
+            "isInternal": false
+          },
+          "common": {
+            "origin": {
+              "jvmOrigin": {
+                "stackTrace": [{
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.Column$",
+                  "methodName": "fnWithOptions",
+                  "fileName": "Column.scala"
+                }, {
+                  "classLoaderName": "app",
+                  "declaringClass": "org.apache.spark.sql.protobuf.functions$",
+                  "methodName": "from_protobuf",
+                  "fileName": "functions.scala"
+                }]
+              }
+            }
+          }
+        }],
+        "isInternal": false
+      },
+      "common": {
+        "origin": {
+          "jvmOrigin": {
+            "stackTrace": [{
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.Column$",
+              "methodName": "fnWithOptions",
+              "fileName": "Column.scala"
+            }, {
+              "classLoaderName": "app",
+              "declaringClass": "org.apache.spark.sql.protobuf.functions$",
+              "methodName": "from_protobuf",
+              "fileName": "functions.scala"
+            }]
+          }
+        }
+      }
+    }]
+  }
+}

@@ -18,6 +18,9 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.util.Collections;
+
+import com.codahale.metrics.MetricSet;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -26,6 +29,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 
 /**
  * The MergedShuffleFileManager is used to process push based shuffle when enabled. It works
@@ -120,4 +124,28 @@ public interface MergedShuffleFileManager {
    * @param appId application ID
    */
   String[] getMergedBlockDirs(String appId);
+
+  /**
+   * Remove shuffle merge data files.
+   *
+   * @param removeShuffleMerge contains shuffle details (appId, shuffleId, etc) to uniquely
+   * identify a shuffle to be removed
+   */
+  void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge);
+
+  /**
+   * Optionally close any resources associated the MergedShuffleFileManager, such as the
+   * leveldb for state persistence.
+   */
+  default void close() {}
+
+  /**
+   * Get the metrics associated with the MergedShuffleFileManager. E.g., this is used to collect
+   * the push merged metrics within RemoteBlockPushResolver.
+   *
+   * @return the map contains the metrics
+   */
+  default MetricSet getMetrics() {
+    return Collections::emptyMap;
+  }
 }

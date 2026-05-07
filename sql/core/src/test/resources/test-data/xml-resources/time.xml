@@ -1,0 +1,7 @@
+<book>
+    <author>John Smith</author>
+    <time>2011-12-03T10:15:30Z</time>
+    <time2>12-03-2011 10:15:30 PST</time2>
+    <time3>2011/12/03 06:15:30</time3>
+    <time4>2011/12/03 16:15:30 +1000</time4>
+</book>

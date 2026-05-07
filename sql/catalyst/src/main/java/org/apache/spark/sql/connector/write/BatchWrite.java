@@ -85,8 +85,37 @@ public interface BatchWrite {
    * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
    * tasks may have committed successfully and one successful commit message per task will be
    * passed to this commit method. The remaining commit messages are ignored by Spark.
+   * <p>
+   * Note: this method signals that all data for this write operation has been successfully written.
+   * It is NOT a transactional commit. When this write is part of a
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction}, the transaction is
+   * committed separately via
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#commit()}.
    */
   void commit(WriterCommitMessage[] messages);
+
+  /**
+   * Commits this writing job with a list of commit messages and write summary.
+   * <p>
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
+   * is undefined and @{@link #abort(WriterCommitMessage[])} may not be able to deal with it.
+   * <p>
+   * Note that speculative execution may cause multiple tasks to run for a partition. By default,
+   * Spark uses the commit coordinator to allow at most one task to commit. Implementations can
+   * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
+   * tasks may have committed successfully and one successful commit message per task will be
+   * passed to this commit method. The remaining commit messages are ignored by Spark.
+   * <p>
+   * @param messages a list of commit messages from successful data writers, produced by
+   *                 {@link DataWriter#commit()}.
+   * @param summary an informational summary collected in a best-effort from the operation
+   *                producing write. Currently supported summary fields are provided through
+   *                implementations of {@link WriteSummary}.
+   */
+  default void commit(WriterCommitMessage[] messages, WriteSummary summary) {
+    commit(messages);
+  }
 
   /**
    * Aborts this writing job because some data writers are failed and keep failing when retry,

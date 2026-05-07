@@ -17,17 +17,26 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.scalatest.BeforeAndAfter
+import java.io.File
 
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.scalatest.BeforeAndAfter
+import org.scalatest.matchers.should._
+import org.scalatest.time.{Seconds, Span}
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, MicroBatchExecution, SerializedOffset, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.util.Utils
 
-class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
+class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter with Matchers {
 
   import testImplicits._
 
@@ -35,13 +44,91 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     sqlContext.streams.active.foreach(_.stop())
   }
 
+  def getListOfFiles(dir: String): List[File] = {
+    val d = new File(dir)
+    if (d.exists && d.isDirectory) {
+      d.listFiles.filter(_.isFile).toList
+    } else {
+      List[File]()
+    }
+  }
+
+  test("async log purging") {
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
+      withTempDir { checkpointLocation =>
+        val inputData = new MemoryStream[Int](id = 0, spark)
+        val ds = inputData.toDS()
+        testStream(ds)(
+          StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
+          AddData(inputData, 0),
+          CheckNewAnswer(0),
+          AddData(inputData, 1),
+          CheckNewAnswer(1),
+          Execute { q =>
+            getListOfFiles(s"$checkpointLocation/offsets")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(0, 1))
+            getListOfFiles(s"$checkpointLocation/commits")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(0, 1))
+          },
+          AddData(inputData, 2),
+          CheckNewAnswer(2),
+          AddData(inputData, 3),
+          CheckNewAnswer(3),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+
+            getListOfFiles(s"$checkpointLocation/offsets")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(1, 2, 3))
+            getListOfFiles(s"$checkpointLocation/commits")
+              .filter(file => !file.isHidden)
+              .map(file => file.getName.toInt)
+              .sorted should equal(Array(1, 2, 3))
+          },
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("error notifier test") {
+    withSQLConf(SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2", SQLConf.ASYNC_LOG_PURGE.key -> "true") {
+      withTempDir { checkpointLocation =>
+        val inputData = new MemoryStream[Int](id = 0, spark)
+        val ds = inputData.toDS()
+        val e = intercept[StreamingQueryException] {
+
+          testStream(ds)(
+            StartStream(checkpointLocation = checkpointLocation.getCanonicalPath),
+            AddData(inputData, 0),
+            CheckNewAnswer(0),
+            AddData(inputData, 1),
+            CheckNewAnswer(1),
+            Execute { q =>
+              q.asInstanceOf[MicroBatchExecution].errorNotifier.markError(new Exception("test"))
+            },
+            AddData(inputData, 2),
+            CheckNewAnswer(2))
+        }
+        e.getCause.getMessage should include("test")
+      }
+    }
+  }
+
   test("SPARK-24156: do not plan a no-data batch again after it has already been planned") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
     testStream(df)(
@@ -74,13 +161,37 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     )
   }
 
+  test("SPARK-38033: SS cannot be started because the commitId and offsetId are inconsistent") {
+    val inputData = MemoryStream[Int]
+    val streamEvent = inputData.toDF().select("value")
+
+    val resourceUri = this.getClass.getResource(
+      "/structured-streaming/checkpoint-test-offsetId-commitId-inconsistent/").toURI
+
+    val checkpointDir = Utils.createTempDir().getCanonicalFile
+    // Copy the checkpoint to a temp dir to prevent changes to the original.
+    // Not doing this will lead to the test passing on the first run, but fail subsequent runs.
+    Utils.copyDirectory(new File(resourceUri), checkpointDir)
+
+    // Disable this check so it fails where we throw the exception we are verifying
+    withSQLConf(SQLConf.STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART.key -> "false") {
+      testStream(streamEvent) (
+        AddData(inputData, 1, 2, 3, 4, 5, 6),
+        StartStream(Trigger.AvailableNow(), checkpointLocation = checkpointDir.getAbsolutePath),
+        ExpectFailure[IllegalStateException] { e =>
+          assert(e.getMessage.contains("batch 3 doesn't exist"))
+        }
+      )
+    }
+  }
+
   test("no-data-batch re-executed after restart should call V1 source.getBatch()") {
     val testSource = ReExecutedBatchTestSource(spark)
     val df = testSource.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
+      .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+      .agg(count("*") as Symbol("count"))
       .select($"window".getField("start").cast("long").as[Long])
 
     /** Reset this test source so that it appears to be a new source requiring initialization */
@@ -153,6 +264,55 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     )
   }
 
+  test("Query cannot be started if there's an unfinished repartition batch") {
+    val numPartitions = 5
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString) {
+      withTempDir { checkpointLocation =>
+        val inputData = MemoryStream[Int]
+        val streamEvent = inputData.toDF().groupBy("value").agg(count("value"))
+
+        // Run a few batches and stop
+        testStream(streamEvent, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointLocation.getAbsolutePath),
+          AddData(inputData, 1, 2, 3),
+          CheckNewAnswer((1, 1), (2, 1), (3, 1)),
+          StopStream
+        )
+
+        // Simulate an uncommitted repartition batch by adding a new offset log entry
+        // with different shuffle partitions
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointLocation.getAbsolutePath}/offsets")
+        val (latestBatchId, latestOffsetSeq) = offsetLog.getLatest().get
+        val latestMetadata = latestOffsetSeq.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]
+
+        val newShufflePartitions = numPartitions * 2
+        val newMetadata = latestMetadata.copy(
+          conf = latestMetadata.conf +
+            (SQLConf.SHUFFLE_PARTITIONS.key -> newShufflePartitions.toString)
+        )
+        val newOffsetSeq = latestOffsetSeq.asInstanceOf[OffsetSeq].copy(
+          metadataOpt = Some(newMetadata)
+        )
+
+        // Write the new offset log entry (without committing it)
+        val newBatchId = latestBatchId + 1
+        offsetLog.add(newBatchId, newOffsetSeq)
+
+        // Restart the query - should fail because there's an uncommitted repartition batch
+        testStream(streamEvent, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointLocation.getAbsolutePath),
+          ExpectFailure[SparkException] { ex =>
+            checkError(
+              ex.asInstanceOf[SparkThrowable],
+              condition = "STREAMING_UNFINISHED_REPARTITION_DETECTED",
+              parameters = Map("batchId" -> newBatchId.toString,
+                "lastCommittedBatchId" -> latestBatchId.toString)
+            )
+          }
+        )
+      }
+    }
+  }
 
   case class ReExecutedBatchTestSource(spark: SparkSession) extends Source {
     @volatile var currentOffset = 0L
@@ -191,4 +351,3 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     }
   }
 }
-

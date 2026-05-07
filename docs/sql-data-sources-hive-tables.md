@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -44,16 +44,16 @@ You may need to grant write privilege to the user who starts the Spark applicati
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example spark_hive python/sql/hive.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example spark_hive scala/org/apache/spark/examples/sql/hive/SparkHiveExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% include_example spark_hive java/org/apache/spark/examples/sql/hive/JavaSparkHiveExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example spark_hive python/sql/hive.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -75,8 +75,8 @@ format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int)
 By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
 creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
 
-<table class="table">
-  <tr><th>Property Name</th><th>Meaning</th></tr>
+<table>
+  <thead><tr><th>Property Name</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>fileFormat</code></td>
     <td>
@@ -123,14 +123,14 @@ will compile against built-in Hive and use those classes for internal execution 
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
-<table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>2.3.9</code></td>
+    <td><code>2.3.10</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>2.3.9</code> and <code>3.0.0</code> through <code>3.1.2</code>.
+      options are <code>2.0.0</code> through <code>2.3.10</code>, <code>3.0.0</code> through <code>3.1.3</code>, and <code>4.0.0</code> through <code>4.1.0</code>.
     </td>
     <td>1.4.0</td>
   </tr>
@@ -142,9 +142,9 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of four options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 2.3.9, which is bundled with the Spark assembly when <code>-Phive</code> is
+        Use Hive 2.3.10, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
-        either <code>2.3.9</code> or not defined.
+        either <code>2.3.10</code> or not defined.
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories. This configuration
         is not generally recommended for production deployments.
@@ -166,7 +166,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>(empty)</code></td>
     <td>
       Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
-      This configuration is useful only when <code>spark.sql.hive.metastore.jars</code> is set as <code>path</code>. 
+      This configuration is useful only when <code>spark.sql.hive.metastore.jars</code> is set as <code>path</code>.
       <br/>
       The paths can be any of the following format:
       <ol>

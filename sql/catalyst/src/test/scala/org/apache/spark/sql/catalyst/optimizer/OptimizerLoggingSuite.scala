@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
+import org.slf4j.event.{Level => Slf4jLevel}
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.InSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -38,10 +41,13 @@ class OptimizerLoggingSuite extends PlanTest {
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new LogAppender("optimizer rules")
-    withLogAppender(logAppender, level = Some(Level.TRACE)) {
-      val input = LocalRelation('a.int, 'b.string, 'c.double)
-      val query = input.select('a, 'b).select('a).where('a > 1).analyze
-      val expected = input.where('a > 1).select('a).analyze
+    logAppender.setThreshold(expectedLevel)
+    withLogAppender(logAppender,
+      loggerNames = Seq("org.apache.spark.sql.catalyst.rules.PlanChangeLogger"),
+      level = Some(Level.TRACE)) {
+      val input = LocalRelation($"a".int, $"b".string, $"c".double)
+      val query = input.select($"a", $"b").select($"a").where($"a" > 1).analyze
+      val expected = input.where($"a" > 1).select($"a").analyze
       comparePlans(Optimize.execute(query), expected)
     }
     val events = logAppender.loggingEvents.filter {
@@ -49,9 +55,9 @@ class OptimizerLoggingSuite extends PlanTest {
         "Applying Rule",
         "Result of Batch",
         "has no effect",
-        "Metrics of Executed Rules").exists(event.getRenderedMessage().contains)
+        "Metrics of Executed Rules").exists(event.getMessage().getFormattedMessage.contains)
     }
-    val logMessages = events.map(_.getRenderedMessage)
+    val logMessages = events.map(_.getMessage.getFormattedMessage)
     assert(expectedRulesOrBatches.forall
     (ruleOrBatch => logMessages.exists(_.contains(ruleOrBatch))))
     assert(events.forall(_.getLevel == expectedLevel))
@@ -96,11 +102,15 @@ class OptimizerLoggingSuite extends PlanTest {
       "infoo")
 
     levels.foreach { level =>
-      val error = intercept[IllegalArgumentException] {
-        withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {}
-      }
-      assert(error.getMessage.contains(
-        "Invalid value for 'spark.sql.planChangeLog.level'."))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {}
+        },
+        condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+        parameters = Map(
+          "confName" -> SQLConf.PLAN_CHANGE_LOG_LEVEL.key,
+          "confValue" -> level,
+          "confOptions" -> classOf[Slf4jLevel].getEnumConstants.mkString(", ")))
     }
   }
 
@@ -148,5 +158,15 @@ class OptimizerLoggingSuite extends PlanTest {
       SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
       verifyLog(Level.INFO, Seq("Batch Has No Effect"))
     }
+  }
+
+  test("SPARK-50329: toString for InSet should be valid for unresolved plan") {
+    val input = LocalRelation($"a".int, $"b".string, $"c".double)
+    val inSetPredicate = InSet($"a", Set(1, 2))
+    val query = input.select($"a", $"b").where(inSetPredicate)
+    val analyzed = query.analyze
+
+    assert(query.toString.contains("'a INSET (values with unresolved data types)"))
+    assert(analyzed.toString.contains("INSET 1, 2"))
   }
 }

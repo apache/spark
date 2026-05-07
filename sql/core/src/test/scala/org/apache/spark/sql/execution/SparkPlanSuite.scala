@@ -17,25 +17,29 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class SparkPlanSuite extends QueryTest with SharedSparkSession {
+class SparkPlanSuite extends SharedSparkSession {
 
   test("SPARK-21619 execution of a canonicalized plan should fail") {
     val plan = spark.range(10).queryExecution.executedPlan.canonicalized
 
-    intercept[IllegalStateException] { plan.execute() }
-    intercept[IllegalStateException] { plan.executeCollect() }
-    intercept[IllegalStateException] { plan.executeCollectPublic() }
-    intercept[IllegalStateException] { plan.executeToIterator() }
-    intercept[IllegalStateException] { plan.executeBroadcast() }
-    intercept[IllegalStateException] { plan.executeTake(1) }
-    intercept[IllegalStateException] { plan.executeTail(1) }
+    intercept[SparkException] { plan.execute() }
+    intercept[SparkException] { plan.executeCollect() }
+    intercept[SparkException] { plan.executeCollectPublic() }
+    intercept[SparkException] { plan.executeToIterator() }
+    intercept[SparkException] { plan.executeBroadcast() }
+    intercept[SparkException] { plan.executeTake(1) }
+    intercept[SparkException] { plan.executeTail(1) }
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
@@ -87,7 +91,7 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-30780 empty LocalTableScan should use RDD without partitions") {
-    assert(LocalTableScanExec(Nil, Nil).execute().getNumPartitions == 0)
+    assert(LocalTableScanExec(Nil, Nil, None).execute().getNumPartitions == 0)
   }
 
   test("SPARK-33617: change default parallelism of LocalTableScan") {
@@ -103,10 +107,75 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(10)
     val planner = spark.sessionState.planner
     val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
-    val err = intercept[IllegalStateException] {
-      planner.plan(deduplicate)
-    }
-    assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
-      "should have been replaced by aggregate in the optimizer"))
+    checkError(
+      exception = intercept[SparkException] {
+        planner.plan(deduplicate)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Deduplicate operator for non streaming data source should have been " +
+          "replaced by aggregate in the optimizer")))
   }
+
+  test("SPARK-37221: The collect-like API in SparkPlan should support columnar output") {
+    val emptyResults = ColumnarOp(LocalTableScanExec(Nil, Nil, None)).toRowBased.executeCollect()
+    assert(emptyResults.isEmpty)
+
+    val relation = LocalTableScanExec(
+      Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
+    val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
+    assert(nonEmpty === relation.executeCollect())
+  }
+
+  test("BatchScanExec hashCode includes keyGroupedPartitioning") {
+    // hashCode must include all fields used in equals.
+    // Previously keyGroupedPartitioning was in equals but missing from hashCode,
+    // violating the contract that equal objects must have equal hash codes.
+    val exec1 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(1)))
+    )
+    val exec2 = BatchScanExec(
+      output = Seq.empty,
+      scan = null,
+      runtimeFilters = Seq.empty,
+      table = null,
+      keyGroupedPartitioning = Some(Seq(Literal(2)))
+    )
+    // With null batch, equals returns false (by design, see SPARK-42745),
+    // so we only verify that hashCode differs for different keyGroupedPartitioning.
+    assert(exec1.hashCode() != exec2.hashCode())
+  }
+
+  test("SPARK-37779: ColumnarToRowExec should be canonicalizable after being (de)serialized") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(1).write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        val columnarToRowExec =
+          df.queryExecution.executedPlan.collectFirst { case p: ColumnarToRowExec => p }.get
+        try {
+          spark.range(1).foreach { _ =>
+            columnarToRowExec.canonicalized
+            ()
+          }
+        } catch {
+          case e: Throwable => fail("ColumnarToRowExec was not canonicalizable", e)
+        }
+      }
+    }
+  }
+}
+
+case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
+  override val supportsColumnar: Boolean = true
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] =
+    RowToColumnarExec(child).executeColumnar()
+  override protected def doExecute(): RDD[InternalRow] = throw SparkUnsupportedOperationException()
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
+    copy(child = newChild)
 }

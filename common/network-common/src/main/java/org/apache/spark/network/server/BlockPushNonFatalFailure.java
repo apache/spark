@@ -18,8 +18,9 @@
 package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
 
-import com.google.common.base.Preconditions;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * A special RuntimeException thrown when shuffle service experiences a non-fatal failure
@@ -101,14 +102,12 @@ public class BlockPushNonFatalFailure extends RuntimeException {
 
   public ByteBuffer getResponse() {
     // Ensure we do not invoke this method if response is not set
-    Preconditions.checkNotNull(response);
-    return response;
+    return Objects.requireNonNull(response);
   }
 
   public ReturnCode getReturnCode() {
     // Ensure we do not invoke this method if returnCode is not set
-    Preconditions.checkNotNull(returnCode);
-    return returnCode;
+    return Objects.requireNonNull(returnCode);
   }
 
   public enum ReturnCode {
@@ -154,14 +153,14 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   }
 
   public static ReturnCode getReturnCode(byte id) {
-    switch (id) {
-      case 0: return ReturnCode.SUCCESS;
-      case 1: return ReturnCode.TOO_LATE_BLOCK_PUSH;
-      case 2: return ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
-      case 3: return ReturnCode.STALE_BLOCK_PUSH;
-      case 4: return ReturnCode.TOO_OLD_ATTEMPT_PUSH;
-      default: throw new IllegalArgumentException("Unknown block push return code: " + id);
-    }
+    return switch (id) {
+      case 0 -> ReturnCode.SUCCESS;
+      case 1 -> ReturnCode.TOO_LATE_BLOCK_PUSH;
+      case 2 -> ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
+      case 3 -> ReturnCode.STALE_BLOCK_PUSH;
+      case 4 -> ReturnCode.TOO_OLD_ATTEMPT_PUSH;
+      default -> throw new IllegalArgumentException("Unknown block push return code: " + id);
+    };
   }
 
   public static boolean shouldNotRetryErrorCode(ReturnCode returnCode) {
@@ -171,7 +170,7 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   }
 
   public static String getErrorMsg(String blockId, ReturnCode errorCode) {
-    Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
+    JavaUtils.checkArgument(errorCode != ReturnCode.SUCCESS, "errorCode should not be SUCCESS.");
     return "Block " + blockId + errorCode.errorMsgSuffix;
   }
 }

@@ -31,37 +31,31 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
   import InMemoryTableCatalog._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override def stageCreate(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    validateStagedTable(partitions, properties)
+  override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedCreateTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
+      new InMemoryTable(s"$name.${ident.quoted}",
+        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+        tableInfo.constraints()))
   }
 
-  override def stageReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    validateStagedTable(partitions, properties)
+  override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable = {
+    validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
+      new InMemoryTable(s"$name.${ident.quoted}",
+        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+        tableInfo.constraints()))
   }
 
-  override def stageCreateOrReplace(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): StagedTable = {
-    validateStagedTable(partitions, properties)
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo) : StagedTable = {
+    validateStagedTable(tableInfo.partitions, tableInfo.properties)
     new TestStagedCreateOrReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
+      new InMemoryTable(s"$name.${ident.quoted}",
+        tableInfo.columns(), tableInfo.partitions(), tableInfo.properties(),
+        tableInfo.constraints()))
   }
 
   private def validateStagedTable(
@@ -75,7 +69,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     maybeSimulateFailedTableCreation(properties)
   }
 
-  private abstract class TestStagedTable(
+  protected abstract class TestStagedTable(
       ident: Identifier,
       delegateTable: InMemoryTable)
     extends StagedTable with SupportsWrite with SupportsRead {
@@ -104,8 +98,7 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
     override def commitStagedChanges(): Unit = {
       val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
       if (maybePreCommittedTable != null) {
-        throw new TableAlreadyExistsException(
-          s"Table with identifier $ident and name $name was already created.")
+        throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
       }
     }
   }
@@ -118,7 +111,9 @@ class StagingInMemoryTableCatalog extends InMemoryTableCatalog with StagingTable
       maybeSimulateDropBeforeCommit()
       val maybePreCommittedTable = tables.replace(ident, delegateTable)
       if (maybePreCommittedTable == null) {
-        throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+        throw QueryCompilationErrors.cannotReplaceMissingTableError(
+          ident,
+          CatalogV2Util.searchPathForTableIdentifier(StagingInMemoryTableCatalog.this, ident))
       }
     }
 

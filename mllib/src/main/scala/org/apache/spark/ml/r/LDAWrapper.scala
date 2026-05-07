@@ -74,7 +74,7 @@ private[r] class LDAWrapper private (
     if (vocabulary.isEmpty || vocabulary.length < vocabSize) {
       topicIndices
     } else {
-      val index2term = udf { indices: mutable.WrappedArray[Int] => indices.map(i => vocabulary(i)) }
+      val index2term = udf { indices: mutable.ArraySeq[Int] => indices.map(i => vocabulary(i)) }
       topicIndices
         .select(col("topic"), index2term(col("termIndices")).as("term"), col("termWeights"))
     }
@@ -198,7 +198,9 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
         ("logPerplexity" -> instance.logPerplexity) ~
         ("vocabulary" -> instance.vocabulary.toList)
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      // Note that we should write single file. If there are more than one row
+      // it produces more partitions.
+      sparkSession.createDataFrame(Seq(Tuple1(rMetadataJson))).write.text(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
     }
@@ -211,7 +213,8 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath)
+        .first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val logLikelihood = (rMetadata \ "logLikelihood").extract[Double]
       val logPerplexity = (rMetadata \ "logPerplexity").extract[Double]

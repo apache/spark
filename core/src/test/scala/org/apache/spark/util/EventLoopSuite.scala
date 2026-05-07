@@ -19,8 +19,8 @@ package org.apache.spark.util
 
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._

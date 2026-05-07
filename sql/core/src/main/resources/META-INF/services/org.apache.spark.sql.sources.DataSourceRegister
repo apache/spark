@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
 org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
@@ -5,7 +22,11 @@ org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 org.apache.spark.sql.execution.datasources.v2.text.TextDataSourceV2
+org.apache.spark.sql.execution.datasources.xml.XmlFileFormat
 org.apache.spark.sql.execution.streaming.ConsoleSinkProvider
 org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 org.apache.spark.sql.execution.streaming.sources.TextSocketSourceProvider
 org.apache.spark.sql.execution.datasources.binaryfile.BinaryFileFormat
+org.apache.spark.sql.execution.streaming.sources.RatePerMicroBatchProvider
+org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataSource
+org.apache.spark.sql.execution.datasources.v2.state.StateDataSource

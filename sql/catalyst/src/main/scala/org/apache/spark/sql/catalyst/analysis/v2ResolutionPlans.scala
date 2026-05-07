@@ -17,26 +17,37 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
-import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC, UNRESOLVED_PROCEDURE}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, ProcedureCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.catalog.procedures.Procedure
 import org.apache.spark.sql.types.{DataType, StructField}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedNamespace]] during analysis.
  */
-case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
+case class UnresolvedNamespace(
+    multipartIdentifier: Seq[String],
+    fetchMetadata: Boolean = false) extends UnresolvedLeafNode
 
-  override def output: Seq[Attribute] = Nil
-}
+/**
+ * A variant of [[UnresolvedNamespace]] that should be resolved to [[ResolvedNamespace]]
+ * representing the current namespace of the current catalog.
+ */
+case object CurrentNamespace extends UnresolvedLeafNode
 
 /**
  * Holds the name of a table that has yet to be looked up in a catalog. It will be resolved to
@@ -45,42 +56,54 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
 case class UnresolvedTable(
     multipartIdentifier: Seq[String],
     commandName: String,
-    relationTypeMismatchHint: Option[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
-
-  override def output: Seq[Attribute] = Nil
-}
+    suggestAlternative: Boolean = false) extends UnresolvedLeafNode
 
 /**
- * Holds the name of a view that has yet to be looked up in a catalog. It will be resolved to
- * [[ResolvedView]] during analysis.
+ * Holds the name of a view that has yet to be looked up. It will be resolved to
+ * [[ResolvedPersistentView]] or [[ResolvedTempView]] during analysis.
  */
 case class UnresolvedView(
     multipartIdentifier: Seq[String],
     commandName: String,
     allowTemp: Boolean,
-    relationTypeMismatchHint: Option[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
+    suggestAlternative: Boolean = false) extends UnresolvedLeafNode
 
-  override def output: Seq[Attribute] = Nil
+/**
+ * Controls which search path is shown in `TABLE_OR_VIEW_NOT_FOUND` for
+ * [[UnresolvedTableOrView]] (see [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]).
+ */
+sealed trait UnresolvedTableOrViewSearchPathMode
+
+object UnresolvedTableOrViewSearchPathMode {
+  /** DDL on catalog objects: `system.session` and current catalog namespace only. */
+  case object Ddl extends UnresolvedTableOrViewSearchPathMode
+  /**
+   * Like `SELECT` / DML: full `sqlResolutionPathEntries` order; fully qualified
+   * `system.session.*` names still use the session-only path in errors.
+   */
+  case object QueryLike extends UnresolvedTableOrViewSearchPathMode
 }
 
 /**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
- * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
+ * be resolved to [[ResolvedTable]], [[ResolvedPersistentView]] or [[ResolvedTempView]] during
+ * analysis.
+ *
+ * @param tableNotFoundSearchPathMode how to format `searchPath` in `TABLE_OR_VIEW_NOT_FOUND`;
+ *                                    set explicitly at parse / construction time (not inferred
+ *                                    from [[commandName]]).
  */
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTempView: Boolean) extends LeafNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
-}
+    allowTempView: Boolean,
+    tableNotFoundSearchPathMode: UnresolvedTableOrViewSearchPathMode =
+      UnresolvedTableOrViewSearchPathMode.Ddl) extends UnresolvedLeafNode
 
 sealed trait PartitionSpec extends LeafExpression with Unevaluable {
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "PartitionSpec.dataType should not be called.")
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "PartitionSpec.nullable should not be called.")
 }
 
@@ -92,9 +115,9 @@ case class UnresolvedPartitionSpec(
 
 sealed trait FieldName extends LeafExpression with Unevaluable {
   def name: Seq[String]
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "FieldName.dataType should not be called.")
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "FieldName.nullable should not be called.")
 }
 
@@ -104,9 +127,9 @@ case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
 
 sealed trait FieldPosition extends LeafExpression with Unevaluable {
   def position: ColumnPosition
-  override def dataType: DataType = throw new IllegalStateException(
+  override def dataType: DataType = throw SparkException.internalError(
     "FieldPosition.dataType should not be called.")
-  override def nullable: Boolean = throw new IllegalStateException(
+  override def nullable: Boolean = throw SparkException.internalError(
     "FieldPosition.nullable should not be called.")
 }
 
@@ -115,30 +138,47 @@ case class UnresolvedFieldPosition(position: ColumnPosition) extends FieldPositi
 }
 
 /**
- * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
- * [[ResolvedFunc]] during analysis.
+ * Holds the name of a function that has yet to be looked up. It will be resolved to
+ * [[ResolvedPersistentFunc]] or [[ResolvedNonPersistentFunc]] during analysis of function-related
+ * commands such as `DESCRIBE FUNCTION name`.
  */
-case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
+case class UnresolvedFunctionName(
+    multipartIdentifier: Seq[String],
+    commandName: String,
+    possibleQualifiedName: Option[Seq[String]] = None) extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
 
 /**
- * Holds the name of a database object (table, view, namespace, function, etc.) that is to be
- * created and we need to determine the catalog to store it. It will be resolved to
- * [[ResolvedDBObjectName]] during analysis.
+ * Holds the name of a table/view/function identifier that we need to determine the catalog. It will
+ * be resolved to [[ResolvedIdentifier]] during analysis.
  */
-case class UnresolvedDBObjectName(nameParts: Seq[String], isNamespace: Boolean) extends LeafNode {
-  override lazy val resolved: Boolean = false
-  override def output: Seq[Attribute] = Nil
+case class UnresolvedIdentifier(nameParts: Seq[String], allowTemp: Boolean = false)
+  extends UnresolvedLeafNode
+
+/**
+ * A procedure identifier that should be resolved into [[ResolvedProcedure]].
+ */
+case class UnresolvedProcedure(nameParts: Seq[String]) extends UnresolvedLeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_PROCEDURE)
+}
+
+/**
+ * A resolved leaf node whose statistics has no meaning.
+ */
+trait LeafNodeWithoutStats extends LeafNode {
+  // Here we just return a dummy statistics to avoid compute statsCache
+  override def stats: Statistics = Statistics.DUMMY
 }
 
 /**
  * A plan containing resolved namespace.
  */
-case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
-  extends LeafNode {
+case class ResolvedNamespace(
+    catalog: CatalogPlugin,
+    namespace: Seq[String],
+    metadata: Map[String, String] = Map.empty)
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
@@ -150,10 +190,10 @@ case class ResolvedTable(
     identifier: Identifier,
     table: Table,
     outputAttributes: Seq[Attribute])
-  extends LeafNode {
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = {
     val qualifier = catalog.name +: identifier.namespace :+ identifier.name
-    outputAttributes.map(_.withQualifier(qualifier))
+    outputAttributes.map(_.withQualifier(qualifier.toImmutableArraySeq))
   }
   def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }
@@ -163,8 +203,8 @@ object ResolvedTable {
       catalog: TableCatalog,
       identifier: Identifier,
       table: Table): ResolvedTable = {
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
-    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    ResolvedTable(catalog, identifier, table, toAttributes(schema))
   }
 }
 
@@ -179,29 +219,102 @@ case class ResolvedFieldName(path: Seq[String], field: StructField) extends Fiel
 
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
 
-
-/**
- * A plan containing resolved (temp) views.
- */
-// TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
-//       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNode {
+case class ResolvedProcedure(
+    catalog: ProcedureCatalog,
+    ident: Identifier,
+    procedure: Procedure) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
 /**
- * A plan containing resolved function.
+ * A plan containing a resolved persistent view.
+ *
+ * `info` is the typed v2 [[org.apache.spark.sql.connector.catalog.ViewInfo]] payload for the
+ * view. Session-catalog (v1) views are surfaced through the same channel via
+ * [[org.apache.spark.sql.connector.catalog.V1ViewInfo]], which extends `ViewInfo` and wraps
+ * the original [[CatalogTable]] -- mirroring the way
+ * [[org.apache.spark.sql.connector.catalog.V1Table]] exposes a v1 `CatalogTable` through the
+ * v2 [[org.apache.spark.sql.connector.catalog.Table]] surface for `ResolvedTable`. v1-only
+ * paths (e.g. `DescribeTableCommand`, `ShowCreateTableCommand`) recover the original
+ * `CatalogTable` by pattern-matching `info` against `V1ViewInfo`.
  */
-// TODO: create a generic representation for v1, v2 function, after we add function
-//       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedFunc(identifier: Identifier)
-  extends LeafNode {
+case class ResolvedPersistentView(
+    catalog: CatalogPlugin,
+    identifier: Identifier,
+    info: org.apache.spark.sql.connector.catalog.ViewInfo)
+  extends LeafNodeWithoutStats {
+  // Surface the view's schema as `output` so `ResolveReferences` can resolve column references
+  // against it (e.g. `DescribeColumn(ResolvedPersistentView, UnresolvedAttribute, ...)`). The
+  // schema is otherwise unused -- consumers read `info` directly and don't iterate `output`.
+  // SELECT on a view goes through view-text expansion and never produces this node, so giving
+  // it output does not affect query resolution.
+  override lazy val output: Seq[Attribute] =
+    toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(info.schema))
+
+  // Render `info` in plan-tree output as the qualified view name. The default case-class
+  // `toString` would format `info` via `Object.toString`, which produces `V1ViewInfo@<hash>`
+  // for the v1 leg and a similarly opaque hash for the v2 leg -- non-deterministic and useless
+  // in EXPLAIN / golden file output. Replace it with the multi-part `catalog.namespace.name`
+  // form so EXPLAIN, plan-tree dumps, and `SQLQueryTestSuite` golden files remain stable.
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(catalog, identifier, (catalog.name +: identifier.namespace :+ identifier.name).quoted)
+}
+
+/**
+ * A plan containing resolved (global) temp views.
+ */
+case class ResolvedTempView(identifier: Identifier, metadata: CatalogTable)
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
 /**
- * A plan containing resolved database object name with catalog determined.
+ * A plan containing resolved persistent function.
  */
-case class ResolvedDBObjectName(catalog: CatalogPlugin, nameParts: Seq[String]) extends LeafNode {
+case class ResolvedPersistentFunc(
+    catalog: FunctionCatalog,
+    identifier: Identifier,
+    func: UnboundFunction)
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A plan containing resolved non-persistent (temp or built-in) function.
+ */
+case class ResolvedNonPersistentFunc(
+    name: String,
+    func: UnboundFunction)
+  extends LeafNodeWithoutStats {
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A plan containing resolved identifier with catalog determined.
+ */
+case class ResolvedIdentifier(
+    catalog: CatalogPlugin,
+    identifier: Identifier,
+    override val output: Seq[Attribute] = Nil) extends LeafNodeWithoutStats {
+  def name: String = (catalog.name +: identifier.namespace :+ identifier.name).quoted
+}
+
+object ResolvedIdentifier {
+  def unapply(ri: ResolvedIdentifier): Option[(CatalogPlugin, Identifier)] = {
+    Some((ri.catalog, ri.identifier))
+  }
+}
+
+// A fake v2 catalog to hold temp views.
+object FakeSystemCatalog extends CatalogPlugin {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "system"
+}
+
+/**
+ * A fake v2 catalog to hold local variables for SQL scripting.
+ */
+object FakeLocalCatalog extends CatalogPlugin {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+  override def name(): String = "local"
 }

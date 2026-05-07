@@ -36,17 +36,16 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingConf.STOP_GRACEFULLY_ON_SHUTDOWN
+import org.apache.spark.streaming.StreamingConf.{STOP_GRACEFULLY_ON_SHUTDOWN, STREAMING_EXTRA_LISTENERS}
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.
-    {ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
+import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener, StreamingListenerStreamingStarted}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -60,7 +59,13 @@ import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
  * using `context.start()` and `context.stop()`, respectively.
  * `context.awaitTermination()` allows the current thread to wait for the termination
  * of the context by `stop()` or by an exception.
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 class StreamingContext private[streaming] (
     _sc: SparkContext,
     _cp: Checkpoint,
@@ -87,7 +92,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param master cluster URL to connect to (e.g. spark://host:port, local[4]).
    * @param appName a name for your job, to display on the cluster web UI
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */
@@ -275,7 +280,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
-   * Find more details at http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+   * Find more details at https://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
   def receiverStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
@@ -578,7 +583,7 @@ class StreamingContext private[streaming] (
             validate()
 
             registerProgressListener()
-
+            registerExtraStreamingListener()
             // Start the streaming scheduler in a new thread, so that thread local properties
             // like call sites and job groups can be reset without affecting those of the
             // current thread.
@@ -616,6 +621,27 @@ class StreamingContext private[streaming] (
     }
   }
 
+  /**
+   * Registers streaming listeners specified in spark.streaming.extraListeners.
+   */
+  private def registerExtraStreamingListener(): Unit = {
+    try {
+      conf.get(STREAMING_EXTRA_LISTENERS).foreach { classNames =>
+        val listeners = Utils.loadExtensions(classOf[StreamingListener], classNames, conf)
+        listeners.foreach { listener =>
+          addStreamingListener(listener)
+          logInfo(s"Registered streaming listener ${listener.getClass().getName()}")
+        }
+      }
+    } catch {
+      case e: Exception =>
+        try {
+          stop()
+        } finally {
+          throw new SparkException(s"Exception when registering StreamingListener", e)
+        }
+    }
+  }
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
@@ -719,7 +745,8 @@ class StreamingContext private[streaming] (
 
   private def stopOnShutdown(): Unit = {
     val stopGracefully = conf.get(STOP_GRACEFULLY_ON_SHUTDOWN)
-    logInfo(s"Invoking stop(stopGracefully=$stopGracefully) from shutdown hook")
+    logInfo(log"Invoking stop(stopGracefully=" +
+      log"${MDC(LogKeys.VALUE, stopGracefully)}) from shutdown hook")
     // Do not stop SparkContext, let its own shutdown hook stop it
     stop(stopSparkContext = false, stopGracefully = stopGracefully)
   }
@@ -740,13 +767,20 @@ class StreamingContext private[streaming] (
 /**
  * StreamingContext object contains a number of utility functions related to the
  * StreamingContext class.
+ *
+ * @deprecated This is deprecated as of Spark 3.4.0.
+ *             There are no longer updates to DStream and it's a legacy project.
+ *             There is a newer and easier to use streaming engine
+ *             in Spark called Structured Streaming.
+ *             You should use Spark Structured Streaming for your streaming applications.
  */
-
+@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")
 object StreamingContext extends Logging {
 
   /**
    * Lock that guards activation of a StreamingContext as well as access to the singleton active
    * StreamingContext in getActiveOrCreate().
+   *
    */
   private val ACTIVATION_LOCK = new Object()
 

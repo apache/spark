@@ -65,6 +65,8 @@ private[ml] class AFTBlockAggregator (
     Double.NaN
   }
 
+  @transient private var buffer: Array[Double] = _
+
   /**
    * Add a new training instance block to this BlockAFTAggregator, and update the loss and
    * gradient of the objective function.
@@ -81,10 +83,18 @@ private[ml] class AFTBlockAggregator (
     // sigma is the scale parameter of the AFT model
     val sigma = math.exp(coefficientsArray(dim - 1))
 
+    if (buffer == null || buffer.length < size) {
+      buffer = Array.ofDim[Double](size)
+    }
+
     // arr here represents margins
-    val arr = Array.ofDim[Double](size)
-    if (fitIntercept) java.util.Arrays.fill(arr, marginOffset)
-    BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
+    val arr = buffer
+    if (fitIntercept) {
+      java.util.Arrays.fill(arr, 0, size, marginOffset)
+      BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
+    } else {
+      BLAS.gemv(1.0, block.matrix, coefficientsArray, 0.0, arr)
+    }
 
     // in-place convert margins to gradient scales
     // then, arr represents gradient scales

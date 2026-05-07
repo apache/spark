@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.DropPartitions
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSession {
+
   test("drop partition") {
     val sql = """
       |ALTER TABLE table_name DROP PARTITION
@@ -32,8 +32,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -52,8 +51,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -67,8 +65,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("a", "b", "c"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false)
@@ -81,8 +78,7 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
     val expected = DropPartitions(
       UnresolvedTable(
         Seq("table_name"),
-        "ALTER TABLE ... DROP PARTITION ...",
-        Some("Please use ALTER VIEW instead.")),
+        "ALTER TABLE ... DROP PARTITION ..."),
       Seq(UnresolvedPartitionSpec(Map("p" -> "1"))),
       ifExists = false,
       purge = true)
@@ -92,9 +88,13 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
 
   test("drop partition from view") {
     val sql = "ALTER VIEW table_name DROP PARTITION (p=1)"
-    val errMsg = intercept[ParseException] {
-      parsePlan(sql)
-    }.getMessage
-    assert(errMsg.contains("Operation not allowed"))
+    checkError(
+      exception = parseException(parsePlan)(sql),
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
+      parameters = Map("operation" -> "ALTER VIEW ... DROP PARTITION"),
+      context = ExpectedContext(
+        fragment = sql,
+        start = 0,
+        stop = 41))
   }
 }

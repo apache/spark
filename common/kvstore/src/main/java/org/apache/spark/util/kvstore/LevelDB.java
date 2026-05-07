@@ -30,14 +30,14 @@ import java.util.stream.Collectors;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
 import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Implementation of KVStore that uses LevelDB as the underlying data store.
@@ -136,20 +136,20 @@ public class LevelDB implements KVStore {
   }
 
   private void put(byte[] key, Object value) throws Exception {
-    Preconditions.checkArgument(value != null, "Null values are not allowed.");
+    JavaUtils.checkArgument(value != null, "Null values are not allowed.");
     db().put(key, serializer.serialize(value));
   }
 
   @Override
   public <T> T read(Class<T> klass, Object naturalKey) throws Exception {
-    Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
+    JavaUtils.checkArgument(naturalKey != null, "Null keys are not allowed.");
     byte[] key = getTypeInfo(klass).naturalIndex().start(null, naturalKey);
     return get(key, klass);
   }
 
   @Override
   public void write(Object value) throws Exception {
-    Preconditions.checkArgument(value != null, "Null values are not allowed.");
+    JavaUtils.checkArgument(value != null, "Null values are not allowed.");
     LevelDBTypeInfo ti = getTypeInfo(value.getClass());
 
     try (WriteBatch batch = db().createWriteBatch()) {
@@ -162,7 +162,7 @@ public class LevelDB implements KVStore {
   }
 
   public void writeAll(List<?> values) throws Exception {
-    Preconditions.checkArgument(values != null && !values.isEmpty(),
+    JavaUtils.checkArgument(values != null && !values.isEmpty(),
       "Non-empty values required.");
 
     // Group by class, in case there are values from different classes in the values
@@ -176,7 +176,7 @@ public class LevelDB implements KVStore {
 
       // Deserialize outside synchronized block
       List<byte[]> list = new ArrayList<>(entry.getValue().size());
-      for (Object value : values) {
+      for (Object value : entry.getValue()) {
         list.add(serializer.serialize(value));
       }
       serializedValueIter = list.iterator();
@@ -190,6 +190,7 @@ public class LevelDB implements KVStore {
 
         try (WriteBatch batch = db().createWriteBatch()) {
           while (valueIter.hasNext()) {
+            assert serializedValueIter.hasNext();
             updateBatch(batch, valueIter.next(), serializedValueIter.next(), klass,
               naturalIndex, indices);
           }
@@ -223,7 +224,7 @@ public class LevelDB implements KVStore {
 
   @Override
   public void delete(Class<?> type, Object naturalKey) throws Exception {
-    Preconditions.checkArgument(naturalKey != null, "Null keys are not allowed.");
+    JavaUtils.checkArgument(naturalKey != null, "Null keys are not allowed.");
     try (WriteBatch batch = db().createWriteBatch()) {
       LevelDBTypeInfo ti = getTypeInfo(type);
       byte[] key = ti.naturalIndex().start(null, naturalKey);
@@ -254,7 +255,8 @@ public class LevelDB implements KVStore {
           iteratorTracker.add(new WeakReference<>(it));
           return it;
         } catch (Exception e) {
-          throw Throwables.propagate(e);
+          if (e instanceof RuntimeException re) throw re;
+          throw new RuntimeException(e);
         }
       }
     };
@@ -270,10 +272,14 @@ public class LevelDB implements KVStore {
     KVStoreView<T> view = view(klass).index(index);
 
     for (Object indexValue : indexValues) {
-      for (T value: view.first(indexValue).last(indexValue)) {
-        Object itemKey = naturalIndex.getValue(value);
-        delete(klass, itemKey);
-        removed = true;
+      try (KVStoreIterator<T> iterator =
+        view.first(indexValue).last(indexValue).closeableIterator()) {
+        while (iterator.hasNext()) {
+          T value = iterator.next();
+          Object itemKey = naturalIndex.getValue(value);
+          delete(klass, itemKey);
+          removed = true;
+        }
       }
     }
 
@@ -322,7 +328,7 @@ public class LevelDB implements KVStore {
    * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
    * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
    */
-  void closeIterator(LevelDBIterator<?> it) throws IOException {
+  void closeIterator(DBIterator it) throws IOException {
     notifyIteratorClosed(it);
     synchronized (this._db) {
       DB _db = this._db.get();
@@ -336,8 +342,11 @@ public class LevelDB implements KVStore {
    * Remove iterator from iterator tracker. `LevelDBIterator` calls it to notify
    * iterator is closed.
    */
-  void notifyIteratorClosed(LevelDBIterator<?> it) {
-    iteratorTracker.removeIf(ref -> it.equals(ref.get()));
+  void notifyIteratorClosed(DBIterator dbIterator) {
+    iteratorTracker.removeIf(ref -> {
+      LevelDBIterator<?> it = ref.get();
+      return it != null && dbIterator.equals(it.internalIterator());
+    });
   }
 
   /** Returns metadata about indices for the given type. */

@@ -19,12 +19,12 @@ package org.apache.spark.ui
 
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.xml.{Node, Unparsed}
 
 import com.google.common.base.Splitter
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.util.Utils
 
@@ -43,7 +43,7 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
   /**
    * Slice a range of data.
    */
-  protected def sliceData(from: Int, to: Int): Seq[T]
+  protected def sliceData(from: Int, to: Int): collection.Seq[T]
 
   /**
    * Slice the data for this page
@@ -76,7 +76,7 @@ private[spark] abstract class PagedDataSource[T](val pageSize: Int) {
  * The data returned by `PagedDataSource.pageData`, including the page number, the number of total
  * pages and the data in this page.
  */
-private[ui] case class PageData[T](totalPage: Int, data: Seq[T])
+private[ui] case class PageData[T](totalPage: Int, data: collection.Seq[T])
 
 /**
  * A paged table that will generate a HTML table for a specified page and also the page navigation.
@@ -134,7 +134,7 @@ private[spark] trait PagedTable[T] {
         val PageData(totalPages, _) = _dataSource.pageData(1)
         <div>
           {pageNavigation(1, _dataSource.pageSize, totalPages)}
-          <div class="alert alert-error">
+          <div class="alert alert-danger">
             <p>Error while rendering table:</p>
             <pre>
               {Utils.exceptionString(e)}
@@ -207,9 +207,9 @@ private[spark] trait PagedTable[T] {
           .withKeyValueSeparator("=")
           .split(search)
           .asScala
-          .filterKeys(_ != pageSizeFormField)
-          .filterKeys(_ != pageNumberFormField)
-          .mapValues(URLDecoder.decode(_, UTF_8.name()))
+          .filter { case (k, _) => k != pageSizeFormField}
+          .filter { case (k, _) => k != pageNumberFormField}
+          .map { case (k, v) => (k, URLDecoder.decode(v, UTF_8.name())) }
           .map { case (k, v) =>
             <input type="hidden" name={k} value={v} />
           }
@@ -218,35 +218,10 @@ private[spark] trait PagedTable[T] {
       }
     }
 
-    <div>
-      <div>
-        <form id={s"form-$navigationId-page"}
-              method="get"
-              action={Unparsed(goButtonFormPath)}
-              class="form-inline float-right justify-content-end"
-              style="margin-bottom: 0px;">
-          {hiddenFormFields}
-          <label>{totalPages} Pages. Jump to</label>
-          <input type="text"
-                 name={pageNumberFormField}
-                 id={s"form-$navigationId-page-no"}
-                 value={page.toString}
-                 class="col-1 form-control" />
-
-          <label>. Show </label>
-          <input type="text"
-                 id={s"form-$navigationId-page-size"}
-                 name={pageSizeFormField}
-                 value={pageSize.toString}
-                 class="col-1 form-control" />
-          <label>items in a page.</label>
-
-          <button type="submit" class="btn btn-spark">Go</button>
-        </form>
-      </div>
-      <div>
-        <span style="float: left; padding-top: 4px; padding-right: 4px;">Page: </span>
-        <ul class="pagination">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="d-flex align-items-center">
+        <span class="pe-1">Page: </span>
+        <ul class="pagination mb-0">
           {if (currentGroup > firstGroup) {
           <li class="page-item">
             <a href={Unparsed(pageLink(startPage - groupSize))} class="page-link"
@@ -285,6 +260,32 @@ private[spark] trait PagedTable[T] {
           </li>
         }}
         </ul>
+      </div>
+      <div>
+        <form id={s"form-$navigationId-page"}
+              method="get"
+              action={Unparsed(goButtonFormPath)}
+              class="d-flex align-items-center gap-1 mb-0">
+          {hiddenFormFields}
+          <label class="text-nowrap">{totalPages} Pages. Jump to</label>
+          <input type="text"
+                 name={pageNumberFormField}
+                 id={s"form-$navigationId-page-no"}
+                 value={page.toString}
+                 class="form-control form-control-sm"
+                 style="width: 60px;" />
+
+          <label class="text-nowrap">. Show </label>
+          <input type="text"
+                 id={s"form-$navigationId-page-size"}
+                 name={pageSizeFormField}
+                 value={pageSize.toString}
+                 class="form-control form-control-sm"
+                 style="width: 60px;" />
+          <label class="text-nowrap">items in a page.</label>
+
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Go</button>
+        </form>
       </div>
     </div>
   }
@@ -362,9 +363,9 @@ private[spark] trait PagedTable[T] {
 
           <th>
             <a href={headerLink}>
-              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                {header}&nbsp;{Unparsed(arrow)}
-              </span>
+              {UIUtils.tooltipSpan(
+                <xml:group>{header}&nbsp;{Unparsed(arrow)}</xml:group>,
+                tooltip.getOrElse(""))}
             </a>
           </th>
         } else {
@@ -377,16 +378,14 @@ private[spark] trait PagedTable[T] {
 
             <th>
               <a href={headerLink}>
-                <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                  {header}
-                </span>
+                {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                  tooltip.getOrElse(""))}
               </a>
             </th>
           } else {
             <th>
-              <span data-toggle="tooltip" data-placement="top" title={tooltip.getOrElse("")}>
-                {header}
-              </span>
+              {UIUtils.tooltipSpan(<xml:group>{header}</xml:group>,
+                tooltip.getOrElse(""))}
             </th>
           }
         }

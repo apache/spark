@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -42,11 +40,11 @@ class HiveSessionStateSuite extends SessionStateSuite with TestHiveSingleton {
   test("Clone then newSession") {
     val sparkSession = hiveContext.sparkSession
     val conf = sparkSession.sparkContext.hadoopConfiguration
-    val oldValue = conf.get(ConfVars.METASTORECONNECTURLKEY.varname)
+    val oldValue = conf.get("javax.jdo.option.ConnectionURL")
     sparkSession.cloneSession()
     sparkSession.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
       .client.newSession()
-    val newValue = conf.get(ConfVars.METASTORECONNECTURLKEY.varname)
+    val newValue = conf.get("javax.jdo.option.ConnectionURL")
     assert(oldValue == newValue,
       "cloneSession and then newSession should not affect the Derby directory")
   }

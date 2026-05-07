@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, ReturnAnswer, Union}
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.test.SharedSparkSession
 
 class SparkPlannerSuite extends SharedSparkSession {
@@ -40,9 +40,9 @@ class SparkPlannerSuite extends SharedSparkSession {
         case u: Union =>
           planned += 1
           UnionExec(u.children.map(planLater)) :: planLater(NeverPlanned) :: Nil
-        case LocalRelation(output, data, _) =>
+        case LocalRelation(output, data, _, stream) =>
           planned += 1
-          LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
+          LocalTableScanExec(output, data, stream) :: planLater(NeverPlanned) :: Nil
         case NeverPlanned =>
           fail("QueryPlanner should not go down to this branch.")
         case _ => Nil

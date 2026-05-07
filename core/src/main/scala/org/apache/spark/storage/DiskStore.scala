@@ -27,13 +27,14 @@ import scala.collection.mutable.ListBuffer
 
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
-import org.apache.commons.io.FileUtils
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -50,6 +51,9 @@ private[spark] class DiskStore(
   private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
   private val blockSizes = new ConcurrentHashMap[BlockId, Long]()
 
+  private val shuffleServiceFetchRddEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
+    conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
+
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId)
 
   /**
@@ -59,18 +63,26 @@ private[spark] class DiskStore(
    */
   def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
     if (contains(blockId)) {
-      logWarning(s"Block $blockId is already present in the disk store")
+      logWarning(log"Block ${MDC(BLOCK_ID, blockId)} is already present in the disk store")
       try {
         diskManager.getFile(blockId).delete()
       } catch {
         case e: Exception =>
-          throw new IllegalStateException(
-            s"Block $blockId is already present in the disk store and could not delete it $e")
+          throw SparkException.internalError(
+            s"Block $blockId is already present in the disk store and could not delete it $e",
+            category = "STORAGE")
       }
     }
     logDebug(s"Attempting to put block $blockId")
     val startTimeNs = System.nanoTime()
     val file = diskManager.getFile(blockId)
+
+    // SPARK-37618: If fetching cached RDDs from the shuffle service is enabled, we must make
+    // the file world readable, as it will not be owned by the group running the shuffle service
+    // in a secure environment. This is due to changing directory permissions to allow deletion,
+    if (shuffleServiceFetchRddEnabled) {
+      diskManager.createWorldReadableFile(file)
+    }
     val out = new CountingWritableChannel(openForWrite(file))
     var threwException: Boolean = true
     try {
@@ -122,7 +134,7 @@ private[spark] class DiskStore(
     if (file.exists()) {
       val ret = file.delete()
       if (!ret) {
-        logWarning(s"Error deleting ${file.getPath()}")
+        logWarning(log"Error deleting ${MDC(PATH, file.getPath())}")
       }
       ret
     } else {
@@ -137,7 +149,8 @@ private[spark] class DiskStore(
   def moveFileToBlock(sourceFile: File, blockSize: Long, targetBlockId: BlockId): Unit = {
     blockSizes.put(targetBlockId, blockSize)
     val targetFile = diskManager.getFile(targetBlockId.name)
-    FileUtils.moveFile(sourceFile, targetFile)
+    logDebug(s"${sourceFile.getPath()} -> ${targetFile.getPath()}")
+    Utils.moveFile(sourceFile, targetFile)
   }
 
   def contains(blockId: BlockId): Boolean = diskManager.containsBlock(blockId)
@@ -172,6 +185,14 @@ private class DiskBlockData(
   * Please see `ManagedBuffer.convertToNetty()` for more details.
   */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
+
+  /**
+   * Returns a Netty-friendly wrapper for the block's data.
+   *
+   * Please see `ManagedBuffer.convertToNettyForSsl()` for more details.
+   */
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
     Utils.tryWithResource(open()) { channel =>
@@ -222,6 +243,9 @@ private[spark] class EncryptedBlockData(
   override def toInputStream(): InputStream = Channels.newInputStream(open())
 
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
+
+  override def toNettyForSsl(): AnyRef =
+    toChunkedByteBuffer(ByteBuffer.allocate).toNettyForSsl
 
   override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
     val source = open()
@@ -286,6 +310,8 @@ private[spark] class EncryptedManagedBuffer(
 
   override def convertToNetty(): AnyRef = blockData.toNetty()
 
+  override def convertToNettyForSsl(): AnyRef = blockData.toNettyForSsl()
+
   override def createInputStream(): InputStream = blockData.toInputStream()
 
   override def retain(): ManagedBuffer = this
@@ -298,7 +324,7 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
 
   private var _transferred = 0L
 
-  private val buffer = ByteBuffer.allocateDirect(64 * 1024)
+  private val buffer = Platform.allocateDirectBuffer(64 * 1024)
   buffer.flip()
 
   override def count(): Long = blockSize

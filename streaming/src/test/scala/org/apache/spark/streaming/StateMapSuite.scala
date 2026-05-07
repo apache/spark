@@ -160,7 +160,7 @@ class StateMapSuite extends SparkFunSuite {
       deltaChainThreshold = deltaChainThreshold)
 
     // Make large delta chain with length more than deltaChainThreshold
-    for(i <- 1 to targetDeltaLength) {
+    for (i <- 1 to targetDeltaLength) {
       map.put(Random.nextInt(), Random.nextInt(), 1)
       map = map.copy().asInstanceOf[OpenHashMapBasedStateMap[Int, Int]]
     }

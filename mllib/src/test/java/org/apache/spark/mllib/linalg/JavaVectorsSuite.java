@@ -19,11 +19,11 @@ package org.apache.spark.mllib.linalg;
 
 import java.util.Arrays;
 
-import static org.junit.Assert.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 import scala.Tuple2;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class JavaVectorsSuite {
 
@@ -35,7 +35,6 @@ public class JavaVectorsSuite {
 
   @Test
   public void sparseArrayConstruction() {
-    @SuppressWarnings("unchecked")
     Vector v = Vectors.sparse(3, Arrays.asList(
       new Tuple2<>(0, 2.0),
       new Tuple2<>(2, 3.0)));

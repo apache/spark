@@ -19,7 +19,7 @@ package org.apache.spark.mllib.classification
 
 import java.lang.{Iterable => JIterable}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
@@ -198,10 +198,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(metadataPath(path))
 
       // Create Parquet data.
-      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath(path))
+      spark.createDataFrame(Seq(data)).write.parquet(dataPath(path))
     }
 
     @Since("1.3.0")
@@ -243,10 +243,10 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
           ("numFeatures" -> data.theta(0).length) ~ ("numClasses" -> data.pi.length)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(metadataPath(path))
 
       // Create Parquet data.
-      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath(path))
+      spark.createDataFrame(Seq(data)).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
@@ -367,8 +367,8 @@ class NaiveBayes private (
     val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
       .toDF("label", "features")
 
-    // mllib NaiveBayes allows input labels like {-1, +1}, so set `positiveLabel` as false.
-    val newModel = nb.trainWithLabelCheck(dataset, positiveLabel = false)
+    // mllib NaiveBayes allows input labels like {-1, +1}, so set `nonNegativeLabel` as false.
+    val newModel = nb.trainWithLabelCheck(dataset, nonNegativeLabel = false)
 
     val pi = newModel.pi.toArray
     val theta = Array.ofDim[Double](newModel.numClasses, newModel.numFeatures)

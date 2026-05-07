@@ -47,18 +47,12 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     super.doValidate()
     assert(sparkProperties != null, "No Spark properties set!")
     assertFieldIsSet(appResource, "appResource")
-    assertFieldIsSet(appArgs, "appArgs")
-    assertFieldIsSet(environmentVariables, "environmentVariables")
-    assertPropertyIsSet("spark.app.name")
     assertPropertyIsBoolean(config.DRIVER_SUPERVISE.key)
     assertPropertyIsNumeric(config.DRIVER_CORES.key)
     assertPropertyIsNumeric(config.CORES_MAX.key)
     assertPropertyIsMemory(config.DRIVER_MEMORY.key)
     assertPropertyIsMemory(config.EXECUTOR_MEMORY.key)
   }
-
-  private def assertPropertyIsSet(key: String): Unit =
-    assertFieldIsSet(sparkProperties.getOrElse(key, null), key)
 
   private def assertPropertyIsBoolean(key: String): Unit =
     assertProperty[Boolean](key, "boolean", _.toBoolean)

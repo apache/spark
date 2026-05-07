@@ -17,23 +17,25 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.IsotonicRegressionModel.IsotonicRegressionModelWriter
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
 import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit, udf}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 
@@ -81,17 +83,19 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
    */
   protected[ml] def extractWeightedLabeledPoints(
       dataset: Dataset[_]): RDD[(Double, Double, Double)] = {
+    val l = checkRegressionLabels($(labelCol))
+
     val f = if (dataset.schema($(featuresCol)).dataType.isInstanceOf[VectorUDT]) {
       val idx = $(featureIndex)
       val extract = udf { v: Vector => v(idx) }
-      extract(col($(featuresCol)))
+      extract(checkNonNanVectors($(featuresCol)))
     } else {
-      col($(featuresCol))
+      checkNonNanValues($(featuresCol), "Features")
     }
-    val w =
-      if (hasWeightCol) checkNonNegativeWeight(col($(weightCol)).cast(DoubleType)) else lit(1.0)
 
-    dataset.select(col($(labelCol)).cast(DoubleType), f, w).rdd.map {
+    val w = checkNonNegativeWeights(get(weightCol))
+
+    dataset.select(l, f, w).rdd.map {
       case Row(label: Double, feature: Double, weight: Double) => (label, feature, weight)
     }
   }
@@ -211,6 +215,9 @@ class IsotonicRegressionModel private[ml] (
     private val oldModel: MLlibIsotonicRegressionModel)
   extends Model[IsotonicRegressionModel] with IsotonicRegressionBase with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", null)
+
   /** @group setParam */
   @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -280,6 +287,25 @@ class IsotonicRegressionModel private[ml] (
 
 @Since("1.6.0")
 object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
+  private[ml] case class Data(
+    boundaries: Array[Double],
+    predictions: Array[Double],
+    isotonic: Boolean)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeDoubleArray(data.boundaries, dos)
+    serializeDoubleArray(data.predictions, dos)
+    dos.writeBoolean(data.isotonic)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val boundaries = deserializeDoubleArray(dis)
+    val predictions = deserializeDoubleArray(dis)
+    val isotonic = dis.readBoolean()
+    Data(boundaries, predictions, isotonic)
+  }
 
   @Since("1.6.0")
   override def read: MLReader[IsotonicRegressionModel] = new IsotonicRegressionModelReader
@@ -292,19 +318,14 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       instance: IsotonicRegressionModel
     ) extends MLWriter with Logging {
 
-    private case class Data(
-        boundaries: Array[Double],
-        predictions: Array[Double],
-        isotonic: Boolean)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: boundaries, predictions, isotonic
       val data = Data(
         instance.oldModel.boundaries, instance.oldModel.predictions, instance.oldModel.isotonic)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -314,16 +335,14 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
     private val className = classOf[IsotonicRegressionModel].getName
 
     override def load(path: String): IsotonicRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("boundaries", "predictions", "isotonic").head()
-      val boundaries = data.getAs[Seq[Double]](0).toArray
-      val predictions = data.getAs[Seq[Double]](1).toArray
-      val isotonic = data.getBoolean(2)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
       val model = new IsotonicRegressionModel(
-        metadata.uid, new MLlibIsotonicRegressionModel(boundaries, predictions, isotonic))
+        metadata.uid,
+        new MLlibIsotonicRegressionModel(data.boundaries, data.predictions, data.isotonic)
+      )
 
       metadata.getAndSetParams(model)
       model

@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.util._
  * Tests for the sameResult function of [[LogicalPlan]].
  */
 class SameResultSuite extends SparkFunSuite {
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation2 = LocalRelation($"a".int, $"b".int, $"c".int)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("EliminateResolvedHint", Once, EliminateResolvedHint) :: Nil
@@ -51,21 +51,22 @@ class SameResultSuite extends SparkFunSuite {
   }
 
   test("projections") {
-    assertSameResult(testRelation.select('a), testRelation2.select('a))
-    assertSameResult(testRelation.select('b), testRelation2.select('b))
-    assertSameResult(testRelation.select('a, 'b), testRelation2.select('a, 'b))
-    assertSameResult(testRelation.select('b, 'a), testRelation2.select('b, 'a))
+    assertSameResult(testRelation.select($"a"), testRelation2.select($"a"))
+    assertSameResult(testRelation.select($"b"), testRelation2.select($"b"))
+    assertSameResult(testRelation.select($"a", $"b"), testRelation2.select($"a", $"b"))
+    assertSameResult(testRelation.select($"b", $"a"), testRelation2.select($"b", $"a"))
 
-    assertSameResult(testRelation, testRelation2.select('a), result = false)
-    assertSameResult(testRelation.select('b, 'a), testRelation2.select('a, 'b), result = false)
+    assertSameResult(testRelation, testRelation2.select($"a"), result = false)
+    assertSameResult(testRelation.select($"b", $"a"),
+      testRelation2.select($"a", $"b"), result = false)
   }
 
   test("filters") {
-    assertSameResult(testRelation.where('a === 'b), testRelation2.where('a === 'b))
+    assertSameResult(testRelation.where($"a" === $"b"), testRelation2.where($"a" === $"b"))
   }
 
   test("sorts") {
-    assertSameResult(testRelation.orderBy('a.asc), testRelation2.orderBy('a.asc))
+    assertSameResult(testRelation.orderBy($"a".asc), testRelation2.orderBy($"a".asc))
   }
 
   test("union") {

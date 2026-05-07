@@ -20,14 +20,13 @@ package org.apache.spark.memory
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.concurrent.duration.Duration
 
 import org.mockito.ArgumentMatchers.{any, anyLong}
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
@@ -35,11 +34,10 @@ import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel}
 import org.apache.spark.storage.memory.MemoryStore
 import org.apache.spark.util.ThreadUtils
 
-
 /**
  * Helper trait for sharing code among [[MemoryManager]] tests.
  */
-private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
+private[memory] trait MemoryManagerSuite extends SparkFunSuite {
 
   protected val evictedBlocks = new mutable.ArrayBuffer[(BlockId, BlockStatus)]
 
@@ -150,7 +148,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
   // -- Tests of sharing of execution memory between tasks ----------------------------------------
   // Prior to Spark 1.6, these tests were part of ShuffleMemoryManagerSuite.
 
-  implicit val ec = ExecutionContext.global
+  implicit val ec: ExecutionContextExecutor = ExecutionContext.global
 
   test("single task requesting on-heap execution memory") {
     val manager = createMemoryManager(1000L)
@@ -336,6 +334,24 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     assert(tMemManager.getMemoryConsumptionForThisTask === 500L)
     tMemManager.releaseExecutionMemory(500L, c)
     assert(tMemManager.getMemoryConsumptionForThisTask === 0L)
+  }
+
+  test("task peak execution memory usage") {
+    val memoryManager = createMemoryManager(
+      maxOnHeapExecutionMemory = 1000L,
+      maxOffHeapExecutionMemory = 1000L)
+
+    val tMemManager = new TaskMemoryManager(memoryManager, 1)
+    val offHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
+    val onHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.ON_HEAP)
+
+    val result1 = tMemManager.acquireExecutionMemory(500L, offHeapConsumer)
+    val result2 = tMemManager.acquireExecutionMemory(400L, onHeapConsumer)
+    assert(result1 === 500L)
+    assert(result2 === 400L)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 900L)
+    assert(tMemManager.getPeakOnHeapExecutionMemory === 400L)
+    assert(tMemManager.getPeakOffHeapExecutionMemory === 500L)
   }
 }
 

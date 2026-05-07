@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
 /**
  * In Spark ANSI mode, the type coercion rules are based on the type precedence lists of the input
@@ -68,16 +69,20 @@ import org.apache.spark.sql.types._
  *       * CreateMap
  *   * For complex types (struct, array, map), Spark recursively looks into the element type and
  *     applies the rules above.
- *  Note: this new type coercion system will allow implicit converting String type literals as other
+ *  Note: this new type coercion system will allow implicit converting String type as other
  *  primitive types, in case of breaking too many existing Spark SQL queries. This is a special
  *  rule and it is not from the ANSI SQL standard.
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
+    UnpivotCoercion ::
     WidenSetOperationTypes ::
-    CombinedTypeCoercionRule(
+    ProcedureArgumentCoercion ::
+    DefaultValueExpressionCoercion ::
+    new AnsiCombinedTypeCoercionRule(
+      CollationTypeCasts ::
       InConversion ::
-      PromoteStringLiterals ::
+      PromoteStrings ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
       ConcatCoercion ::
@@ -91,12 +96,14 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      GetDateFieldOperations:: Nil) :: Nil
+      GetDateFieldOperations :: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
     case (NullType, t1) => Some(t1)
     case (t1, NullType) => Some(t1)
+
+    case(s1: StringType, s2: StringType) => StringHelper.tightestCommonString(s1, s2)
 
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)
@@ -116,13 +123,19 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         Some(widerType)
       }
 
-    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-      Some(TimestampType)
+    case (d1: DatetimeType, d2: DatetimeType) => findWiderDateTimeType(d1, d2)
 
     case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
       Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
     case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
       Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+
+    // We allow coercion from GEOGRAPHY(<srid>) types (i.e. fixed SRID types) to the
+    // GEOGRAPHY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+    case (t1: GeographyType, t2: GeographyType) if t1 != t2 => Some(GeographyType("ANY"))
+    // We allow coercion from GEOMETRY(<srid>) types (i.e. fixed SRID types) to the
+    // GEOMETRY(ANY) type (i.e. mixed SRID type). This coercion is always safe to do.
+    case (t1: GeometryType, t2: GeometryType) if t1 != t2 => Some(GeometryType("ANY"))
 
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
@@ -130,6 +143,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
       .orElse(findWiderTypeForDecimal(t1, t2))
+      .orElse(AnsiStringPromotionTypeCoercion.findWiderTypeForString(t1, t2))
       .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
@@ -142,7 +156,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-    implicitCast(e.dataType, expectedType, e.foldable).map { dt =>
+    implicitCast(e.dataType, expectedType).map { dt =>
       if (dt == e.dataType) e else Cast(e, dt)
     }
   }
@@ -153,178 +167,64 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   private def implicitCast(
       inType: DataType,
-      expectedType: AbstractDataType,
-      isInputFoldable: Boolean): Option[DataType] = {
+      expectedType: AbstractDataType): Option[DataType] = {
     (inType, expectedType) match {
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
 
-      // Cast null type (usually from null literals) into target types
-      // By default, the result type is `target.defaultConcreteType`. When the target type is
-      // `TypeCollection`, there is another branch to find the "closet convertible data type" below.
-      case (NullType, target) if !target.isInstanceOf[TypeCollection] =>
-        Some(target.defaultConcreteType)
-
-      // This type coercion system will allow implicit converting String type literals as other
-      // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (StringType, a: AtomicType) if isInputFoldable =>
-        Some(a)
-
-      // If the target type is any Numeric type, convert the String type literal as Double type.
-      case (StringType, NumericType) if isInputFoldable =>
-        Some(DoubleType)
-
-      // If the target type is any Decimal type, convert the String type literal as Double type.
-      case (StringType, DecimalType) if isInputFoldable =>
-        Some(DecimalType.SYSTEM_DEFAULT)
-
       // If input is a numeric type but not decimal, and we expect a decimal type,
       // cast the input to decimal.
-      case (d: NumericType, DecimalType) => Some(DecimalType.forType(d))
+      case (n: NumericType, DecimalType) => Some(DecimalType.forType(n))
 
-      case (n1: NumericType, n2: NumericType) =>
-        val widerType = findWiderTypeForTwo(n1, n2)
-        widerType match {
-          // if the expected type is Float type, we should still return Float type.
-          case Some(DoubleType) if n1 != DoubleType && n2 == FloatType => Some(FloatType)
-
-          case Some(dt) if dt == n2 => Some(dt)
-
-          case _ => None
+      // If a function expects a StringType, no StringType instance should be implicitly cast to
+      // StringType with a collation that's not accepted (aka. lockdown unsupported collations).
+      case (s1: StringType, s2: StringType) =>
+        if (s1.collationId == s2.collationId && StringHelper.isMoreConstrained(s1, s2)) {
+          Some(s2)
+        } else {
+          None
         }
+      case (_: StringType, _: AbstractStringType) => None
 
-      case (DateType, TimestampType) => Some(TimestampType)
-      case (DateType, AnyTimestampType) => Some(AnyTimestampType.defaultConcreteType)
+      // If a function expects integral type, fractional input is not allowed.
+      case (_: FractionalType, IntegralType) => None
+
+      // Ideally the implicit cast rule should be the same as `Cast.canANSIStoreAssign` so that it's
+      // consistent with table insertion. To avoid breaking too many existing Spark SQL queries,
+      // we make the system to allow implicitly converting String type as other primitive types.
+      case (_: StringType, a @ (_: AtomicType | NumericType | DecimalType | AnyTimestampType)) =>
+        Some(a.defaultConcreteType)
+
+      case (ArrayType(fromType, _), AbstractArrayType(toType)) =>
+        implicitCast(fromType, toType).map(ArrayType(_, true))
+
+      // When the target type is `TypeCollection`, there is another branch to find the
+      // "closet convertible data type" below.
+      case (_, target) if !target.isInstanceOf[TypeCollection] =>
+        val concreteType = target.defaultConcreteType
+        if (Cast.canANSIStoreAssign(inType, concreteType)) {
+          Some(concreteType)
+        } else {
+          None
+        }
 
       // When we reach here, input type is not acceptable for any types in this type collection,
-      // first try to find the all the expected types we can implicitly cast:
-      //   1. if there is no convertible data types, return None;
-      //   2. if there is only one convertible data type, cast input as it;
-      //   3. otherwise if there are multiple convertible data types, find the closet convertible
-      //      data type among them. If there is no such a data type, return None.
+      // try to find the first one we can implicitly cast.
       case (_, TypeCollection(types)) =>
-        // Since Spark contains special objects like `NumericType` and `DecimalType`, which accepts
-        // multiple types and they are `AbstractDataType` instead of `DataType`, here we use the
-        // conversion result their representation.
-        val convertibleTypes = types.flatMap(implicitCast(inType, _, isInputFoldable))
-        if (convertibleTypes.isEmpty) {
-          None
-        } else {
-          // find the closet convertible data type, which can be implicit cast to all other
-          // convertible types.
-          val closestConvertibleType = convertibleTypes.find { dt =>
-            convertibleTypes.forall { target =>
-              implicitCast(dt, target, isInputFoldable = false).isDefined
-            }
-          }
-          // If the closet convertible type is Float type and the convertible types contains Double
-          // type, simply return Double type as the closet convertible type to avoid potential
-          // precision loss on converting the Integral type as Float type.
-          if (closestConvertibleType.contains(FloatType) && convertibleTypes.contains(DoubleType)) {
-            Some(DoubleType)
-          } else {
-            closestConvertibleType
-          }
-        }
-
-      // Implicit cast between array types.
-      //
-      // Compare the nullabilities of the from type and the to type, check whether the cast of
-      // the nullability is resolvable by the following rules:
-      // 1. If the nullability of the to type is true, the cast is always allowed;
-      // 2. If the nullabilities of both the from type and the to type are false, the cast is
-      //    allowed.
-      // 3. Otherwise, the cast is not allowed
-      case (ArrayType(fromType, containsNullFrom), ArrayType(toType: DataType, containsNullTo))
-          if Cast.resolvableNullability(containsNullFrom, containsNullTo) =>
-        implicitCast(fromType, toType, isInputFoldable).map(ArrayType(_, containsNullTo))
-
-      // Implicit cast between Map types.
-      // Follows the same semantics of implicit casting between two array types.
-      // Refer to documentation above.
-      case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, tn))
-          if Cast.resolvableNullability(fn, tn) =>
-        val newKeyType = implicitCast(fromKeyType, toKeyType, isInputFoldable)
-        val newValueType = implicitCast(fromValueType, toValueType, isInputFoldable)
-        if (newKeyType.isDefined && newValueType.isDefined) {
-          Some(MapType(newKeyType.get, newValueType.get, tn))
-        } else {
-          None
-        }
+        types.flatMap(implicitCast(inType, _)).headOption
 
       case _ => None
     }
   }
 
-  override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
+  override def canCast(from: DataType, to: DataType): Boolean = Cast.canAnsiCast(from, to)
 
-  /**
-   * Promotes string literals that appear in arithmetic, comparison, and datetime expressions.
-   */
-  object PromoteStringLiterals extends TypeCoercionRule {
-    private def castExpr(expr: Expression, targetType: DataType): Expression = {
-      expr.dataType match {
-        case NullType => Literal.create(null, targetType)
-        case l if l != targetType => Cast(expr, targetType)
-        case _ => expr
-      }
-    }
-
-    // Return whether a string literal can be promoted as the give data type in a binary operation.
-    private def canPromoteAsInBinaryOperation(dt: DataType) = dt match {
-      // If a binary operation contains interval type and string literal, we can't decide which
-      // interval type the string literal should be promoted as. There are many possible interval
-      // types, such as year interval, month interval, day interval, hour interval, etc.
-      case _: AnsiIntervalType => false
-      case _: AtomicType => true
-      case _ => false
-    }
+  object PromoteStrings extends TypeCoercionRule {
 
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case b @ BinaryOperator(left @ StringType(), right)
-        if left.foldable && canPromoteAsInBinaryOperation(right.dataType) =>
-        b.makeCopy(Array(castExpr(left, right.dataType), right))
-
-      case b @ BinaryOperator(left, right @ StringType())
-        if right.foldable && canPromoteAsInBinaryOperation(left.dataType) =>
-        b.makeCopy(Array(left, castExpr(right, left.dataType)))
-
-      case Abs(e @ StringType(), failOnError) if e.foldable => Abs(Cast(e, DoubleType), failOnError)
-      case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>
-        m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) if e.foldable => UnaryPositive(Cast(e, DoubleType))
-
-      // Promotes string literals in `In predicate`.
-      case p @ In(a, b)
-        if a.dataType != StringType && b.exists( e => e.foldable && e.dataType == StringType) =>
-        val newList = b.map {
-          case e @ StringType() if e.foldable => Cast(e, a.dataType)
-          case other => other
-        }
-        p.makeCopy(Array(a, newList))
-
-      case d @ DateAdd(left @ StringType(), _) if left.foldable =>
-        d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(_, right @ StringType()) if right.foldable =>
-        d.copy(days = Cast(right, IntegerType))
-      case d @ DateSub(left @ StringType(), _) if left.foldable =>
-        d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(_, right @ StringType()) if right.foldable =>
-        d.copy(days = Cast(right, IntegerType))
-
-      case s @ SubtractDates(left @ StringType(), _, _) if left.foldable =>
-        s.copy(left = Cast(s.left, DateType))
-      case s @ SubtractDates(_, right @ StringType(), _) if right.foldable =>
-        s.copy(right = Cast(s.right, DateType))
-      case t @ TimeAdd(left @ StringType(), _, _) if left.foldable =>
-        t.copy(start = Cast(t.start, TimestampType))
-      case t @ SubtractTimestamps(left @ StringType(), _, _, _) if left.foldable =>
-        t.copy(left = Cast(t.left, t.right.dataType))
-      case t @ SubtractTimestamps(_, right @ StringType(), _, _) if right.foldable =>
-        t.copy(right = Cast(right, t.left.dataType))
+      case withChildrenResolved => AnsiStringPromotionTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -338,8 +238,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   object GetDateFieldOperations extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
-      case g: GetDateField if AnyTimestampType.unapply(g.child) =>
-        g.withNewChildren(Seq(Cast(g.child, DateType)))
+      // Skip nodes who's children have not been resolved yet.
+      case g if !g.childrenResolved => g
+      case withChildrenResolved => AnsiGetDateFieldOperationsTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -347,16 +248,12 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-
-      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
-        s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
-        s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
-        if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
-        s.copy(left = newLeft, right = newRight)
+      case withChildrenResolved => AnsiDateTimeOperationsTypeCoercion(withChildrenResolved)
     }
   }
+
+  // This is for generating a new rule id, so that we can run both default and Ansi
+  // type coercion rules against one logical plan.
+  class AnsiCombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends
+    CombinedTypeCoercionRule(rules)
 }

@@ -16,9 +16,9 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder}
+import io.fabric8.kubernetes.api.model.ContainerBuilder
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
@@ -76,33 +76,18 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   private[spark] def environmentVariables: Map[String, String] = sys.env
 
   private def configureForPython(pod: SparkPod, res: String): SparkPod = {
-    if (conf.get(PYSPARK_MAJOR_PYTHON_VERSION).isDefined) {
-      logWarning(
-          s"${PYSPARK_MAJOR_PYTHON_VERSION.key} was deprecated in Spark 3.1. " +
-          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
-          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
-          "variables instead.")
+    val pythonEnvs = {
+      KubernetesUtils.buildEnvVars(
+        Seq(
+          ENV_PYSPARK_PYTHON -> conf.get(PYSPARK_PYTHON)
+            .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
+            .orNull,
+          ENV_PYSPARK_DRIVER_PYTHON -> conf.get(PYSPARK_DRIVER_PYTHON)
+            .orElse(conf.get(PYSPARK_PYTHON))
+            .orElse(environmentVariables.get(ENV_PYSPARK_DRIVER_PYTHON))
+            .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
+            .orNull))
     }
-
-    val pythonEnvs =
-      Seq(
-        conf.get(PYSPARK_PYTHON)
-          .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON)).map { value =>
-          new EnvVarBuilder()
-            .withName(ENV_PYSPARK_PYTHON)
-            .withValue(value)
-            .build()
-        },
-        conf.get(PYSPARK_DRIVER_PYTHON)
-          .orElse(conf.get(PYSPARK_PYTHON))
-          .orElse(environmentVariables.get(ENV_PYSPARK_DRIVER_PYTHON))
-          .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON)).map { value =>
-          new EnvVarBuilder()
-            .withName(ENV_PYSPARK_DRIVER_PYTHON)
-            .withValue(value)
-            .build()
-        }
-      ).flatten
 
     // re-write primary resource to be the remote one and upload the related file
     val newResName = KubernetesUtils
@@ -120,12 +105,6 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {
-    // re-write primary resource, app jar is also added to spark.jars by default in SparkSubmit
-    val resolvedResource = if (conf.mainAppResource.isInstanceOf[JavaMainAppResource]) {
-      KubernetesUtils.renameMainAppResource(resource, Option(conf.sparkConf), false)
-    } else {
-      resource
-    }
     var proxyUserArgs = Seq[String]()
     if (!conf.proxyUser.isEmpty) {
       proxyUserArgs = proxyUserArgs :+ "--proxy-user"
@@ -136,7 +115,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
       .addToArgs(proxyUserArgs: _*)
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.mainClass)
-      .addToArgs(resolvedResource)
+      .addToArgs(resource)
       .addToArgs(conf.appArgs: _*)
   }
 }

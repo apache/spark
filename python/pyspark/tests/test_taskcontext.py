@@ -16,6 +16,7 @@
 #
 import os
 import random
+import socketserver
 import stat
 import sys
 import tempfile
@@ -23,16 +24,16 @@ import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import PySparkTestCase, eventually
 
 
 class TaskContextTests(PySparkTestCase):
-
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         # Allow retries even though they are normally disabled in local mode
-        self.sc = SparkContext('local[4, 2]', class_name)
+        self.sc = SparkContext("local[4, 2]", class_name)
 
     def test_stage_id(self):
         """Test the stage ids are available and incrementing as expected."""
@@ -82,6 +83,7 @@ class TaskContextTests(PySparkTestCase):
                 raise RuntimeError("Failing on first attempt")
             else:
                 return [x, partition_id, attempt_number, attempt_id]
+
         result = rdd.map(fail_on_first).collect()
         # We should re-submit the first partition to it but other partitions should be attempt 0
         self.assertEqual([0, 0, 1], result[0][0:3])
@@ -161,8 +163,12 @@ class TaskContextTests(PySparkTestCase):
         def f(iterator):
             yield sum(iterator)
 
-        taskInfos = rdd.barrier().mapPartitions(f).map(lambda x: BarrierTaskContext.get()
-                                                       .getTaskInfos()).collect()
+        taskInfos = (
+            rdd.barrier()
+            .mapPartitions(f)
+            .map(lambda x: BarrierTaskContext.get().getTaskInfos())
+            .collect()
+        )
         self.assertTrue(len(taskInfos) == 4)
         self.assertTrue(len(taskInfos[0]) == 4)
 
@@ -210,12 +216,25 @@ class TaskContextTests(PySparkTestCase):
         self.assertTrue(result2 == [0, 1, 2, 3])
 
 
-class TaskContextTestsWithWorkerReuse(unittest.TestCase):
+@unittest.skipUnless(
+    hasattr(socketserver, "UnixStreamServer"),
+    "Unix Domain Socket is not supported on this platform.",
+)
+class TaskContextUDSTests(TaskContextTests):
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        # Enable Unix Domain Socket for the test
+        conf = SparkConf().set("spark.python.unix.domain.socket.enabled", "true")
+        # Allow retries even though they are normally disabled in local mode
+        self.sc = SparkContext("local[4, 2]", class_name, conf=conf)
 
+
+class TaskContextTestsWithWorkerReuse(unittest.TestCase):
     def setUp(self):
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.worker.reuse", "true")
-        self.sc = SparkContext('local[2]', class_name, conf=conf)
+        self.sc = SparkContext("local[2]", class_name, conf=conf)
 
     def test_barrier_with_python_worker_reuse(self):
         """
@@ -283,36 +302,48 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
             self.assertTrue(pid in worker_pids)
         return True
 
+    @eventually(catch_assertions=True)
     def test_task_context_correct_with_python_worker_reuse(self):
         # Retrying the check as the PIDs from Python workers might be different even
         # when reusing Python workers is enabled if a Python worker is dead for some reasons
         # (e.g., socket connection failure) and new Python worker is created.
-        eventually(
-            self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
+        self.check_task_context_correct_with_python_worker_reuse()
 
     def tearDown(self):
         self.sc.stop()
 
 
 class TaskContextTestsWithResources(unittest.TestCase):
-
     def setUp(self):
         class_name = self.__class__.__name__
-        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
-        self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
-        self.tempFile.close()
-        # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
-                 stat.S_IROTH | stat.S_IXOTH)
+        # Create discovery script for GPU
+        self.gpuTempFile = tempfile.NamedTemporaryFile(delete=False)
+        self.gpuTempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
+        self.gpuTempFile.close()
+        os.chmod(
+            self.gpuTempFile.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+        # Create discovery script for FPGA (SPARK-54929)
+        self.fpgaTempFile = tempfile.NamedTemporaryFile(delete=False)
+        self.fpgaTempFile.write(b'echo {\\"name\\": \\"fpga\\", \\"addresses\\": [\\"0\\"]}')
+        self.fpgaTempFile.close()
+        os.chmod(
+            self.fpgaTempFile.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
-        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.gpuTempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
         conf = conf.set("spark.task.cpus", 2)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
-        self.sc = SparkContext('local-cluster[2,2,1024]', class_name, conf=conf)
+        # Configure FPGA resource (SPARK-54929)
+        conf = conf.set("spark.worker.resource.fpga.discoveryScript", self.fpgaTempFile.name)
+        conf = conf.set("spark.worker.resource.fpga.amount", 1)
+        conf = conf.set("spark.task.resource.fpga.amount", "1")
+        conf = conf.set("spark.executor.resource.fpga.amount", "1")
+        self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
 
     def test_cpus(self):
         """Test the cpus are available."""
@@ -321,25 +352,24 @@ class TaskContextTestsWithResources(unittest.TestCase):
         self.assertEqual(cpus, 2)
 
     def test_resources(self):
-        """Test the resources are available."""
+        """Test that multiple resources are all available (SPARK-54929)."""
         rdd = self.sc.parallelize(range(10))
         resources = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
-        self.assertEqual(len(resources), 1)
-        self.assertTrue('gpu' in resources)
-        self.assertEqual(resources['gpu'].name, 'gpu')
-        self.assertEqual(resources['gpu'].addresses, ['0'])
+        self.assertEqual(len(resources), 2)
+        self.assertTrue("gpu" in resources)
+        self.assertEqual(resources["gpu"].name, "gpu")
+        self.assertEqual(resources["gpu"].addresses, ["0"])
+        self.assertTrue("fpga" in resources)
+        self.assertEqual(resources["fpga"].name, "fpga")
+        self.assertEqual(resources["fpga"].addresses, ["0"])
 
     def tearDown(self):
-        os.unlink(self.tempFile.name)
+        os.unlink(self.gpuTempFile.name)
+        os.unlink(self.fpgaTempFile.name)
         self.sc.stop()
 
-if __name__ == "__main__":
-    import unittest
-    from pyspark.tests.test_taskcontext import *  # noqa: F401
 
-    try:
-        import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+if __name__ == "__main__":
+    from pyspark.testing import main
+
+    main()

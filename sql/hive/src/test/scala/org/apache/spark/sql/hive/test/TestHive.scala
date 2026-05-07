@@ -19,34 +19,33 @@ package org.apache.spark.sql.hive.test
 
 import java.io.File
 import java.net.URI
-import java.util.{Set => JavaSet}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQLExecution}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
-import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD, SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD, WAREHOUSE_PATH}
+import org.apache.spark.sql.test.WithTestConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -72,7 +71,15 @@ object TestHive
         // LocalRelation will exercise the optimization rules better by disabling it as
         // this rule may potentially block testing of other optimization rules such as
         // ConstantPropagation etc.
-        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)))
+        .set(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, ConvertToLocalRelation.ruleName)
+        .set(SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD,
+          sys.env.getOrElse("SPARK_TEST_HIVE_SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD",
+            SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt)
+        .set(RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD,
+          sys.env.getOrElse("SPARK_TEST_HIVE_RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD",
+            RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD.defaultValueString).toInt))) {
+  override def conf: SQLConf = sparkSession.sessionState.conf
+}
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -175,7 +182,7 @@ private[hive] class TestHiveSparkSession(
     @transient private val existingSharedState: Option[TestHiveSharedState],
     @transient private val parentSessionState: Option[SessionState],
     private val loadTestTables: Boolean)
-  extends SparkSession(sc) with Logging { self =>
+  extends SparkSession(sc) with WithTestConf with Logging { self =>
 
   def this(sc: SparkContext, loadTestTables: Boolean) = {
     this(
@@ -200,13 +207,13 @@ private[hive] class TestHiveSparkSession(
     val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       // scratch directory used by Hive's metastore client
-      ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+      "hive.exec.scratchdir" -> TestHiveContext.makeScratchDir().toURI.toString,
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1") ++
       // After session cloning, the JDBC connect string for a JDBC metastore should not be changed.
       existingSharedState.map { state =>
         val connKey =
-          state.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
-        ConfVars.METASTORECONNECTURLKEY.varname -> connKey
+          state.sparkContext.hadoopConfiguration.get("javax.jdo.option.ConnectionURL")
+        "javax.jdo.option.ConnectionURL" -> connKey
       }
 
     metastoreTempConf.foreach { case (k, v) =>
@@ -219,6 +226,13 @@ private[hive] class TestHiveSparkSession(
   @transient
   override lazy val sharedState: TestHiveSharedState = {
     existingSharedState.getOrElse(new TestHiveSharedState(sc))
+  }
+
+  override protected def testConfOverrides: Map[String, String] = TestHiveContext.overrideConfs
+
+  @transient
+  override lazy val sqlConf: SQLConf = {
+    parentSessionState.map(_.conf.clone()).getOrElse(newTestConf())
   }
 
   @transient
@@ -251,6 +265,7 @@ private[hive] class TestHiveSparkSession(
       Some(sessionState),
       loadTestTables)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result
   }
 
@@ -524,21 +539,16 @@ private[hive] class TestHiveSparkSession(
   }
 
   /**
-   * Records the UDFs present when the server starts, so we can delete ones that are created by
-   * tests.
-   */
-  protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
-
-  /**
    * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
    */
   def reset(): Unit = {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.asScala.foreach { log =>
-        val logger = log.asInstanceOf[org.apache.log4j.Logger]
-        if (!logger.getName.contains("org.apache.spark")) {
-          logger.setLevel(org.apache.log4j.Level.WARN)
+      org.apache.logging.log4j.LogManager.getContext(false)
+        .asInstanceOf[org.apache.logging.log4j.core.LoggerContext].getConfiguration.getLoggers()
+        .asScala.foreach { case (_, log) =>
+        if (!log.getName.contains("org.apache.spark")) {
+          log.setLevel(org.apache.logging.log4j.Level.WARN)
         }
       }
 
@@ -550,6 +560,7 @@ private[hive] class TestHiveSparkSession(
       sharedState.cacheManager.clearCache()
       sharedState.loadedTables.clear()
       sessionState.catalog.reset()
+      sessionState.catalogManager.reset()
       metadataHive.reset()
 
       // HDFS root scratch dir requires the write all (733) permission. For each connecting user,
@@ -557,7 +568,7 @@ private[hive] class TestHiveSparkSession(
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
       val hadoopConf = sessionState.newHadoopConf()
-      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val location = new Path(hadoopConf.get("hive.exec.scratchdir"))
       val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 
@@ -633,7 +644,11 @@ private[hive] object TestHiveContext {
   val overrideConfs: Map[String, String] =
     Map(
       // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will break
+      //  an existing Hive use case (one session adds JARs and another session uses them). We need
+      //  to decide whether/how to enable isolation for Hive.
+      SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key -> "false"
     )
 
   def makeWarehouseDir(): File = {
@@ -657,10 +672,7 @@ private[hive] object TestHiveContext {
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
     state: Option[SessionState])
-  extends HiveSessionStateBuilder(session, state)
-  with WithTestConf {
-
-  override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
+  extends HiveSessionStateBuilder(session, state) {
 
   override def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =

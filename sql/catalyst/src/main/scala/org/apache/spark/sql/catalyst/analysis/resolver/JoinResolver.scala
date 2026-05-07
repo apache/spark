@@ -1,0 +1,426 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.analysis.resolver
+
+import java.util.HashSet
+
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, NaturalAndUsingJoinResolution}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId, NamedExpression}
+import org.apache.spark.sql.catalyst.plans.{JoinType, NaturalJoin, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.types.BooleanType
+
+/**
+ * Resolves [[Join]] operator by resolving its left and right children and its join condition. If
+ * the unresolved join is [[NaturalJoin]] or [[UsingJoin]], the resulting operator will be
+ * [[Project]], otherwise it will be [[Join]].
+ */
+class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
+    extends TreeNodeResolver[Join, LogicalPlan] {
+  private val scopes = resolver.getNameScopes
+  private val expressionIdAssigner = expressionResolver.getExpressionIdAssigner
+  private val cteRegistry = resolver.getCteRegistry
+  private val operatorResolutionContextStack = resolver.getOperatorResolutionContextStack
+
+  /**
+   * Resolves [[Join]] operator:
+   *  - Retrieve old output and child outputs if the operator is already resolved. This is relevant
+   *    for partially resolved subtrees from DataFrame programs. Do not regenerate ExprIds if there
+   *    are no conflicting ids.
+   *  - Resolve each child in the context of a) New [[NameScope]] b) New [[ExpressionIdAssigner]]
+   *    mapping. Collect children name scopes to use in [[Join]] output computation.
+   *  - Based on the type of [[Join]] (natural, using or other) perform additional transformations
+   *  and resolve join condition.
+   *  - Return the resulting [[Project]] or [[Join]] with new children optionally wrapped in
+   *    [[WithCTE]]. See [[CteScope]] scaladoc for more info.
+   */
+  override def resolve(unresolvedJoin: Join): LogicalPlan = {
+    val (resolvedLeftOperator: LogicalPlan, leftNameScope: NameScope) = resolveJoinChild(
+      unresolvedJoin = unresolvedJoin,
+      child = unresolvedJoin.left
+    )
+
+    val (resolvedRightOperator: LogicalPlan, rightNameScope: NameScope) = resolveJoinChild(
+      unresolvedJoin = unresolvedJoin,
+      child = unresolvedJoin.right
+    )
+
+    ExpressionIdAssigner.assertOutputsHaveNoConflictingExpressionIds(
+      Seq(leftNameScope.output, rightNameScope.output)
+    )
+
+    expressionIdAssigner.createMappingFromChildMappings(
+      newOutputIds = leftNameScope.getOutputIds ++ rightNameScope.getOutputIds
+    )
+
+    val partiallyResolvedJoin = unresolvedJoin.copy(
+      left = resolvedLeftOperator,
+      right = resolvedRightOperator
+    )
+
+    handleDifferentTypesOfJoin(
+      unresolvedJoin = unresolvedJoin,
+      partiallyResolvedJoin = partiallyResolvedJoin,
+      leftNameScope = leftNameScope,
+      rightNameScope = rightNameScope
+    )
+  }
+
+  private def resolveJoinChild(
+      unresolvedJoin: Join,
+      child: LogicalPlan): (LogicalPlan, NameScope) = {
+    expressionIdAssigner.pushMapping()
+    scopes.pushScope()
+    cteRegistry.pushScopeForMultiChildOperator(
+      unresolvedOperator = unresolvedJoin,
+      unresolvedChild = child
+    )
+
+    try {
+      val resolvedChild = resolver.resolve(child)
+      (resolvedChild, scopes.current)
+    } finally {
+      cteRegistry.popScope()
+      scopes.popScope()
+      expressionIdAssigner.popMapping(collectChildMapping = true)
+    }
+  }
+
+  /**
+   * If the type of join is [[NaturalJoin]] or [[UsingJoin]], perform additional transformations in
+   * [[commonNaturalJoinProcessing]]. Otherwise, overwrite current name scope output with the
+   * result of [[Join.computeOutput]].
+   */
+  private def handleDifferentTypesOfJoin(
+      unresolvedJoin: Join,
+      partiallyResolvedJoin: Join,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): LogicalPlan = partiallyResolvedJoin match {
+    case Join(left, right, UsingJoin(joinType, usingCols), _, hint) =>
+      commonNaturalJoinProcessing(
+        unresolvedJoin = unresolvedJoin,
+        left = left,
+        leftNameScope = leftNameScope,
+        right = right,
+        rightNameScope = rightNameScope,
+        joinType = joinType,
+        joinNames = usingCols,
+        condition = None,
+        hint = hint
+      )
+    case Join(left, right, NaturalJoin(joinType), condition, hint) =>
+      val joinNames = getJoinNamesForNaturalJoin(leftNameScope, rightNameScope)
+      commonNaturalJoinProcessing(
+        unresolvedJoin = unresolvedJoin,
+        left = left,
+        leftNameScope = leftNameScope,
+        right = right,
+        rightNameScope = rightNameScope,
+        joinType = joinType,
+        joinNames = joinNames,
+        condition = condition,
+        hint = hint
+      )
+    case partiallyResolvedJoin: Join =>
+      handleRegularJoin(
+        unresolvedJoin = unresolvedJoin,
+        partiallyResolvedJoin = partiallyResolvedJoin,
+        leftNameScope = leftNameScope,
+        rightNameScope = rightNameScope
+      )
+  }
+
+  /**
+   * This method handles [[NaturalJoin]] and [[UsingJoin]] by computing their correct outputs and
+   * placing a [[Project]] node on top of them.
+   * The order of necessary operations is as follows:
+   *  - Compute output list, hidden list and new condition with join pairs, if there are any.
+   *    [[NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition]] introduces new
+   *    aliased expressions (e.g. [[Coalesce]] for keys), so we need to run the output list through
+   *    [[ExpressionIdAssigner.mapExpression]].
+   *  - Resolve the new condition.
+   *  - Compute new `hiddenOutput` by appending elements from computed hidden list that are not
+   *  already in current `hiddenOutput`. Hidden list must be qualified access only.
+   *  - Overwrite current name scope with output list and newly computed hidden output.
+   *  - Finally, put a [[Project]] node on top of the original [[Join]] by:
+   *    - New project list becomes output list.
+   *    - If [[Join]] was not a top level operator, append current hidden output to the project
+   *    list.
+   *    - Store the resolved [[Join]] as the [[OperatorResolutionContextStack.baseOperator]].
+   *    - Add qualified access only attributes from new hidden output as a tag to project node in
+   *    order to stay compatible with fixed-point. This should never be used in single-pass, but it
+   *    can happen that fixed-point uses the single-pass result, therefore we need to set the tag.
+   */
+  private def commonNaturalJoinProcessing(
+      unresolvedJoin: Join,
+      left: LogicalPlan,
+      leftNameScope: NameScope,
+      right: LogicalPlan,
+      rightNameScope: NameScope,
+      joinType: JoinType,
+      joinNames: Seq[String],
+      condition: Option[Expression],
+      hint: JoinHint): LogicalPlan = {
+    val (outputList, hiddenList, newCondition) =
+      NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
+        left = left,
+        leftOutput = leftNameScope.output,
+        right = right,
+        rightOutput = rightNameScope.output,
+        joinType = joinType,
+        joinNames = joinNames,
+        condition = condition,
+        resolveName = conf.resolver
+      )
+
+    val newOutputList = outputList.map { column =>
+      expressionResolver
+        .resolveExpressionTreeInOperator(column, unresolvedJoin)
+        .asInstanceOf[NamedExpression]
+    }
+
+    val resolvedCondition =
+      resolveJoinCondition(unresolvedJoin, newCondition, leftNameScope, rightNameScope)
+
+    scopes.overwriteCurrent(
+      output = Some(newOutputList.map(_.toAttribute)),
+      hiddenOutput = Some(
+        computeHiddenOutputForNaturalAndUsingJoin(
+          newHiddenOutput = hiddenList,
+          oldHiddenOutput = scopes.current.hiddenOutput
+        )
+      )
+    )
+
+    val qualifiedAccessOnlyColumnsFromHiddenOutput =
+      scopes.current.hiddenOutput.filter(_.qualifiedAccessOnly)
+
+    val newProjectList =
+      if (!unresolvedJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR)) {
+        newOutputList ++ qualifiedAccessOnlyColumnsFromHiddenOutput
+      } else {
+        newOutputList
+      }
+
+    val resolvedJoin = Join(left, right, joinType, resolvedCondition, hint)
+
+    operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
+
+    val project = Project(newProjectList, resolvedJoin)
+
+    project.setTagValue(Project.hiddenOutputTag, qualifiedAccessOnlyColumnsFromHiddenOutput)
+
+    project
+  }
+
+  /**
+   * Compute new hidden output for the resolved NATURAL and USING joins. This new output must
+   * contain unique attributes, and new versions of attributes from
+   * [[NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition]] must take precedence.
+   * Consider the following query:
+   *
+   * {{{
+   * SELECT COUNT(DISTINCT col1) FROM v1 NATURAL JOIN v2 GROUP BY col1 ORDER BY MAX(col1);
+   * }}}
+   *
+   * Since ORDER BY references `col1` under aggregate expression `MAX`, both `v1.col1` and `v2.col2`
+   * will be considered as name resolution candidates. But `v2.col1` will have
+   * `QUALIFIED_ACCESS_ONLY` access metadata, so we must disambiguate in favor of `v1.col1`. For
+   * that disambiguation to work, new hidden output must be constructed from `newHiddenOutput`
+   * which has correct access qualifiers, and old versions of these attributes without new
+   * qualifiers must be thrown away.
+   */
+  private def computeHiddenOutputForNaturalAndUsingJoin(
+      newHiddenOutput: Seq[Attribute],
+      oldHiddenOutput: Seq[Attribute]
+  ): Seq[Attribute] = {
+    val newHiddenOutputLookup = new HashSet[ExprId](newHiddenOutput.size)
+    newHiddenOutput.foreach { attribute =>
+      newHiddenOutputLookup.add(attribute.exprId)
+    }
+
+    newHiddenOutput.map(_.markAsQualifiedAccessOnly()) ++ oldHiddenOutput.filter(
+      attribute => !newHiddenOutputLookup.contains(attribute.exprId)
+    )
+  }
+
+  /**
+   * Resolve a join that is not [[NaturalJoin]] or [[UsingJoin]]. In order to resolve the join we
+   * do the following:
+   *  - Resolve join condition.
+   *  - Overwrite [[NameScope.output]] with join's output and overwrite [[NameScope.hiddenOutput]]
+   *    using the result of `computeHiddenOutputForRegularJoin` call.
+   *  - Wrap the [[Join]] in [[WithCTE]] if necessary.
+   */
+  private def handleRegularJoin(
+      unresolvedJoin: Join,
+      partiallyResolvedJoin: Join,
+      leftNameScope: NameScope,
+      rightNameScope: NameScope) = {
+    val resolvedCondition = resolveJoinCondition(
+      unresolvedJoin = unresolvedJoin,
+      unresolvedCondition = partiallyResolvedJoin.condition,
+      leftNameScope = leftNameScope,
+      rightNameScope = rightNameScope
+    )
+
+    val newOutput = Join.computeOutput(
+      joinType = partiallyResolvedJoin.joinType,
+      leftOutput = leftNameScope.output,
+      rightOutput = rightNameScope.output
+    )
+
+    val newHiddenOutput = computeHiddenOutputForRegularJoin(
+      mainOutput = newOutput,
+      oldHiddenOutput = scopes.current.hiddenOutput
+    )
+
+    scopes.overwriteCurrent(
+      output = Some(newOutput),
+      hiddenOutput = Some(newHiddenOutput)
+    )
+
+    val resolvedJoin = partiallyResolvedJoin.copy(condition = resolvedCondition)
+
+    cteRegistry.currentScope.tryPutWithCTE(
+      unresolvedOperator = unresolvedJoin,
+      resolvedOperator = resolvedJoin
+    )
+  }
+
+  /**
+   * Compute new hidden output for the regular [[Join]]s. This new output contains attributes from
+   * the main output (computed using the [[Join.computeOutput]]) the qualified access only
+   * attributes from the old hidden output. All the attributes must be unique and attributes from
+   * the main output take the precedence over the attributes from the old hidden output. Consider
+   * this query:
+   *
+   * {{{
+   * SELECT
+   *     col2 AS ltrl
+   * FROM
+   *     t1 AS t1_1
+   * LEFT SEMI JOIN
+   *     t1 AS t1_2
+   *     ON t1_1.col1 = t1_2.col1
+   * ORDER BY
+   *     col2;
+   * }}}
+   *
+   * In this example, hidden output would be `Seq(col1, col2)` which is the output of the [[Join]]
+   * itself (old hidden output attributes are filtered out as there are no qualified access only).
+   *
+   * Regarding qualified access only attributes, consider this query:
+   *
+   * {{{
+   *   SELECT
+   *     nt1.*,
+   *     nt2.*,
+   *     nt3.*
+   *   FROM
+   *     VALUES (1, 2) AS nt1(k, v)
+   *   NATURAL JOIN
+   *     VALUES (1, 2) AS nt2(k, v)
+   *   JOIN
+   *     VALUES (1, 2) AS nt3(k, v)
+   *   ON nt2.k = nt3.k;
+   * }}}
+   *
+   * In this example we have a regular [[Join]] on top of a natural [[Join]] which produces
+   * qualified access only attributes. These attributes have to be preserved so they can be queried
+   * aftewards in the project list and thus the hidden output of the regular join will be:
+   * [k, v, k, v, k, v] where the last to `k` and `v` are qualified access only attributes from the
+   * natural join.
+   */
+  private def computeHiddenOutputForRegularJoin(
+      mainOutput: Seq[Attribute],
+      oldHiddenOutput: Seq[Attribute]): Seq[Attribute] = {
+    val mainOutputLookup = new HashSet[ExprId](mainOutput.size)
+    mainOutput.foreach { attribute =>
+      mainOutputLookup.add(attribute.exprId)
+    }
+
+    val oldHiddenOutputQualifiedAccessOnlyAttributes = oldHiddenOutput.filter { attribute =>
+      !mainOutputLookup.contains(attribute.exprId) &&
+      attribute.qualifiedAccessOnly
+    }
+
+    mainOutput ++ oldHiddenOutputQualifiedAccessOnlyAttributes
+  }
+
+  /**
+   * Computes the intersection of two child name scopes, by name.
+   */
+  private def getJoinNamesForNaturalJoin(
+      leftNameScope: NameScope,
+      rightNameScope: NameScope): Seq[String] = {
+    NaturalAndUsingJoinResolution.canonicalizedIntersect(
+      leftNameScope.output.map(_.name),
+      rightNameScope.output.map(_.name)
+    )
+  }
+
+  /**
+   * Resolves join condition by __all__ attributes from child scopes. We need to overwrite current
+   * scope first to prepare for [[resolveExpressionTreeInOperator]]. [[Join]] will actually produce
+   * different output than the one we are setting here, so additional overwrite with correct values
+   * will be needed. Two overwrites are necessary because condition is resolved from original
+   * children outputs, whereas output of [[Join]] will either not contain all attributes or their
+   * nullabilities will be different.
+   */
+  private def resolveJoinCondition(
+      unresolvedJoin: Join,
+      unresolvedCondition: Option[Expression],
+      leftNameScope: NameScope,
+      rightNameScope: NameScope) = {
+    scopes.overwriteCurrent(
+      output = Some(leftNameScope.output ++ rightNameScope.output),
+      hiddenOutput = Some(leftNameScope.hiddenOutput ++ rightNameScope.hiddenOutput)
+    )
+
+    val resolvedCondition = unresolvedCondition.map { condition =>
+      expressionResolver.resolveExpressionTreeInOperator(
+        condition,
+        unresolvedJoin
+      )
+    }
+
+    validateJoinConditionDataType(resolvedCondition, unresolvedJoin)
+
+    resolvedCondition
+  }
+
+  private def validateJoinConditionDataType(
+      condition: Option[Expression],
+      unresolvedJoin: Join): Unit = {
+    condition match {
+      case Some(condition) =>
+        if (condition.dataType != BooleanType) {
+          unresolvedJoin.failAnalysis(
+            errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+            messageParameters = Map(
+              "joinCondition" -> toSQLExpr(condition),
+              "conditionType" -> toSQLType(condition.dataType)
+            )
+          )
+        }
+      case None =>
+    }
+  }
+}

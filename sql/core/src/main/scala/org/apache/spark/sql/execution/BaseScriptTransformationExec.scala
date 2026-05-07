@@ -21,13 +21,14 @@ import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStre
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
@@ -50,8 +51,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     child.output.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
-            .withTimeZone(conf.sessionLocalTimeZone)
+          StructsToJson(ioschema.inputSerdeProps.toMap, in,
+            Some(conf.sessionLocalTimeZone)).replacement
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
     }
@@ -83,6 +84,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val path = System.getenv("PATH") + File.pathSeparator +
       SparkFiles.getRootDirectory()
     builder.environment().put("PATH", path)
+    // if OMP_NUM_THREADS is not explicitly set, override it with the value of "spark.task.cpus"
+    if (System.getenv("OMP_NUM_THREADS") == null) {
+      builder.environment().put("OMP_NUM_THREADS", conf.getConfString("spark.task.cpus", "1"))
+    }
 
     val proc = builder.start()
     val inputStream = proc.getInputStream
@@ -123,8 +128,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
               .map { case (data, writer) => writer(data) })
       } else {
         // In schema less mode, hive will choose first two output column as output.
-        // If output column size less then 2, it will return NULL for columns with missing values.
-        // Here we split row string and choose first 2 values, if values's size less then 2,
+        // If output column size less than 2, it will return NULL for columns with missing values.
+        // Here we split row string and choose first 2 values, if values's size less than 2,
         // we pad NULL value until 2 to make behavior same with hive.
         val kvWriter = CatalystTypeConverters.createToCatalystConverter(StringType)
         prevLine: String =>
@@ -185,7 +190,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     if (!proc.isAlive) {
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
-        logError(stderrBuffer.toString) // log the stderr circular buffer
+        logError(log"${MDC(STDERR, stderrBuffer.toString)}") // log the stderr circular buffer
         throw QueryExecutionErrors.subprocessExitedError(exitCode, stderrBuffer, cause)
       }
     }
@@ -220,6 +225,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         UTF8String.fromString(data),
         DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
         .map(DateTimeUtils.toJavaTimestamp).orNull, converter)
+      case TimestampNTZType =>
+        wrapperConvertException(data => DateTimeUtils.stringToTimestampWithoutTimeZone(
+          UTF8String.fromString(data)).map(DateTimeUtils.microsToLocalDateTime).orNull, converter)
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
@@ -270,6 +278,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   def taskContext: TaskContext
   def conf: Configuration
 
+  setName(s"Thread-${this.getClass.getSimpleName}-Feed")
   setDaemon(true)
 
   @volatile protected var _exception: Throwable = null
@@ -325,12 +334,13 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError("Thread-ScriptTransformation-Feed exit cause by: ", t)
+        logError(log"Thread-${MDC(CLASS_NAME, this.getClass.getSimpleName)}-Feed " +
+          log"exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
         if (proc.waitFor() != 0) {
-          logError(stderrBuffer.toString) // log the stderr circular buffer
+          logError(log"${MDC(STDERR, stderrBuffer.toString)}") // log the stderr circular buffer
         }
       } catch {
         case NonFatal(exceptionFromFinallyBlock) =>

@@ -15,48 +15,122 @@
 # limitations under the License.
 #
 
+from pyspark.loose_version import LooseVersion
+from pyspark.errors import PySparkImportError, PySparkRuntimeError
 
-def require_minimum_pandas_version():
-    """ Raise ImportError if minimum version of Pandas is not installed
-    """
+
+def require_minimum_pandas_version() -> None:
+    """Raise ImportError if minimum version of Pandas is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "0.23.2"
+    minimum_pandas_version = "2.2.0"
 
-    from distutils.version import LooseVersion
     try:
         import pandas
-        have_pandas = True
+
+        # Even if pandas is deleted, if the pandas extension package (e.g. pandas-stubs) is still
+        # installed, the pandas path will not be completely deleted.
+        # Therefore, even if the import is successful, additional check is required here to verify
+        # that pandas is actually installed properly.
+        if hasattr(pandas, "__version__"):
+            have_pandas = True
+        else:
+            have_pandas = False
+            raised_error = None
     except ImportError as error:
         have_pandas = False
         raised_error = error
     if not have_pandas:
-        raise ImportError("Pandas >= %s must be installed; however, "
-                          "it was not found." % minimum_pandas_version) from raised_error
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "Pandas",
+                "minimum_version": str(minimum_pandas_version),
+            },
+        ) from raised_error
     if LooseVersion(pandas.__version__) < LooseVersion(minimum_pandas_version):
-        raise ImportError("Pandas >= %s must be installed; however, "
-                          "your version was %s." % (minimum_pandas_version, pandas.__version__))
+        raise PySparkImportError(
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
+                "package_name": "Pandas",
+                "minimum_version": str(minimum_pandas_version),
+                "current_version": str(pandas.__version__),
+            },
+        )
+    if LooseVersion(pandas.__version__) >= LooseVersion("3.0.0"):
+        import warnings
+
+        warnings.warn(
+            "PySpark does not yet fully support pandas >= 3.0.0. "
+            "Some features may not work correctly. "
+            "It is recommended to use pandas < 3.0.0 for now.",
+            FutureWarning,
+            stacklevel=2,
+        )
 
 
-def require_minimum_pyarrow_version():
-    """ Raise ImportError if minimum version of pyarrow is not installed
-    """
+def require_minimum_pyarrow_version() -> None:
+    """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "1.0.0"
+    minimum_pyarrow_version = "18.0.0"
 
-    from distutils.version import LooseVersion
     import os
+
     try:
         import pyarrow
+
         have_arrow = True
     except ImportError as error:
         have_arrow = False
         raised_error = error
     if not have_arrow:
-        raise ImportError("PyArrow >= %s must be installed; however, "
-                          "it was not found." % minimum_pyarrow_version) from raised_error
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "PyArrow",
+                "minimum_version": str(minimum_pyarrow_version),
+            },
+        ) from raised_error
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
-        raise ImportError("PyArrow >= %s must be installed; however, "
-                          "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
+        raise PySparkImportError(
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
+                "package_name": "PyArrow",
+                "minimum_version": str(minimum_pyarrow_version),
+                "current_version": str(pyarrow.__version__),
+            },
+        )
     if os.environ.get("ARROW_PRE_0_15_IPC_FORMAT", "0") == "1":
-        raise RuntimeError("Arrow legacy IPC format is not supported in PySpark, "
-                           "please unset ARROW_PRE_0_15_IPC_FORMAT")
+        raise PySparkRuntimeError(
+            errorClass="ARROW_LEGACY_IPC_FORMAT",
+            messageParameters={},
+        )
+
+
+def require_minimum_numpy_version() -> None:
+    """Raise ImportError if minimum version of NumPy is not installed"""
+    minimum_numpy_version = "1.22"
+
+    try:
+        import numpy
+
+        have_numpy = True
+    except ImportError as error:
+        have_numpy = False
+        raised_error = error
+    if not have_numpy:
+        raise PySparkImportError(
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={
+                "package_name": "NumPy",
+                "minimum_version": str(minimum_numpy_version),
+            },
+        ) from raised_error
+    if LooseVersion(numpy.__version__) < LooseVersion(minimum_numpy_version):
+        raise PySparkImportError(
+            errorClass="UNSUPPORTED_PACKAGE_VERSION",
+            messageParameters={
+                "package_name": "NumPy",
+                "minimum_version": str(minimum_numpy_version),
+                "current_version": str(numpy.__version__),
+            },
+        )

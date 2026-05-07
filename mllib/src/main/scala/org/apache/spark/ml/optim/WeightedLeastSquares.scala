@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.optim
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.COUNT
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.util.OptionalInstrumentation
@@ -82,7 +84,7 @@ private[ml] class WeightedLeastSquares(
     val solverType: WeightedLeastSquares.Solver = WeightedLeastSquares.Auto,
     val maxIter: Int = 100,
     val tol: Double = 1e-6
-  ) extends Serializable {
+  ) extends Serializable with Logging {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
@@ -104,9 +106,14 @@ private[ml] class WeightedLeastSquares(
       instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
     }
 
-    val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_), depth)
+    val summary = instances.treeAggregate[Aggregator](
+      zeroValue = new Aggregator,
+      seqOp = (agg: Aggregator, x: Instance) => agg.add(x),
+      combOp = (agg1: Aggregator, agg2: Aggregator) => agg1.merge(agg2),
+      depth = depth,
+      finalAggregateOnExecutor = true)
     summary.validate()
-    instr.logInfo(s"Number of instances: ${summary.count}.")
+    instr.logInfo(log"Number of instances: ${MDC(COUNT, summary.count)}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k
     val numFeatures = summary.k
     val triK = summary.triK
@@ -121,13 +128,13 @@ private[ml] class WeightedLeastSquares(
     if (rawBStd == 0) {
       if (fitIntercept || rawBBar == 0.0) {
         if (rawBBar == 0.0) {
-          instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
-            s"coefficients and the intercept will all be zero; as a result, training is not " +
-            s"needed.")
+          instr.logWarning("Mean and standard deviation of the label are zero, so the " +
+            "coefficients and the intercept will all be zero; as a result, training is not " +
+            "needed.")
         } else {
-          instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
-            s"will be zeros and the intercept will be the mean of the label; as a result, " +
-            s"training is not needed.")
+          instr.logWarning("The standard deviation of the label is zero, so the coefficients " +
+            "will be zeros and the intercept will be the mean of the label; as a result, " +
+            "training is not needed.")
         }
         val coefficients = new DenseVector(Array.ofDim(numFeatures))
         val intercept = rawBBar
@@ -136,8 +143,8 @@ private[ml] class WeightedLeastSquares(
       } else {
         require(!(regParam > 0.0 && standardizeLabel), "The standard deviation of the label is " +
           "zero. Model cannot be regularized when labels are standardized.")
-        instr.logWarning(s"The standard deviation of the label is zero. Consider setting " +
-          s"fitIntercept=true.")
+        instr.logWarning("The standard deviation of the label is zero. Consider setting " +
+          "fitIntercept=true.")
       }
     }
 

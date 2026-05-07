@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{CoalescedBoundary, CoalescedHashPartitioning, HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
@@ -68,22 +69,34 @@ case class AQEShuffleReadExec private(
             case other => other
           }
         case _ =>
-          throw new IllegalStateException("operating on canonicalization plan")
+          throw SparkException.internalError("operating on canonicalization plan")
       }
     } else if (isCoalescedRead) {
       // For coalesced shuffle read, the data distribution is not changed, only the number of
       // partitions is changed.
       child.outputPartitioning match {
         case h: HashPartitioning =>
-          CurrentOrigin.withOrigin(h.origin)(h.copy(numPartitions = partitionSpecs.length))
+          val partitions = partitionSpecs.map {
+            case CoalescedPartitionSpec(start, end, _) => CoalescedBoundary(start, end)
+            // Can not happend due to isCoalescedRead
+            case unexpected =>
+              throw SparkException.internalError(s"Unexpected ShufflePartitionSpec: $unexpected")
+          }
+          CurrentOrigin.withOrigin(h.origin)(CoalescedHashPartitioning(h, partitions))
         case r: RangePartitioning =>
           CurrentOrigin.withOrigin(r.origin)(r.copy(numPartitions = partitionSpecs.length))
         // This can only happen for `REBALANCE_PARTITIONS_BY_NONE`, which uses
         // `RoundRobinPartitioning` but we don't need to retain the number of partitions.
         case r: RoundRobinPartitioning =>
           r.copy(numPartitions = partitionSpecs.length)
-        case other => throw new IllegalStateException(
-          "Unexpected partitioning for coalesced shuffle read: " + other)
+        case other @ SinglePartition =>
+          throw SparkException.internalError(
+            "Unexpected partitioning for coalesced shuffle read: " + other)
+        case _ =>
+          // Spark plugins may have custom partitioning and may replace this operator
+          // during the postStageOptimization phase, so return UnknownPartitioning here
+          // rather than throw an exception
+          UnknownPartitioning(partitionSpecs.length)
       }
     } else {
       UnknownPartitioning(partitionSpecs.length)
@@ -150,7 +163,7 @@ case class AQEShuffleReadExec private(
           assert(p.dataSize.isDefined)
           p.dataSize.get
         case p: PartialReducerPartitionSpec => p.dataSize
-        case p => throw new IllegalStateException(s"unexpected $p")
+        case p => throw SparkException.internalError(s"unexpected $p")
       })
     } else {
       None
@@ -164,6 +177,15 @@ case class AQEShuffleReadExec private(
     val numPartitionsMetric = metrics("numPartitions")
     numPartitionsMetric.set(partitionSpecs.length)
     driverAccumUpdates += (numPartitionsMetric.id -> partitionSpecs.length.toLong)
+
+    val numEmptyPartitionsMetric = metrics("numEmptyPartitions")
+    val numEmptyPartitions = child match {
+      case s: ShuffleQueryStageExec =>
+        s.mapStats.map(stats => stats.bytesByPartitionId.count(_ == 0)).getOrElse(0)
+      case _ => 0
+    }
+    numEmptyPartitionsMetric.set(numEmptyPartitions)
+    driverAccumUpdates += (numEmptyPartitionsMetric.id -> numEmptyPartitions.toLong)
 
     if (hasSkewedPartition) {
       val skewedSpecs = partitionSpecs.collect {
@@ -187,7 +209,7 @@ case class AQEShuffleReadExec private(
       val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
       val x = partitionSpecs.count(isCoalescedSpec)
       numCoalescedPartitionsMetric.set(x)
-      driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
+      driverAccumUpdates ++= Seq(numCoalescedPartitionsMetric.id -> x)
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -202,7 +224,9 @@ case class AQEShuffleReadExec private(
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
-      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
+      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions"),
+        "numEmptyPartitions" ->
+          SQLMetrics.createMetric(sparkContext, "number of empty partitions")) ++ {
         if (isLocalRead) {
           // We split the mapper partition evenly when creating local shuffle read, so no
           // data size info is available.
@@ -240,7 +264,7 @@ case class AQEShuffleReadExec private(
         sendDriverMetrics()
         stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
       case _ =>
-        throw new IllegalStateException("operating on canonicalized plan")
+        throw SparkException.internalError("operating on canonicalized plan")
     }
   }
 
@@ -254,4 +278,14 @@ case class AQEShuffleReadExec private(
 
   override protected def withNewChildInternal(newChild: SparkPlan): AQEShuffleReadExec =
     copy(child = newChild)
+
+  override def simpleStringWithNodeId(): String = {
+    val args = stringArgs.mkString(", ")
+    if (args.nonEmpty) {
+      super.simpleStringWithNodeId() + ", " + args
+    } else {
+      super.simpleStringWithNodeId()
+    }
+  }
+
 }

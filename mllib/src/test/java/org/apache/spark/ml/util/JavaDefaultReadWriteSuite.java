@@ -20,8 +20,10 @@ package org.apache.spark.ml.util;
 import java.io.File;
 import java.io.IOException;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.util.Utils;
@@ -30,6 +32,7 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
   File tempDir = null;
 
   @Override
+  @BeforeEach
   public void setUp() throws IOException {
     super.setUp();
     tempDir = Utils.createTempDir(
@@ -37,6 +40,7 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
   }
 
   @Override
+  @AfterEach
   public void tearDown() {
     super.tearDown();
     Utils.deleteRecursively(tempDir);
@@ -49,17 +53,11 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
     instance.set(instance.intParam(), 2);
     String outputPath = new File(tempDir, uid).getPath();
     instance.save(outputPath);
-    try {
-      instance.save(outputPath);
-      Assert.fail(
-        "Write without overwrite enabled should fail if the output directory already exists.");
-    } catch (IOException e) {
-      // expected
-    }
+    Assertions.assertThrows(IOException.class, () -> instance.save(outputPath));
     instance.write().session(spark).overwrite().save(outputPath);
     MyParams newInstance = MyParams.load(outputPath);
-    Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
-    Assert.assertEquals("Params should be preserved.",
-      2, newInstance.getOrDefault(newInstance.intParam()));
+    Assertions.assertEquals(instance.uid(), newInstance.uid(), "UID should match.");
+    Assertions.assertEquals(2, newInstance.getOrDefault(newInstance.intParam()),
+      "Params should be preserved.");
   }
 }

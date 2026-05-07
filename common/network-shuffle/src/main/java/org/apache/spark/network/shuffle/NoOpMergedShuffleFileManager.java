@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.File;
 import java.io.IOException;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -25,6 +26,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
+import org.apache.spark.network.shuffle.protocol.RemoveShuffleMerge;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -38,7 +40,7 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
   // This constructor is needed because we use this constructor to instantiate an implementation
   // of MergedShuffleFileManager using reflection.
   // See YarnShuffleService#newMergedShuffleFileManagerInstance.
-  public NoOpMergedShuffleFileManager(TransportConf transportConf) {}
+  public NoOpMergedShuffleFileManager(TransportConf transportConf, File recoveryFile) {}
 
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
@@ -82,5 +84,10 @@ public class NoOpMergedShuffleFileManager implements MergedShuffleFileManager {
   @Override
   public String[] getMergedBlockDirs(String appId) {
     throw new UnsupportedOperationException("Cannot handle shuffle block merge");
+  }
+
+  @Override
+  public void removeShuffleMerge(RemoveShuffleMerge removeShuffleMerge) {
+    throw new UnsupportedOperationException("Cannot handle merged shuffle remove");
   }
 }

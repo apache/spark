@@ -18,22 +18,27 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
+import org.apache.spark.TaskOutputFileAlreadyExistException
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.LogKeys.{CONFIG, NUM_CONCURRENT_WRITER}
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Abstract class for writing out data in a single Spark task.
@@ -75,14 +80,28 @@ abstract class FileFormatDataWriter(
     releaseCurrentWriter()
   }
 
+  private def enrichWriteError[T](path: => String)(f: => T): T = try {
+    f
+  } catch {
+    case e: FetchFailedException =>
+      throw e
+    case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
+      // If any output file to write already exists, it does not make sense to re-run this task.
+      // We throw the exception and let Executor throw ExceptionFailure to abort the job.
+      throw new TaskOutputFileAlreadyExistException(f)
+    case t: Throwable => throw QueryExecutionErrors.taskFailedWhileWritingRowsError(path, t)
+  }
+
   /** Writes a record. */
   def write(record: InternalRow): Unit
 
-  def writeWithMetrics(record: InternalRow, count: Long): Unit = {
+  final def writeWithMetrics(record: InternalRow, count: Long): Unit = {
     if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+      CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
-    write(record)
+    enrichWriteError(Option(currentWriter).map(_.path()).getOrElse(description.path)) {
+      write(record)
+    }
   }
 
   /** Write an iterator of records. */
@@ -92,7 +111,7 @@ abstract class FileFormatDataWriter(
       writeWithMetrics(iterator.next(), count)
       count += 1
     }
-    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+    CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
   }
 
   /**
@@ -101,7 +120,7 @@ abstract class FileFormatDataWriter(
    * to the driver and used to update the catalog. Other information will be sent back to the
    * driver too and used to e.g. update the metrics in UI.
    */
-  override def commit(): WriteTaskResult = {
+  final override def commit(): WriteTaskResult = enrichWriteError(description.path) {
     releaseResources()
     val (taskCommitMessage, taskCommitTime) = Utils.timeTakenMs {
       committer.commitTask(taskAttemptContext)
@@ -112,7 +131,7 @@ abstract class FileFormatDataWriter(
     WriteTaskResult(taskCommitMessage, summary)
   }
 
-  def abort(): Unit = {
+  final def abort(): Unit = enrichWriteError(description.path) {
     try {
       releaseResources()
     } finally {
@@ -120,7 +139,7 @@ abstract class FileFormatDataWriter(
     }
   }
 
-  override def close(): Unit = {}
+  final override def close(): Unit = {}
 }
 
 /** FileFormatWriteTask for empty partitions */
@@ -153,7 +172,7 @@ class SingleDirectoryDataWriter(
     val currentPath = committer.newTaskTempFile(
       taskAttemptContext,
       None,
-      f"-c$fileCounter%03d" + ext)
+      FileNameSpec("", f"-c$fileCounter%03d" + ext))
 
     currentWriter = description.outputWriterFactory.newInstance(
       path = currentPath,
@@ -173,7 +192,7 @@ class SingleDirectoryDataWriter(
     }
 
     currentWriter.write(record)
-    statsTrackers.foreach(_.newRow(currentWriter.path, record))
+    statsTrackers.foreach(_.newRow(currentWriter.path(), record))
     recordsInFile += 1
   }
 }
@@ -193,7 +212,7 @@ abstract class BaseDynamicPartitionDataWriter(
   protected val isPartitioned = description.partitionColumns.nonEmpty
 
   /** Flag saying whether or not the data to be written out is bucketed. */
-  protected val isBucketed = description.bucketIdExpression.isDefined
+  protected val isBucketed = description.bucketSpec.isDefined
 
   assert(isPartitioned || isBucketed,
     s"""DynamicPartitionWriteTask should be used for writing out data that's either
@@ -238,7 +257,8 @@ abstract class BaseDynamicPartitionDataWriter(
   /** Given an input row, returns the corresponding `bucketId` */
   protected lazy val getBucketId: InternalRow => Int = {
     val proj =
-      UnsafeProjection.create(description.bucketIdExpression.toSeq, description.allColumns)
+      UnsafeProjection.create(Seq(description.bucketSpec.get.bucketIdExpression),
+        description.allColumns)
     row => proj(row).getInt(0)
   }
 
@@ -271,17 +291,24 @@ abstract class BaseDynamicPartitionDataWriter(
 
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
-    // This must be in a form that matches our bucketing format. See BucketingUtils.
-    val ext = f"$bucketIdStr.c$fileCounter%03d" +
+    // The prefix and suffix must be in a form that matches our bucketing format. See BucketingUtils
+    // for details. The prefix is required to represent bucket id when writing Hive-compatible
+    // bucketed table.
+    val prefix = bucketId match {
+      case Some(id) => description.bucketSpec.get.bucketFileNamePrefix(id)
+      case _ => ""
+    }
+    val suffix = f"$bucketIdStr.c$fileCounter%03d" +
       description.outputWriterFactory.getFileExtension(taskAttemptContext)
+    val fileNameSpec = FileNameSpec(prefix, suffix)
 
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
     val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, fileNameSpec)
     } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      committer.newTaskTempFile(taskAttemptContext, partDir, fileNameSpec)
     }
 
     currentWriter = description.outputWriterFactory.newInstance(
@@ -318,7 +345,7 @@ abstract class BaseDynamicPartitionDataWriter(
   protected def writeRecord(record: InternalRow): Unit = {
     val outputRow = getOutputRow(record)
     currentWriter.write(outputRow)
-    statsTrackers.foreach(_.newRow(currentWriter.path, outputRow))
+    statsTrackers.foreach(_.newRow(currentWriter.path(), outputRow))
     recordsInFile += 1
   }
 }
@@ -419,6 +446,7 @@ class DynamicPartitionDataConcurrentWriter(
       if (status.outputWriter != null) {
         try {
           status.outputWriter.close()
+          statsTrackers.foreach(_.closeFile(status.outputWriter.path()))
         } finally {
           status.outputWriter = null
         }
@@ -477,7 +505,7 @@ class DynamicPartitionDataConcurrentWriter(
       writeWithMetrics(iterator.next(), count)
       count += 1
     }
-    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+    CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
 
     if (iterator.hasNext) {
       count = 0L
@@ -488,7 +516,7 @@ class DynamicPartitionDataConcurrentWriter(
         writeWithMetrics(sortIterator.next(), count)
         count += 1
       }
-      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+      CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
   }
 
@@ -531,9 +559,11 @@ class DynamicPartitionDataConcurrentWriter(
         new WriterStatus(currentWriter, recordsInFile, fileCounter))
       if (concurrentWriters.size >= concurrentOutputWriterSpec.maxWriters && !sorted) {
         // Fall back to sort-based sequential writer mode.
-        logInfo(s"Number of concurrent writers ${concurrentWriters.size} reaches the threshold. " +
-          "Fall back from concurrent writers to sort-based sequential writer. You may change " +
-          s"threshold with configuration ${SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key}")
+        logInfo(log"Number of concurrent writers " +
+          log"${MDC(NUM_CONCURRENT_WRITER, concurrentWriters.size)} reaches the threshold. " +
+          log"Fall back from concurrent writers to sort-based sequential writer. You may change " +
+          log"threshold with configuration " +
+          log"${MDC(CONFIG, SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key)}")
         sorted = true
       }
     }
@@ -554,6 +584,16 @@ class DynamicPartitionDataConcurrentWriter(
   }
 }
 
+/**
+ * Bucketing specification for all the write tasks.
+ *
+ * @param bucketIdExpression Expression to calculate bucket id based on bucket column(s).
+ * @param bucketFileNamePrefix Prefix of output file name based on bucket id.
+ */
+case class WriterBucketSpec(
+  bucketIdExpression: Expression,
+  bucketFileNamePrefix: Int => String)
+
 /** A shared job description for all the write tasks. */
 class WriteJobDescription(
     val uuid: String, // prevent collision between different (appending) write jobs
@@ -562,7 +602,7 @@ class WriteJobDescription(
     val allColumns: Seq[Attribute],
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],
-    val bucketIdExpression: Option[Expression],
+    val bucketSpec: Option[WriterBucketSpec],
     val path: String,
     val customPartitionLocations: Map[TablePartitionSpec, String],
     val maxRecordsPerFile: Long,

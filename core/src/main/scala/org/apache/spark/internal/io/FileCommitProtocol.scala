@@ -20,6 +20,7 @@ package org.apache.spark.internal.io
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
@@ -95,7 +96,10 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
-  def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String
+  @deprecated("use newTaskTempFile(..., spec: FileNameSpec) instead", "3.3.0")
+  def newTaskTempFile(taskContext: TaskAttemptContext, dir: Option[String], ext: String): String = {
+    throw SparkException.mustOverrideOneMethodError("newTaskTempFile")
+  }
 
   /**
    * Notifies the commit protocol to add a new file, and gets back the full path that should be
@@ -132,8 +136,11 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    */
+  @deprecated("use newTaskTempFileAbsPath(..., spec: FileNameSpec) instead", "3.3.0")
   def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String
+      taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
+    throw SparkException.mustOverrideOneMethodError("newTaskTempFileAbsPath")
+  }
 
   /**
    * Similar to newTaskTempFile(), but allows files to committed to an absolute output location.

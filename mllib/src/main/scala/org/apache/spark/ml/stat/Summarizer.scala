@@ -26,11 +26,16 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt
+import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * A builder object that provides summary statistics about a given column.
@@ -93,8 +98,8 @@ object Summarizer extends Logging {
    * The following metrics are accepted (case sensitive):
    *  - mean: a vector that contains the coefficient-wise mean.
    *  - sum: a vector that contains the coefficient-wise sum.
-   *  - variance: a vector tha contains the coefficient-wise variance.
-   *  - std: a vector tha contains the coefficient-wise standard deviation.
+   *  - variance: a vector that contains the coefficient-wise variance.
+   *  - std: a vector that contains the coefficient-wise standard deviation.
    *  - count: the count of all vectors seen.
    *  - numNonzeros: a vector with the number of non-zeros for each coefficients
    *  - max: the maximum for each coefficient.
@@ -105,7 +110,7 @@ object Summarizer extends Logging {
    * @return a builder.
    * @throws IllegalArgumentException if one of the metric names is not understood.
    *
-   * Note: Currently, the performance of this interface is about 2x~3x slower then using the RDD
+   * Note: Currently, the performance of this interface is about 2x~3x slower than using the RDD
    * interface.
    */
   @Since("2.3.0")
@@ -212,15 +217,16 @@ object Summarizer extends Logging {
       aggregationDepth: Int = 2,
       requested: Seq[String] = Seq("mean", "std", "count")) = {
     instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer(requested: _*),
-        Summarizer.createSummarizerBuffer("mean", "std", "count")))(
+      zeroValue = (Summarizer.createSummarizerBuffer(requested: _*),
+        Summarizer.createSummarizerBuffer("mean", "std", "count")),
       seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight),
           c._2.add(Vectors.dense(instance.label), instance.weight)),
       combOp = (c1: (SummarizerBuffer, SummarizerBuffer),
                 c2: (SummarizerBuffer, SummarizerBuffer)) =>
         (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = aggregationDepth
+      depth = aggregationDepth,
+      finalAggregateOnExecutor = true
     )
   }
 
@@ -230,13 +236,14 @@ object Summarizer extends Logging {
       aggregationDepth: Int = 2,
       requested: Seq[String] = Seq("mean", "std", "count")) = {
     instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer(requested: _*), new MultiClassSummarizer))(
+      zeroValue = (Summarizer.createSummarizerBuffer(requested: _*), new MultiClassSummarizer),
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
                 c2: (SummarizerBuffer, MultiClassSummarizer)) =>
         (c1._1.merge(c2._1), c1._2.merge(c2._2)),
-      depth = aggregationDepth
+      depth = aggregationDepth,
+      finalAggregateOnExecutor = true
     )
   }
 }
@@ -247,16 +254,13 @@ private[ml] class SummaryBuilderImpl(
   ) extends SummaryBuilder {
 
   override def summary(featuresCol: Column, weightCol: Column): Column = {
-
-    val agg = SummaryBuilderImpl.MetricsAggregate(
+    Column(SummaryBuilderImpl.MetricsAggregate(
       requestedMetrics,
       requestedCompMetrics,
-      featuresCol.expr,
-      weightCol.expr,
+      expression(featuresCol),
+      expression(weightCol),
       mutableAggBufferOffset = 0,
-      inputAggBufferOffset = 0)
-
-    new Column(AggregateExpression(agg, mode = Complete, isDistinct = false))
+      inputAggBufferOffset = 0))
   }
 }
 
@@ -288,6 +292,14 @@ private[spark] object SummaryBuilderImpl extends Logging {
       StructField(name, dataType, nullable = false)
     }
     StructType(fields)
+  }
+
+  private def extractRequestedMetrics(metrics: Expression): (Seq[Metric], Seq[ComputeMetric]) = {
+    metrics.eval() match {
+      case arrayData: ArrayData =>
+        val requested = arrayData.toSeq[UTF8String](StringType)
+        getRelevantMetrics(requested.map(_.toString))
+    }
   }
 
   private val vectorUDT = new VectorUDT
@@ -342,7 +354,7 @@ private[spark] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeMin extends ComputeMetric
 
 
-  private case class MetricsAggregate(
+  private[spark] case class MetricsAggregate(
       requestedMetrics: Seq[Metric],
       requestedComputeMetrics: Seq[ComputeMetric],
       featuresExpr: Expression,
@@ -352,6 +364,27 @@ private[spark] object SummaryBuilderImpl extends Logging {
     extends TypedImperativeAggregate[SummarizerBuffer]
     with ImplicitCastInputTypes
     with BinaryLike[Expression] {
+
+    // helper constructor
+    def this(
+        metrics: (Seq[Metric], Seq[ComputeMetric]),
+        featuresExpr: Expression,
+        weightExpr: Expression) = {
+      this(metrics._1, metrics._2, featuresExpr, weightExpr, 0, 0)
+    }
+
+    def this(
+        requestedMetrics: Expression,
+        featuresExpr: Expression,
+        weightExpr: Expression) = {
+      this(extractRequestedMetrics(requestedMetrics), featuresExpr, weightExpr)
+    }
+
+    def this(
+        requestedMetrics: Expression,
+        featuresExpr: Expression) = {
+      this(requestedMetrics, featuresExpr, Literal(1.0))
+    }
 
     override def eval(state: SummarizerBuffer): Any = {
       val metrics = requestedMetrics.map {
@@ -397,17 +430,12 @@ private[spark] object SummaryBuilderImpl extends Logging {
 
     override def serialize(state: SummarizerBuffer): Array[Byte] = {
       // TODO: Use ByteBuffer to optimize
-      val bos = new ByteArrayOutputStream()
-      val oos = new ObjectOutputStream(bos)
-      oos.writeObject(state)
-      bos.toByteArray
+      Utils.serialize(state)
     }
 
     override def deserialize(bytes: Array[Byte]): SummarizerBuffer = {
       // TODO: Use ByteBuffer to optimize
-      val bis = new ByteArrayInputStream(bytes)
-      val ois = new ObjectInputStream(bis)
-      ois.readObject().asInstanceOf[SummarizerBuffer]
+      Utils.deserialize(bytes)
     }
 
     override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): MetricsAggregate = {
@@ -596,7 +624,7 @@ private[spark] class SummarizerBuffer(
         // merge max and min
         if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
         if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
-        if (nnz != null) { nnz(i) = nnz(i) + other.nnz(i) }
+        if (nnz != null) { nnz(i) += other.nnz(i) }
         i += 1
       }
     } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {

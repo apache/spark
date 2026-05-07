@@ -25,13 +25,15 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -50,7 +52,7 @@ class InMemoryCatalog(
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
-    val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
+    var partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
   }
 
   private class DatabaseDesc(var db: CatalogDatabase) {
@@ -89,7 +91,7 @@ class InMemoryCatalog(
       specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
       if (partitionExists(db, table, s)) {
-        throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
+        throw new PartitionsAlreadyExistException(db = db, table = table, spec = s)
       }
     }
   }
@@ -124,7 +126,9 @@ class InMemoryCatalog(
           throw QueryExecutionErrors.unableToCreateDatabaseAsFailedToCreateDirectoryError(
             dbDefinition, e)
       }
-      catalog.put(dbDefinition.name, new DatabaseDesc(dbDefinition))
+      val newDb = dbDefinition.copy(
+        properties = dbDefinition.properties ++ Map(PROP_OWNER -> Utils.getCurrentUserName()))
+      catalog.put(dbDefinition.name, new DatabaseDesc(newDb))
     }
   }
 
@@ -135,11 +139,8 @@ class InMemoryCatalog(
     if (catalog.contains(db)) {
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
-        if (catalog(db).tables.nonEmpty) {
-          throw QueryCompilationErrors.databaseNotEmptyError(db, "tables")
-        }
-        if (catalog(db).functions.nonEmpty) {
-          throw QueryCompilationErrors.databaseNotEmptyError(db, "functions")
+        if (catalog(db).tables.nonEmpty || catalog(db).functions.nonEmpty) {
+          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
         }
       }
       // Remove the database.
@@ -192,7 +193,10 @@ class InMemoryCatalog(
   override def createTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot create table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
@@ -235,7 +239,13 @@ class InMemoryCatalog(
       table: String,
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = synchronized {
-    requireDbExists(db)
+    if (!databaseExists(db)) {
+      if (ignoreIfNotExists) {
+        return
+      } else {
+        throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, db, table))
+      }
+    }
     if (tableExists(db, table)) {
       val tableMeta = getTable(db, table)
       if (tableMeta.tableType == CatalogTableType.MANAGED) {
@@ -268,7 +278,7 @@ class InMemoryCatalog(
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new NoSuchTableException(db = db, table = table)
+        throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, db, table))
       }
     }
   }
@@ -280,7 +290,7 @@ class InMemoryCatalog(
     requireTableExists(db, oldName)
     requireTableNotExists(db, newName)
     val oldDesc = catalog(db).tables(oldName)
-    oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
+    oldDesc.table = oldDesc.table.copy(identifier = oldDesc.table.identifier.copy(table = newName))
 
     if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
       assert(oldDesc.table.storage.locationUri.isDefined,
@@ -297,14 +307,26 @@ class InMemoryCatalog(
             oldName, newName, oldDir, e)
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
-    }
 
+      val newPartitions = oldDesc.partitions.map { case (spec, partition) =>
+        val storage = partition.storage
+        val newLocationUri = storage.locationUri.map { uri =>
+          new Path(uri.toString.replace(oldDir.toString, newDir.toString)).toUri
+        }
+        val newPartition = partition.copy(storage = storage.copy(locationUri = newLocationUri))
+        (spec, newPartition)
+      }
+      oldDesc.partitions = newPartitions
+    }
     catalog(db).tables.put(newName, oldDesc)
     catalog(db).tables.remove(oldName)
   }
 
   override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot alter table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
@@ -322,6 +344,21 @@ class InMemoryCatalog(
     catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      newSchema: StructType): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+
+    val partCols = origTable.partitionColumnNames
+    assert(newSchema.map(_.name).takeRight(partCols.length) == partCols,
+      s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
+        s"the new schema ${newSchema.catalogString} for now.")
+
+    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
+  }
+
   override def alterTableStats(
       db: String,
       table: String,
@@ -332,6 +369,7 @@ class InMemoryCatalog(
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
+    requireDbExists(db)
     requireTableExists(db, table)
     catalog(db).tables(table).table
   }
@@ -356,7 +394,9 @@ class InMemoryCatalog(
 
   override def listViews(db: String, pattern: String): Seq[String] = synchronized {
     requireDbExists(db)
-    val views = catalog(db).tables.filter(_._2.table.tableType == CatalogTableType.VIEW).keySet
+    val views = catalog(db).tables.filter { case (_, t) =>
+      t.table.isViewLike
+    }.keySet
     StringUtils.filterPattern(views.toSeq.sorted, pattern)
   }
 
@@ -500,7 +540,7 @@ class InMemoryCatalog(
         try {
           val fs = tablePath.getFileSystem(hadoopConfig)
           fs.mkdirs(newPartPath)
-          if(!fs.rename(oldPartPath, newPartPath)) {
+          if (!fs.rename(oldPartPath, newPartPath)) {
             throw new IOException(s"Renaming partition path from $oldPartPath to " +
               s"$newPartPath returned false")
           }
@@ -622,7 +662,8 @@ class InMemoryCatalog(
       newName: String): Unit = synchronized {
     requireFunctionExists(db, oldName)
     requireFunctionNotExists(db, newName)
-    val newFunc = getFunction(db, oldName).copy(identifier = FunctionIdentifier(newName, Some(db)))
+    val oldFunc = getFunction(db, oldName)
+    val newFunc = oldFunc.copy(identifier = oldFunc.identifier.copy(funcName = newName))
     catalog(db).functions.remove(oldName)
     catalog(db).functions.put(newName, newFunc)
   }

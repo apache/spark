@@ -1,0 +1,4186 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.sql.connector
+
+import java.sql.Timestamp
+import java.util.Collections
+
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.rdd.SortedMergeCoalescedRDD
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.plans.physical
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.functions._
+import org.apache.spark.sql.connector.distributions.Distributions
+import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.Expressions._
+import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RDDScanExec, SimpleMode, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
+import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.functions.{col, max}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf._
+import org.apache.spark.sql.types._
+
+class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
+  private val functions = Seq(
+    UnboundYearsFunction,
+    UnboundDaysFunction,
+    UnboundBucketFunction,
+    UnboundTruncateFunction)
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(V2_BUCKETING_ENABLED, true)
+    .set(AUTO_BROADCASTJOIN_THRESHOLD, -1L)
+
+  before {
+    functions.foreach { f =>
+      catalog.createFunction(Identifier.of(Array.empty, f.name()), f)
+    }
+  }
+
+  after {
+    catalog.clearTables()
+    catalog.clearFunctions()
+  }
+
+  private val emptyProps: java.util.Map[String, String] = {
+    Collections.emptyMap[String, String]
+  }
+  private val table: String = "tbl"
+
+  private val columns: Array[Column] = Array(
+    Column.create("id", IntegerType),
+    Column.create("data", StringType),
+    Column.create("ts", TimestampType))
+
+  private val columns2: Array[Column] = Array(
+      Column.create("store_id", IntegerType),
+      Column.create("dept_id", IntegerType),
+      Column.create("data", StringType))
+
+  def withFunction[T](fns: UnboundFunction*)(f: => T): T = {
+    val fnIds = catalog.listFunctions(Array.empty)
+    val oldFns = fns.map { fn =>
+      val id = Identifier.of(Array.empty, fn.name())
+      val oldFn = Option.when(fnIds.contains(id)) {
+        val fn = catalog.loadFunction(id)
+        catalog.dropFunction(id)
+        fn
+      }
+      catalog.createFunction(id, fn)
+      (id, oldFn)
+    }
+    try f finally {
+      oldFns.foreach { case (id, oldFn) =>
+        catalog.dropFunction(id)
+        oldFn.foreach(catalog.createFunction(id, _))
+      }
+    }
+  }
+
+  test("clustered distribution: output partitioning should be KeyedPartitioning") {
+    val partitions: Array[Transform] = Array(Expressions.years("ts"))
+
+    // create a table with 3 partitions, partitioned by `years` transform
+    createTable(table, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+        s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+        s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    var df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY ts")
+    val catalystDistribution = physical.ClusteredDistribution(
+      Seq(TransformExpression(YearsFunction, Seq(attr("ts")))))
+    val partitionKeys = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
+
+    checkQueryPlan(df, catalystDistribution,
+      physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys))
+
+    // multiple group keys should work too as long as partition keys are subset of them
+    df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY id, ts")
+    checkQueryPlan(df, catalystDistribution,
+      physical.KeyedPartitioning(catalystDistribution.clustering, partitionKeys))
+  }
+
+  test("non-clustered distribution: no partition") {
+    val partitions: Array[Transform] = Array(bucket(32, "ts"))
+    createTable(table, columns, partitions)
+
+    val df = sql(s"SELECT * FROM testcat.ns.$table")
+    val distribution = physical.ClusteredDistribution(
+      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+
+    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+  }
+
+  test("non-clustered distribution: single partition") {
+    val partitions: Array[Transform] = Array(bucket(32, "ts"))
+    createTable(table, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$table VALUES (0, 'aaa', CAST('2020-01-01' AS timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$table")
+    val distribution = physical.ClusteredDistribution(
+      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+
+    // Has exactly one partition.
+    val partitionKeys = Seq(0).map(v => InternalRow.fromSeq(Seq(v)))
+    checkQueryPlan(df, distribution,
+      physical.KeyedPartitioning(distribution.clustering, partitionKeys))
+  }
+
+  test("non-clustered distribution: no V2 catalog") {
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    val nonFunctionCatalog = spark.sessionState.catalogManager.catalog("testcat2")
+        .asInstanceOf[InMemoryTableCatalog]
+    val partitions: Array[Transform] = Array(bucket(32, "ts"))
+    createTable(table, columns, partitions, catalog = nonFunctionCatalog)
+    sql(s"INSERT INTO testcat2.ns.$table VALUES " +
+        s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+        s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+        s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat2.ns.$table")
+    val distribution = physical.UnspecifiedDistribution
+
+    try {
+      checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+    } finally {
+      spark.conf.unset("spark.sql.catalog.testcat2")
+    }
+  }
+
+  test("non-clustered distribution: no V2 function provided") {
+    catalog.clearFunctions()
+
+    val partitions: Array[Transform] = Array(bucket(32, "ts"))
+    createTable(table, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+        s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+        s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$table")
+    val distribution = physical.UnspecifiedDistribution
+
+    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+  }
+
+  test("non-clustered distribution: V2 bucketing disabled") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+      val partitions: Array[Transform] = Array(bucket(32, "ts"))
+      createTable(table, columns, partitions)
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+          s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+          s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+          s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+      val df = sql(s"SELECT * FROM testcat.ns.$table")
+      val distribution = physical.ClusteredDistribution(
+        Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+
+      checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+    }
+  }
+
+  test("non-clustered distribution: V2 function with multiple args") {
+    val partitions: Array[Transform] = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(2))
+    )
+
+    // create a table with 3 partitions, partitioned by `truncate` transform
+    createTable(table, columns, partitions)
+    sql(s"INSERT INTO testcat.ns.$table VALUES " +
+      s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$table")
+    val distribution = physical.ClusteredDistribution(
+      Seq(TransformExpression(TruncateFunction, Seq(attr("data"), Literal(2)))))
+
+    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+  }
+
+  /**
+   * Check whether the query plan from `df` has the expected `distribution`, `ordering` and
+   * `partitioning`.
+   */
+  private def checkQueryPlan(
+      df: DataFrame,
+      distribution: physical.Distribution,
+      partitioning: physical.Partitioning): Unit = {
+    // check distribution & ordering are correctly populated in logical plan
+    val relation = df.queryExecution.optimizedPlan.collect {
+      case r: DataSourceV2ScanRelation => r
+    }.head
+
+    resolveDistribution(distribution, relation) match {
+      case physical.ClusteredDistribution(clustering, _, _) =>
+        assert(relation.keyGroupedPartitioning.isDefined &&
+          relation.keyGroupedPartitioning.get == clustering)
+      case _ =>
+        assert(relation.keyGroupedPartitioning.isEmpty)
+    }
+
+    // check distribution, ordering and output partitioning are correctly populated in physical plan
+    val scan = collect(df.queryExecution.executedPlan) {
+      case s: BatchScanExec => s
+    }.head
+
+    val expectedPartitioning = resolvePartitioning(partitioning, scan)
+    assert(expectedPartitioning == scan.outputPartitioning)
+  }
+
+  private def createTable(
+      table: String,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      ordering: Array[SortOrder] = Array.empty,
+      catalog: InMemoryTableCatalog = catalog): Unit = {
+    catalog.createTable(Identifier.of(Array("ns"), table),
+      columns, partitions, emptyProps, Distributions.unspecified(), ordering, None, None,
+      numRowsPerSplit = 1)
+  }
+
+  private val customers: String = "customers"
+  private val customersColumns: Array[Column] = Array(
+    Column.create("customer_name", StringType),
+    Column.create("customer_age", IntegerType),
+    Column.create("customer_id", LongType))
+
+  private val orders: String = "orders"
+  private val ordersColumns: Array[Column] = Array(
+    Column.create("order_amount", DoubleType),
+    Column.create("customer_id", LongType))
+
+  private def selectWithMergeJoinHint(t1: String, t2: String): String = {
+    s"SELECT /*+ MERGE($t1, $t2) */ "
+  }
+
+  private def createJoinTestDF(
+      keys: Seq[(String, String)],
+      extraColumns: Seq[String] = Nil,
+      joinType: String = ""): DataFrame = {
+    val extraColList = if (extraColumns.isEmpty) "" else extraColumns.mkString(", ", ", ", "")
+    sql(
+      s"""
+         |${selectWithMergeJoinHint("i", "p")}
+         |id, name, i.price as purchase_price, p.price as sale_price $extraColList
+         |FROM testcat.ns.$items i $joinType JOIN testcat.ns.$purchases p
+         |ON ${keys.map(k => s"i.${k._1} = p.${k._2}").mkString(" AND ")}
+         |ORDER BY id, purchase_price, sale_price $extraColList
+         |""".stripMargin)
+  }
+
+  private def testWithCustomersAndOrders(
+      customers_partitions: Array[Transform],
+      orders_partitions: Array[Transform],
+      expectedNumOfShuffleExecs: Int,
+      expectedGroupPartitionsExecs: Int): Unit = {
+    createTable(customers, customersColumns, customers_partitions)
+    sql(s"INSERT INTO testcat.ns.$customers VALUES " +
+        s"('aaa', 10, 1), ('bbb', 20, 2), ('ccc', 30, 3)")
+
+    createTable(orders, ordersColumns, orders_partitions)
+    sql(s"INSERT INTO testcat.ns.$orders VALUES " +
+        s"(100.0, 1), (200.0, 1), (150.0, 2), (250.0, 2), (350.0, 2), (400.50, 3)")
+
+    val df = sql(
+      s"""
+        |${selectWithMergeJoinHint("c", "o")}
+        |customer_name, customer_age, order_amount
+        |FROM testcat.ns.$customers c JOIN testcat.ns.$orders o
+        |ON c.customer_id = o.customer_id ORDER BY c.customer_id, order_amount
+        |""".stripMargin)
+
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    assert(shuffles.length == expectedNumOfShuffleExecs)
+
+    val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+    assert(groupPartitions.length == expectedGroupPartitionsExecs)
+
+    checkAnswer(df,
+      Seq(Row("aaa", 10, 100.0), Row("aaa", 10, 200.0), Row("bbb", 20, 150.0),
+        Row("bbb", 20, 250.0), Row("bbb", 20, 350.0), Row("ccc", 30, 400.50)))
+  }
+
+  protected def collectAllShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
+    collect(plan) {
+      case s: ShuffleExchangeExec => s
+    }
+  }
+
+  protected def collectAllGroupPartitions(plan: SparkPlan): Seq[GroupPartitionsExec] = {
+    collect(plan) {
+      case g: GroupPartitionsExec => g
+    }
+  }
+
+  protected def collectShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
+    // here we skip collecting shuffle operators that are not associated with SMJ
+    collect(plan) {
+      case s: SortMergeJoinExec => s
+    }.flatMap(smj =>
+      collect(smj) {
+        case s: ShuffleExchangeExec => s
+      })
+  }.toSet.toSeq
+
+  protected def collectGroupPartitions(plan: SparkPlan): Seq[GroupPartitionsExec] = {
+    // here we skip collecting shuffle operators that are not associated with SMJ
+    collect(plan) {
+      case s: SortMergeJoinExec => s
+    }.flatMap(smj =>
+      collect(smj) {
+        case g: GroupPartitionsExec => g
+      })
+  }.toSet.toSeq
+
+  private def collectScans(plan: SparkPlan): Seq[BatchScanExec] = {
+    collect(plan) { case s: BatchScanExec => s }
+  }
+
+  /**
+   * Helper method to verify that filteredPartitions contains the expected number of
+   * Some and None values. This is used to verify that dynamic partition filtering
+   * properly fills filtered-out partitions with None.
+   */
+  private def assertFilteredPartitions(
+      scans: Seq[BatchScanExec],
+      expectedTotalPartitions: Seq[Int],
+      expectedFilteredOutPartitions: Seq[Int]): Unit = {
+    assert(scans.size === expectedTotalPartitions.size,
+      s"Expected ${expectedTotalPartitions.size} scans but got ${scans.size}")
+
+    scans.zip(expectedTotalPartitions).zip(expectedFilteredOutPartitions).foreach {
+      case ((scan, expectedTotal), expectedFiltered) =>
+        val filtered = scan.filteredPartitions
+        assert(filtered.size === expectedTotal,
+          s"Expected $expectedTotal total partitions but got ${filtered.size}")
+
+        val noneCount = filtered.count(_.isEmpty)
+        assert(noneCount === expectedFiltered,
+          s"Expected $expectedFiltered None values but got $noneCount")
+
+        val someCount = filtered.count(_.isDefined)
+        assert(someCount === (expectedTotal - expectedFiltered),
+          s"Expected ${expectedTotal - expectedFiltered} Some values but got $someCount")
+    }
+  }
+
+
+  test("partitioned join: exact distribution (same number of buckets) from both sides") {
+    val customers_partitions = Array(bucket(4, "customer_id"))
+    val orders_partitions = Array(bucket(4, "customer_id"))
+
+    testWithCustomersAndOrders(customers_partitions, orders_partitions, 0, 1)
+  }
+
+  test("partitioned join: number of buckets mismatch should trigger shuffle") {
+    val customers_partitions = Array(bucket(4, "customer_id"))
+    val orders_partitions = Array(bucket(2, "customer_id"))
+
+    // should shuffle both sides when number of buckets are not the same
+    testWithCustomersAndOrders(customers_partitions, orders_partitions, 2, 0)
+  }
+
+  test("partitioned join: only one side reports partitioning") {
+    val customers_partitions = Array(bucket(4, "customer_id"))
+
+    testWithCustomersAndOrders(customers_partitions, Array.empty, 2, 0)
+  }
+
+  private val items: String = "items"
+  private val itemsColumns: Array[Column] = Array(
+    Column.create("id", LongType),
+    Column.create("name", StringType),
+    Column.create("price", FloatType),
+    Column.create("arrive_time", TimestampType))
+
+  private val purchases: String = "purchases"
+  private val purchasesColumns: Array[Column] = Array(
+    Column.create("item_id", LongType),
+    Column.create("price", FloatType),
+    Column.create("time", TimestampType))
+
+  private val details: String = "details"
+  private val detailsColumns: Array[Column] = Array(
+    Column.create("item_id", LongType),
+    Column.create("description", StringType),
+    Column.create("updated", TimestampType))
+
+  test("SPARK-48655: group by on partition keys should not introduce additional shuffle") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(s"SELECT MAX(price) AS res FROM testcat.ns.$items GROUP BY id")
+    val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+    assert(shuffles.isEmpty,
+      "should not contain shuffle when grouping by partition values")
+    val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+    assert(groupPartitions.size == 1,
+      "should contain group partitions when grouping by partition values")
+
+    checkAnswer(df.sort("res"), Seq(Row(10.0), Row(15.5), Row(41.0)))
+  }
+
+  test("SPARK-48655: order by on partition keys should not introduce additional shuffle") {
+    val items_partitions = Array(identity("price"), identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+      s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+      s"(null, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+      s"(3, 'cc', null, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { sortingEnabled =>
+      withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> sortingEnabled.toString) {
+
+        def verifyShuffle(cmd: String, answer: Seq[Row], expectedGroupPartitions: Int): Unit = {
+          val df = sql(cmd)
+          if (sortingEnabled) {
+            assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
+              "should contain no shuffle when sorting by partition values")
+            assert(collectAllGroupPartitions(df.queryExecution.executedPlan).size ==
+              expectedGroupPartitions,
+              "should contain partition grouping when sorting by partition values")
+          } else {
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+              "should contain one shuffle when optimization is disabled")
+            assert(collectAllGroupPartitions(df.queryExecution.executedPlan).isEmpty,
+              "should contain no partition grouping when optimization is disabled")
+          }
+          checkAnswer(df, answer)
+        }: Unit
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items ORDER BY price ASC, id ASC",
+          // Default ordering of partitions matches requested ordering so we don't expect any
+          // shuffles or group partitions
+          Seq(Row(null, 3), Row(10.0, 2), Row(15.5, null),
+            Row(15.5, 3), Row(40.0, 1), Row(41.0, 1)), 0)
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items " +
+            s"ORDER BY price ASC NULLS LAST, id ASC NULLS LAST",
+          Seq(Row(10.0, 2), Row(15.5, 3), Row(15.5, null),
+            Row(40.0, 1), Row(41.0, 1), Row(null, 3)), 1)
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items ORDER BY price DESC, id ASC",
+          Seq(Row(41.0, 1), Row(40.0, 1), Row(15.5, null),
+            Row(15.5, 3), Row(10.0, 2), Row(null, 3)), 1)
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items ORDER BY price DESC, id DESC",
+          Seq(Row(41.0, 1), Row(40.0, 1), Row(15.5, 3),
+            Row(15.5, null), Row(10.0, 2), Row(null, 3)), 1)
+
+        verifyShuffle(
+          s"SELECT price, id FROM testcat.ns.$items " +
+            s"ORDER BY price DESC NULLS FIRST, id DESC NULLS FIRST",
+          Seq(Row(null, 3), Row(41.0, 1), Row(40.0, 1),
+            Row(15.5, null), Row(15.5, 3), Row(10.0, 2)), 1);
+      }
+    }
+  }
+
+  test("SPARK-49179: Fix v2 multi bucketed inner joins throw AssertionError") {
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("name", StringType))
+    val buckets = Array(bucket(8, "id"))
+
+    withTable("t1", "t2", "t3") {
+      Seq("t1", "t2", "t3").foreach { t =>
+        createTable(t, cols, buckets)
+        sql(s"INSERT INTO testcat.ns.$t VALUES (1, 'aa'), (2, 'bb'), (3, 'cc')")
+      }
+      val df = sql(
+        """
+          |SELECT t1.id, t2.id, t3.name FROM testcat.ns.t1
+          |JOIN testcat.ns.t2 ON t1.id = t2.id
+          |JOIN testcat.ns.t3 ON t1.id = t3.id
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 1, "aa"), Row(2, 2, "bb"), Row(3, 3, "cc")))
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty)
+      assert(collectGroupPartitions(df.queryExecution.executedPlan).isEmpty)
+    }
+  }
+
+  test("partitioned join: join with two partition keys and matching & sorted partitions") {
+    val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        assert(groupPartitions.size === 2,
+          "should contain group partitions on both sides of the join")
+        checkAnswer(df,
+          Seq(Row(1, "aa", 40.0, 42.0), Row(1, "aa", 41.0, 44.0), Row(1, "aa", 41.0, 45.0),
+            Row(2, "bb", 10.0, 11.0), Row(2, "bb", 10.5, 11.0), Row(3, "cc", 15.5, 19.5))
+        )
+      }
+    }
+  }
+
+  test("partitioned join: join with two partition keys and unsorted partitions") {
+    val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        assert(groupPartitions.size === 2,
+          "should contain group partitions on both sides of the join")
+        checkAnswer(df,
+          Seq(Row(1, "aa", 40.0, 42.0), Row(1, "aa", 41.0, 44.0), Row(1, "aa", 41.0, 45.0),
+            Row(2, "bb", 10.0, 11.0), Row(2, "bb", 10.5, 11.0), Row(3, "cc", 15.5, 19.5))
+        )
+      }
+    }
+  }
+
+  test("partitioned join: join with two partition keys and different # of partition keys") {
+    val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+          assert(groupPartitions.size === 2,
+            "should add group partitions when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+          assert(groupPartitions.isEmpty, "should not add group partition when partition values " +
+            "mismatch, and pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df,
+          Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 11.0)))
+      }
+    }
+  }
+
+  test("SPARK-41413: partitioned join: partition values from one side are subset of those from " +
+      "the other side") {
+    val items_partitions = Array(bucket(4, "id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(4, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+          assert(groupPartitions.size === 2,
+            "should add group partitions when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+          assert(groupPartitions.isEmpty, "should not add group partition when partition values " +
+            "mismatch, and pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-41413: partitioned join: partition values from both sides overlaps") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(4, 30.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+          assert(groupPartitions.size === 2,
+            "should add group partitions when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+          assert(groupPartitions.isEmpty, "should not add group partition when partition values " +
+            "mismatch, and pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(2, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-41413: partitioned join: non-overlapping partition values from both sides") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(5, 19.5, cast('2020-02-01' as timestamp)), " +
+        "(6, 30.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        if (pushDownValues) {
+          assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
+          assert(groupPartitions.size === 2,
+            "should add group partitions when partition values mismatch")
+        } else {
+          assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
+              "pushing down partition values is not enabled")
+          assert(groupPartitions.isEmpty, "should not add group partition when partition values " +
+            "mismatch, and pushing down partition values is not enabled")
+        }
+
+        checkAnswer(df, Seq.empty)
+      }
+    }
+  }
+
+  test("SPARK-49205: KeyedPartitioning should be an Expression") {
+    val items_partitions = Array(days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 44.0, cast('2020-01-15' as timestamp)), " +
+      "(1, 45.0, cast('2020-01-15' as timestamp)), " +
+      "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(
+      s"""
+        |SELECT x, count(*) FROM (
+        | SELECT /*+ broadcast(t2) */ arrive_time as x, * FROM testcat.ns.$items t1
+        | JOIN testcat.ns.$purchases t2 ON t1.arrive_time = t2.time
+        |)
+        |GROUP BY x
+        |""".stripMargin)
+    checkAnswer(df,
+      Seq(Row(Timestamp.valueOf("2020-01-01 00:00:00"), 6),
+        Row(Timestamp.valueOf("2020-01-15 00:00:00"), 2),
+        Row(Timestamp.valueOf("2020-02-01 00:00:00"), 1)))
+    assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty)
+
+    val df2 = sql(
+      s"""
+        |WITH t1 (SELECT * FROM testcat.ns.$items)
+        |SELECT x, count(*) FROM (
+        | SELECT /*+ broadcast(t2) */ t2.time as x FROM t1
+        | JOIN testcat.ns.$purchases t2 ON t1.arrive_time = t2.time
+        | JOIN t1 t3 ON t1.arrive_time = t3.arrive_time
+        |) GROUP BY x
+        |""".stripMargin)
+    checkAnswer(df2,
+      Seq(Row(Timestamp.valueOf("2020-01-01 00:00:00"), 18),
+        Row(Timestamp.valueOf("2020-01-15 00:00:00"), 2),
+        Row(Timestamp.valueOf("2020-02-01 00:00:00"), 1)))
+    assert(collectAllShuffles(df2.queryExecution.executedPlan).isEmpty)
+  }
+
+  test("SPARK-42038: partially clustered: with same partition keys and one side fully clustered") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(("true", 5), ("false", 3)).foreach {
+        case (enable, expected) =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+            val df = createJoinTestDF(Seq("id" -> "item_id"))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "should not contain any shuffle")
+            if (pushDownValues) {
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions == expected))
+            }
+            checkAnswer(df, Seq(Row(1, "aa", 40.0, 45.0), Row(1, "aa", 40.0, 50.0),
+              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: with same partition keys and both sides partially " +
+      "clustered") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        s"(1, 55.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(2, 22.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(("true", 7), ("false", 3)).foreach {
+        case (enable, expected) =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+            val df = createJoinTestDF(Seq("id" -> "item_id"))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "should not contain any shuffle")
+            if (pushDownValues) {
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            }
+            checkAnswer(df, Seq(
+              Row(1, "aa", 40.0, 45.0), Row(1, "aa", 40.0, 50.0), Row(1, "aa", 40.0, 55.0),
+              Row(1, "aa", 41.0, 45.0), Row(1, "aa", 41.0, 50.0), Row(1, "aa", 41.0, 55.0),
+              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(2, "bb", 10.0, 22.0),
+              Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: with different partition keys and both sides partially " +
+      "clustered") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+        s"(4, 'dd', 18.0, cast('2023-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        s"(1, 55.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(2, 25.0, cast('2020-01-03' as timestamp)), " +
+        s"(2, 30.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
+        s"(5, 30.0, cast('2023-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq((true, true, 8), (false, true, 3), (true, false, 10), (false, false, 5)).foreach {
+        case (partial, filter, expected) =>
+          withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> partial.toString) {
+            val df = createJoinTestDF(Seq("id" -> "item_id"))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not contain any shuffle")
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+            }
+            checkAnswer(df, Seq(
+              Row(1, "aa", 40.0, 45.0), Row(1, "aa", 40.0, 50.0), Row(1, "aa", 40.0, 55.0),
+              Row(1, "aa", 41.0, 45.0), Row(1, "aa", 41.0, 50.0), Row(1, "aa", 41.0, 55.0),
+              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(2, "bb", 10.0, 25.0),
+              Row(2, "bb", 10.0, 30.0), Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+
+  test("SPARK-42038: partially clustered: with different partition keys and missing keys on " +
+      "left-hand side") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+        s"(4, 'dd', 18.0, cast('2023-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(2, 25.0, cast('2020-01-03' as timestamp)), " +
+        s"(2, 30.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
+        s"(5, 30.0, cast('2023-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq((true, true, 3), (false, true, 2), (true, false, 9), (false, false, 5)).foreach {
+        case(partial, filter, expected) =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                partial.toString) {
+            val df = createJoinTestDF(Seq("id" -> "item_id"))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not contain any shuffle")
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+            }
+            checkAnswer(df, Seq(
+              Row(1, "aa", 40.0, 45.0), Row(1, "aa", 40.0, 50.0),
+              Row(1, "aa", 41.0, 45.0), Row(1, "aa", 41.0, 50.0),
+              Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: with different partition keys and missing keys on " +
+      "right-hand side") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(2, 15.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
+        s"(4, 25.0, cast('2020-02-01' as timestamp)), " +
+        s"(5, 30.0, cast('2023-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq((true, true, 2), (false, true, 2), (true, false, 6), (false, false, 5)).foreach {
+        case (partial, filter, expected) =>
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                partial.toString) {
+            val df = createJoinTestDF(Seq("id" -> "item_id"))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not contain any shuffle")
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+            }
+            checkAnswer(df, Seq(
+              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: left outer join") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 15.0, cast('2020-01-02' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(2, 20.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
+        s"(4, 25.0, cast('2020-02-01' as timestamp)), " +
+        s"(5, 30.0, cast('2023-01-01' as timestamp))")
+
+    // In a left-outer join, and when the left side has larger stats, partially clustered
+    // distribution should kick in and pick the right hand side to replicate partitions.
+    Seq(true, false).foreach { pushDownValues =>
+      Seq((true, true, 5), (false, true, 3), (true, false, 7), (false, false, 5)).foreach {
+        case (partial, filter, expected) =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+              partial.toString) {
+            val df = createJoinTestDF(
+              Seq("id" -> "item_id", "arrive_time" -> "time"), joinType = "LEFT")
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not contain any shuffle")
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+            }
+            checkAnswer(df, Seq(
+              Row(1, "aa", 40.0, null), Row(1, "aa", 41.0, null),
+              Row(2, "bb", 10.0, 20.0), Row(2, "bb", 15.0, null), Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: right outer join") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 20.0, cast('2020-02-01' as timestamp)), " +
+        s"(4, 25.0, cast('2020-02-01' as timestamp)), " +
+        s"(5, 30.0, cast('2023-01-01' as timestamp))")
+
+    // The left-hand side is picked as the side to replicate partitions based on stats, but since
+    // this is right outer join, partially clustered distribution won't kick in, and Spark should
+    // only push down partition values on both side.
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(("true", 5), ("false", 5)).foreach {
+        case (enable, expected) =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+            val df = createJoinTestDF(
+              Seq("id" -> "item_id", "arrive_time" -> "time"), joinType = "RIGHT")
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not contain any shuffle")
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+            }
+            checkAnswer(df, Seq(
+              Row(null, null, null, 25.0), Row(null, null, null, 30.0),
+              Row(1, "aa", 40.0, 45.0),
+              Row(2, "bb", 10.0, 15.0), Row(2, "bb", 10.0, 20.0), Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: full outer join is not applicable") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 45.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 15.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 20.0, cast('2020-01-02' as timestamp)), " +
+        s"(3, 20.0, cast('2020-01-01' as timestamp)), " +
+        s"(4, 25.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 30.0, cast('2023-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(("true", 5), ("false", 5)).foreach {
+        case (enable, expected) =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+            val df = createJoinTestDF(
+              Seq("id" -> "item_id", "arrive_time" -> "time"), joinType = "FULL OUTER")
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not contain any shuffle")
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+            }
+            checkAnswer(df, Seq(
+              Row(null, null, null, 20.0), Row(null, null, null, 25.0), Row(null, null, null, 30.0),
+              Row(1, "aa", 40.0, 45.0), Row(1, "aa", 41.0, null),
+              Row(2, "bb", 10.0, 15.0), Row(3, "cc", 15.5, 20.0)))
+          }
+      }
+    }
+  }
+
+  test("[SPARK-53074] partial clustering avoided to meet a non-JOIN required distribution") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 45.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+      "(2, 15.0, cast('2020-01-02' as timestamp)), " +
+      "(2, 20.0, cast('2020-01-03' as timestamp)), " +
+      "(3, 20.0, cast('2020-02-01' as timestamp))")
+
+    for {
+      pushDownValues <- Seq(true, false)
+      enable <- Seq("true", "false")
+    } yield {
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> false.toString,
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+        // The left side uses a key-grouped partitioning to satisfy the WINDOW function's
+        // required distribution. By default, the left side will be partially clustered (since
+        // it's estimated to be larger), but this partial clustering won't be applied because the
+        // left side needs to be key-grouped partitioned to satisfy the WINDOW's required
+        // distribution.
+        // The left side needs to project additional fields to ensure it's estimated to be
+        // larger than the right side.
+        val df = sql(
+          s"""
+             |WITH purchases_windowed AS (
+             |  SELECT
+             |    ROW_NUMBER() OVER (
+             |      PARTITION BY item_id ORDER BY time DESC
+             |    ) AS RN,
+             |    item_id,
+             |    price,
+             |    STRUCT(item_id, price, time) AS purchases_struct
+             |  FROM testcat.ns.$purchases
+             |)
+             |SELECT
+             |  SUM(p.price),
+             |  SUM(p.purchases_struct.item_id),
+             |  SUM(p.purchases_struct.price),
+             |  MAX(p.purchases_struct.time)
+             |FROM
+             |  purchases_windowed p JOIN testcat.ns.$items i
+             |  ON i.id = p.item_id
+             |WHERE p.RN = 1
+             |""".stripMargin)
+        checkAnswer(df, Seq(Row(140.0, 7, 140.0, Timestamp.valueOf("2020-02-01 00:00:00"))))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not contain any shuffle")
+        if (pushDownValues) {
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions === 3))
+        }
+      }
+    }
+  }
+
+  test("SPARK-55848: dropDuplicates after SPJ with partial clustering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    // Two rows for id=1 so partial clustering may split them across tasks
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
+      // dropDuplicates on the join key after a partially-clustered SPJ must still
+      // produce the correct number of distinct ids.  Before the fix, the
+      // partially-clustered partitioning was incorrectly treated as satisfying
+      // ClusteredDistribution, so EnsureRequirements did not insert an Exchange
+      // before the dedup, leading to duplicate rows.
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")} DISTINCT i.id
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON i.id = p.item_id
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the aggregate.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for aggregate)")
+    }
+  }
+
+  test("SPARK-55848: Window dedup after SPJ with partial clustering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+        "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
+      // Use ROW_NUMBER() OVER to dedup joined rows per id after a partially-clustered
+      // SPJ.  The WINDOW operator requires ClusteredDistribution on i.id; with partial
+      // clustering the plan must insert the right exchange/group so that the window
+      // produces exactly one row per id.
+      val df = sql(
+        s"""
+           |SELECT id, price FROM (
+           |  ${selectWithMergeJoinHint("i", "p")} i.id, i.price,
+           |    ROW_NUMBER() OVER (PARTITION BY i.id ORDER BY i.price DESC) AS rn
+           |  FROM testcat.ns.$items i
+           |  JOIN testcat.ns.$purchases p ON i.id = p.item_id
+           |) t WHERE rn = 1
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1, 41.0f), Row(2, 10.0f), Row(3, 15.5f)))
+
+      // One GroupPartitionsExec per join child to align the partially-clustered
+      // partitions, and one above the join to group for the window.
+      val joinGP = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(joinGP.size === 2,
+        "expected 2 GroupPartitionsExec under the join")
+      val allGP = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(allGP.size === 3,
+        "expected 3 GroupPartitionsExec total (2 under join + 1 above for window)")
+    }
+  }
+
+  test("SPARK-55848: checkpointed partially-clustered join with dedup") {
+    withTempDir { dir =>
+      spark.sparkContext.setCheckpointDir(dir.getPath)
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          "(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          "(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          "(1, 50.0, cast('2020-01-02' as timestamp)), " +
+          "(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> true.toString) {
+        // Checkpoint the JOIN result (not the scan) so the checkpoint node carries the
+        // partially-clustered KeyGroupedPartitioning. The dedup on top must still insert
+        // the required grouping operator because partially-clustered partitioning does not
+        // satisfy ClusteredDistribution.
+        val joinedDf = sql(
+          s"""${selectWithMergeJoinHint("i", "p")} i.id, i.name, i.price
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON i.id = p.item_id""".stripMargin)
+        val checkpointedDf = joinedDf.checkpoint()
+        val df = checkpointedDf.select("id").distinct()
+        checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+
+        val checkpointScans = collect(df.queryExecution.executedPlan) {
+          case r: RDDScanExec => r
+        }
+        assert(checkpointScans.exists(_.outputPartitioning match {
+          case kp: physical.KeyedPartitioning => !kp.isGrouped
+          case _ => false
+        }), "checkpoint (RDDScanExec) should have ungrouped KeyedPartitioning")
+
+        val allGroupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+        assert(allGroupPartitions.size === 1,
+          "expected 1 GroupPartitionsExec above the checkpointed join for dedup")
+      }
+    }
+  }
+
+  test("data source partitioning + dynamic partition filtering") {
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+          s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+          s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      Seq(true, false).foreach { pushDownValues =>
+        withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+          // number of unique partitions changed after dynamic filtering - the gap should be filled
+          // with empty partitions and the job should still succeed
+          var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p " +
+              "WHERE i.id = p.item_id AND i.price > 40.0")
+
+          var shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          var scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.forall(_.outputPartitioning.numPartitions === 5))
+          var groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions === 3))
+
+          checkAnswer(df, Seq(Row(131)))
+
+          // Verify that filteredPartitions contains None for filtered-out partitions.
+          // After DPF with filter i.price > 40.0, only id=1 survives on items side.
+          // The purchases side should be pruned to only item_id=1.
+          // purchases: 5 total partitions (3 for id=1, 1 for id=2, 1 for id=3)
+          // After DPF: 3 Some (id=1), 2 None (id=2, id=3)
+          assertFilteredPartitions(scans, Seq(5, 5), Seq(0, 2))
+
+          // dynamic filtering doesn't change partitioning so storage-partitioned join should kick
+          // in
+          df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p " +
+              "WHERE i.id = p.item_id AND i.price >= 10.0")
+
+          shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          scans = collectScans(df.queryExecution.executedPlan)
+          assert(scans.forall(_.outputPartitioning.numPartitions === 5))
+          groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions === 3))
+
+          checkAnswer(df, Seq(Row(303.5)))
+
+          // With filter i.price >= 10.0, all ids (1, 2, 3) survive,
+          // so no partitions should be filtered out
+          assertFilteredPartitions(scans, Seq(5, 5), Seq(0, 0))
+        }
+      }
+    }
+  }
+
+  test("SPARK-42038: partially clustered: with dynamic partition filtering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp)), " +
+        s"(4, 'dd', 18.0, cast('2023-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 50.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 55.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 60.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 65.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp)), " +
+        s"(5, 25.0, cast('2023-01-01' as timestamp)), " +
+        s"(5, 26.0, cast('2023-01-01' as timestamp)), " +
+        s"(5, 28.0, cast('2023-01-01' as timestamp)), " +
+        s"(6, 50.0, cast('2023-02-01' as timestamp)), " +
+        s"(6, 50.0, cast('2023-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(("true", 15), ("false", 6)).foreach {
+        case (enable, expected) =>
+          withSQLConf(
+              SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+              SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+              SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+              SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10",
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> enable) {
+
+            // storage-partitioned join should kick in and fill the missing partitions & splits
+            // after dynamic filtering with empty partitions & splits, respectively.
+            val df = sql(s"SELECT sum(p.price) from " +
+                s"testcat.ns.$purchases p, testcat.ns.$items i WHERE " +
+                s"p.item_id = i.id AND p.price < 45.0")
+
+            checkAnswer(df, Seq(Row(213.5)))
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            val scans = collectScans(df.queryExecution.executedPlan)
+            val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            assert(scans.map(_.outputPartitioning.numPartitions) === Seq(14, 6))
+            if (pushDownValues) {
+              assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+              assert(groupPartitions.forall(_.outputPartitioning.numPartitions === expected))
+            } else {
+              assert(shuffles.nonEmpty,
+                "should contain shuffle when not pushing down partition values")
+              assert(groupPartitions.isEmpty)
+            }
+
+            // Verify filteredPartitions for DPF.
+            // After filter p.price < 45.0, purchases has item_ids {1, 2, 3, 5}.
+            // Items side should be pruned to these ids. Since items has {1, 2, 3, 4},
+            // id=4 should be filtered out.
+            // purchases: 14 total, all kept (0 None) - no DPF on probe side
+            // items: 6 total, id=4 filtered (1 None)
+            assertFilteredPartitions(scans, Seq(14, 6), Seq(0, 1))
+          }
+      }
+    }
+  }
+
+  test("SPARK-41471: shuffle one side: only one side reports partitioning") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
+            " is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-41471: shuffle one side: shuffle side has more partition value") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp)), " +
+      "(5, 26.0, cast('2023-01-01' as timestamp)), " +
+      "(6, 50.0, cast('2023-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        Seq("", "LEFT OUTER", "RIGHT OUTER", "FULL OUTER").foreach { joinType =>
+          val df = createJoinTestDF(Seq("id" -> "item_id"), joinType = joinType)
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          if (shuffle) {
+            assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+          } else {
+            assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one " +
+              "side is not enabled")
+          }
+          joinType match {
+            case "" =>
+              checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+            case "LEFT OUTER" =>
+              checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5),
+                Row(4, "cc", 15.5, null)))
+            case "RIGHT OUTER" =>
+              checkAnswer(df, Seq(Row(null, null, null, 26.0), Row(null, null, null, 50.0),
+                Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+            case "FULL OUTER" =>
+              checkAnswer(df, Seq(Row(null, null, null, 26.0), Row(null, null, null, 50.0),
+                Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5),
+                Row(4, "cc", 15.5, null)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-41471: shuffle one side: only one side reports partitioning with two identity") {
+    val items_partitions = Array(identity("id"), identity("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
+            " is not enabled")
+        }
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+      }
+    }
+  }
+
+  test("SPARK-41471: shuffle one side: partitioning with transform") {
+    val items_partitions = Array(years("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2021-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString) {
+        val df = createJoinTestDF(Seq("arrive_time" -> "time"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (shuffle) {
+          assert(shuffles.size == 1, "partitioning with transform should trigger SPJ")
+        } else {
+          assert(shuffles.size == 2, "should add two side shuffle when bucketing shuffle one side" +
+            " is not enabled")
+        }
+
+        checkAnswer(df, Seq(
+          Row(1, "aa", 40.0, 42.0),
+          Row(3, "bb", 10.0, 42.0),
+          Row(4, "cc", 15.5, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-41471: shuffle one side: work with group partition split") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp)), " +
+      "(5, 26.0, cast('2023-01-01' as timestamp)), " +
+      "(6, 50.0, cast('2023-02-01' as timestamp))")
+
+    Seq(true, false).foreach { shuffle =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> shuffle.toString,
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0), Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-44641: duplicated records when SPJ is not triggered") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"""
+        INSERT INTO testcat.ns.$items VALUES
+        (1, 'aa', 40.0, cast('2020-01-01' as timestamp)),
+        (1, 'aa', 41.0, cast('2020-01-15' as timestamp)),
+        (2, 'bb', 10.0, cast('2020-01-01' as timestamp)),
+        (2, 'bb', 10.5, cast('2020-01-01' as timestamp)),
+        (3, 'cc', 15.5, cast('2020-02-01' as timestamp))""")
+
+    val purchases_partitions = Array(bucket(8, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"""INSERT INTO testcat.ns.$purchases VALUES
+        (1, 42.0, cast('2020-01-01' as timestamp)),
+        (1, 44.0, cast('2020-01-15' as timestamp)),
+        (1, 45.0, cast('2020-01-15' as timestamp)),
+        (2, 11.0, cast('2020-01-01' as timestamp)),
+        (3, 19.5, cast('2020-02-01' as timestamp))""")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(true, false).foreach { partiallyClusteredEnabled =>
+        withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+              partiallyClusteredEnabled.toString) {
+
+          // join keys are not the same as the partition keys, therefore SPJ is not triggered.
+          val df = createJoinTestDF(Seq("arrive_time" -> "time"), extraColumns = Seq("p.item_id"))
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.nonEmpty, "shuffle should exist when SPJ is not used")
+
+          checkAnswer(df,
+            Seq(
+              Row(1, "aa", 40.0, 11.0, 2),
+              Row(1, "aa", 40.0, 42.0, 1),
+              Row(1, "aa", 41.0, 44.0, 1),
+              Row(1, "aa", 41.0, 45.0, 1),
+              Row(2, "bb", 10.0, 11.0, 2),
+              Row(2, "bb", 10.0, 42.0, 1),
+              Row(2, "bb", 10.5, 11.0, 2),
+              Row(2, "bb", 10.5, 42.0, 1),
+              Row(3, "cc", 15.5, 19.5, 3)
+            )
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-48065: SPJ: allowKeysSubsetOfPartitionKeys is too strict") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+    val partition = Array(identity("id"))
+    createTable(table1, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp)), " +
+        "(3, 'ee', cast('2020-01-01' as timestamp)), " +
+        "(3, 'ee', cast('2020-01-01' as timestamp))")
+
+    createTable(table2, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "(4, 'zz', cast('2020-01-01' as timestamp)), " +
+        "(4, 'zz', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp)), " +
+        "(3, 'xx', cast('2020-01-01' as timestamp)), " +
+        "(3, 'xx', cast('2020-01-01' as timestamp)), " +
+        "(2, 'ww', cast('2020-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(true, false).foreach { partiallyClustered =>
+        withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+            partiallyClustered.toString,
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("t1", "t2")}
+               |t1.id AS id, t1.data AS t1data, t2.data AS t2data
+               |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+               |ON t1.id = t2.id AND t1.data = t2.data ORDER BY t1.id, t1data, t2data
+               |""".stripMargin)
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "SPJ should be triggered")
+
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            .map(_.outputPartitioning.numPartitions)
+          if (partiallyClustered) {
+            assert(groupPartitions == Seq(8, 8))
+          } else {
+            assert(groupPartitions == Seq(4, 4))
+          }
+          checkAnswer(df, Seq(
+            Row(3, "dd", "dd"),
+            Row(3, "dd", "dd"),
+            Row(3, "dd", "dd"),
+            Row(3, "dd", "dd")
+          ))
+        }
+      }
+    }
+  }
+
+  test("SPARK-44647: SPJ: test join key is subset of cluster key " +
+      "with push values and partially-clustered") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+    val partition = Array(identity("id"), identity("data"))
+    createTable(table1, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-01' as timestamp)), " +
+        "(2, 'cc', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp)), " +
+        "(3, 'dd', cast('2020-01-01' as timestamp)), " +
+        "(3, 'ee', cast('2020-01-01' as timestamp)), " +
+        "(3, 'ee', cast('2020-01-01' as timestamp))")
+
+    createTable(table2, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "(4, 'zz', cast('2020-01-01' as timestamp)), " +
+        "(4, 'zz', cast('2020-01-01' as timestamp)), " +
+        "(3, 'yy', cast('2020-01-01' as timestamp)), " +
+        "(3, 'yy', cast('2020-01-01' as timestamp)), " +
+        "(3, 'xx', cast('2020-01-01' as timestamp)), " +
+        "(3, 'xx', cast('2020-01-01' as timestamp)), " +
+        "(2, 'ww', cast('2020-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(true, false).foreach { filter =>
+        Seq(true, false).foreach { partiallyClustered =>
+          Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+            withSQLConf(
+              SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+              SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                  partiallyClustered.toString,
+              SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
+              SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+                  allowKeysSubsetOfPartitionKeys.toString) {
+              val df = sql(
+                s"""
+                  |${selectWithMergeJoinHint("t1", "t2")}
+                  |t1.id AS id, t1.data AS t1data, t2.data AS t2data
+                  |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                  |ON t1.id = t2.id ORDER BY t1.id, t1data, t2data
+                  |""".stripMargin)
+              val shuffles = collectShuffles(df.queryExecution.executedPlan)
+              if (allowKeysSubsetOfPartitionKeys) {
+                assert(shuffles.isEmpty, "SPJ should be triggered")
+              } else {
+                assert(shuffles.nonEmpty, "SPJ should not be triggered")
+              }
+
+              val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+                .map(_.outputPartitioning.numPartitions)
+              (allowKeysSubsetOfPartitionKeys, partiallyClustered, filter) match {
+                // SPJ, partially-clustered, with filter
+                case (true, true, true) => assert(groupPartitions == Seq(6, 6))
+
+                // SPJ, partially-clustered, no filter
+                case (true, true, false) => assert(groupPartitions == Seq(8, 8))
+
+                // SPJ and not partially-clustered, with filter
+                case (true, false, true) => assert(groupPartitions == Seq(2, 2))
+
+                // SPJ and not partially-clustered, no filter
+                case (true, false, false) => assert(groupPartitions == Seq(4, 4))
+
+                // No SPJ
+                case _ => assert(groupPartitions == Seq.empty)
+              }
+
+              checkAnswer(df, Seq(
+                Row(2, "bb", "ww"),
+                Row(2, "cc", "ww"),
+                Row(3, "dd", "xx"),
+                Row(3, "dd", "xx"),
+                Row(3, "dd", "xx"),
+                Row(3, "dd", "xx"),
+                Row(3, "dd", "yy"),
+                Row(3, "dd", "yy"),
+                Row(3, "dd", "yy"),
+                Row(3, "dd", "yy"),
+                Row(3, "ee", "xx"),
+                Row(3, "ee", "xx"),
+                Row(3, "ee", "xx"),
+                Row(3, "ee", "xx"),
+                Row(3, "ee", "yy"),
+                Row(3, "ee", "yy"),
+                Row(3, "ee", "yy"),
+                Row(3, "ee", "yy")
+              ))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-47094: SPJ: Support compatible buckets") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+
+    Seq(
+      ((2, 4), (4, 2)),
+      ((4, 2), (2, 4)),
+      ((2, 2), (4, 6)),
+      ((6, 2), (2, 2))).foreach {
+      case ((table1buckets1, table1buckets2), (table2buckets1, table2buckets2)) =>
+        catalog.clearTables()
+
+        val partition1 = Array(bucket(table1buckets1, "store_id"),
+          bucket(table1buckets2, "dept_id"))
+        val partition2 = Array(bucket(table2buckets1, "store_id"),
+          bucket(table2buckets2, "dept_id"))
+
+        Seq((table1, partition1), (table2, partition2)).foreach { case (tab, part) =>
+          createTable(tab, columns2, part)
+          val insertStr = s"INSERT INTO testcat.ns.$tab VALUES " +
+            "(0, 0, 'aa'), " +
+            "(0, 0, 'ab'), " + // duplicate partition key
+            "(0, 1, 'ac'), " +
+            "(0, 2, 'ad'), " +
+            "(0, 3, 'ae'), " +
+            "(0, 4, 'af'), " +
+            "(0, 5, 'ag'), " +
+            "(1, 0, 'ah'), " +
+            "(1, 0, 'ai'), " + // duplicate partition key
+            "(1, 1, 'aj'), " +
+            "(1, 2, 'ak'), " +
+            "(1, 3, 'al'), " +
+            "(1, 4, 'am'), " +
+            "(1, 5, 'an'), " +
+            "(2, 0, 'ao'), " +
+            "(2, 0, 'ap'), " + // duplicate partition key
+            "(2, 1, 'aq'), " +
+            "(2, 2, 'ar'), " +
+            "(2, 3, 'as'), " +
+            "(2, 4, 'at'), " +
+            "(2, 5, 'au'), " +
+            "(3, 0, 'av'), " +
+            "(3, 0, 'aw'), " + // duplicate partition key
+            "(3, 1, 'ax'), " +
+            "(3, 2, 'ay'), " +
+            "(3, 3, 'az'), " +
+            "(3, 4, 'ba'), " +
+            "(3, 5, 'bb'), " +
+            "(4, 0, 'bc'), " +
+            "(4, 0, 'bd'), " + // duplicate partition key
+            "(4, 1, 'be'), " +
+            "(4, 2, 'bf'), " +
+            "(4, 3, 'bg'), " +
+            "(4, 4, 'bh'), " +
+            "(4, 5, 'bi'), " +
+            "(5, 0, 'bj'), " +
+            "(5, 0, 'bk'), " + // duplicate partition key
+            "(5, 1, 'bl'), " +
+            "(5, 2, 'bm'), " +
+            "(5, 3, 'bn'), " +
+            "(5, 4, 'bo'), " +
+            "(5, 5, 'bp')"
+
+            // additional unmatched partitions to test push down
+            val finalStr = if (tab == table1) {
+              insertStr ++ ", (8, 0, 'xa'), (8, 8, 'xx')"
+            } else {
+              insertStr ++ ", (9, 0, 'ya'), (9, 9, 'yy')"
+            }
+
+            sql(finalStr)
+        }
+
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+              allowKeysSubsetOfPartitionKeys.toString,
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+            val df = sql(
+              s"""
+                 |${selectWithMergeJoinHint("t1", "t2")}
+                 |t1.store_id, t1.dept_id, t1.data, t2.data
+                 |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                 |ON t1.store_id = t2.store_id AND t1.dept_id = t2.dept_id
+                 |ORDER BY t1.store_id, t1.dept_id, t1.data, t2.data
+                 |""".stripMargin)
+
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "SPJ should be triggered")
+
+            val partions = collectGroupPartitions(df.queryExecution.executedPlan)
+              .map(_.outputPartitioning.numPartitions)
+            val expectedBuckets = Math.min(table1buckets1, table2buckets1) *
+              Math.min(table1buckets2, table2buckets2)
+            assert(partions == Seq(expectedBuckets, expectedBuckets))
+
+            checkAnswer(df, Seq(
+              Row(0, 0, "aa", "aa"),
+              Row(0, 0, "aa", "ab"),
+              Row(0, 0, "ab", "aa"),
+              Row(0, 0, "ab", "ab"),
+              Row(0, 1, "ac", "ac"),
+              Row(0, 2, "ad", "ad"),
+              Row(0, 3, "ae", "ae"),
+              Row(0, 4, "af", "af"),
+              Row(0, 5, "ag", "ag"),
+              Row(1, 0, "ah", "ah"),
+              Row(1, 0, "ah", "ai"),
+              Row(1, 0, "ai", "ah"),
+              Row(1, 0, "ai", "ai"),
+              Row(1, 1, "aj", "aj"),
+              Row(1, 2, "ak", "ak"),
+              Row(1, 3, "al", "al"),
+              Row(1, 4, "am", "am"),
+              Row(1, 5, "an", "an"),
+              Row(2, 0, "ao", "ao"),
+              Row(2, 0, "ao", "ap"),
+              Row(2, 0, "ap", "ao"),
+              Row(2, 0, "ap", "ap"),
+              Row(2, 1, "aq", "aq"),
+              Row(2, 2, "ar", "ar"),
+              Row(2, 3, "as", "as"),
+              Row(2, 4, "at", "at"),
+              Row(2, 5, "au", "au"),
+              Row(3, 0, "av", "av"),
+              Row(3, 0, "av", "aw"),
+              Row(3, 0, "aw", "av"),
+              Row(3, 0, "aw", "aw"),
+              Row(3, 1, "ax", "ax"),
+              Row(3, 2, "ay", "ay"),
+              Row(3, 3, "az", "az"),
+              Row(3, 4, "ba", "ba"),
+              Row(3, 5, "bb", "bb"),
+              Row(4, 0, "bc", "bc"),
+              Row(4, 0, "bc", "bd"),
+              Row(4, 0, "bd", "bc"),
+              Row(4, 0, "bd", "bd"),
+              Row(4, 1, "be", "be"),
+              Row(4, 2, "bf", "bf"),
+              Row(4, 3, "bg", "bg"),
+              Row(4, 4, "bh", "bh"),
+              Row(4, 5, "bi", "bi"),
+              Row(5, 0, "bj", "bj"),
+              Row(5, 0, "bj", "bk"),
+              Row(5, 0, "bk", "bj"),
+              Row(5, 0, "bk", "bk"),
+              Row(5, 1, "bl", "bl"),
+              Row(5, 2, "bm", "bm"),
+              Row(5, 3, "bn", "bn"),
+              Row(5, 4, "bo", "bo"),
+              Row(5, 5, "bp", "bp")
+            ))
+          }
+        }
+    }
+  }
+
+  test("SPARK-47094: SPJ:Support compatible buckets with common divisor") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+
+    Seq(
+      ((6, 4), (4, 6)),
+      ((6, 6), (4, 4)),
+      ((4, 4), (6, 6)),
+      ((4, 6), (6, 4))).foreach {
+      case ((table1buckets1, table1buckets2), (table2buckets1, table2buckets2)) =>
+        catalog.clearTables()
+
+        val partition1 = Array(bucket(table1buckets1, "store_id"),
+          bucket(table1buckets2, "dept_id"))
+        val partition2 = Array(bucket(table2buckets1, "store_id"),
+          bucket(table2buckets2, "dept_id"))
+
+        Seq((table1, partition1), (table2, partition2)).foreach { case (tab, part) =>
+          createTable(tab, columns2, part)
+          val insertStr = s"INSERT INTO testcat.ns.$tab VALUES " +
+            "(0, 0, 'aa'), " +
+            "(0, 0, 'ab'), " + // duplicate partition key
+            "(0, 1, 'ac'), " +
+            "(0, 2, 'ad'), " +
+            "(0, 3, 'ae'), " +
+            "(0, 4, 'af'), " +
+            "(0, 5, 'ag'), " +
+            "(1, 0, 'ah'), " +
+            "(1, 0, 'ai'), " + // duplicate partition key
+            "(1, 1, 'aj'), " +
+            "(1, 2, 'ak'), " +
+            "(1, 3, 'al'), " +
+            "(1, 4, 'am'), " +
+            "(1, 5, 'an'), " +
+            "(2, 0, 'ao'), " +
+            "(2, 0, 'ap'), " + // duplicate partition key
+            "(2, 1, 'aq'), " +
+            "(2, 2, 'ar'), " +
+            "(2, 3, 'as'), " +
+            "(2, 4, 'at'), " +
+            "(2, 5, 'au'), " +
+            "(3, 0, 'av'), " +
+            "(3, 0, 'aw'), " + // duplicate partition key
+            "(3, 1, 'ax'), " +
+            "(3, 2, 'ay'), " +
+            "(3, 3, 'az'), " +
+            "(3, 4, 'ba'), " +
+            "(3, 5, 'bb'), " +
+            "(4, 0, 'bc'), " +
+            "(4, 0, 'bd'), " + // duplicate partition key
+            "(4, 1, 'be'), " +
+            "(4, 2, 'bf'), " +
+            "(4, 3, 'bg'), " +
+            "(4, 4, 'bh'), " +
+            "(4, 5, 'bi'), " +
+            "(5, 0, 'bj'), " +
+            "(5, 0, 'bk'), " + // duplicate partition key
+            "(5, 1, 'bl'), " +
+            "(5, 2, 'bm'), " +
+            "(5, 3, 'bn'), " +
+            "(5, 4, 'bo'), " +
+            "(5, 5, 'bp')"
+
+            // additional unmatched partitions to test push down
+            val finalStr = if (tab == table1) {
+              insertStr ++ ", (8, 0, 'xa'), (8, 8, 'xx')"
+            } else {
+              insertStr ++ ", (9, 0, 'ya'), (9, 9, 'yy')"
+            }
+
+            sql(finalStr)
+        }
+
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+              allowKeysSubsetOfPartitionKeys.toString,
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+            val df = sql(
+              s"""
+                 |${selectWithMergeJoinHint("t1", "t2")}
+                 |t1.store_id, t1.dept_id, t1.data, t2.data
+                 |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                 |ON t1.store_id = t2.store_id AND t1.dept_id = t2.dept_id
+                 |ORDER BY t1.store_id, t1.dept_id, t1.data, t2.data
+                 |""".stripMargin)
+
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.isEmpty, "SPJ should be triggered")
+
+            val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              .map(_.outputPartitioning.numPartitions)
+            def gcd(a: Int, b: Int): Int = BigInt(a).gcd(BigInt(b)).toInt
+            val expectedPartitions = gcd(table1buckets1, table2buckets1) *
+              gcd(table1buckets2, table2buckets2)
+            assert(partitions == Seq(expectedPartitions, expectedPartitions))
+
+            checkAnswer(df, Seq(
+              Row(0, 0, "aa", "aa"),
+              Row(0, 0, "aa", "ab"),
+              Row(0, 0, "ab", "aa"),
+              Row(0, 0, "ab", "ab"),
+              Row(0, 1, "ac", "ac"),
+              Row(0, 2, "ad", "ad"),
+              Row(0, 3, "ae", "ae"),
+              Row(0, 4, "af", "af"),
+              Row(0, 5, "ag", "ag"),
+              Row(1, 0, "ah", "ah"),
+              Row(1, 0, "ah", "ai"),
+              Row(1, 0, "ai", "ah"),
+              Row(1, 0, "ai", "ai"),
+              Row(1, 1, "aj", "aj"),
+              Row(1, 2, "ak", "ak"),
+              Row(1, 3, "al", "al"),
+              Row(1, 4, "am", "am"),
+              Row(1, 5, "an", "an"),
+              Row(2, 0, "ao", "ao"),
+              Row(2, 0, "ao", "ap"),
+              Row(2, 0, "ap", "ao"),
+              Row(2, 0, "ap", "ap"),
+              Row(2, 1, "aq", "aq"),
+              Row(2, 2, "ar", "ar"),
+              Row(2, 3, "as", "as"),
+              Row(2, 4, "at", "at"),
+              Row(2, 5, "au", "au"),
+              Row(3, 0, "av", "av"),
+              Row(3, 0, "av", "aw"),
+              Row(3, 0, "aw", "av"),
+              Row(3, 0, "aw", "aw"),
+              Row(3, 1, "ax", "ax"),
+              Row(3, 2, "ay", "ay"),
+              Row(3, 3, "az", "az"),
+              Row(3, 4, "ba", "ba"),
+              Row(3, 5, "bb", "bb"),
+              Row(4, 0, "bc", "bc"),
+              Row(4, 0, "bc", "bd"),
+              Row(4, 0, "bd", "bc"),
+              Row(4, 0, "bd", "bd"),
+              Row(4, 1, "be", "be"),
+              Row(4, 2, "bf", "bf"),
+              Row(4, 3, "bg", "bg"),
+              Row(4, 4, "bh", "bh"),
+              Row(4, 5, "bi", "bi"),
+              Row(5, 0, "bj", "bj"),
+              Row(5, 0, "bj", "bk"),
+              Row(5, 0, "bk", "bj"),
+              Row(5, 0, "bk", "bk"),
+              Row(5, 1, "bl", "bl"),
+              Row(5, 2, "bm", "bm"),
+              Row(5, 3, "bn", "bn"),
+              Row(5, 4, "bo", "bo"),
+              Row(5, 5, "bp", "bp")
+            ))
+          }
+        }
+    }
+  }
+
+  test("SPARK-47094: SPJ: Does not trigger when incompatible number of buckets on both side") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+
+    Seq(
+      (2, 3),
+      (3, 4)
+    ).foreach {
+      case (table1buckets1, table2buckets1) =>
+        catalog.clearTables()
+
+        val partition1 = Array(bucket(table1buckets1, "store_id"))
+        val partition2 = Array(bucket(table2buckets1, "store_id"))
+
+        Seq((table1, partition1), (table2, partition2)).foreach { case (tab, part) =>
+          createTable(tab, columns2, part)
+          val insertStr = s"INSERT INTO testcat.ns.$tab VALUES " +
+            "(0, 0, 'aa'), " +
+            "(1, 0, 'ab'), " + // duplicate partition key
+            "(2, 2, 'ac'), " +
+            "(3, 3, 'ad'), " +
+            "(4, 2, 'bc') "
+
+          sql(insertStr)
+        }
+
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+              allowKeysSubsetOfPartitionKeys.toString,
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+            val df = sql(
+              s"""
+                 |${selectWithMergeJoinHint("t1", "t2")}
+                 |t1.store_id, t1.dept_id, t1.data, t2.data
+                 |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                 |ON t1.store_id = t2.store_id AND t1.dept_id = t2.dept_id
+                 |""".stripMargin)
+
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            assert(shuffles.nonEmpty, "SPJ should not be triggered")
+          }
+        }
+    }
+  }
+
+  test("SPARK-47094: Support compatible buckets with less join keys than partition keys") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+
+    Seq((2, 4), (4, 2), (2, 6), (6, 2)).foreach {
+      case (table1buckets, table2buckets) =>
+        catalog.clearTables()
+
+        val partition1 = Array(identity("data"),
+          bucket(table1buckets, "dept_id"))
+        val partition2 = Array(bucket(3, "store_id"),
+          bucket(table2buckets, "dept_id"))
+
+        createTable(table1, columns2, partition1)
+        sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+          "(0, 0, 'aa'), " +
+          "(1, 0, 'ab'), " +
+          "(2, 1, 'ac'), " +
+          "(3, 2, 'ad'), " +
+          "(4, 3, 'ae'), " +
+          "(5, 4, 'af'), " +
+          "(6, 5, 'ag'), " +
+
+          // value without other side match
+          "(6, 6, 'xx')"
+        )
+
+        createTable(table2, columns2, partition2)
+        sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+          "(6, 0, '01'), " +
+          "(5, 1, '02'), " + // duplicate partition key
+          "(5, 1, '03'), " +
+          "(4, 2, '04'), " +
+          "(3, 3, '05'), " +
+          "(2, 4, '06'), " +
+          "(1, 5, '07'), " +
+
+          // value without other side match
+          "(7, 7, '99')"
+        )
+
+
+        withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("t1", "t2")}
+               |t1.store_id, t2.store_id, t1.dept_id, t2.dept_id, t1.data, t2.data
+               |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+               |ON t1.dept_id = t2.dept_id
+               |ORDER BY t1.store_id, t1.dept_id, t1.data, t2.data
+               |""".stripMargin)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "SPJ should be triggered")
+
+          val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            .map(_.outputPartitioning.numPartitions)
+
+          val expectedBuckets = Math.min(table1buckets, table2buckets)
+
+          assert(partitions == Seq(expectedBuckets, expectedBuckets))
+
+          checkAnswer(df, Seq(
+            Row(0, 6, 0, 0, "aa", "01"),
+            Row(1, 6, 0, 0, "ab", "01"),
+            Row(2, 5, 1, 1, "ac", "02"),
+            Row(2, 5, 1, 1, "ac", "03"),
+            Row(3, 4, 2, 2, "ad", "04"),
+            Row(4, 3, 3, 3, "ae", "05"),
+            Row(5, 2, 4, 4, "af", "06"),
+            Row(6, 1, 5, 5, "ag", "07")
+          ))
+        }
+      }
+  }
+
+  test("SPARK-47094: Compatible buckets does not support SPJ with " +
+    "push-down values or partially-clustered") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+
+    val partition1 = Array(bucket(4, "store_id"),
+      bucket(2, "dept_id"))
+    val partition2 = Array(bucket(2, "store_id"),
+      bucket(2, "dept_id"))
+
+    createTable(table1, columns2, partition1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+          "(0, 0, 'aa'), " +
+          "(1, 1, 'bb'), " +
+          "(2, 2, 'cc')"
+        )
+
+    createTable(table2, columns2, partition2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+          "(0, 0, 'aa'), " +
+          "(1, 1, 'bb'), " +
+          "(2, 2, 'cc')"
+        )
+
+    Seq(true, false).foreach{ allowPushDown =>
+      Seq(true, false).foreach{ partiallyClustered =>
+        withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> allowPushDown.toString,
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+            partiallyClustered.toString,
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          val df = sql(
+                s"""
+                   |${selectWithMergeJoinHint("t1", "t2")}
+                   |t1.store_id, t1.store_id, t1.dept_id, t2.dept_id, t1.data, t2.data
+                   |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                   |ON t1.store_id = t2.store_id AND t1.dept_id = t2.dept_id
+                   |ORDER BY t1.store_id, t1.dept_id, t1.data, t2.data
+                   |""".stripMargin)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
+            .map(_.outputPartitioning.numPartitions)
+
+          (allowPushDown, partiallyClustered) match {
+            case (true, false) =>
+              assert(shuffles.isEmpty, "SPJ should be triggered")
+              assert(partitions == Seq(2, 2))
+            case (_, _) =>
+              assert(shuffles.nonEmpty, "SPJ should not be triggered")
+              assert(partitions.isEmpty)
+          }
+
+          checkAnswer(df, Seq(
+              Row(0, 0, 0, 0, "aa", "aa"),
+              Row(1, 1, 1, 1, "bb", "bb"),
+              Row(2, 2, 2, 2, "cc", "cc")
+            ))
+          }
+      }
+    }
+  }
+
+  test("SPARK-44647: test join key is the second cluster key") {
+    val table1 = "tab1e1"
+    val table2 = "table2"
+    val partition = Array(identity("id"), identity("data"))
+    createTable(table1, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(2, 'bb', cast('2020-01-02' as timestamp)), " +
+        "(3, 'cc', cast('2020-01-03' as timestamp))")
+
+    createTable(table2, columns, partition)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+        "(4, 'aa', cast('2020-01-01' as timestamp)), " +
+        "(5, 'bb', cast('2020-01-02' as timestamp)), " +
+        "(6, 'cc', cast('2020-01-03' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(true, false).foreach { partiallyClustered =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key ->
+                pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                partiallyClustered.toString,
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+                allowKeysSubsetOfPartitionKeys.toString) {
+
+            val df = sql(
+              s"""
+                |${selectWithMergeJoinHint("t1", "t2")}
+                |t1.id AS t1id, t2.id as t2id, t1.data AS data
+                |FROM testcat.ns.$table1 t1 JOIN testcat.ns.$table2 t2
+                |ON t1.data = t2.data
+                |ORDER BY t1id, t1id, data
+                |""".stripMargin)
+            checkAnswer(df, Seq(Row(1, 4, "aa"), Row(2, 5, "bb"), Row(3, 6, "cc")))
+
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (allowKeysSubsetOfPartitionKeys) {
+              assert(shuffles.isEmpty, "SPJ should be triggered")
+            } else {
+              assert(shuffles.nonEmpty, "SPJ should not be triggered")
+            }
+
+            val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              .map(_.outputPartitioning.numPartitions)
+            (pushDownValues, allowKeysSubsetOfPartitionKeys, partiallyClustered) match {
+              // SPJ and partially-clustered
+              case (_, true, _) => assert(partitions == Seq(3, 3))
+              // non-SPJ or SPJ/partially-clustered
+              case _ => assert(partitions.isEmpty)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-44647: test join key is the second partition key and a transform") {
+    val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDownValues =>
+      Seq(true, false).foreach { partiallyClustered =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
+
+          withSQLConf(
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                partiallyClustered.toString,
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+                allowKeysSubsetOfPartitionKeys.toString) {
+            val df = createJoinTestDF(Seq("arrive_time" -> "time"), extraColumns = Seq("p.item_id"))
+            // Currently SPJ for case where join key not same as partition key
+            // only supported when push-part-values enabled
+            val shuffles = collectShuffles(df.queryExecution.executedPlan)
+            if (allowKeysSubsetOfPartitionKeys) {
+              assert(shuffles.isEmpty, "SPJ should be triggered")
+            } else {
+              assert(shuffles.nonEmpty, "SPJ should not be triggered")
+            }
+
+            val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
+              .map(_.outputPartitioning.numPartitions)
+            (allowKeysSubsetOfPartitionKeys, partiallyClustered) match {
+              // SPJ and partially-clustered
+              case (true, true) => assert(partitions == Seq(5, 5))
+              // SPJ and not partially-clustered
+              case (true, false) => assert(partitions == Seq(3, 3))
+              // No SPJ
+              case _ => assert(partitions.isEmpty)
+            }
+
+            checkAnswer(df,
+              Seq(
+                Row(1, "aa", 40.0, 11.0, 2),
+                Row(1, "aa", 40.0, 42.0, 1),
+                Row(1, "aa", 41.0, 44.0, 1),
+                Row(1, "aa", 41.0, 45.0, 1),
+                Row(2, "bb", 10.0, 11.0, 2),
+                Row(2, "bb", 10.0, 42.0, 1),
+                Row(2, "bb", 10.5, 11.0, 2),
+                Row(2, "bb", 10.5, 42.0, 1),
+                Row(3, "cc", 15.5, 19.5, 3)
+              )
+            )
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-44647: shuffle one side and join keys are less than partition keys") {
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 30.0, cast('2020-01-02' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 89.0, cast('2020-01-03' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp)), " +
+      "(5, 26.0, cast('2023-01-01' as timestamp)), " +
+      "(6, 50.0, cast('2023-02-01' as timestamp))")
+
+    Seq(true, false).foreach { pushdownValues =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushdownValues.toString,
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.size == 1, "SPJ should be triggered")
+        checkAnswer(df, Seq(Row(1, "aa", 30.0, 42.0),
+          Row(1, "aa", 30.0, 89.0),
+          Row(1, "aa", 40.0, 42.0),
+          Row(1, "aa", 40.0, 89.0),
+          Row(3, "bb", 10.0, 19.5)))
+      }
+    }
+  }
+
+  test("SPARK-45652: SPJ should handle empty partition after dynamic filtering") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+          s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 'aa', 41.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+          s"(2, 'bb', 10.5, cast('2020-01-01' as timestamp)), " +
+          s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+          s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+          s"(1, 44.0, cast('2020-01-15' as timestamp)), " +
+          s"(1, 45.0, cast('2020-01-15' as timestamp)), " +
+          s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+          s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+      Seq(true, false).foreach { pushDownValues =>
+        Seq(true, false).foreach { partiallyClustered => {
+          withSQLConf(
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
+                partiallyClustered.toString,
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString) {
+            // The dynamic filtering effectively filtered out all the partitions
+            val df = sql(s"SELECT p.price from testcat.ns.$items i, testcat.ns.$purchases p " +
+                "WHERE i.id = p.item_id AND i.price > 50.0")
+            checkAnswer(df, Seq.empty)
+          }
+        }
+        }
+      }
+    }
+  }
+
+  test("SPARK-48012: one-side shuffle with partition transforms") {
+    val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
+    val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))
+
+    Seq(items_partitions, items_partitions2).foreach { partition =>
+      catalog.clearTables()
+
+      createTable(items, itemsColumns, partition)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'bb', 30.0, cast('2020-01-01' as timestamp)), " +
+        "(1, 'cc', 30.0, cast('2020-01-02' as timestamp)), " +
+        "(3, 'dd', 10.0, cast('2020-01-01' as timestamp)), " +
+        "(4, 'ee', 15.5, cast('2020-02-01' as timestamp)), " +
+        "(5, 'ff', 32.1, cast('2020-03-01' as timestamp))")
+
+      createTable(purchases, purchasesColumns, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        "(2, 10.7, cast('2020-01-01' as timestamp))," +
+        "(3, 19.5, cast('2020-02-01' as timestamp))," +
+        "(4, 56.5, cast('2020-02-01' as timestamp))")
+
+      withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+        val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.size == 1, "only shuffle side that does not report partitioning")
+
+        checkAnswer(df, Seq(
+          Row(1, "bb", 30.0, 42.0),
+          Row(1, "aa", 40.0, 42.0),
+          Row(4, "ee", 15.5, 56.5)))
+      }
+    }
+  }
+
+  test("SPARK-48012: one-side shuffle with partition transforms and pushdown values") {
+    val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'bb', 30.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'cc', 30.0, cast('2020-01-02' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 10.7, cast('2020-01-01' as timestamp))")
+
+    Seq(true, false).foreach { pushDown => {
+        withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key ->
+            pushDown.toString) {
+          val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.size == 1, "only shuffle side that does not report partitioning")
+
+          checkAnswer(df, Seq(
+            Row(1, "bb", 30.0, 42.0),
+            Row(1, "aa", 40.0, 42.0)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-48012: one-side shuffle with partition transforms " +
+    "with fewer join keys than partition kes") {
+    val items_partitions = Array(bucket(2, "id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'aa', 30.0, cast('2020-01-02' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 89.0, cast('2020-01-03' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp)), " +
+      "(5, 26.0, cast('2023-01-01' as timestamp)), " +
+      "(6, 50.0, cast('2023-02-01' as timestamp))")
+
+   withSQLConf(
+     SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+     SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+     SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+     SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+     SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+     val df = createJoinTestDF(Seq("id" -> "item_id"))
+     val shuffles = collectShuffles(df.queryExecution.executedPlan)
+     assert(shuffles.size == 1, "SPJ should be triggered")
+     checkAnswer(df, Seq(Row(1, "aa", 30.0, 42.0),
+       Row(1, "aa", 30.0, 89.0),
+       Row(1, "aa", 40.0, 42.0),
+       Row(1, "aa", 40.0, 89.0),
+       Row(3, "bb", 10.0, 19.5)))
+   }
+  }
+
+  test("SPARK-48949: test partition filters inner join") {
+    val items_partitions = Array(bucket(8, "id"), days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 41.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 'bb', 42.0, cast('2020-01-04' as timestamp)), " +
+        s"(4, 'cc', 43.5, cast('2020-01-05' as timestamp)), " +
+        s"(5, 'cc', 44.5, cast('2020-01-15' as timestamp)), " +
+        s"(6, 'dd', 45.5, cast('2020-02-07' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"), days("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(7, 46.5, cast('2020-02-08' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+
+      val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+      checkAnswer(df,
+        Seq(Row(1, "aa", 40.0, 42.0), Row(5, "cc", 44.5, 44.0))
+      )
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+    }
+  }
+
+  test("SPARK-48949: test partition filters with no matches") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-02' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+      assert(df.collect().isEmpty, "should return no results")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 0))
+    }
+  }
+
+  test("SPARK-48949: test partition filters with right outer") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-02' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(4, 42.0, cast('2020-01-02' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"), joinType = "RIGHT OUTER")
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+
+      checkAnswer(df,
+        Seq(Row(null, null, null, 42.0),
+          Row(null, null, null, 44.0),
+          Row(1, "aa", 40.0, 40.0))
+      )
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 3))
+    }
+  }
+
+  test("SPARK-48949: test partition filters with full outer") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-02' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(4, 42.0, cast('2020-01-02' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"), joinType = "FULL OUTER")
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+
+      checkAnswer(df,
+        Seq(Row(null, null, null, 42.0),
+          Row(null, null, null, 44.0),
+          Row(0, "aa", 39.0, null),
+          Row(1, "aa", 40.0, 40.0))
+      )
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 4))
+    }
+  }
+
+  test("SPARK-48949: test partition filters with left outer") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 38.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 39.0, cast('2020-01-02' as timestamp)), " +
+        s"(4, 'aa', 40.0, cast('2020-01-02' as timestamp))")
+
+    val purchases_partitions = Array(bucket(8, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(4, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"), joinType = "LEFT OUTER")
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+
+      checkAnswer(df,
+        Seq(Row(0, "aa", 38.0, null),
+          Row(1, "aa", 39.0, null),
+          Row(4, "aa", 40.0, 42.0))
+      )
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 3))
+    }
+  }
+
+  test("SPARK-48949: test partition filters with compatible transforms") {
+    val items_partitions = Array(bucket(8, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 41.0, cast('2020-01-03' as timestamp)), " +
+        s"(3, 'bb', 42.0, cast('2020-01-04' as timestamp)), " +
+        s"(4, 'cc', 43.5, cast('2020-01-05' as timestamp)), " +
+        s"(5, 'cc', 44.5, cast('2020-01-15' as timestamp)), " +
+        s"(6, 'dd', 45.5, cast('2020-02-07' as timestamp))")
+
+    val purchases_partitions = Array(bucket(4, "item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(7, 46.5, cast('2020-02-08' as timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+      checkAnswer(df,
+        Seq(Row(1, "aa", 40.0, 42.0), Row(5, "cc", 44.5, 44.0))
+      )
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+    }
+  }
+
+  test("SPARK-53322: checkpointed scans avoid shuffles for aggregates") {
+    withTempDir { dir =>
+      spark.sparkContext.setCheckpointDir(dir.getPath)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 41.0, cast('2020-01-02' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+      val scanDF = spark.read.table(s"testcat.ns.$items").checkpoint()
+      val df = scanDF.groupBy("id").agg(max("price").as("res")).select("res")
+      checkAnswer(df.sort("res"), Seq(Row(10.0), Row(15.5), Row(41.0)))
+
+      val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "should not contain shuffle when not grouping by partition values")
+      val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.size === 1)
+      assert(groupPartitions.head.outputPartitioning.numPartitions == 3)
+    }
+  }
+
+  test("SPARK-53322: checkpointed scans are used for SPJ") {
+    withTempDir { dir =>
+      spark.sparkContext.setCheckpointDir(dir.getPath)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 41.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-02' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-01-03' as timestamp))")
+
+      val purchase_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchase_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 25.5, cast('2020-01-03' as timestamp)), " +
+        s"(4, 20.0, cast('2020-01-04' as timestamp))")
+
+      for {
+        pushdownValues <- Seq(true, false)
+        checkpointBothScans <- Seq(true, false)
+      } {
+        withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushdownValues.toString) {
+          val scanDF1 = spark.read.table(s"testcat.ns.$items").checkpoint().as("i")
+          val scanDF2 = if (checkpointBothScans) {
+            spark.read.table(s"testcat.ns.$purchases").checkpoint().as("p")
+          } else {
+            spark.read.table(s"testcat.ns.$purchases").as("p")
+          }
+
+          val df = scanDF1
+            .join(scanDF2, col("id") === col("item_id"))
+            .selectExpr("id", "name", "i.price AS purchase_price", "p.price AS sale_price")
+            .orderBy("id", "purchase_price", "sale_price")
+          checkAnswer(
+            df,
+            Seq(Row(1, "aa", 41.0, 40.0), Row(3, "cc", 15.5, 25.5))
+          )
+          if (pushdownValues) {
+            // 1 shuffle for SORT and 2 group partitions for JOIN are expected.
+            assert(collectAllShuffles(df.queryExecution.executedPlan).length === 1)
+            assert(collectAllGroupPartitions(df.queryExecution.executedPlan).length === 2)
+          } else {
+            // 1 shuffle for SORT and 2 shuffles for JOIN are expected.
+            assert(collectAllShuffles(df.queryExecution.executedPlan).length === 3)
+            assert(collectAllGroupPartitions(df.queryExecution.executedPlan).length === 0)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-53322: checkpointed scans can shuffle other children on SPJ") {
+    withTempDir { dir =>
+      spark.sparkContext.setCheckpointDir(dir.getPath)
+      val itemsPartitions = Array(identity("id"))
+      createTable(items, itemsColumns, itemsPartitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 41.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-02' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-01-03' as timestamp))")
+
+      createTable(purchases, purchasesColumns, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 25.5, cast('2020-01-03' as timestamp)), " +
+        s"(4, 20.0, cast('2020-01-04' as timestamp))")
+
+      Seq(true, false).foreach { pushdownValues =>
+        withSQLConf(
+            SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+            SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushdownValues.toString) {
+          val scanDF1 = spark.read.table(s"testcat.ns.$items").checkpoint().as("i")
+          val scanDF2 = spark.read.table(s"testcat.ns.$purchases").as("p")
+
+          val df = scanDF1
+            .join(scanDF2, col("id") === col("item_id"))
+            .selectExpr("id", "name", "i.price AS purchase_price", "p.price AS sale_price")
+            .orderBy("id", "purchase_price", "sale_price")
+          checkAnswer(
+            df,
+            Seq(Row(1, "aa", 41.0, 40.0), Row(3, "cc", 15.5, 25.5))
+          )
+          // 1 shuffle for SORT and 1 shuffle for JOIN are expected.
+          assert(collectAllShuffles(df.queryExecution.executedPlan).length === 2)
+          // 0 group partitions are expected because both sides of the join are clustered from scans
+          assert(collectAllGroupPartitions(df.queryExecution.executedPlan).length === 0)
+        }
+      }
+    }
+  }
+
+  test("SPARK-54439: KeyedPartitioning and join key size mismatch") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // `time` and `item_id` in the required `ClusteredDistribution` for `purchases`, but `item` is
+      // storage partitioned only by `id`
+      val df = createJoinTestDF(Seq("arrive_time" -> "time", "id" -> "item_id"))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+
+      checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+    }
+  }
+
+  test("SPARK-54439: KeyedPartitioning with transform and join key size mismatch") {
+    val items_partitions = Array(years("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(1, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2021-02-01' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+      // `item_id` and `time` in the required `ClusteredDistribution` for `purchases`, but `item` is
+      // storage partitioned only by `year(arrive_time)`
+      val df = createJoinTestDF(Seq("id" -> "item_id", "arrive_time" -> "time"))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size == 1, "only shuffle one side not report partitioning")
+
+      checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+    }
+  }
+
+  test("SPARK-55302: Custom metrics of grouped partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    val metrics = runAndFetchMetrics {
+      val df = sql(s"SELECT id, count(*) FROM testcat.ns.$items GROUP BY id")
+      df.collect()
+      val scans = collectScans(df.queryExecution.executedPlan)
+      assert(scans(0).inputRDD.partitions.length === 3, "items scan should have 3 partitions")
+      val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions(0).outputPartitioning.numPartitions === 2,
+        "group partitions should have 2 partition groups")
+    }
+    assert(metrics.collect {
+      case ((_, "BatchScan testcat.ns.items", "number of rows read"), v) => v
+    } === Seq("3"))
+  }
+
+  test("SPARK-55619: Custom metrics of coalesced partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(2, 'bb', 10.0, cast('2021-01-01' as timestamp))")
+
+    val metrics = runAndFetchMetrics {
+      val df = sql(s"SELECT * FROM testcat.ns.$items").coalesce(1)
+      df.collect()
+    }
+    assert(metrics.collect {
+      case ((_, "BatchScan testcat.ns.items", "number of rows read"), v) => v
+    } === Seq("2"))
+  }
+
+  test("SPARK-55715: Custom metrics of sorted-merge coalesced partitions") {
+    // items has id=1 on three splits with interleaved arrive_times -- out of order across splits.
+    // purchases has item_id=1 on two splits, also out of order. Both sides coalesce under SMJ,
+    // using SortedMergeCoalescedRDD with multiple concurrent readers per task. This test verifies
+    // that all rows from both tables (5 + 4 = 9) are accounted for in the per-scan metrics.
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    // Rows inserted out of order: id=1 lands on partitions 1, 3, 4 with arrive_times
+    // [2022-03-10, 2021-05-20, 2025-09-01] -- out of order.
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(1, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    // item_id=1 lands on partitions 1 and 3 with times [2022-03-10, 2021-05-20] -- out of order.
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp))")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val metrics = runAndFetchMetrics {
+        val df = sql(
+          s"""${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+             |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(3, "dd")))
+        val plan = df.queryExecution.executedPlan
+        val groupPartitions = collectAllGroupPartitions(plan)
+        val coalescingGP = groupPartitions.filter(_.groupedPartitions.exists(_._2.size > 1))
+        assert(coalescingGP.nonEmpty, "expected a coalescing GroupPartitionsExec")
+        coalescingGP.foreach { gp =>
+          assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+            "should use SortedMergeCoalescedRDD when preserve-ordering config is enabled")
+        }
+      }
+      assert(metrics.collect {
+        case ((_, "BatchScan testcat.ns.items", "number of rows read"), v) => v
+      } === Seq("5"))
+      assert(metrics.collect {
+        case ((_, "BatchScan testcat.ns.purchases", "number of rows read"), v) => v
+      } === Seq("4"))
+    }
+  }
+
+  test("SPARK-55411: Fix ArrayIndexOutOfBoundsException when join keys " +
+    "are less than cluster keys") {
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+
+      val customers_partitions = Array(identity("customer_name"), bucket(4, "customer_id"))
+      createTable(customers, customersColumns, customers_partitions)
+      sql(s"INSERT INTO testcat.ns.$customers VALUES " +
+        s"('aaa', 10, 1), ('bbb', 20, 2), ('ccc', 30, 3)")
+
+      createTable(orders, ordersColumns, Array.empty)
+      sql(s"INSERT INTO testcat.ns.$orders VALUES " +
+        s"(100.0, 1), (200.0, 1), (150.0, 2), (250.0, 2), (350.0, 2), (400.50, 3)")
+
+      val df = sql(
+        s"""${selectWithMergeJoinHint("c", "o")}
+           |customer_name, customer_age, order_amount
+           |FROM testcat.ns.$customers c JOIN testcat.ns.$orders o
+           |ON c.customer_id = o.customer_id ORDER BY c.customer_id, order_amount
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.length == 1)
+
+      checkAnswer(df, Seq(
+        Row("aaa", 10, 100.0),
+        Row("aaa", 10, 200.0),
+        Row("bbb", 20, 150.0),
+        Row("bbb", 20, 250.0),
+        Row("bbb", 20, 350.0),
+        Row("ccc", 30, 400.50)))
+    }
+  }
+
+  test("SPARK-55092: Scans should not group partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      "(4, 'bb', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(4, 'cc', 15.5, cast('2021-02-01' as timestamp))")
+
+    val purchases_partitions = Array(years("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      "(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat.ns.$items")
+    val scans = collectScans(df.queryExecution.executedPlan)
+    assert(scans(0).inputRDD.partitions.length === 3,
+      "items scan should not group partitions")
+
+    Seq((true, 1), (false, 2)).foreach { case (bucketingShuffle, expectedShuffleCount) =>
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> bucketingShuffle.toString) {
+        val df = createJoinTestDF(Seq("id" -> "item_id"))
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.size == expectedShuffleCount)
+
+        val scans = collectScans(df.queryExecution.executedPlan)
+        assert(scans(0).inputRDD.partitions.length === 3,
+          "items scan should not group partitions")
+        assert(scans(1).inputRDD.partitions.length === 2,
+          "purchases scan should not group partitions")
+
+        checkAnswer(df, Seq(Row(1, "aa", 40.0, 42.0)))
+      }
+    }
+  }
+
+  test("SPARK-55535: Multi table join granular partition grouping") {
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val items_partitions = Array(identity("id"), years("arrive_time"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(2, 'aa', 30.0, cast('2021-01-01' as timestamp)), " +
+        "(2, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"), years("time"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(2, 10.0, cast('2021-01-01' as timestamp)), " +
+        "(2, 20.0, cast('2022-01-01' as timestamp)), " +
+        "(3, 30.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 40.0, cast('2022-01-01' as timestamp))")
+
+      val details_partitions = Array(identity("item_id"))
+      createTable(details, detailsColumns, details_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$details VALUES " +
+        "(2, 'cc', cast('2021-01-01' as timestamp)), " +
+        "(3, 'cc', cast('2022-01-01' as timestamp))")
+
+      val df = sql(
+        s"""
+           |SELECT i.id, i.arrive_time, p.item_id, d.item_id
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |JOIN testcat.ns.$details d ON d.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(2, Timestamp.valueOf("2021-01-01 00:00:00"), 2, 2),
+        Row(2, Timestamp.valueOf("2022-01-01 00:00:00"), 2, 2)))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not contain any shuffle")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      // Expect 6 partitions in the inner join node legs because partitioning uses 2 attributes.
+      // Expect 3 partitions in the outer join node legs because partitioning uses 1 attributes.
+      assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(3, 6, 6, 3))
+    }
+  }
+
+  test("SPARK-55535: Multi table join partial clustering") {
+    withSQLConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(1, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(2, 'aa', 30.0, cast('2021-01-01' as timestamp)), " +
+        "(2, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        "(2, 10.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 20.0, cast('2022-01-01' as timestamp))")
+
+      val details_partitions = Array(identity("item_id"))
+      createTable(details, detailsColumns, details_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$details VALUES " +
+        "(2, 'cc', cast('2021-01-01' as timestamp)), " +
+        "(4, 'cc', cast('2022-01-01' as timestamp))")
+
+      val df = sql(
+        s"""
+           |SELECT i.id, i.price, p.price, d.description
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |JOIN testcat.ns.$details d ON d.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(2, 30.0, 10.0, "cc"),
+        Row(2, 40.0, 10.0, "cc")))
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "should not contain any shuffle")
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      // Expect 5 partitions in the inner join node legs because 4 from the partially clustered
+      // items table and 1 new from clustered purchases table.
+      // Expect 6 partitions in the outer join node legs because 5 from the partially clustered
+      // inner join result and 1 new from clustered details table.
+      assert(groupPartitions.map(_.outputPartitioning.numPartitions) === Seq(6, 5, 5, 6))
+    }
+  }
+
+  test("SPARK-55535: Empty partitioned table") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      val purchases_partitions = Array(identity("item_id"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      checkAnswer(df, Seq.empty)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.size === 2,
+        "both legs should be shuffled as empty tables should not report KeyedPartitioning")
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.isEmpty,
+        "no legs should be grouped as empty tables should not report KeyedPartitioning")
+    }
+  }
+
+  test("SPARK-55535: Empty group partitions due to filtered partitions") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 39.0, cast('2020-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(2, 42.0, cast('2020-01-01' as timestamp))")
+
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "true") {
+      val df = createJoinTestDF(Seq("id" -> "item_id"))
+      checkAnswer(df, Seq.empty)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty, "no legs should be shuffled")
+
+      val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+      assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 0),
+        "group partitions should not have any (common) partitions")
+    }
+  }
+
+  test("SPARK-55535: Order by on partitions keys") {
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      val items_partitions = Array(identity("id"))
+      createTable(items, itemsColumns, items_partitions)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        "(2, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+        "(3, 'aa', 20.0, cast('2022-01-01' as timestamp)), " +
+        "(1, 'aa', 40.0, cast('2022-01-01' as timestamp))")
+
+      val df = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id")
+
+      val expected = (1 to 3).map(Row(_))
+      checkAnswer(df, expected)
+
+      val reverseDf = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id DESC")
+
+      checkAnswer(reverseDf, expected.reverse)
+
+      sql(s"INSERT INTO testcat.ns.$items VALUES (2, 'aa', 30.0, cast('2021-01-01' as timestamp))")
+
+      val dfWithDuplicate = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id")
+
+      val expectedWithDuplicate = Seq(1, 2, 2, 3).map(Row(_))
+      checkAnswer(dfWithDuplicate, expectedWithDuplicate)
+
+      val reverseDfWithDuplicate = sql(s"SELECT id FROM testcat.ns.$items i ORDER BY id DESC")
+
+      checkAnswer(reverseDfWithDuplicate, expectedWithDuplicate.reverse)
+
+      Seq(
+        df -> Seq.empty,
+        reverseDf -> Seq(3),
+        dfWithDuplicate -> Seq.empty,
+        reverseDfWithDuplicate -> Seq(4)
+      ).foreach {
+        case (df, expectedPartitions) =>
+          val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not contain any shuffle")
+
+          val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.map(_.outputPartitioning.numPartitions) == expectedPartitions)
+      }
+    }
+  }
+
+  test("SPARK-55992: GroupPartitions string in simple and extended explain") {
+    val items_partitions = Array(bucket(4, "id"), years("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES (1, 'aa', 10.0, cast('2021-01-01' as timestamp))")
+    val purchases_partitions = Array(bucket(6, "item_id"), years("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
+    withSQLConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |*
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |""".stripMargin)
+      val simpleAndExtendedKeyword =
+        "GroupPartitions JoinKeyPositions: [0] ExpectedPartitionKeys: 2 " +
+        "Reducers: [BucketReducer(2)] DistributePartitions: false"
+      val formattedKeyword =
+        "Arguments: JoinKeyPositions: [0], ExpectedPartitionKeys: 2, " +
+        "Reducers: [BucketReducer(2)], DistributePartitions: false"
+      checkKeywordsExistsInExplain(df, SimpleMode, simpleAndExtendedKeyword)
+      checkKeywordsExistsInExplain(df, ExtendedMode, simpleAndExtendedKeyword)
+      checkKeywordsExistsInExplain(df, FormattedMode, formattedKeyword)
+    }
+  }
+
+  test("SPARK-56046: Reducers with same result types") {
+    val items_partitions = Array(days("arrive_time"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+      s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+    val purchases_partitions = Array(years("time"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+      s"(7, 46.5, cast('2021-02-08' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+        ).foreach { joinString =>
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "p")} id, item_id
+               |FROM $joinString
+               |ORDER BY id, item_id
+               |""".stripMargin)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+
+          checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+        }
+      }
+  }
+
+  test("SPARK-56046: Reducers with different result types") {
+    withFunction(UnboundDaysFunctionWithToYearsReducerWithDateResult) {
+      val items_partitions = Array(days("arrive_time"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+        s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+      val purchases_partitions = Array(years("time"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(7, 46.5, cast('2021-02-08' as timestamp))")
+
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+        ).foreach { joinString =>
+          val e = intercept[SparkException] {
+            sql(
+              s"""
+                 |${selectWithMergeJoinHint("i", "p")} id, item_id
+                 |FROM $joinString
+                 |ORDER BY id, item_id
+                 |""".stripMargin).collect()
+          }
+          assert(e.getMessage.contains(
+            "Storage-partition join partition transforms produced incompatible reduced types"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-56164: Reducers with different result types to original keys") {
+    withFunction(
+      UnboundDaysFunctionWithToYearsReducerWithLongResult,
+      UnboundYearsFunctionWithToYearsReducerWithLongResult) {
+      val items_partitions = Array(days("arrive_time"))
+      createTable(items, itemsColumns, items_partitions)
+      sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+        s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+      val purchases_partitions = Array(years("time"))
+      createTable(purchases, purchasesColumns, purchases_partitions)
+      sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(5, 44.0, cast('2020-01-15' as timestamp)), " +
+        s"(7, 46.5, cast('2021-02-08' as timestamp))")
+
+      withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.time = i.arrive_time",
+          s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.arrive_time = p.time"
+        ).foreach { joinString =>
+          val df = sql(
+            s"""
+               |${selectWithMergeJoinHint("i", "p")} id, item_id
+               |FROM $joinString
+               |ORDER BY id, item_id
+               |""".stripMargin)
+
+          val shuffles = collectShuffles(df.queryExecution.executedPlan)
+          assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+          val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+          assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 2))
+
+          checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-56182: Reduce identity to other transforms") {
+    val items_partitions = Array(bucket(4, "id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(0, 'aa', 39.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'bb', 41.0, cast('2021-01-03' as timestamp)), " +
+      s"(3, 'bb', 42.0, cast('2021-01-04' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(3, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(0, 44.0, cast('2020-01-15' as timestamp)), " +
+      s"(1, 46.5, cast('2021-02-08' as timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      Seq(
+        s"testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id",
+        s"testcat.ns.$purchases p JOIN testcat.ns.$items i ON i.id = p.item_id"
+      ).foreach { joinString =>
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")} id, item_id
+             |FROM $joinString
+             |ORDER BY id, item_id
+             |""".stripMargin)
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
+        val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
+        assert(groupPartitions.forall(_.outputPartitioning.numPartitions == 4))
+
+        checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(3, 3)))
+      }
+    }
+  }
+
+  test("SPARK-56241: scan with KeyedPartitioning reports key-derived outputOrdering") {
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(3, 'cc', 30.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2022-01-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2022-01-01' as timestamp))")
+
+    val df = sql(s"SELECT id, name FROM testcat.ns.$items")
+    val plan = df.queryExecution.executedPlan
+    val scans = collectScans(plan)
+    assert(scans.size === 1)
+    // With the config disabled (default), ordering derivation is suppressed.
+    assert(scans.head.outputOrdering.isEmpty)
+    // When enabled, the scan derives an ascending sort on the partition key `id`.
+    // identity transforms are unwrapped to AttributeReferences by V2ExpressionUtils.
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+      val scansEnabled = collectScans(df.queryExecution.executedPlan)
+      assert(scansEnabled.size === 1)
+      val ordering = scansEnabled.head.outputOrdering
+      assert(ordering.length === 1)
+      assert(ordering.head.direction === Ascending)
+      val keyExpr = ordering.head.child
+      assert(keyExpr.isInstanceOf[AttributeReference])
+      assert(keyExpr.asInstanceOf[AttributeReference].name === "id")
+    }
+  }
+
+  test("SPARK-56241: GroupPartitionsExec non-coalescing passes through child ordering, " +
+      "no pre-join SortExec needed before SortMergeJoin") {
+    // Non-identical key sets force GroupPartitionsExec to be inserted on both sides align them,
+    // but each group has exactly one partition — no coalescing.
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2021-01-01' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2021-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 100.0, cast('2021-01-01' as timestamp)), " +
+      "(2, 200.0, cast('2021-01-01' as timestamp))")
+
+    // GroupPartitionsExec passes through the child's key-derived outputOrdering.
+    // EnsureRequirements checks outputOrdering directly so no SortExec should be inserted before
+    // the SMJ.
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb")))
+
+      val plan = df.queryExecution.executedPlan
+      val groupPartitions = collectGroupPartitions(plan)
+      assert(groupPartitions.nonEmpty, "expected GroupPartitionsExec in plan")
+      assert(groupPartitions.forall(_.groupedPartitions.forall(_._2.size <= 1)),
+        "expected non-coalescing GroupPartitionsExec")
+      val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+      assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+      smjs.foreach { smj =>
+        val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+        assert(sorts.isEmpty, "should not add SortExec before SMJ when ordering passes through " +
+          "non-coalescing GroupPartitions")
+      }
+    }
+  }
+
+  test("SPARK-56241: GroupPartitionsExec coalescing derives ordering from key expressions, " +
+      "no pre-join SortExec needed before SortMergeJoin") {
+    // Duplicate key 1 on both sides causes coalescing.
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, 'aa', 10.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 'ab', 11.0, cast('2021-06-01' as timestamp)), " +
+      "(2, 'bb', 20.0, cast('2021-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 100.0, cast('2021-01-01' as timestamp)), " +
+      "(1, 110.0, cast('2021-06-01' as timestamp)), " +
+      "(2, 200.0, cast('2021-01-01' as timestamp))")
+
+    // GroupPartitionsExec derives outputOrdering from the key expressions after coalescing.
+    // EnsureRequirements checks outputOrdering directly so no SortExec should be inserted before
+    // the SMJ.
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PARTITION_KEY_ORDERING_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PRESERVE_KEY_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON p.item_id = i.id
+           |""".stripMargin)
+
+      checkAnswer(df, Seq(
+        Row(1, "aa"), Row(1, "aa"), Row(1, "ab"), Row(1, "ab"),
+        Row(2, "bb")))
+
+      val plan = df.queryExecution.executedPlan
+      val groupPartitions = collectGroupPartitions(plan)
+      assert(groupPartitions.nonEmpty, "expected GroupPartitionsExec in plan")
+      assert(groupPartitions.exists(_.groupedPartitions.exists(_._2.size > 1)),
+        "expected coalescing GroupPartitionsExec")
+      val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+      assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+      smjs.foreach { smj =>
+        val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+        assert(sorts.isEmpty, "should not add SortExec before SMJ when ordering is derived " +
+          "from coalesced partition key")
+      }
+    }
+  }
+
+  test("SPARK-55715: preserve outputOrdering when coalescing partitions with sorted merge") {
+    // Both tables are partitioned by their id column and report ordering [id ASC, price ASC]
+    // via SupportsReportOrdering. Each has two rows with id=1 (two splits), so GroupPartitionsExec
+    // must coalesce them. We join on (id, price) = (item_id, price) using SMJ.
+    //
+    // With config enabled:  SortedMergeCoalescedRDD performs a k-way merge preserving the full
+    //   [id ASC, price ASC] ordering -> EnsureRequirements is satisfied -> no SortExec added.
+    // With config disabled: simple CoalescedRDD concatenates the splits and only the key-derived
+    //   [id ASC] ordering survives -> price ordering is lost -> SortExec is added for price.
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    // Rows inserted out of order: id values are interleaved and arrive_time is not monotone
+    // within each id group, so ordering by [id ASC, arrive_time ASC] is non-trivial.
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    // Also inserted out of order
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+
+    Seq(true, false).foreach { preserveOrdering =>
+      withSQLConf(
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
+            preserveOrdering.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+             |""".stripMargin)
+        checkAnswer(df, Seq(
+          Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllShuffles(plan).isEmpty, "should not contain any shuffle")
+
+        val groupPartitions = collectAllGroupPartitions(plan)
+        assert(groupPartitions.nonEmpty, "should contain GroupPartitionsExec for coalescing")
+        assert(groupPartitions.exists(_.groupedPartitions.exists(_._2.size > 1)),
+          "expected coalescing GroupPartitionsExec")
+
+        val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+        assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+        smjs.foreach { smj =>
+          val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+          if (preserveOrdering) {
+            assert(sorts.isEmpty,
+              "config enabled: SortedMergeCoalescedRDD preserves [id ASC, arrive_time ASC], " +
+                "no SortExec should be added before SMJ")
+
+            // Also verify the k-way merge RDD is actually used
+            val coalescingGP = groupPartitions.filter(_.groupedPartitions.exists(_._2.size > 1))
+            coalescingGP.foreach { gp =>
+              assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+                "config enabled: should use SortedMergeCoalescedRDD")
+            }
+          } else {
+            assert(sorts.nonEmpty,
+              "config disabled: simple coalescing loses arrive_time ordering, " +
+                "SortExec should be added before SMJ")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-55715: preserve outputOrdering when coalescing transform-partitioned splits") {
+    // Both tables are partitioned by years("arrive_time") / years("time") and report ordering
+    // [arrive_time ASC] / [time ASC]. Two rows share the same year bucket (2022 and 2023), so
+    // GroupPartitionsExec coalesces two splits per year. We join solely on
+    // p.time = i.arrive_time (the partition key expression) using SMJ.
+    //
+    // With config enabled:  SortedMergeCoalescedRDD k-way merge preserves [arrive_time ASC]
+    //   ordering -> EnsureRequirements is satisfied -> no SortExec added.
+    // With config disabled: simple CoalescedRDD only preserves the key-derived year ordering ->
+    //   arrive_time ordering within a year is lost -> SortExec is added.
+    val itemOrdering = Array(
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(years("arrive_time")), itemOrdering)
+    // Inserted out of order: within year 2022, September is before March in insertion order
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'bb', 20.0, cast('2022-09-20' as timestamp)), " +
+      "(4, 'dd', 40.0, cast('2023-11-05' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2022-03-15' as timestamp)), " +
+      "(3, 'cc', 30.0, cast('2023-01-10' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(years("time")), purchaseOrdering)
+    // Also inserted out of order
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 20.0, cast('2022-09-20' as timestamp)), " +
+      "(4, 40.0, cast('2023-11-05' as timestamp)), " +
+      "(1, 10.0, cast('2022-03-15' as timestamp)), " +
+      "(3, 30.0, cast('2023-01-10' as timestamp))")
+
+    Seq(true, false).foreach { preserveOrdering =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
+            preserveOrdering.toString) {
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("i", "p")}
+             |i.id, i.name
+             |FROM testcat.ns.$items i
+             |JOIN testcat.ns.$purchases p ON p.time = i.arrive_time
+             |""".stripMargin)
+        checkAnswer(df, Seq(Row(1, "aa"), Row(2, "bb"), Row(3, "cc"), Row(4, "dd")))
+
+        val plan = df.queryExecution.executedPlan
+        assert(collectAllShuffles(plan).isEmpty, "should not contain any shuffle")
+
+        val groupPartitions = collectAllGroupPartitions(plan)
+        assert(groupPartitions.nonEmpty, "should contain GroupPartitionsExec for coalescing")
+        assert(groupPartitions.exists(_.groupedPartitions.exists(_._2.size > 1)),
+          "expected coalescing GroupPartitionsExec")
+
+        val smjs = collect(plan) { case j: SortMergeJoinExec => j }
+        assert(smjs.nonEmpty, "expected SortMergeJoinExec in plan")
+        smjs.foreach { smj =>
+          val sorts = smj.children.flatMap(child => collect(child) { case s: SortExec => s })
+          if (preserveOrdering) {
+            assert(sorts.isEmpty,
+              "config enabled: SortedMergeCoalescedRDD preserves [arrive_time ASC], " +
+                "no SortExec should be added before SMJ")
+
+            val coalescingGP = groupPartitions.filter(_.groupedPartitions.exists(_._2.size > 1))
+            coalescingGP.foreach { gp =>
+              assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+                "config enabled: should use SortedMergeCoalescedRDD")
+            }
+          } else {
+            assert(sorts.nonEmpty,
+              "config disabled: simple coalescing loses arrive_time ordering within a year, " +
+                "SortExec should be added before SMJ")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
+    // Both tables are partitioned by id/item_id and report a two-column ordering.
+    // Key 1 appears on two splits on each side, so GroupPartitionsExec must coalesce.
+    //
+    // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
+    // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true"
+    ) {
+      val hashDf = sql(
+        s"""
+           |SELECT /*+ SHUFFLE_HASH(i, p) */ i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(hashDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      val hashPlan = hashDf.queryExecution.executedPlan
+      assert(collect(hashPlan) { case j: ShuffledHashJoinExec => j }.nonEmpty,
+        "expected ShuffledHashJoinExec")
+      assert(collectAllShuffles(hashPlan).isEmpty, "should not shuffle for compatible partitioning")
+      val hashCoalescing =
+        collectAllGroupPartitions(hashPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
+      assert(hashCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+      hashCoalescing.foreach { gp =>
+        assert(!gp.enableSortedMerge,
+          "hash join does not require ordering: enableSortedMerge must stay false")
+        assert(!gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+          "hash join does not require ordering: must use simple CoalescedRDD")
+      }
+
+      val smjDf = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(smjDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      val smjPlan = smjDf.queryExecution.executedPlan
+      assert(collectAllShuffles(smjPlan).isEmpty, "should not shuffle for compatible partitioning")
+      val smjCoalescing =
+        collectAllGroupPartitions(smjPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
+      assert(smjCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+      smjCoalescing.foreach { gp =>
+        assert(gp.enableSortedMerge,
+          "sort-merge join requires ordering: enableSortedMerge must be true")
+        assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+          "sort-merge join requires ordering: must use SortedMergeCoalescedRDD")
+      }
+    }
+  }
+
+  test("SPARK-46367: partition key alias in subquery projects KeyedPartitioning") {
+    // A subquery that renames a partition key (id -> pk) creates a ProjectExec between the scan and
+    // the join. This test verifies that KeyedPartitioning expressions are correctly projected
+    // through aliases so that SPJ still works without a shuffle. Both sides have the same partition
+    // key sequence so no GroupPartitionsExec is needed.
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(
+      s"""
+         |${selectWithMergeJoinHint("sub", "p")}
+         |sub.pk, p.price AS purchase_price
+         |FROM (SELECT id AS pk FROM testcat.ns.$items) sub
+         |JOIN testcat.ns.$purchases p
+         |ON sub.pk = p.item_id
+         |ORDER BY pk, purchase_price
+         |""".stripMargin)
+
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    assert(shuffles.isEmpty, "should not add shuffle when partition key is aliased in subquery")
+
+    checkAnswer(df, Seq(Row(1, 42.0f), Row(2, 11.0f), Row(3, 19.5f)))
+  }
+
+  test("SPARK-46367: narrowing projection requires allowKeysSubsetOfPartitionKeys") {
+    // items is partitioned by (id, name). The subquery projects away 'name', narrowing
+    // KeyedPartitioning([id, name]) -> KeyedPartitioning([id]) with isNarrowed=true.
+    // Because id=1 maps to two original partitions ("aa" and "bb"), isGrouped=false.
+    // GroupPartitionsExec would merge them, carrying the same skew risk as subset partition
+    // keys -- so SPJ requires allowKeysSubsetOfPartitionKeys to be enabled.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 41.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    Seq(true, false).foreach { allowSubset =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+          allowSubset.toString) {
+
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("sub", "p")}
+             |sub.id, p.price AS purchase_price
+             |FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+             |JOIN testcat.ns.$purchases p
+             |ON sub.id = p.item_id
+             |ORDER BY sub.id, purchase_price
+             |""".stripMargin)
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (allowSubset) {
+          assert(shuffles.isEmpty, "SPJ should be triggered with config enabled")
+        } else {
+          assert(shuffles.nonEmpty, "SPJ should not be triggered without config")
+        }
+
+        checkAnswer(df, Seq(Row(1, 42.0f), Row(1, 42.0f), Row(2, 11.0f)))
+      }
+    }
+  }
+
+  test("SPARK-46367: narrowing projection with distinct projected keys does not require " +
+      "allowKeysSubsetOfPartitionKeys") {
+    // items is partitioned by (id, name) but each id value is unique, so projecting away 'name'
+    // produces KeyedPartitioning([id]) with isNarrowed=true but isGrouped=true.
+    // Because no two original partitions share the same projected key, GroupPartitionsExec does not
+    // merge any partitions -- no skew risk -- so SPJ works without config.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("sub", "p")}
+           |sub.id, p.price AS purchase_price
+           |FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+           |JOIN testcat.ns.$purchases p
+           |ON sub.id = p.item_id
+           |ORDER BY sub.id, purchase_price
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "should not add shuffle: narrowed KP remains grouped so no skew risk")
+
+      checkAnswer(df, Seq(Row(1, 42.0f), Row(2, 11.0f), Row(3, 19.5f)))
+    }
+  }
+
+  test("SPARK-46367: aggregate with GROUP BY subset of partition keys uses GroupPartitionsExec " +
+      "with allowKeysSubsetOfPartitionKeys") {
+    // Table partitioned by (id, name): id=1 maps to two distinct partition keys (1,'aa') and
+    // (1,'bb'). The partial HashAggregate (a PartitioningPreservingUnaryExecNode) projects away
+    // 'name', narrowing the KP from [id,name] to KP([id], isNarrowed=true, isGrouped=false).
+    // By default a shuffle is required; with allowKeysSubsetOfPartitionKeys enabled,
+    // EnsureRequirements inserts GroupPartitionsExec to coalesce both id=1 partitions so the final
+    // aggregate sees all id=1 partial results in one task -- correct and shuffle-free.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 41.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    // Use MAX(name) so that 'name' stays in the scan output and is not column-pruned away.
+    // Without it, V2ScanPartitioningAndOrdering drops KP([id,name]) when 'name' is absent
+    // from the output, making the scan report UnknownPartitioning and always shuffling for
+    // a different reason -- which would mask the narrowing behaviour we are testing here.
+    val query =
+      s"SELECT id, MAX(name) AS max_name, COUNT(*) AS cnt FROM testcat.ns.$items GROUP BY id"
+    val expected = Seq(Row(1L, "bb", 2L), Row(2L, "cc", 1L))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnswer(sql(query), expected)
+      assert(collectAllShuffles(sql(query).queryExecution.executedPlan).nonEmpty,
+        "shuffle required: KP([id,name]) does not satisfy ClusteredDistribution([id])")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        checkAnswer(sql(query), expected)
+        assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+          "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
+      }
+    }
+  }
+
+  test("SPARK-46367: window with PARTITION BY subset of partition keys uses GroupPartitionsExec " +
+      "with allowKeysSubsetOfPartitionKeys") {
+    // Same narrowing mechanism as the aggregate test: the partial HashAggregate (a
+    // PartitioningPreservingUnaryExecNode) for the inner GROUP BY id, price projects away 'name',
+    // narrowing KP([id,name]) to KP([id], isNarrowed=true, isGrouped=false). With
+    // allowKeysSubsetOfPartitionKeys enabled, EnsureRequirements inserts GroupPartitionsExec to
+    // coalesce both id=1 partitions for the final aggregate. The window PARTITION BY id then sees
+    // KP([id], isGrouped=true) from the aggregate output and needs no further exchange.
+    //
+    // MAX(name) in the subquery keeps 'name' in the scan output so that
+    // V2ScanPartitioningAndOrdering does not drop the KP before PartitioningPreservingUnaryExecNode
+    // narrowing can happen.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 20.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""SELECT id, SUM(price) OVER (PARTITION BY id ORDER BY price) AS running_sum, max_name
+         |FROM (SELECT id, MAX(name) AS max_name, price FROM testcat.ns.$items GROUP BY id, price)
+         |""".stripMargin
+    val expected = Seq(Row(1L, 10.0, "aa"), Row(1L, 30.0, "bb"), Row(2L, 30.0, "cc"))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnswer(sql(query), expected)
+      assert(collectAllShuffles(sql(query).queryExecution.executedPlan).nonEmpty,
+        "shuffle required: KP([id,name]) does not satisfy ClusteredDistribution([id])")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        checkAnswer(sql(query), expected)
+        assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+          "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
+      }
+    }
+  }
+}

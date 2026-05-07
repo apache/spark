@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent._
@@ -40,9 +39,14 @@ trait FutureAction[T] extends Future[T] {
   // documentation (with reference to the word "action").
 
   /**
+   * Cancels the execution of this action with an optional reason.
+   */
+  def cancel(reason: Option[String]): Unit
+
+  /**
    * Cancels the execution of this action.
    */
-  def cancel(): Unit
+  def cancel(): Unit = cancel(None)
 
   /**
    * Blocks until this action completes.
@@ -115,9 +119,9 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
   @volatile private var _cancelled: Boolean = false
 
-  override def cancel(): Unit = {
+  override def cancel(reason: Option[String]): Unit = {
     _cancelled = true
-    jobWaiter.cancel()
+    jobWaiter.cancel(reason)
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
@@ -187,12 +191,12 @@ class ComplexFutureAction[T](run : JobSubmitter => Future[T])
   @volatile private var subActions: List[FutureAction[_]] = Nil
 
   // A promise used to signal the future.
-  private val p = Promise[T]().tryCompleteWith(run(jobSubmitter))
+  private val p = Promise[T]().completeWith(run(jobSubmitter))
 
-  override def cancel(): Unit = synchronized {
+  override def cancel(reason: Option[String]): Unit = synchronized {
     _cancelled = true
     p.tryFailure(new SparkException("Action has been cancelled"))
-    subActions.foreach(_.cancel())
+    subActions.foreach(_.cancel(reason))
   }
 
   private def jobSubmitter = new JobSubmitter {
@@ -255,8 +259,6 @@ private[spark]
 class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S => T)
   extends JavaFutureAction[T] {
 
-  import scala.collection.JavaConverters._
-
   override def isCancelled: Boolean = futureAction.isCancelled
 
   override def isDone: Boolean = {
@@ -266,7 +268,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
   }
 
   override def jobIds(): java.util.List[java.lang.Integer] = {
-    Collections.unmodifiableList(futureAction.jobIds.map(Integer.valueOf).asJava)
+    java.util.List.of(futureAction.jobIds.map(Integer.valueOf): _*)
   }
 
   private def getImpl(timeout: Duration): T = {

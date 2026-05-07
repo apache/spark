@@ -18,17 +18,23 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.Cleaner;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
 import org.iq80.leveldb.DBIterator;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.network.util.JavaUtils;
+
 class LevelDBIterator<T> implements KVStoreIterator<T> {
+
+  private static final Cleaner CLEANER = Cleaner.create();
 
   private final LevelDB db;
   private final boolean ascending;
@@ -39,6 +45,9 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
   private final byte[] indexKeyPrefix;
   private final byte[] end;
   private final long max;
+
+  private final ResourceCleaner resourceCleaner;
+  private final Cleaner.Cleanable cleanable;
 
   private boolean checkedNext;
   private byte[] next;
@@ -53,8 +62,10 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     this.ti = db.getTypeInfo(type);
     this.index = ti.index(params.index);
     this.max = params.max;
+    this.resourceCleaner = new ResourceCleaner(it, db);
+    this.cleanable = CLEANER.register(this, this.resourceCleaner);
 
-    Preconditions.checkArgument(!index.isChild() || params.parent != null,
+    JavaUtils.checkArgument(!index.isChild() || params.parent != null,
       "Cannot iterate over child index %s without parent value.", params.index);
     byte[] parent = index.isChild() ? index.parent().childPrefix(params.parent) : null;
 
@@ -115,7 +126,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       try {
         close();
       } catch (IOException ioe) {
-        throw Throwables.propagate(ioe);
+        throw new RuntimeException(ioe);
       }
     }
     return next != null;
@@ -139,13 +150,9 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
       next = null;
       return ret;
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
-  }
-
-  @Override
-  public void remove() {
-    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -159,6 +166,8 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public boolean skip(long n) {
+    if (closed) return false;
+
     long skipped = 0;
     while (skipped < n) {
       if (next != null) {
@@ -185,22 +194,33 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
 
   @Override
   public synchronized void close() throws IOException {
-    db.notifyIteratorClosed(this);
+    db.notifyIteratorClosed(it);
     if (!closed) {
-      it.close();
-      closed = true;
+      try {
+        it.close();
+      } finally {
+        closed = true;
+        next = null;
+        cancelResourceClean();
+      }
     }
   }
 
   /**
-   * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
+   * Prevent ResourceCleaner from trying to release resources after close.
    */
-  @SuppressWarnings("deprecation")
-  @Override
-  protected void finalize() throws Throwable {
-    db.closeIterator(this);
+  private void cancelResourceClean() {
+    this.resourceCleaner.setStartedToFalse();
+    this.cleanable.clean();
+  }
+
+  DBIterator internalIterator() {
+    return it;
+  }
+
+  @VisibleForTesting
+  ResourceCleaner getResourceCleaner() {
+    return resourceCleaner;
   }
 
   private byte[] loadNext() {
@@ -282,4 +302,38 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
+  static class ResourceCleaner implements Runnable {
+    private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ResourceCleaner.class);
+
+    private final DBIterator dbIterator;
+
+    private final LevelDB levelDB;
+
+    private final AtomicBoolean started = new AtomicBoolean(true);
+
+    ResourceCleaner(DBIterator dbIterator, LevelDB levelDB) {
+      this.dbIterator = dbIterator;
+      this.levelDB = levelDB;
+    }
+
+    @Override
+    public void run() {
+      if (started.compareAndSet(true, false)) {
+        try {
+          levelDB.closeIterator(dbIterator);
+        } catch (IOException e) {
+          LOG.warn("Failed to close iterator", e);
+        }
+      }
+    }
+
+    void setStartedToFalse() {
+      started.set(false);
+    }
+
+    @VisibleForTesting
+    boolean isCompleted() {
+      return !started.get();
+    }
+  }
 }

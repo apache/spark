@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.pmml.export
+package org.apache.spark.mllib.pmml.`export`
 
 import org.dmg.pmml.regression.RegressionModel
 
@@ -32,7 +32,7 @@ class GeneralizedLinearPMMLModelExportSuite extends SparkFunSuite {
     val linearModelExport = PMMLModelExportFactory.createPMMLModelExport(linearRegressionModel)
     // assert that the PMML format is as expected
     assert(linearModelExport.isInstanceOf[PMMLModelExport])
-    val pmml = linearModelExport.getPmml
+    val pmml = linearModelExport.getPmml()
     assert(pmml.getHeader.getDescription === "linear regression")
     // check that the number of fields match the weights size
     assert(pmml.getDataDictionary.getNumberOfFields === linearRegressionModel.weights.size + 1)
@@ -51,7 +51,7 @@ class GeneralizedLinearPMMLModelExportSuite extends SparkFunSuite {
     val ridgeModelExport = PMMLModelExportFactory.createPMMLModelExport(ridgeRegressionModel)
     // assert that the PMML format is as expected
     assert(ridgeModelExport.isInstanceOf[PMMLModelExport])
-    val pmml = ridgeModelExport.getPmml
+    val pmml = ridgeModelExport.getPmml()
     assert(pmml.getHeader.getDescription === "ridge regression")
     // check that the number of fields match the weights size
     assert(pmml.getDataDictionary.getNumberOfFields === ridgeRegressionModel.weights.size + 1)
@@ -69,7 +69,7 @@ class GeneralizedLinearPMMLModelExportSuite extends SparkFunSuite {
     val lassoModelExport = PMMLModelExportFactory.createPMMLModelExport(lassoModel)
     // assert that the PMML format is as expected
     assert(lassoModelExport.isInstanceOf[PMMLModelExport])
-    val pmml = lassoModelExport.getPmml
+    val pmml = lassoModelExport.getPmml()
     assert(pmml.getHeader.getDescription === "lasso regression")
     // check that the number of fields match the weights size
     assert(pmml.getDataDictionary.getNumberOfFields === lassoModel.weights.size + 1)

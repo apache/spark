@@ -23,8 +23,17 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types.StructType
 
+
+private[hive] trait RawHiveTable {
+  def rawTable: Object
+  def toCatalogTable: CatalogTable
+
+  /** Get hive table properties. */
+  def hiveTableProps(): Map[String, String]
+}
 
 /**
  * An externally visible interface to the Hive client.  This interface is shared across both the
@@ -47,7 +56,7 @@ private[hive] trait HiveClient {
 
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
-   * result in one string.
+   * result in one string. This should be used only in testing environment.
    */
   def runSqlHive(sql: String): Seq[String]
 
@@ -85,13 +94,37 @@ private[hive] trait HiveClient {
   /** Return whether a table/view with the specified name exists. */
   def tableExists(dbName: String, tableName: String): Boolean
 
-  /** Returns the specified table, or throws `NoSuchTableException`. */
+  /**
+   * Returns the specified table, or throws [[NoSuchNamespaceException]] if the database
+   * does not exist, or [[NoSuchTableException]] if the table does not exist.
+   */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
-    getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
+    getTableOption(dbName, tableName).getOrElse {
+      if (!databaseExists(dbName)) {
+        throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName))
+      }
+      throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
+    }
   }
 
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
+
+  /**
+   * Returns the specified catalog and Hive table, or throws [[NoSuchNamespaceException]] if
+   * the database does not exist, or [[NoSuchTableException]] if the table does not exist.
+   */
+  final def getRawHiveTable(dbName: String, tableName: String): RawHiveTable = {
+    getRawHiveTableOption(dbName, tableName).getOrElse {
+      if (!databaseExists(dbName)) {
+        throw new NoSuchNamespaceException(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName))
+      }
+      throw new NoSuchTableException(Seq(CatalogManager.SESSION_CATALOG_NAME, dbName, tableName))
+    }
+  }
+
+  /** Returns the metadata for the specified catalog and Hive table or None if it doesn't exist. */
+  def getRawHiveTableOption(dbName: String, tableName: String): Option[RawHiveTable]
 
   /** Returns metadata of existing permanent tables/views for given names. */
   def getTablesByName(dbName: String, tableNames: Seq[String]): Seq[CatalogTable]
@@ -112,6 +145,9 @@ private[hive] trait HiveClient {
    * moving across different database.
    */
   def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
+
+  /** Alter a table properties */
+  def alterTableProps(rawHiveTable: RawHiveTable, newProps: Map[String, String]): Unit
 
   /**
    * Updates the given table with a new data schema and table properties, and keep everything else
@@ -144,8 +180,7 @@ private[hive] trait HiveClient {
    * Create one or many partitions in the given table.
    */
   def createPartitions(
-      db: String,
-      table: String,
+      table: CatalogTable,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit
 
@@ -203,36 +238,26 @@ private[hive] trait HiveClient {
       db: String,
       table: String,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = {
-    getPartitionOption(getTable(db, table), spec)
+    getPartitionOption(getRawHiveTable(db, table), spec)
   }
 
   /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
-      table: CatalogTable,
+      table: RawHiveTable,
       spec: TablePartitionSpec): Option[CatalogTablePartition]
 
   /**
    * Returns the partitions for the given table that match the supplied partition spec.
    * If no partition spec is specified, all partitions are returned.
    */
-  final def getPartitions(
+  def getPartitions(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
-    getPartitions(getTable(db, table), partialSpec)
-  }
-
-  /**
-   * Returns the partitions for the given table that match the supplied partition spec.
-   * If no partition spec is specified, all partitions are returned.
-   */
-  def getPartitions(
-      catalogTable: CatalogTable,
-      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
-      catalogTable: CatalogTable,
+      catalogTable: RawHiveTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */

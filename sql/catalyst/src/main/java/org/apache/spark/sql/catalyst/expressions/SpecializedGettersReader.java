@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.util.Map;
+
+import org.apache.spark.SparkUnsupportedOperationException;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 
 public final class SpecializedGettersReader {
@@ -28,71 +32,66 @@ public final class SpecializedGettersReader {
       DataType dataType,
       boolean handleNull,
       boolean handleUserDefinedType) {
-    if (handleNull && (obj.isNullAt(ordinal) || dataType instanceof NullType)) {
+    PhysicalDataType physicalDataType = PhysicalDataType.apply(dataType);
+    if (handleNull && (obj.isNullAt(ordinal) || physicalDataType instanceof PhysicalNullType)) {
       return null;
     }
-    if (dataType instanceof BooleanType) {
+    if (physicalDataType instanceof PhysicalBooleanType) {
       return obj.getBoolean(ordinal);
     }
-    if (dataType instanceof ByteType) {
+    if (physicalDataType instanceof PhysicalByteType) {
       return obj.getByte(ordinal);
     }
-    if (dataType instanceof ShortType) {
+    if (physicalDataType instanceof PhysicalShortType) {
       return obj.getShort(ordinal);
     }
-    if (dataType instanceof IntegerType) {
+    if (physicalDataType instanceof PhysicalIntegerType) {
       return obj.getInt(ordinal);
     }
-    if (dataType instanceof LongType) {
+    if (physicalDataType instanceof PhysicalLongType) {
       return obj.getLong(ordinal);
     }
-    if (dataType instanceof FloatType) {
+    if (physicalDataType instanceof PhysicalFloatType) {
       return obj.getFloat(ordinal);
     }
-    if (dataType instanceof DoubleType) {
+    if (physicalDataType instanceof PhysicalDoubleType) {
       return obj.getDouble(ordinal);
     }
-    if (dataType instanceof StringType) {
+    if (physicalDataType instanceof PhysicalStringType) {
       return obj.getUTF8String(ordinal);
     }
-    if (dataType instanceof DecimalType) {
-      DecimalType dt = (DecimalType) dataType;
+    if (physicalDataType instanceof PhysicalGeographyType) {
+      return obj.getGeography(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalGeometryType) {
+      return obj.getGeometry(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalDecimalType dt) {
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
     }
-    if (dataType instanceof DateType) {
-      return obj.getInt(ordinal);
-    }
-    if (dataType instanceof TimestampType) {
-      return obj.getLong(ordinal);
-    }
-    if (dataType instanceof TimestampNTZType) {
-      return obj.getLong(ordinal);
-    }
-    if (dataType instanceof CalendarIntervalType) {
+    if (physicalDataType instanceof PhysicalCalendarIntervalType) {
       return obj.getInterval(ordinal);
     }
-    if (dataType instanceof BinaryType) {
+    if (physicalDataType instanceof PhysicalBinaryType) {
       return obj.getBinary(ordinal);
     }
-    if (dataType instanceof StructType) {
-      return obj.getStruct(ordinal, ((StructType) dataType).size());
+    if (physicalDataType instanceof PhysicalVariantType) {
+      return obj.getVariant(ordinal);
     }
-    if (dataType instanceof ArrayType) {
+    if (physicalDataType instanceof PhysicalStructType dt) {
+      return obj.getStruct(ordinal, dt.fields().length);
+    }
+    if (physicalDataType instanceof PhysicalArrayType) {
       return obj.getArray(ordinal);
     }
-    if (dataType instanceof MapType) {
+    if (physicalDataType instanceof PhysicalMapType) {
       return obj.getMap(ordinal);
     }
-    if (handleUserDefinedType && dataType instanceof UserDefinedType) {
-      return obj.get(ordinal, ((UserDefinedType)dataType).sqlType());
-    }
-    if (dataType instanceof DayTimeIntervalType) {
-      return obj.getLong(ordinal);
-    }
-    if (dataType instanceof YearMonthIntervalType) {
-      return obj.getInt(ordinal);
+    if (handleUserDefinedType && dataType instanceof UserDefinedType dt) {
+      return obj.get(ordinal, dt.sqlType());
     }
 
-    throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
+    throw new SparkUnsupportedOperationException(
+      "_LEGACY_ERROR_TEMP_3131", Map.of("dataType", dataType.simpleString()));
   }
 }

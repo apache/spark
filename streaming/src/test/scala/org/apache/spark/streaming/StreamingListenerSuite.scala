@@ -19,10 +19,12 @@ package org.apache.spark.streaming
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import org.mockito.Mockito.{mock, reset, verifyNoMoreInteractions}
 import org.scalatest.concurrent.Eventually._
@@ -30,8 +32,9 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
@@ -115,7 +118,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
   test("receiver info reporting") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
 
     val collector = new ReceiverInfoCollector
     ssc.addStreamingListener(collector)
@@ -161,7 +164,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
   test("don't call ssc.stop in listener") {
     ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
 
     startStreamingContextAndCallStop(ssc)
   }
@@ -169,7 +172,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
   test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
 
     val failureReasons = startStreamingContextAndCollectFailureReasons(ssc)
     assert(failureReasons != null && failureReasons.isEmpty,
@@ -218,7 +221,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     ssc.addStreamingListener(streamingListener)
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
+    inputStream.foreachRDD(_.count())
     ssc.start()
     ssc.stop()
 
@@ -231,6 +234,19 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     ssc.sparkContext.listenerBus.waitUntilEmpty()
     // The StreamingListener should not receive any event
     verifyNoMoreInteractions(streamingListener)
+  }
+
+  test("SPARK-38498: Support extra streaming listener") {
+    val conf = new SparkConf().setMaster("local").setAppName("customized streaming listener")
+      .set(UI.UI_ENABLED, false)
+      .set(StreamingConf.STREAMING_EXTRA_LISTENERS.key,
+        classOf[ExtraStreamingListener].getName)
+    val sc = new SparkContext(conf)
+    ssc = new StreamingContext(sc, Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count())
+    startStreamingContextAndCallStop(ssc)
+    assert(ExtraStreamingListenerBatchCounter.COMPLETED_BATCH >= 1)
   }
 
   private def startStreamingContextAndCallStop(_ssc: StreamingContext): Unit = {
@@ -383,4 +399,15 @@ class StreamingContextStoppingCollector(val ssc: StreamingContext) extends Strea
       }
     }
   }
+}
+
+class ExtraStreamingListener extends StreamingListener {
+  import ExtraStreamingListenerBatchCounter._
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
+    COMPLETED_BATCH += 1
+  }
+}
+
+object ExtraStreamingListenerBatchCounter {
+  var COMPLETED_BATCH = 0
 }

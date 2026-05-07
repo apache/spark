@@ -22,6 +22,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * Builder methods for KubernetesConf that allow easy control over what to return for a few
@@ -47,11 +48,13 @@ object KubernetesTestConf {
       labels: Map[String, String] = Map.empty,
       environment: Map[String, String] = Map.empty,
       annotations: Map[String, String] = Map.empty,
+      serviceLabels: Map[String, String] = Map.empty,
       serviceAnnotations: Map[String, String] = Map.empty,
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
       volumes: Seq[KubernetesVolumeSpec] = Seq.empty,
-      proxyUser: Option[String] = None): KubernetesDriverConf = {
+      proxyUser: Option[String] = None,
+      clock: Clock = new SystemClock()): KubernetesDriverConf = {
     val conf = sparkConf.clone()
 
     resourceNamePrefix.foreach { prefix =>
@@ -60,12 +63,13 @@ object KubernetesTestConf {
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_LABEL_PREFIX, labels)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ENV_PREFIX, environment)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_ANNOTATION_PREFIX, annotations)
+    setPrefixedConfigs(conf, KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX, serviceLabels)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX, serviceAnnotations)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRETS_PREFIX, secretNamesToMountPaths)
     setPrefixedConfigs(conf, KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_DRIVER_VOLUMES_PREFIX, volumes)
 
-    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs, proxyUser)
+    new KubernetesDriverConf(conf, appId, mainAppResource, mainClass, appArgs, proxyUser, clock)
   }
   // scalastyle:on argcount
 
@@ -109,16 +113,26 @@ object KubernetesTestConf {
 
     volumes.foreach { case spec =>
       val (vtype, configs) = spec.volumeConf match {
-        case KubernetesHostPathVolumeConf(path) =>
-          (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
+        case KubernetesHostPathVolumeConf(hostPath, volumeType) =>
+          (KUBERNETES_VOLUMES_HOSTPATH_TYPE, Map(
+            KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> hostPath,
+            KUBERNETES_VOLUMES_OPTIONS_TYPE_KEY -> volumeType))
 
-        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit) =>
+        case KubernetesPVCVolumeConf(claimName, storageClass, sizeLimit, labels, annotations) =>
           val sconf = storageClass
             .map { s => (KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY, s) }.toMap
           val lconf = sizeLimit.map { l => (KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY, l) }.toMap
+          val llabels = labels match {
+            case Some(value) => value.map { case(k, v) => s"label.$k" -> v }
+            case None => Map()
+          }
+          val aannotations = annotations match {
+            case Some(value) => value.map { case (k, v) => s"annotation.$k" -> v }
+            case None => Map()
+          }
           (KUBERNETES_VOLUMES_PVC_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++ sconf ++ lconf)
+            Map(KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY -> claimName) ++
+              sconf ++ lconf ++ llabels ++ aannotations)
 
         case KubernetesEmptyDirVolumeConf(medium, sizeLimit) =>
           val mconf = medium.map { m => (KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY, m) }.toMap
@@ -135,6 +149,10 @@ object KubernetesTestConf {
       if (spec.mountSubPath.nonEmpty) {
         conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY),
           spec.mountSubPath)
+      }
+      if (spec.mountSubPathExpr.nonEmpty) {
+        conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_SUBPATHEXPR_KEY),
+          spec.mountSubPathExpr)
       }
       conf.set(key(vtype, spec.volumeName, KUBERNETES_VOLUMES_MOUNT_READONLY_KEY),
         spec.mountReadOnly.toString)

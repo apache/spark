@@ -17,12 +17,13 @@
 
 package org.apache.spark.network.sasl;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,15 +37,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import javax.security.sasl.SaslException;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -58,10 +57,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
-import org.apache.spark.network.util.ByteArrayWritableChannel;
-import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.MapConfigProvider;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.*;
 
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
@@ -147,13 +143,11 @@ public class SparkSaslSuite {
       .when(rpcHandler)
       .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
 
-    SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
-    try {
+    try (SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false)) {
       ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
         TimeUnit.SECONDS.toMillis(10));
       assertEquals("Pong", JavaUtils.bytesToString(response));
     } finally {
-      ctx.close();
       // There should be 2 terminated events; one for the client, one for the server.
       Throwable error = null;
       long deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
@@ -211,7 +205,7 @@ public class SparkSaslSuite {
 
       channel.reset();
       count = emsg.transferTo(channel, emsg.transferred());
-      assertTrue("Unexpected count: " + count, count > 1 && count < data.length);
+      assertTrue(count > 1 && count < data.length, "Unexpected count: " + count);
       assertEquals(data.length, emsg.transferred());
     } finally {
       msg.release();
@@ -226,7 +220,7 @@ public class SparkSaslSuite {
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
-      Files.write(data, file);
+      Files.write(file.toPath(), data);
 
       SaslEncryptionBackend backend = mock(SaslEncryptionBackend.class);
       // It doesn't really matter what we return here, as long as it's not null.
@@ -250,7 +244,7 @@ public class SparkSaslSuite {
 
   @Test
   public void testFileRegionEncryption() throws Exception {
-    Map<String, String> testConf = ImmutableMap.of(
+    Map<String, String> testConf = Map.of(
       "spark.network.sasl.maxEncryptedBlockSize", "1k");
 
     AtomicReference<ManagedBuffer> response = new AtomicReference<>();
@@ -267,7 +261,7 @@ public class SparkSaslSuite {
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
-      Files.write(data, file);
+      Files.write(file.toPath(), data);
 
       ctx = new SaslTestCtx(rpcHandler, true, false, testConf);
 
@@ -287,7 +281,7 @@ public class SparkSaslSuite {
       verify(callback, times(1)).onSuccess(anyInt(), any(ManagedBuffer.class));
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
 
-      byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
+      byte[] received = response.get().createInputStream().readAllBytes();
       assertArrayEquals(data, received);
     } finally {
       file.delete();
@@ -301,19 +295,11 @@ public class SparkSaslSuite {
   }
 
   @Test
-  public void testServerAlwaysEncrypt() throws Exception {
-    SaslTestCtx ctx = null;
-    try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), false, false,
-        ImmutableMap.of("spark.network.sasl.serverAlwaysEncrypt", "true"));
-      fail("Should have failed to connect without encryption.");
-    } catch (Exception e) {
-      assertTrue(e.getCause() instanceof SaslException);
-    } finally {
-      if (ctx != null) {
-        ctx.close();
-      }
-    }
+  public void testServerAlwaysEncrypt() {
+    Exception re = assertThrows(Exception.class,
+      () -> new SaslTestCtx(mock(RpcHandler.class), false, false,
+              Map.of("spark.network.sasl.serverAlwaysEncrypt", "true")));
+    assertTrue(re.getCause() instanceof SaslException);
   }
 
   @Test
@@ -321,18 +307,11 @@ public class SparkSaslSuite {
     // This test sets up an encrypted connection but then, using a client bootstrap, removes
     // the encryption handler from the client side. This should cause the server to not be
     // able to understand RPCs sent to it and thus close the connection.
-    SaslTestCtx ctx = null;
-    try {
-      ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
-      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
-        TimeUnit.SECONDS.toMillis(10));
-      fail("Should have failed to send RPC to server.");
-    } catch (Exception e) {
+    try (SaslTestCtx ctx = new SaslTestCtx(mock(RpcHandler.class), true, true)) {
+      Exception e = assertThrows(Exception.class,
+        () -> ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
+                TimeUnit.SECONDS.toMillis(10)));
       assertFalse(e.getCause() instanceof TimeoutException);
-    } finally {
-      if (ctx != null) {
-        ctx.close();
-      }
     }
   }
 
@@ -362,7 +341,7 @@ public class SparkSaslSuite {
     }
   }
 
-  private static class SaslTestCtx {
+  private static class SaslTestCtx implements AutoCloseable {
 
     final TransportClient client;
     final TransportServer server;
@@ -423,7 +402,7 @@ public class SparkSaslSuite {
       this.disableClientEncryption = disableClientEncryption;
     }
 
-    void close() {
+    public void close() {
       if (!disableClientEncryption) {
         assertEquals(encrypt, checker.foundEncryptionHandler);
       }

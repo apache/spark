@@ -21,8 +21,9 @@ import java.io.{DataInputStream, DataOutputStream}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Time, Timestamp}
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.WrappedArray
+import scala.collection.mutable
+
+import org.apache.spark.util.collection.Utils
 
 /**
  * Utility functions to serialize, deserialize objects to / from R
@@ -132,33 +133,23 @@ private[spark] object SerDe {
   }
 
   def readDate(in: DataInputStream): Date = {
-    try {
-      val inStr = readString(in)
-      if (inStr == "NA") {
-        null
-      } else {
-        Date.valueOf(inStr)
-      }
-    } catch {
-      // TODO: SPARK-18011 with some versions of R deserializing NA from R results in NASE
-      case _: NegativeArraySizeException => null
+    val inStr = readString(in)
+    if (inStr == "NA") {
+      null
+    } else {
+      Date.valueOf(inStr)
     }
   }
 
   def readTime(in: DataInputStream): Timestamp = {
-    try {
-      val seconds = in.readDouble()
-      if (java.lang.Double.isNaN(seconds)) {
-        null
-      } else {
-        val sec = Math.floor(seconds).toLong
-        val t = new Timestamp(sec * 1000L)
-        t.setNanos(((seconds - sec) * 1e9).toInt)
-        t
-      }
-    } catch {
-      // TODO: SPARK-18011 with some versions of R deserializing NA from R results in NASE
-      case _: NegativeArraySizeException => null
+    val seconds = in.readDouble()
+    if (java.lang.Double.isNaN(seconds)) {
+      null
+    } else {
+      val sec = Math.floor(seconds).toLong
+      val t = new Timestamp(sec * 1000L)
+      t.setNanos(((seconds - sec) * 1e9).toInt)
+      t
     }
   }
 
@@ -236,7 +227,7 @@ private[spark] object SerDe {
       val keys = readArray(in, jvmObjectTracker).asInstanceOf[Array[Object]]
       val values = readList(in, jvmObjectTracker)
 
-      keys.zip(values).toMap.asJava
+      Utils.toJavaMap(keys, values)
     } else {
       new java.util.HashMap[Object, Object]()
     }
@@ -302,13 +293,11 @@ private[spark] object SerDe {
     } else {
       // Convert ArrayType collected from DataFrame to Java array
       // Collected data of ArrayType from a DataFrame is observed to be of
-      // type "scala.collection.mutable.WrappedArray"
-      val value =
-        if (obj.isInstanceOf[WrappedArray[_]]) {
-          obj.asInstanceOf[WrappedArray[_]].toArray
-        } else {
-          obj
-        }
+      // type "scala.collection.mutable.ArraySeq"
+      val value = obj match {
+        case wa: mutable.ArraySeq[_] => wa.array
+        case other => other
+      }
 
       value match {
         case v: java.lang.Character =>
@@ -400,7 +389,7 @@ private[spark] object SerDe {
           writeType(dos, "map")
           writeInt(dos, v.size)
           val iter = v.entrySet.iterator
-          while(iter.hasNext) {
+          while (iter.hasNext) {
             val entry = iter.next
             val key = entry.getKey
             val value = entry.getValue
