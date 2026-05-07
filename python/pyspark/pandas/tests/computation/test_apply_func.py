@@ -262,20 +262,18 @@ class FrameApplyFunctionMixin:
         actual.columns = ["a", "b"]
         self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
 
-        # For NumPy typing, NumPy version should be 1.21+
-        if LooseVersion(np.__version__) >= LooseVersion("1.21"):
-            import numpy.typing as ntp
+        import numpy.typing as ntp
 
-            psdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-            def identify4(
-                x,
-            ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:
-                return x
+        def identify4(
+            x,
+        ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:
+            return x
 
-            actual = psdf.pandas_on_spark.apply_batch(identify4)
-            actual.columns = ["a", "b"]
-            self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
+        actual = psdf.pandas_on_spark.apply_batch(identify4)
+        actual.columns = ["a", "b"]
+        self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
 
         arrays = [[1, 2, 3, 4, 5, 6, 7, 8, 9], ["a", "b", "c", "d", "e", "f", "g", "h", "i"]]
         idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
