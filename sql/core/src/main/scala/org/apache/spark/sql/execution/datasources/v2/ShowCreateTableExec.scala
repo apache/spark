@@ -100,9 +100,7 @@ case class ShowCreateTableExec(
       var bucketSpec = Option.empty[BucketSpec]
       table.partitioning.map {
         case BucketTransform(numBuckets, col, sortCol) if table.isInstanceOf[V1Table] =>
-          if (bucketSpec.nonEmpty) {
-            throw QueryExecutionErrors.unsupportedMultipleBucketTransformsError()
-          }
+          require(bucketSpec.isEmpty, "V1Table can not define multiple bucket transforms")
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {
