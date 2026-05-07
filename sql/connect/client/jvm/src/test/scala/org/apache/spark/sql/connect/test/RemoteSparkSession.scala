@@ -172,11 +172,6 @@ object SparkConnectServerUtils {
     val testClassesPath = Paths.get(IntegrationTestUtils.connectClientTestClassDir)
     spark.client.artifactManager.addClassDir(testClassesPath)
 
-    // Upload common-utils test-classes so the server can resolve test-only helpers
-    // (e.g. `TestEnvHelper`) referenced by closures sent from this client.
-    val commonUtilsTestClassesPath = Paths.get(IntegrationTestUtils.commonUtilsTestClassDir)
-    spark.client.artifactManager.addClassDir(commonUtilsTestClassesPath)
-
     // We need scalatest & scalactic on the session's classpath to make the tests work.
     val jars = System
       .getProperty("java.class.path")

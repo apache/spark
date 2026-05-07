@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 
 import scala.jdk.CollectionConverters._
 
@@ -37,8 +37,20 @@ import org.apache.spark.util.ArrayImplicits._
 // scalastyle:on line.size.limit
 class LogKeysSuite
     extends AnyFunSuite // scalastyle:ignore funsuite
-    with Logging
-    with TestEnvHelper {
+    with Logging {
+
+  /**
+   * Get a Path relative to the root project. It is assumed that a spark home is set.
+   */
+  protected final def getWorkspaceFilePath(first: String, more: String*): Path = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+    java.nio.file.Paths.get(sparkHome, first +: more: _*)
+  }
+
+  private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
   private val logKeyFilePath = getWorkspaceFilePath("common", "utils", "src", "main", "java",
     "org", "apache", "spark", "internal", "LogKeys.java")
