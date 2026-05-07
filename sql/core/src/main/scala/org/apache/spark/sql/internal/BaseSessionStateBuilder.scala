@@ -17,7 +17,6 @@
 package org.apache.spark.sql.internal
 
 import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
@@ -173,7 +172,9 @@ abstract class BaseSessionStateBuilder(
           case _ => None
         }
       } catch {
-        case NonFatal(_) => None
+        // The format name is not a registered data source. Fall through and let the caller
+        // treat it as a catalog/namespace name.
+        case _: ClassNotFoundException => None
       }
 
   protected lazy val catalogManager = {

@@ -184,7 +184,7 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       createPathTable(tablePathWithFormat2)
       sql(s"INSERT INTO $tablePathWithFormat2 VALUES (1, 'a')")
 
-      // pathformat falls back to the session catalog (extractCatalog returns null).
+      // pathformat routes to the session catalog (default extractCatalog).
       createPathTable(tablePathWithFormat)
 
       val e = intercept[AnalysisException] {
@@ -200,9 +200,9 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
 
 /**
  * Simulates a path-based connector (e.g. Delta) that implements [[SupportsCatalogOptions]]
- * to route `pathformat.\`/path/to/t\`` SQL identifiers to the session catalog. Returning
- * null from [[extractCatalog]] signals that the session catalog (`spark_catalog`) owns the
- * table, matching Delta's behavior where DeltaCatalog is registered as spark_catalog.
+ * to route `pathformat.\`/path/to/t\`` SQL identifiers to the session catalog. We rely on
+ * the default [[SupportsCatalogOptions#extractCatalog]] which returns
+ * [[org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME]].
  */
 class FakePathBasedSource
     extends FakeV2ProviderWithCustomSchema
@@ -210,9 +210,6 @@ class FakePathBasedSource
     with DataSourceRegister {
 
   override def shortName(): String = "pathformat"
-
-  // Use the session catalog.
-  override def extractCatalog(options: CaseInsensitiveStringMap): String = null
 
   // Not used in the transactional path.
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier = null
