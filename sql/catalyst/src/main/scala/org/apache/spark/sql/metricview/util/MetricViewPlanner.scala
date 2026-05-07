@@ -64,10 +64,13 @@ object MetricViewPlanner {
     val metricView = try {
       MetricViewFactory.fromYAML(yaml)
     } catch {
+      // Both cases are user-correctable errors in the YAML body, not internal Spark bugs;
+      // surface them as `INVALID_METRIC_VIEW_YAML` AnalysisExceptions so the message is
+      // categorized as user input error rather than "please contact support".
       case e: MetricViewValidationException =>
-        throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
+        throw QueryCompilationErrors.invalidMetricViewYamlError(e.getMessage, e)
       case e: MetricViewYAMLParsingException =>
-        throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
+        throw QueryCompilationErrors.invalidMetricViewYamlError(e.getMessage, e)
     }
     val source = metricView.from match {
       case asset: AssetSource => UnresolvedRelation(sqlParser.parseMultipartIdentifier(asset.name))
