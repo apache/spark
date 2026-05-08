@@ -20,8 +20,6 @@ package org.apache.spark.sql.connect
 import java.util
 import java.util.Collections
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{classic, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -59,9 +57,22 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       s"Expected ${expected.mkString(", ")} but got ${actual.mkString(", ")}")
   }
 
-  private def serverCatalog[T <: TableCatalog: ClassTag](
+  /** Get a catalog from the server-side session by name. */
+  private def serverCatalog[T <: TableCatalog](
       serverSession: classic.SparkSession, name: String): T =
     serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
+
+  /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
+  private def externalAppend(
+      cat: TableCatalog,
+      ident: Identifier,
+      schema: StructType,
+      row: InternalRow): Unit = {
+    val extTable = cat
+      .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+      .asInstanceOf[InMemoryBaseTable]
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
+  }
 
   private def withCleanup(session: SparkSession, table: String)(fn: => Unit): Unit = {
     try { fn } finally { session.sql(s"DROP TABLE IF EXISTS $table").collect() }
@@ -93,11 +104,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
         val schema2 = StructType.fromDDL("id INT, salary INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema2).withRow(InternalRow(2, 200))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema2, row = InternalRow(2, 200))
 
         assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
       }
@@ -116,11 +124,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
           val serverSession = getServerSession(session)
           val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
           val schema = StructType.fromDDL("id INT, salary INT")
-          val extTable = cat
-            .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-            .asInstanceOf[InMemoryBaseTable]
-          extTable.withData(
-            Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+          externalAppend(
+            cat = cat, ident = ident, schema = schema, row = InternalRow(2, 200))
 
           // Caching connector returns stale table: external write invisible
           assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
@@ -168,11 +173,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, addCol)
 
         val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
 
         assertRows(
           session.sql(s"SELECT * FROM $T").collect(),
@@ -196,11 +198,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
           cat.alterTable(ident, addCol)
 
           val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
-          val extTable = cat
-            .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-            .asInstanceOf[InMemoryBaseTable]
-          extTable.withData(
-            Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+          externalAppend(
+            cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
 
           // Caching connector returns stale table: external changes invisible
           assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
@@ -303,11 +302,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
         val schema2 = StructType.fromDDL("id INT, salary INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema2).withRow(InternalRow(2, 200))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema2, row = InternalRow(2, 200))
 
         // same df object, Connect re-analyzes and sees the new row
         assertRows(df.collect(), Seq(Row(1, 100), Row(2, 200)))
@@ -331,11 +327,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, addCol)
 
         val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
 
         // same df object, Connect re-analyzes and sees the new schema
         assertRows(df.collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
