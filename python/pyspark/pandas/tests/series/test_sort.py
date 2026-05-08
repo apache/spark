@@ -136,6 +136,78 @@ class SeriesSortMixin:
         with self.assertRaisesRegex(ValueError, "Invalid side"):
             ps.from_pandas(pser1).searchsorted(1.1, side="middle")
 
+    def test_searchsorted_array_like_value(self):
+        pser_sorted = pd.Series([1, 2, 2, 3])
+        psser_sorted = ps.from_pandas(pser_sorted)
+
+        # list, tuple, ndarray, Series, Index inputs
+        for value in [
+            [0, 2, 5],
+            (0, 2, 5),
+            np.array([0, 2, 5]),
+            pd.Series([0, 2, 5]),
+            pd.Index([0, 2, 5]),
+        ]:
+            for side in ["left", "right"]:
+                self.assert_eq(
+                    pser_sorted.searchsorted(value, side=side),
+                    psser_sorted.searchsorted(value, side=side),
+                )
+
+        # 2-D ndarray preserves shape
+        value_2d = np.array([[0, 2], [3, 5]])
+        for side in ["left", "right"]:
+            self.assert_eq(
+                pser_sorted.searchsorted(value_2d, side=side),
+                psser_sorted.searchsorted(value_2d, side=side),
+            )
+
+        # Empty array-like input returns an empty array
+        self.assert_eq(
+            pser_sorted.searchsorted([]),
+            psser_sorted.searchsorted([]),
+        )
+
+        # 0-d ndarray is treated as a scalar (matches pandas)
+        self.assert_eq(
+            pser_sorted.searchsorted(np.array(2)),
+            psser_sorted.searchsorted(np.array(2)),
+        )
+
+        # Empty self with array-like value
+        pser_empty = pd.Series([], dtype=float)
+        psser_empty = ps.from_pandas(pser_empty)
+        self.assert_eq(
+            pser_empty.searchsorted([1, 2]),
+            psser_empty.searchsorted([1, 2]),
+        )
+
+    def test_searchsorted_sorter(self):
+        pser_unsorted = pd.Series([3, 1, 2])
+        psser_unsorted = ps.from_pandas(pser_unsorted)
+        sorter = np.argsort(pser_unsorted.values)
+
+        for value in [0, 2, 5, [0, 2, 5], np.array([0, 2, 5])]:
+            for side in ["left", "right"]:
+                self.assert_eq(
+                    pser_unsorted.searchsorted(value, side=side, sorter=sorter),
+                    psser_unsorted.searchsorted(value, side=side, sorter=sorter),
+                )
+
+        # Plain list sorter is also accepted
+        self.assert_eq(
+            pser_unsorted.searchsorted(2, sorter=list(sorter)),
+            psser_unsorted.searchsorted(2, sorter=list(sorter)),
+        )
+
+        # sorter length mismatch raises ValueError
+        with self.assertRaisesRegex(ValueError, "sorter.size must equal"):
+            psser_unsorted.searchsorted(2, sorter=[0, 1])
+
+        # 2-D sorter is rejected
+        with self.assertRaisesRegex(ValueError, "sorter must be 1-dimensional"):
+            psser_unsorted.searchsorted(2, sorter=np.array([[0, 1], [2, 0]]))
+
 
 class SeriesSortTests(
     SeriesSortMixin,

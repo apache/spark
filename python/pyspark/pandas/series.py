@@ -112,6 +112,7 @@ from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 from pyspark.pandas.utils import (
     ansi_mode_context,
     combine_frames,
+    default_session,
     is_ansi_mode_enabled,
     is_name_like_tuple,
     is_name_like_value,
@@ -6813,8 +6814,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return DataFrame(internal)
 
-    # TODO(SPARK-40553): 1, support array-like 'value'; 2, add parameter 'sorter'
-    def searchsorted(self, value: Any, side: str = "left") -> int:
+    def searchsorted(
+        self,
+        value: Any,
+        side: str = "left",
+        sorter: Optional[Sequence[int]] = None,
+    ) -> Union[int, np.ndarray]:
         """
         Find indices where elements should be inserted to maintain order.
 
@@ -6823,23 +6828,30 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         .. versionadded:: 3.4.0
 
+        .. versionchanged:: 4.3.0
+            Support array-like ``value`` and added ``sorter`` parameter.
+
         Parameters
         ----------
-        value : scalar
+        value : scalar or array-like
             Values to insert into self.
         side : {'left', 'right'}, optional
             If 'left', the index of the first suitable location found is given.
             If 'right', return the last such index. If there is no suitable index,
             return either 0 or N (where N is the length of self).
+        sorter : 1-D array-like, optional
+            Optional array of integer indices that sort self into ascending order.
+            They are typically the result of ``np.argsort``.
 
         Returns
         -------
-        int
-            insertion point
+        int or numpy.ndarray of int
+            A scalar or array of insertion points with the same shape as ``value``.
 
         Notes
         -----
-        The Series must be monotonically sorted, otherwise wrong locations will likely be returned.
+        The Series must be monotonically sorted, otherwise wrong locations will likely be
+        returned. If ``sorter`` is provided, ``self.take(sorter)`` must be monotonically sorted.
 
         Examples
         --------
@@ -6860,9 +6872,43 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3
         >>> ser.searchsorted(5, side="right")
         4
+
+        Array-like ``value`` returns an array of insertion points:
+
+        >>> ser.searchsorted([0, 2, 5])
+        array([0, 1, 4])
+        >>> ser.searchsorted([1, 3], side="right")
+        array([1, 4])
+
+        ``sorter`` reorders ``self`` into ascending order before searching:
+
+        >>> ser = ps.Series([3, 1, 2])
+        >>> ser.searchsorted(2, sorter=[1, 2, 0])
+        1
+        >>> ser.searchsorted([0, 2, 5], sorter=[1, 2, 0])
+        array([0, 1, 3])
         """
         if side not in ["left", "right"]:
             raise ValueError(f"Invalid side {side}")
+
+        # pandas treats anything that is_list_like (ndarray, list, tuple, Series, Index)
+        # as array-like. ``is_list_like`` already excludes strings, bytes, and 0-d ndarrays.
+        is_array_like = is_list_like(value)
+        if is_array_like:
+            value_arr = np.asarray(value)
+            values = list(value_arr.ravel().tolist())
+        else:
+            values = [value]
+
+        if sorter is not None:
+            sorter_arr = np.asarray(sorter)
+            if sorter_arr.ndim != 1:
+                raise ValueError("sorter must be 1-dimensional")
+            if sorter_arr.size != len(self):
+                raise ValueError("sorter.size must equal self.size")
+
+        if is_array_like and len(values) == 0:
+            return np.empty(value_arr.shape, dtype=np.intp)
 
         sdf = self._internal.spark_frame
         index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
@@ -6871,21 +6917,50 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             sdf.select(self.spark.column.alias(value_col_name)), index_col_name
         )
 
+        if sorter is not None:
+            # Build a small DataFrame mapping original positions to their sorted positions,
+            # then join so the searchsorted aggregation sees the sorted ordering.
+            sorted_pos_col_name = verify_temp_column_name(sdf, "__search_sorted_sorted_pos__")
+            orig_pos_col_name = verify_temp_column_name(sdf, "__search_sorted_orig_pos__")
+            mapping_pdf = pd.DataFrame(
+                {
+                    orig_pos_col_name: sorter_arr.astype(np.int64),
+                    sorted_pos_col_name: np.arange(len(self), dtype=np.int64),
+                }
+            )
+            mapping_sdf = default_session().createDataFrame(mapping_pdf)
+            sdf = sdf.join(
+                mapping_sdf,
+                sdf[index_col_name] == mapping_sdf[orig_pos_col_name],
+                how="inner",
+            ).select(F.col(value_col_name), F.col(sorted_pos_col_name).alias(index_col_name))
+
+        agg_aliases = [f"__search_sorted_r{i}__" for i in range(len(values))]
+        count_alias = "__search_sorted_n__"
         if side == "left":
-            results = sdf.select(
-                F.min(F.when(F.lit(value) <= F.col(value_col_name), F.col(index_col_name))),
-                F.count(F.lit(0)),
-            ).take(1)
+            agg_exprs = [
+                F.min(F.when(F.lit(v) <= F.col(value_col_name), F.col(index_col_name))).alias(a)
+                for v, a in zip(values, agg_aliases)
+            ]
         else:
-            results = sdf.select(
-                F.min(F.when(F.lit(value) < F.col(value_col_name), F.col(index_col_name))),
-                F.count(F.lit(0)),
-            ).take(1)
+            agg_exprs = [
+                F.min(F.when(F.lit(v) < F.col(value_col_name), F.col(index_col_name))).alias(a)
+                for v, a in zip(values, agg_aliases)
+            ]
+        results = sdf.select(*agg_exprs, F.count(F.lit(0)).alias(count_alias)).take(1)
 
         if len(results) == 0:
-            return 0
+            n = 0
+            row_values: List[Optional[int]] = [None] * len(values)
         else:
-            return results[0][1] if results[0][0] is None else results[0][0]
+            row = results[0]
+            n = row[count_alias]
+            row_values = [row[a] for a in agg_aliases]
+
+        insertions = [n if r is None else r for r in row_values]
+        if is_array_like:
+            return np.asarray(insertions, dtype=np.intp).reshape(value_arr.shape)
+        return int(insertions[0])
 
     def align(
         self,
