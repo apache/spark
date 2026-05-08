@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.connect
 
+import java.util
 import java.util.Collections
-
-import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SparkSession}
@@ -60,10 +59,22 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
       s"Expected ${expected.mkString(", ")} but got ${actual.mkString(", ")}")
   }
 
-  /** Get the catalog from the server-side session. */
-  private def serverCatalog[T <: TableCatalog: ClassTag](
+  /** Get a catalog from the server-side session by name. */
+  private def serverCatalog[T <: TableCatalog](
       serverSession: classic.SparkSession, name: String): T =
     serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
+
+  /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
+  private def externalAppend(
+      cat: TableCatalog,
+      ident: Identifier,
+      schema: StructType,
+      row: InternalRow): Unit = {
+    val extTable = cat
+      .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+      .asInstanceOf[InMemoryBaseTable]
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
+  }
 
   /** Drop tables in `finally` so cleanup runs even when a test fails. */
   private def withTable(session: SparkSession, tableNames: String*)(f: => Unit): Unit = {
@@ -94,10 +105,8 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
         // (bypasses this session's CacheManager)
         val schema = StructType.fromDDL("id INT, salary INT")
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val extTable = cat
-          .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema, row = InternalRow(2, 200))
 
         // cache is pinned, external write invisible
         assertCached(serverSession.table(T))
@@ -119,11 +128,8 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
           Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
 
         // external writer adds (4, 400) via direct catalog API
-        val extTable2 = cat
-          .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable2.withData(
-          Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(4, 400))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema, row = InternalRow(4, 400))
 
         // cache is re-pinned, external write invisible
         assertCached(serverSession.table(T))
@@ -153,11 +159,8 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
 
         // external writer adds (2, 200, -1)
         val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-        val extTable = cat
-          .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
 
         // cache stays pinned at original 2-column schema
         assertCached(serverSession.table(T))
@@ -193,11 +196,8 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
         // external writer adds (2, 200, -1) via catalog API
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
         val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-        val extTable = cat
-          .loadTable(ident, java.util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
 
         // external write invisible: cache still shows (1, 100, null)
         assertCached(serverSession.table(T))
