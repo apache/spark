@@ -102,7 +102,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
             self.assertIn("UDF", physical_plan)
 
-
     def test_udf_not_transpilable(self):
         class UnsupportedEx:
             def __call__(self, col):
