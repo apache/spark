@@ -52,7 +52,7 @@ sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
 private[sql] object ExpressionDefaults {
   val DEFAULT_GEOGRAPHY_SRID: Int = Geography.DEFAULT_SRID
   val DEFAULT_GEOMETRY_SRID: Int = Geometry.DEFAULT_SRID
-  val DEFAULT_WKB_ENDIANNESS: String = STUtils.NDR
+  val DEFAULT_WKB_ENDIANNESS: String = "NDR"
 }
 
 /** ST writer expressions. */
