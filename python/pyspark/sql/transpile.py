@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 class AbstractTranspiler(object):
     """Base class for transpilers. All experimental."""
 
-    varieties: dict[str, type[AbstractTranspiler]] = {}
+    varieties: dict[str, type["AbstractTranspiler"]] = {}
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.transpilers
     # to enable this transpiler.
     variety: str = ""
