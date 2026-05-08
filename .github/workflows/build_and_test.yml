@@ -745,14 +745,14 @@ jobs:
       run: |
         tar -xzf compile-artifact.tar.gz
         rm compile-artifact.tar.gz
-    - name: Set SKIP_SCALA_BUILD when precompiled artifact is usable
-      if: steps.extract-precompiled.outcome == 'success'
-      run: echo "SKIP_SCALA_BUILD=true" >> $GITHUB_ENV
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+        fi
         if [[ "$MODULES_TO_TEST" == *"pyspark-pipelines"* ]]; then
           export SKIP_PACKAGING=false
           echo "Python Packaging Tests Enabled!"
