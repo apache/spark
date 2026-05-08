@@ -41,19 +41,19 @@ case class ShowTablesExec(
     namespace: Seq[String],
     pattern: Option[String]) extends V2CommandExec with LeafExecNode {
   override protected def run(): Seq[InternalRow] = {
-    val rows = new ArrayBuffer[InternalRow]()
-
     val identifiers: Array[Identifier] = catalog match {
       case mc: TableViewCatalog =>
         mc.listTableAndViewSummaries(namespace.toArray).map(_.identifier())
       case _ => catalog.listTables(namespace.toArray)
     }
-    identifiers.foreach { ident =>
-      if (pattern.map(StringUtils.filterPattern(Seq(ident.name()), _).nonEmpty).getOrElse(true)) {
-        rows += toCatalystRow(ident.namespace().quoted, ident.name(), isTempView(ident, catalog))
-      }
+    val filteredIdents = identifiers.filter { ident =>
+      pattern.map(StringUtils.filterPattern(Seq(ident.name()), _).nonEmpty).getOrElse(true)
     }
 
+    val rows = new ArrayBuffer[InternalRow]()
+    filteredIdents.foreach { ident =>
+      rows += toCatalystRow(ident.namespace().quoted, ident.name(), isTempView(ident, catalog))
+    }
     rows.toSeq
   }
 
