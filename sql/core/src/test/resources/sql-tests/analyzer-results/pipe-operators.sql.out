@@ -3834,7 +3834,7 @@ table windowTestData
 |> select cate, val, sum(val) over w, first_value(val) over w
    window w1 as (partition by cate order by val)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
@@ -3923,7 +3923,7 @@ table windowTestData
    window w1 as (partition by cate)
    window w2 as (order by val)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
