@@ -74,10 +74,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
   @Since("1.4.0")
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
-  /** @group setParam */
-  @Since("4.3.0")
-  def setPruneTree(value: Boolean): this.type = set(pruneTree, value)
-
   /** @group expertSetParam */
   @Since("1.4.0")
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
@@ -138,11 +134,9 @@ class DecisionTreeClassifier @Since("1.4.0") (
 
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     require(!strategy.bootstrap, "DecisionTreeClassifier does not need bootstrap sampling")
-    strategy.pruneTree = $(pruneTree)
-
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
-      probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain, pruneTree,
+      probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
       maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed, thresholds)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",

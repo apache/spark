@@ -55,8 +55,6 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
  *                    If a split has less information gain than minInfoGain,
  *                    this split will not be considered as a valid split.
- * @param pruneTree If this is true, the final training tree will undergo a pruning in which
- *                  nodes with the same classifications are merged.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.  If too small, then 1 node will be split per iteration, and
  *                      its aggregates may exceed this size.
@@ -79,7 +77,6 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
     @Since("1.2.0") @BeanProperty var minInstancesPerNode: Int = 1,
     @Since("1.2.0") @BeanProperty var minInfoGain: Double = 0.0,
-    @Since("4.3.0") @BeanProperty var pruneTree: Boolean = true,
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
@@ -116,13 +113,12 @@ class Strategy @Since("1.3.0") (
       categoricalFeaturesInfo: Map[Int, Int],
       minInstancesPerNode: Int,
       minInfoGain: Double,
-      pruneTree: Boolean,
       maxMemoryInMB: Int,
       subsamplingRate: Double,
       useNodeIdCache: Boolean,
       checkpointInterval: Int) = {
     this(algo, impurity, maxDepth, numClasses, maxBins, quantileCalculationStrategy,
-      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, pruneTree, maxMemoryInMB,
+      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB,
       subsamplingRate, useNodeIdCache, checkpointInterval, 0.0)
   }
   // scalastyle:on argcount
@@ -204,7 +200,7 @@ class Strategy @Since("1.3.0") (
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode,
-      minInfoGain, pruneTree, maxMemoryInMB, subsamplingRate, useNodeIdCache,
+      minInfoGain, maxMemoryInMB, subsamplingRate, useNodeIdCache,
       checkpointInterval, minWeightFractionPerNode)
   }
 }

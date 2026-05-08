@@ -76,10 +76,6 @@ class RandomForestClassifier @Since("1.4.0") (
   @Since("1.4.0")
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
-  /** @group setParam */
-  @Since("4.3.0")
-  def setPruneTree(value: Boolean): this.type = set(pruneTree, value)
-
   /** @group expertSetParam */
   @Since("1.4.0")
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
@@ -163,11 +159,10 @@ class RandomForestClassifier @Since("1.4.0") (
     val strategy =
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
     strategy.bootstrap = $(bootstrap)
-    strategy.pruneTree = $(pruneTree)
 
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, probabilityCol,
       rawPredictionCol, leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins,
-      maxMemoryInMB, minInfoGain, pruneTree, minInstancesPerNode, minWeightFractionPerNode, seed,
+      maxMemoryInMB, minInfoGain, minInstancesPerNode, minWeightFractionPerNode, seed,
       subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap)
 
     val trees = RandomForest
