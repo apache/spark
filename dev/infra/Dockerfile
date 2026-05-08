@@ -51,7 +51,7 @@ RUN curl -fsSL https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc 
     -o /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
 RUN apt update
-RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
+RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libuv1-dev libssl-dev zlib1g-dev
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
