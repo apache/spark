@@ -79,7 +79,7 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
     @Since("1.2.0") @BeanProperty var minInstancesPerNode: Int = 1,
     @Since("1.2.0") @BeanProperty var minInfoGain: Double = 0.0,
-    @Since("5.0.0") @BeanProperty var pruneTree: Boolean = false,
+    @Since("5.0.0") @BeanProperty var pruneTree: Boolean = true,
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,

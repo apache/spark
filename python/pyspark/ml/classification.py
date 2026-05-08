@@ -1678,7 +1678,7 @@ class _DecisionTreeClassifierParams(_DecisionTreeParams, _TreeClassifierParams):
             maxBins=32,
             minInstancesPerNode=1,
             minInfoGain=0.0,
-            pruneTree=False,
+            pruneTree=True,
             maxMemoryInMB=256,
             cacheNodeIds=False,
             checkpointInterval=10,
@@ -1790,7 +1790,7 @@ class DecisionTreeClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
-        pruneTree: bool = False,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -1803,7 +1803,7 @@ class DecisionTreeClassifier(
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False, \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
         """
@@ -1828,7 +1828,7 @@ class DecisionTreeClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
-        pruneTree: bool = False,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -1841,7 +1841,7 @@ class DecisionTreeClassifier(
         """
         setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False, \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                   seed=None, weightCol=None, leafCol="", minWeightFractionPerNode=0.0)
         Sets params for the DecisionTreeClassifier.
@@ -1981,7 +1981,7 @@ class _RandomForestClassifierParams(_RandomForestParams, _TreeClassifierParams):
             maxBins=32,
             minInstancesPerNode=1,
             minInfoGain=0.0,
-            pruneTree=False,
+            pruneTree=True,
             maxMemoryInMB=256,
             cacheNodeIds=False,
             checkpointInterval=10,
@@ -2091,7 +2091,7 @@ class RandomForestClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
-        pruneTree: bool = False,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -2108,7 +2108,7 @@ class RandomForestClassifier(
         """
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False, \
+                 maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
                  numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
                  leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)
@@ -2134,7 +2134,7 @@ class RandomForestClassifier(
         maxBins: int = 32,
         minInstancesPerNode: int = 1,
         minInfoGain: float = 0.0,
-        pruneTree: bool = False,
+        pruneTree: bool = True,
         maxMemoryInMB: int = 256,
         cacheNodeIds: bool = False,
         checkpointInterval: int = 10,
@@ -2151,7 +2151,7 @@ class RandomForestClassifier(
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
-                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=False, \
+                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, pruneTree=True, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
                   impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
                   leafCol="", minWeightFractionPerNode=0.0, weightCol=None, bootstrap=True)

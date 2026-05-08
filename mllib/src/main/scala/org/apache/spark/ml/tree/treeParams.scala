@@ -216,7 +216,7 @@ private[ml] trait TreeClassifierParams extends Params {
    * with the same class predictions are merged. The resulting tree will be smaller and have
    * faster predictions, but class probabilities will be lost.
    * If false, no pruning is applied after training, and class probabilities are preserved.
-   * (default = false)
+   * (default = true)
    * @group param
    */
   final val pruneTree: BooleanParam = new BooleanParam(this, "pruneTree", "" +
@@ -226,7 +226,7 @@ private[ml] trait TreeClassifierParams extends Params {
     " If false, no pruning is applied after training, and class probabilities are preserved."
   )
 
-  setDefault(impurity -> "gini", pruneTree -> false)
+  setDefault(impurity -> "gini", pruneTree -> true)
 
   /** @group getParam */
   final def getImpurity: String = $(impurity).toLowerCase(Locale.ROOT)

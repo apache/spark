@@ -826,6 +826,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         instr = None)
       .head
 
+    strategy.pruneTree = true
     val defaultBehaviorTree = RandomForest
       .run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto", seed = 42, instr = None)
       .head
@@ -833,7 +834,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(prunedTree.numNodes === 5)
     assert(unprunedTree.numNodes === 7)
 
-    assert(defaultBehaviorTree.numNodes == unprunedTree.numNodes)
+    assert(defaultBehaviorTree.numNodes == prunedTree.numNodes)
 
     assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.length)
   }
@@ -882,6 +883,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         instr = None)
       .head
 
+    strategy.pruneTree = true
     val defaultBehaviorTree = RandomForest
       .run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto", seed = 42, instr = None)
       .head
@@ -889,7 +891,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(prunedTree.numNodes === 3)
     assert(unprunedTree.numNodes === 5)
 
-    assert(defaultBehaviorTree.numNodes == unprunedTree.numNodes)
+    assert(defaultBehaviorTree.numNodes == prunedTree.numNodes)
 
     assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.length)
   }
