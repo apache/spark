@@ -1403,10 +1403,12 @@ case class RenameTable(
 case class ShowTables(
     namespace: LogicalPlan,
     pattern: Option[String],
+    asJson: Boolean = false,
     override val output: Seq[Attribute] = ShowTables.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTables =
     copy(namespace = newChild)
+  override protected def stringArgs: Iterator[Any] = Iterator(pattern, output)
 }
 
 object ShowTables {
@@ -1414,6 +1416,9 @@ object ShowTables {
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)())
+
+  def getJsonOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("json_metadata", StringType, nullable = false)())
 }
 
 /**
@@ -1422,10 +1427,12 @@ object ShowTables {
 case class ShowTablesExtended(
     namespace: LogicalPlan,
     pattern: String,
+    asJson: Boolean = false,
     override val output: Seq[Attribute] = ShowTablesUtils.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): ShowTablesExtended =
     copy(namespace = newChild)
+  override protected def stringArgs: Iterator[Any] = Iterator(pattern, output)
 }
 
 object ShowTablesUtils {

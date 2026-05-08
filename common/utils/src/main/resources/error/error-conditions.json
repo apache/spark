@@ -8295,6 +8295,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION" : {
+        "message" : [
+          "SHOW TABLE EXTENDED with PARTITION does not support AS JSON output."
+        ]
+      },
       "SQL_CURSOR" : {
         "message" : [
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."

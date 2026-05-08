@@ -25,6 +25,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, FsAction, FsPermission}
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{SQLConfHelper, TableIdentifier}
@@ -927,9 +929,21 @@ case class ShowTablesCommand(
     tableIdentifierPattern: Option[String],
     override val output: Seq[Attribute],
     isExtended: Boolean = false,
-    partitionSpec: Option[TablePartitionSpec] = None) extends LeafRunnableCommand {
+    partitionSpec: Option[TablePartitionSpec] = None,
+    asJson: Boolean = false) extends LeafRunnableCommand {
+
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(databaseName, tableIdentifierPattern, output, isExtended, partitionSpec)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    if (asJson) {
+      runAsJson(sparkSession)
+    } else {
+      runAsText(sparkSession)
+    }
+  }
+
+  private def runAsText(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
     // instead of calling tables in sparkSession.
     val catalog = sparkSession.sessionState.catalog
@@ -971,6 +985,45 @@ case class ShowTablesCommand(
       val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
+  }
+
+  private def runAsJson(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    val tables =
+      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+
+    val jsonTables = tables.map { tableIdent =>
+      val isTemp = catalog.isTempView(tableIdent)
+      val ns = tableIdent.database.toList
+
+      if (isExtended) {
+        val tableType = if (isTemp) {
+          "VIEW"
+        } else {
+          val meta = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
+          if (meta.tableType == CatalogTableType.VIEW) "VIEW" else "TABLE"
+        }
+
+        JObject(
+          "name" -> JString(tableIdent.table),
+          "catalog" -> JString(
+            sparkSession.sessionState.catalogManager.v2SessionCatalog.name()),
+          "namespace" -> JArray(ns.map(JString(_))),
+          "type" -> JString(tableType),
+          "isTemporary" -> JBool(isTemp)
+        )
+      } else {
+        JObject(
+          "name" -> JString(tableIdent.table),
+          "namespace" -> JArray(ns.map(JString(_))),
+          "isTemporary" -> JBool(isTemp)
+        )
+      }
+    }.toList
+
+    val jsonOutput = JObject("tables" -> JArray(jsonTables))
+    Seq(Row(compact(render(jsonOutput))))
   }
 }
 

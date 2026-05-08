@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -32,6 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowTablesSuite`
  */
 trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
+  implicit val formats: Formats = DefaultFormats
+
   override val command = "SHOW TABLES"
   protected def defaultNamespace: Seq[String]
 
@@ -458,6 +463,192 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
         assert(extendedResultCollect(1)(1) === table1)
         assert(extendedResultCollect(1)(3).toString.contains(extendedTableSchema))
+      }
+    }
+  }
+
+  test("SHOW TABLES AS JSON returns single row with json_metadata column") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT, data STRING) $defaultUsing")
+      val df = sql(s"SHOW TABLES IN $catalog.ns AS JSON")
+      assert(df.schema.fieldNames === Seq("json_metadata"))
+      assert(df.count() == 1)
+
+      val jsonStr = df.collect()(0).getString(0)
+      val json = parse(jsonStr)
+      val tables = (json \ "tables").asInstanceOf[JArray].arr
+      assert(tables.length == 1, s"Expected 1 entry, got: $tables")
+      val tblEntry = tables.find(t => (t \ "name").extract[String] == "tbl")
+      assert(tblEntry.isDefined)
+      assert((tblEntry.get \ "isTemporary").extract[Boolean] == false)
+      assert((tblEntry.get \ "namespace").isInstanceOf[JArray])
+    }
+  }
+
+  test("SHOW TABLES AS JSON with empty database") {
+    withNamespace(s"$catalog.ns_empty") {
+      sql(s"CREATE NAMESPACE $catalog.ns_empty")
+      val df = sql(s"SHOW TABLES IN $catalog.ns_empty AS JSON")
+      assert(df.count() == 1)
+
+      val jsonStr = df.collect()(0).getString(0)
+      val json = parse(jsonStr)
+      val tables = (json \ "tables").asInstanceOf[JArray].arr
+      assert(tables.isEmpty)
+    }
+  }
+
+  test("SHOW TABLE EXTENDED AS JSON returns single row with json_metadata column") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT, data STRING) $defaultUsing")
+      val df = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl' AS JSON")
+      assert(df.schema.fieldNames === Seq("json_metadata"))
+      assert(df.count() == 1)
+
+      val jsonStr = df.collect()(0).getString(0)
+      val json = parse(jsonStr)
+      val tables = (json \ "tables").asInstanceOf[JArray].arr
+      assert(tables.length == 1)
+      val entry = tables.head
+      assert((entry \ "name").extract[String] == "tbl")
+      assert((entry \ "type").extract[String] == "TABLE")
+      assert((entry \ "isTemporary").extract[Boolean] == false)
+      assert((entry \ "catalog").isInstanceOf[JString])
+      assert((entry \ "namespace").isInstanceOf[JArray])
+    }
+  }
+
+  test("SHOW TABLES AS JSON includes temp views") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      withTempView("tv") {
+        sql("CREATE TEMP VIEW tv AS SELECT 1 AS id")
+        val df = sql(s"SHOW TABLES IN $catalog.ns AS JSON")
+        val jsonStr = df.collect()(0).getString(0)
+        val json = parse(jsonStr)
+        val tables = (json \ "tables").asInstanceOf[JArray].arr
+        // Verify no duplicate entries
+        val names = tables.map(t => (t \ "name").extract[String])
+        assert(names.distinct.length == names.length, s"Duplicate entries found: $names")
+        val tempView = tables.find(t => (t \ "name").extract[String] == "tv")
+        assert(tempView.isDefined)
+        assert((tempView.get \ "isTemporary").extract[Boolean] == true)
+      }
+    }
+  }
+
+  test("SHOW TABLE EXTENDED AS JSON with local temp view") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val localTmpViewName = "tbl_local_tmp"
+      withTempView(localTmpViewName) {
+        sql(s"CREATE TEMPORARY VIEW $localTmpViewName AS SELECT id FROM $t")
+
+        val df = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl*' AS JSON")
+        assert(df.schema.fieldNames === Seq("json_metadata"))
+        assert(df.count() == 1)
+
+        val jsonStr = df.collect()(0).getString(0)
+        val json = parse(jsonStr)
+        val tables = (json \ "tables").asInstanceOf[JArray].arr
+        assert(tables.length == 2, s"Expected 2 entries (tbl + $localTmpViewName), got: $tables")
+
+        // Verify no duplicate entries
+        val names = tables.map(e => (e \ "name").extract[String])
+        assert(names.distinct.length == names.length, s"Duplicate entries found: $names")
+
+        val tblEntry = tables.find(e => (e \ "name").extract[String] == "tbl")
+        assert(tblEntry.isDefined)
+        assert((tblEntry.get \ "isTemporary").extract[Boolean] == false)
+        assert((tblEntry.get \ "type").extract[String] == "TABLE")
+
+        val tempViewEntry = tables.find(e => (e \ "name").extract[String] == localTmpViewName)
+        assert(tempViewEntry.isDefined)
+        assert((tempViewEntry.get \ "isTemporary").extract[Boolean] == true)
+        assert((tempViewEntry.get \ "type").extract[String] == "VIEW")
+      }
+    }
+  }
+
+  test("SHOW TABLE EXTENDED AS JSON with global temp view") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val globalTmpViewName = "ext_json_gtv"
+      val globalNamespace = "global_temp"
+      withView(s"$globalNamespace.$globalTmpViewName") {
+        sql(s"CREATE OR REPLACE GLOBAL TEMP VIEW $globalTmpViewName AS SELECT id FROM $t")
+
+        val df = sql(s"SHOW TABLE EXTENDED IN $globalNamespace LIKE 'ext_json*' AS JSON")
+        assert(df.schema.fieldNames === Seq("json_metadata"))
+        assert(df.count() == 1)
+
+        val jsonStr = df.collect()(0).getString(0)
+        val json = parse(jsonStr)
+        val tables = (json \ "tables").asInstanceOf[JArray].arr
+        assert(tables.length == 1, s"Expected 1 entry, got: $tables")
+
+        val globalTempViewEntry =
+          tables.find(e => (e \ "name").extract[String] == globalTmpViewName)
+        assert(globalTempViewEntry.isDefined)
+        assert((globalTempViewEntry.get \ "isTemporary").extract[Boolean] == true)
+        assert((globalTempViewEntry.get \ "type").extract[String] == "VIEW")
+      }
+    }
+  }
+
+  test("SHOW TABLES AS JSON with global temp view") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val globalTmpViewName = "show_json_gtv"
+      val globalNamespace = "global_temp"
+      withView(s"$globalNamespace.$globalTmpViewName") {
+        sql(s"CREATE OR REPLACE GLOBAL TEMP VIEW $globalTmpViewName AS SELECT id FROM $t")
+
+        val df = sql(s"SHOW TABLES IN $globalNamespace AS JSON")
+        assert(df.schema.fieldNames === Seq("json_metadata"))
+        assert(df.count() == 1)
+
+        val jsonStr = df.collect()(0).getString(0)
+        val json = parse(jsonStr)
+        val tables = (json \ "tables").asInstanceOf[JArray].arr
+        assert(tables.length == 1, s"Expected 1 entry, got: $tables")
+
+        val globalTempViewEntry =
+          tables.find(e => (e \ "name").extract[String] == globalTmpViewName)
+        assert(globalTempViewEntry.isDefined)
+        assert((globalTempViewEntry.get \ "isTemporary").extract[Boolean] == true)
+      }
+    }
+  }
+
+  test("SHOW TABLE EXTENDED AS JSON with both local and global temp views") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val localTmpViewName = "both_json_ltv"
+      val globalTmpViewName = "both_json_gtv"
+      val globalNamespace = "global_temp"
+      withView(localTmpViewName, s"$globalNamespace.$globalTmpViewName") {
+        sql(s"CREATE OR REPLACE TEMP VIEW $localTmpViewName AS SELECT id FROM $t")
+        sql(s"CREATE OR REPLACE GLOBAL TEMP VIEW $globalTmpViewName AS SELECT id FROM $t")
+
+        val df = sql(s"SHOW TABLE EXTENDED IN $globalNamespace LIKE 'both_json*' AS JSON")
+        assert(df.count() == 1)
+
+        val jsonStr = df.collect()(0).getString(0)
+        val json = parse(jsonStr)
+        val tables = (json \ "tables").asInstanceOf[JArray].arr
+
+        assert(tables.length == 2)
+
+        val globalTempViewEntry =
+          tables.find(e => (e \ "name").extract[String] == globalTmpViewName)
+        assert(globalTempViewEntry.isDefined)
+        assert((globalTempViewEntry.get \ "isTemporary").extract[Boolean] == true)
+
+        val localTempViewEntry =
+          tables.find(e => (e \ "name").extract[String] == localTmpViewName)
+        assert(localTempViewEntry.isDefined)
+        assert((localTempViewEntry.get \ "isTemporary").extract[Boolean] == true)
       }
     }
   }
