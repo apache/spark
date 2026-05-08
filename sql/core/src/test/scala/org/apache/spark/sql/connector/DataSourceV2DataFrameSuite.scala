@@ -2165,7 +2165,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Section 1: Temp views with stored plans - missing scenarios
+  // Part 1: Temp views with stored plans - missing scenarios
   // =====================================================================
 
   test("temp view: drop and add column with same name and same type (session)") {
@@ -2397,7 +2397,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Section 2: Repeated table access with external changes (regression)
+  // Part 2: Repeated table access with external changes (regression)
   // =====================================================================
 
   test("repeated SELECT picks up external data writes") {
@@ -2454,7 +2454,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Section 3: Incrementally constructed queries - missing scenarios
+  // Part 3: Incrementally constructed queries - missing scenarios
   // =====================================================================
 
   test("join: drop and add column with same name and same type between df1 and df2") {
@@ -2540,7 +2540,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Section 4: Version pinning and refresh in Dataset - show vs collect
+  // Part 4: Version pinning and refresh in Dataset - show vs collect
   // =====================================================================
 
   test("show() creates new QueryExecution while collect() reuses stale one") {
@@ -2562,7 +2562,7 @@ class DataSourceV2DataFrameSuite
       assert(df.count() == 2)
 
       // collect() reuses the pinned QueryExecution and sees stale data
-      // This documents the current inconsistent behavior noted in the design doc
+      // This documents the current inconsistent behavior
       val result2 = df.collect()
       assert(result2.length == 1)
     }
@@ -2657,7 +2657,7 @@ class DataSourceV2DataFrameSuite
 
       // InMemoryTable returns null for drop+re-add (dropped column data is discarded),
       // so the version refresh detects a compatible change and succeeds
-      // The design doc proposes this should eventually fail with column ID mismatch
+      // This should eventually fail with column ID mismatch
       // once Spark introduces the notion of column IDs
       checkAnswer(df, Seq(Row(1, null)))
     }
@@ -2738,7 +2738,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Section 5: CACHE TABLE scenarios (in DataSourceV2DataFrameSuite)
+  // Part 5: CACHE TABLE scenarios (in DataSourceV2DataFrameSuite)
   // =====================================================================
 
   test("CACHE TABLE pins state against external schema changes") {
@@ -2930,10 +2930,10 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Design Doc Section 3, Scenario 4: Join after drop/recreate table
+  // Part 3, Scenario 4: Join after drop/recreate table
   // =====================================================================
 
-  test("[Section 3 S4] join: drop and recreate table between df1 and df2 analysis") {
+  test("[Part 3 S4] join: drop and recreate table between df1 and df2 analysis") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -2968,15 +2968,15 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Design Doc Section 4: collect() reuses stale QueryExecution
+  // Part 4: collect() reuses stale QueryExecution
   // These tests document the inconsistent behavior where Dataset.collect()
   // pins the QueryExecution from its first invocation and subsequent
   // collect() calls reuse the stale plan, while show(), count(), and
   // other derived operations create fresh QueryExecutions.
-  // The design doc proposes aligning collect() with show() in the future.
+  // The proposed fix is to align collect() with show() in the future.
   // =====================================================================
 
-  test("[Section 4 S2] collect reuses stale QE after column addition") {
+  test("[Part 4 S2] collect reuses stale QE after column addition") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -3003,7 +3003,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("[Section 4 S3] collect reuses stale QE after column removal") {
+  test("[Part 4 S3] collect reuses stale QE after column removal") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -3028,7 +3028,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("[Section 4 S4] collect reuses stale QE after drop/recreate table") {
+  test("[Part 4 S4] collect reuses stale QE after drop/recreate table") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -3051,7 +3051,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("[Section 4 S5] collect reuses stale QE after drop and add column with same type") {
+  test("[Part 4 S5] collect reuses stale QE after drop and add column with same type") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -3074,7 +3074,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("[Section 4 S6] collect reuses stale QE after drop and add column with different type") {
+  test("[Part 4 S6] collect reuses stale QE after drop and add column with different type") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
@@ -3098,10 +3098,10 @@ class DataSourceV2DataFrameSuite
   }
 
   // =====================================================================
-  // Design Doc Section 5, Scenario 4: Session schema change + cache
+  // Part 5, Scenario 4: Session schema change + cache
   // =====================================================================
 
-  test("[Section 5 S4] CACHE TABLE: session schema change reflects in subsequent queries") {
+  test("[Part 5 S4] CACHE TABLE: session schema change reflects in subsequent queries") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")

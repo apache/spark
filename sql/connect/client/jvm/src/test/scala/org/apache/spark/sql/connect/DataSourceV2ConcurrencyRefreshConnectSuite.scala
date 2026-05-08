@@ -232,7 +232,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
       dfRows = Seq.empty))
 
   // =====================================================================
-  // Section 1: DataFrame-based Temp View x All Modifications
+  // Part 1: DataFrame-based Temp View x All Modifications
   // Uses spark.read.table(T).createOrReplaceTempView() which stores
   // an analyzed plan (unlike SQL views which store SQL text).
   // In classic, this is tested with VIEW_PLAN_CHANGED errors.
@@ -264,7 +264,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 2: Repeated SQL Access x All Modifications
+  // Part 2: Repeated SQL Access x All Modifications
   // Always fresh analysis: all succeed.
   // =====================================================================
 
@@ -284,7 +284,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 3: Join x All Modifications
+  // Part 3: Join x All Modifications
   // In Connect, both sides re-analyze. ALL succeed.
   // =====================================================================
 
@@ -311,7 +311,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 4a: DataFrame First Access x All Modifications
+  // Part 4a: DataFrame First Access x All Modifications
   // Connect re-analyzes: all succeed.
   // =====================================================================
 
@@ -329,7 +329,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 4b: DataFrame collect() is NOT stale in Connect
+  // Part 4b: DataFrame collect() is NOT stale in Connect
   // KEY DIFFERENCE from classic: collect() re-analyzes.
   // =====================================================================
 
@@ -348,7 +348,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 5: CACHE TABLE (session modifications)
+  // Part 5: CACHE TABLE (session modifications)
   // =====================================================================
 
   mods.foreach { mod =>
@@ -373,7 +373,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 6: Subquery x All Modifications
+  // Part 6: Subquery x All Modifications
   // Connect re-analyzes subqueries too.
   // =====================================================================
 
@@ -393,7 +393,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 7: SQL Temp View (from SQL text, not DataFrame plan)
+  // Part 7: SQL Temp View (from SQL text, not DataFrame plan)
   // SELECT * is expanded at creation time; schema changes on captured
   // columns cause INCOMPATIBLE_VIEW_SCHEMA_CHANGE (or CANNOT_UP_CAST_DATATYPE
   // for type widening / drop+add different type).
@@ -834,7 +834,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         for (i <- 1 to 5) {
           spark.sql(s"ALTER TABLE $T ADD COLUMN col_$i INT")
         }
-        // SQL view preserves original 2-col schema (design doc Section 1 Scenario 2).
+        // SQL view preserves original 2-col schema (Part 1 Scenario 2).
         // New top-level columns are ignored; the view shows (id, salary) only.
         checkAnswer(spark.sql("SELECT * FROM tmp"), Seq(Row(1, 100)))
       }
@@ -1392,7 +1392,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 1: "New top level fields are ignored while new
+  // Part 1: "New top level fields are ignored while new
   // nested fields trigger an exception."
   // Classic: [Gap.1] nested struct field addition breaks temp view
   test("[edge] nested struct field addition breaks DF temp view") {
@@ -1418,7 +1418,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 1: top-level addition OK then nested addition fails.
+  // Part 1: top-level addition OK then nested addition fails.
   // Classic: [Gap.2] top-level addition OK but nested addition fails
   test("[edge] top-level addition OK but nested addition breaks view") {
     assumeCanRun()
@@ -1470,7 +1470,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
         spark.sql(s"ALTER TABLE $T ADD COLUMN bonus INT")
         spark.sql(s"INSERT INTO $T VALUES (2, 200, 50)")
         // SQL view preserves original 2-col schema but picks up new data
-        // (design doc Section 1 Scenario 2: original schema, new snapshot)
+        // (Part 1 Scenario 2: original schema, new snapshot)
         checkAnswer(spark.sql("SELECT * FROM tv"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
@@ -1600,7 +1600,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 4-show: count vs collect consistency in Connect
+  // Part 4-show: count vs collect consistency in Connect
   // KEY DIFFERENCE: In classic, count creates a new QE (fresh) while
   // collect reuses a pinned QE (stale). In Connect, both re-analyze,
   // so they are always consistent.
@@ -1623,7 +1623,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Section 8: Dataset.cache() API x All Modifications
+  // Part 8: Dataset.cache() API x All Modifications
   // Tests the programmatic cache API (df.cache()) as opposed to
   // SQL CACHE TABLE tested in S5.
   // =====================================================================
@@ -1651,12 +1651,12 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // External session tests: cover the "external write" column of the
-  // design doc. In Connect, newSession() creates an isolated session
-  // with a separate CatalogManager that cannot see testcat tables
+  // External session tests: cover the "external write" scenarios.
+  // In Connect, newSession() creates an isolated session with a
+  // separate CatalogManager that cannot see testcat tables
   // (no CloneSession RPC). Since Connect re-analyzes every action
   // anyway, we use the main spark session for "external" writes.
-  // The design doc confirms Connect behavior is "Same as classic".
+  // Connect behavior is "Same as classic".
   // =====================================================================
 
   test("[ext-session] data write via newSession visible to main session") {
@@ -1716,9 +1716,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
   }
 
   // =====================================================================
-  // Design doc Section 1 external variants: temp view with stored plan
+  // Part 1 external variants: temp view with stored plan
   // after external column removal, drop/recreate, and type widening.
-  // These test the "external" column of the design doc tables.
+  // These test the "external" column of the scenario tables.
   // =====================================================================
 
   test("[ext-session] temp view after external column removal fails") {
@@ -1796,7 +1796,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 1 Scenario 3 via DF view: external column removal
+  // Part 1 Scenario 3 via DF view: external column removal
   // breaks a DF-based temp view with VIEW_PLAN_CHANGED (different from
   // SQL view which throws SQL_VIEW_CHANGED).
   test("[ext-session] DF temp view after external column removal fails") {
@@ -1819,9 +1819,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 1, Scenario 2: filtered DF view preserves
+  // Part 1, Scenario 2: filtered DF view preserves
   // schema after ADD COLUMN but picks up new data.
-  // Matches the doc's exact example: spark.table("t").filter("salary < 999")
+  // Matches the exact example: spark.table("t").filter("salary < 999")
   test("[ext-session] filtered DF view preserves schema after external ADD COLUMN") {
     assumeCanRun()
     withTable(T) {
@@ -1845,7 +1845,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 2: repeated table access after external drop/recreate.
+  // Part 2: repeated table access after external drop/recreate.
   test("[ext-session] repeated SQL reflects external drop/recreate") {
     assumeCanRun()
     withTable(T) {
@@ -1860,9 +1860,9 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 3: join with full SELECT * after external write.
+  // Part 3: join with full SELECT * after external write.
   // Unlike S3 which uses id-only SELECTs, this tests the full schema
-  // re-analysis behavior described in the design doc.
+  // re-analysis behavior.
   test("[ext-session] full-schema join after external insert") {
     assumeCanRun()
     withTable(T) {
@@ -1878,7 +1878,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 1 Scenario 5.2: external drop+add column same type.
+  // Part 1 Scenario 5.2: external drop+add column same type.
   test("[ext-session] temp view after external drop+add column same type") {
     assumeCanRun()
     withTable(T) {
@@ -1896,7 +1896,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 1 Scenario 6.2: external drop+add column different type.
+  // Part 1 Scenario 6.2: external drop+add column different type.
   test("[ext-session] temp view after external drop+add column different type fails") {
     assumeCanRun()
     withTable(T) {
@@ -1917,7 +1917,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 3 Scenario 2: join after external ADD COLUMN.
+  // Part 3 Scenario 2: join after external ADD COLUMN.
   // In Connect, both sides re-analyze to the new 3-col schema.
   test("[ext-session] join after external ADD COLUMN succeeds in Connect") {
     assumeCanRun()
@@ -1937,7 +1937,7 @@ class DataSourceV2ConcurrencyRefreshConnectSuite
     }
   }
 
-  // Design doc Section 3 Scenario 3: join after external DROP COLUMN.
+  // Part 3 Scenario 3: join after external DROP COLUMN.
   // In classic, this throws AnalysisException (COLUMNS_MISMATCH).
   // In Connect, both re-analyze to the new schema, so it succeeds.
   test("[ext-session] join after external DROP COLUMN succeeds in Connect") {

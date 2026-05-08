@@ -112,7 +112,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
       dfOk = true))
 
   // =====================================================================
-  // Section 1: SQL Temp View x All Modifications
+  // Part 1: SQL Temp View x All Modifications
   // SQL views re-analyze but SELECT * captures column names at
   // creation time. Removals/renames/type changes of captured
   // columns fail.
@@ -138,7 +138,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   }
 
   // =====================================================================
-  // Section 2: Repeated SQL Access x All Modifications
+  // Part 2: Repeated SQL Access x All Modifications
   // Always fresh analysis -- all succeed.
   // =====================================================================
 
@@ -161,7 +161,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   }
 
   // =====================================================================
-  // Section 3: Join x All Modifications
+  // Part 3: Join x All Modifications
   // In Connect, both sides re-analyze. ALL succeed (even column
   // removal, type widening, etc.) because the plan is fresh.
   // Uses aliases to avoid ambiguous column names.
@@ -185,7 +185,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   }
 
   // =====================================================================
-  // Section 4a: DataFrame first access x All Modifications
+  // Part 4a: DataFrame first access x All Modifications
   // In Connect, DataFrames re-analyze. ALL succeed.
   // =====================================================================
 
@@ -208,7 +208,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   }
 
   // =====================================================================
-  // Section 4b: DataFrame collect() is NOT stale
+  // Part 4b: DataFrame collect() is NOT stale
   // KEY DIFFERENCE from classic: collect() re-analyzes in Connect.
   // =====================================================================
 
@@ -237,7 +237,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   }
 
   // =====================================================================
-  // Section 5: CACHE TABLE (session writes)
+  // Part 5: CACHE TABLE (session writes)
   // Numbered [connect][5.x] scenarios: DataSourceV2ConcurrencyRefreshConnectSuite.
   // Classic [5.x] / [5.x-main]: DataSourceV2TablePinningRefreshSuite.
   // =====================================================================
@@ -261,7 +261,7 @@ class DataSourceV2RefreshConnectSuite extends QueryTest with RemoteSparkSession 
   }
 
   // =====================================================================
-  // Section 6: Subquery x All Modifications
+  // Part 6: Subquery x All Modifications
   // Connect re-analyzes subqueries too.
   // =====================================================================
 

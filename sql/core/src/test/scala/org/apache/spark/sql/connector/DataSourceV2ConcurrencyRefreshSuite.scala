@@ -294,7 +294,7 @@ class DataSourceV2ConcurrencyRefreshSuite
       tempViewOk = false, dfOk = false, joinOk = false))
 
   // =====================================================================
-  // Section 1: Temp View x All Session Modifications
+  // Part 1: Temp View x All Session Modifications
   // =====================================================================
 
   mods.foreach { mod =>
@@ -317,7 +317,7 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
-  // Section 1 external: "someone else changed the table" via catalog API.
+  // Part 1 external: "someone else changed the table" via catalog API.
   // The doc distinguishes session vs external for every temp view scenario.
   extMods.foreach { mod =>
     test(s"[S1-ext] temp view: ${mod.name}") {
@@ -340,7 +340,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 2: Repeated SQL Access x All Modifications
+  // Part 2: Repeated SQL Access x All Modifications
   // Fresh analysis each time, so most modifications succeed.
   // Exception: type widening causes ClassCastException because
   // InMemoryTable stores Integer objects that cannot be read as Long
@@ -366,7 +366,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 3: Join x All Modifications
+  // Part 3: Join x All Modifications
   // =====================================================================
 
   mods.foreach { mod =>
@@ -390,7 +390,7 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
-  // Section 3 external: join with external modifications
+  // Part 3 external: join with external modifications
   extMods.foreach { mod =>
     test(s"[S3-ext] join: ${mod.name}") {
       withTable(T) {
@@ -413,7 +413,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 4a: DataFrame First Access x All Modifications
+  // Part 4a: DataFrame First Access x All Modifications
   // =====================================================================
 
   mods.foreach { mod =>
@@ -433,10 +433,10 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
-  // Section 4 show variant: access DF before modification, then again after.
+  // Part 4 show variant: access DF before modification, then again after.
   // show/count/head create derived DFs with new QEs each time, so they
   // always reflect the latest data after refresh. This matches the doc's
-  // "show" scenarios in Section 4 where df.show() is called before and after.
+  // "show" scenarios in Part 4 where df.show() is called before and after.
   mods.foreach { mod =>
     test(s"[S4-show] DataFrame show before and after: ${mod.name}") {
       withTable(T) {
@@ -459,7 +459,7 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
-  // Section 4a external: DataFrame first access with external mods
+  // Part 4a external: DataFrame first access with external mods
   extMods.foreach { mod =>
     test(s"[S4a-ext] DataFrame first access: ${mod.name}") {
       withTable(T) {
@@ -478,7 +478,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 4b: DataFrame Stale collect() x All Modifications
+  // Part 4b: DataFrame Stale collect() x All Modifications
   // collect() pins QueryExecution --> always returns stale data
   // =====================================================================
 
@@ -498,7 +498,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 5a: CACHE TABLE with External Modifications (pinned)
+  // Part 5a: CACHE TABLE with External Modifications (pinned)
   // =====================================================================
 
   extMods.foreach { mod =>
@@ -517,7 +517,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 5b: CACHE TABLE with Session Modifications
+  // Part 5b: CACHE TABLE with Session Modifications
   // =====================================================================
 
   mods.foreach { mod =>
@@ -542,7 +542,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 6: Subquery Same Table x All Modifications
+  // Part 6: Subquery Same Table x All Modifications
   // =====================================================================
 
   mods.foreach { mod =>
@@ -563,7 +563,7 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
-  // Section 6 external: subquery with external modifications
+  // Part 6 external: subquery with external modifications
   extMods.foreach { mod =>
     test(s"[S6-ext] subquery same table: ${mod.name}") {
       withTable(T) {
@@ -583,7 +583,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 7: Temp View from SQL x All Modifications
+  // Part 7: Temp View from SQL x All Modifications
   // =====================================================================
 
   mods.foreach { mod =>
@@ -611,7 +611,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // =====================================================================
-  // Section 8: Dataset.cache() API x External Modifications (pinned)
+  // Part 8: Dataset.cache() API x External Modifications (pinned)
   // =====================================================================
 
   extMods.foreach { mod =>
@@ -2938,7 +2938,7 @@ class DataSourceV2ConcurrencyRefreshSuite
 
   // =====================================================================
   // BEYOND-DOC SCENARIOS
-  // Real-world patterns not explicitly covered in the design doc.
+  // Real-world patterns not explicitly covered above.
   // =====================================================================
 
   // --- #1: Permanent SQL view on DSv2 table ---
@@ -3393,7 +3393,7 @@ class DataSourceV2ConcurrencyRefreshSuite
 
   // =====================================================================
   // REVIEWER COMMENT SCENARIOS
-  // Test cases derived from design doc review comments by
+  // Test cases derived from review comments by
   // Bart Samwel, Julek Sompolski, Ryan Johnson, Daniel Weeks.
   // =====================================================================
 
@@ -3473,7 +3473,7 @@ class DataSourceV2ConcurrencyRefreshSuite
   }
 
   // --- Julek: write transactions should never use cache ---
-  // (Section 5 comment: "I assume write txns never use cache")
+  // (Part 5 comment: "I assume write txns never use cache")
 
   test("[reviewer] CTAS reads fresh data, not cached") {
     val t2 = "testcat.ns1.ns2.tbl2"
@@ -3679,7 +3679,7 @@ class DataSourceV2ConcurrencyRefreshSuite
     }
   }
 
-  // --- Julek: align classic/connect for Section 3 Scenario 2 ---
+  // --- Julek: align classic/connect for Part 3 Scenario 2 ---
   // (join with column addition: classic keeps original schema,
   //  connect re-analyzes to new schema)
 

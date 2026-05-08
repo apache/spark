@@ -26,8 +26,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Comprehensive tests for DSv2 table pinning and refresh behavior.
  *
- * Follows Anton Okolnychyi's "Refreshing and pinning tables in Spark" design
- * doc section by section. Each design doc scenario has both a "session write"
+ * Follows Anton Okolnychyi's "Refreshing and pinning tables in Spark"
+ * section by section. Each scenario has both a "session write"
  * (.1) and an "external write" (.2) variant.
  *
  * External writes use spark.newSession() with SharedInMemoryTableCatalog so
@@ -43,7 +43,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  *  5. Joins combine pre-analyzed plans; refresh aligns versions.
  *  6. CACHE TABLE pins table state against external changes.
  *
- * Sections:
+ * Parts:
  *  [1] Temp views with stored plans
  *  [2] Repeated table access via sql()
  *  [3] Incrementally constructed queries (joins, unions, etc.)
@@ -636,7 +636,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Design doc Section 3.4: "If the table ID is not exposed to Spark,
+  // Part 3.4: "If the table ID is not exposed to Spark,
   // allow the joined DataFrame to be executed."
   // NullIdInMemoryTableCatalog creates tables with null IDs, so
   // validateTableIdentity is skipped on refresh.
@@ -679,7 +679,7 @@ class DataSourceV2TablePinningRefreshSuite
   }
 
   // Null ID: drop+add column same type. Without column IDs,
-  // name+type matching passes. Tests both modes per the design doc.
+  // name+type matching passes. Tests both modes.
   test("[3.5-nullid] join after drop+add same type with null ID") {
     val NT = "nullidcat.ns.tbl"
     withTable(NT) {
@@ -1025,7 +1025,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Section 4 Scenario 5: drop+add column with same name and type.
+  // Part 4 Scenario 5: drop+add column with same name and type.
   // InMemoryTable returns null for drop+re-add (dropped column data is discarded).
   // In 4.2: column ID will make this fail instead.
   test("[4.S5-show] DataFrame after session drop+add column same type") {
@@ -1060,7 +1060,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Section 4 Scenario 6: drop+add column with same name but different type
+  // Part 4 Scenario 6: drop+add column with same name but different type
   test("[4.S6-show] DataFrame fails after session drop+add column different type") {
     withTable(T) {
       setupTable()
@@ -1092,7 +1092,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // --- show vs collect inconsistency (doc Section 4.1.2) ---
+  // --- show vs collect inconsistency (doc Part 4.1.2) ---
 
   test("[4-showVsCollect] count vs collect consistency after INSERT") {
     withTable(T) {
@@ -1119,7 +1119,7 @@ class DataSourceV2TablePinningRefreshSuite
   // DataSourceV2ConcurrencyRefreshConnectSuite [connect][5.x-main].
   // =========================================================================
 
-  // Section 5 Scenario 1: external write after CACHE TABLE
+  // Part 5 Scenario 1: external write after CACHE TABLE
   // Cache pinned: external change NOT visible -> (1, 100)
   test("[5.1] cached table pinned against external data write") {
     withTable(T) {
@@ -1153,7 +1153,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Section 5 Scenario 2: session write invalidates, external invisible
+  // Part 5 Scenario 2: session write invalidates, external invisible
   // Proposed: (1, 100), (2, 200) - session write visible, external not
   test("[5.2] session write invalidates cache, then external invisible") {
     withTable(T) {
@@ -1178,7 +1178,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Section 5 Scenario 3: external schema change after CACHE TABLE
+  // Part 5 Scenario 3: external schema change after CACHE TABLE
   // Cache pinned: external schema change NOT visible -> (1, 100)
   test("[5.3] cached table pinned against external schema change") {
     withTable(T) {
@@ -1212,7 +1212,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Section 5 Scenario 4: session schema change + external data
+  // Part 5 Scenario 4: session schema change + external data
   // Proposed: session change invalidates, external invisible
   //   -> (1, 100, null) with 3-col schema
   test("[5.4] session schema change invalidates cache") {
@@ -1228,7 +1228,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Scenario 4 from design doc: session schema change then external data write.
+  // Scenario 4: session schema change then external data write.
   // Session ALTER invalidates and rebuilds cache. Subsequent external write
   // does not invalidate (separate CacheManager), so cache stays pinned.
   test("[5.4-ext] session schema change then external write invisible") {
@@ -1249,7 +1249,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // Section 5 Scenario 5: external drop/recreate
+  // Part 5 Scenario 5: external drop/recreate
   // Proposed: Keep as is (empty table after drop/recreate)
   test("[5.5] external drop/recreate with CACHE TABLE") {
     withTable(T) {
@@ -2054,7 +2054,7 @@ class DataSourceV2TablePinningRefreshSuite
   }
 
   // =========================================================================
-  // [DocComment] Tests from design doc review comments
+  // [DocComment] Tests from review comments
   // =========================================================================
 
   test("[DocComment.1] session consistency: own writes always visible") {
@@ -2116,7 +2116,7 @@ class DataSourceV2TablePinningRefreshSuite
   }
 
   // =========================================================================
-  // [Gap] Tests for missing coverage from design doc
+  // [Gap] Tests for missing coverage
   // =========================================================================
 
   test("[Gap.1] nested struct field addition breaks temp view") {
@@ -2214,7 +2214,7 @@ class DataSourceV2TablePinningRefreshSuite
   // =========================================================================
   // [Cache] Caching connector tests (simulates Iceberg CachingCatalog)
   // =========================================================================
-  // The design doc distinguishes "Connector w/o cache" (changes visible
+  // This distinguishes "Connector w/o cache" (changes visible
   // immediately) from "Connector w/ cache" (external changes may not be
   // visible). CachingInMemoryTableCatalog caches the first loadTable result
   // and returns it for all subsequent loads, simulating Iceberg's 30-second
@@ -2280,11 +2280,11 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  // --- Section 2 caching connector: "Connector w/ cache" from design doc ---
-  // The doc says external writes through a caching connector are invisible
+  // --- Part 2 caching connector: "Connector w/ cache" ---
+  // External writes through a caching connector are invisible
   // until the cache expires. Session writes are always visible.
 
-  test("[Cache.4] Section 2 S1: repeated sql() with caching connector") {
+  test("[Cache.4] Part 2 S1: repeated sql() with caching connector") {
     withTable(CT) {
       setupCachingTable()
       checkAnswer(sql(s"SELECT * FROM $CT"), Seq(Row(1, 100)))
@@ -2295,7 +2295,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  test("[Cache.5] Section 2 S2: schema change with caching connector") {
+  test("[Cache.5] Part 2 S2: schema change with caching connector") {
     withTable(CT) {
       setupCachingTable()
       checkAnswer(sql(s"SELECT * FROM $CT"), Seq(Row(1, 100)))
@@ -2320,7 +2320,7 @@ class DataSourceV2TablePinningRefreshSuite
     }
   }
 
-  test("[Cache.6] Section 2 S3: drop/recreate with caching connector") {
+  test("[Cache.6] Part 2 S3: drop/recreate with caching connector") {
     withTable(CT) {
       setupCachingTable()
       checkAnswer(sql(s"SELECT * FROM $CT"), Seq(Row(1, 100)))
