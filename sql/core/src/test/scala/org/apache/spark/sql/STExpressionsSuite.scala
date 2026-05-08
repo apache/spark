@@ -486,6 +486,7 @@ class STExpressionsSuite
     assert(geographyExpression.dataType.sameType(defaultGeographyType))
     checkEvaluation(new ST_AsBinary(geographyExpression), wkbNdr)
     checkEvaluation(ST_AsBinary(geographyExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create("nDr")), wkbNdr)
     checkEvaluation(ST_AsBinary(geographyExpression, endiannessXdr), wkbXdr)
     // ST_GeomFromWKB and ST_AsBinary.
     val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
@@ -493,11 +494,14 @@ class STExpressionsSuite
     checkEvaluation(new ST_AsBinary(geometryExpression), wkbNdr)
     checkEvaluation(ST_AsBinary(geometryExpression, endiannessNdr), wkbNdr)
     checkEvaluation(ST_AsBinary(geometryExpression, endiannessXdr), wkbXdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create("XdR")), wkbXdr)
     // Test NULL handling.
     checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeographyType)), null)
     checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeographyType), endiannessNdr), null)
     checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeometryType)), null)
     checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeometryType), endiannessXdr), null)
+    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create(null, StringType)), null)
+    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create(null, StringType)), null)
     // Test invalid endianness.
     Seq(geographyExpression, geometryExpression).foreach { expr =>
       checkError(

@@ -11122,6 +11122,12 @@ object functions {
   def st_asbinary(geo: Column, endianness: Column): Column =
     Column.fn("st_asbinary", geo, endianness)
 
+  /**
+   * Returns the input GEOGRAPHY or GEOMETRY value in WKB format using the specified endianness.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
   def st_asbinary(geo: Column, endianness: String): Column =
     Column.fn("st_asbinary", geo, lit(endianness))
 

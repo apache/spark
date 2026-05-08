@@ -45,8 +45,6 @@ class GeographyExecutionSuite {
     0x40
   };
 
-  private final String ENDIANNESS_NDR = "NDR";
-
   /** Tests for Geography factory methods and getters. */
 
   @Test
@@ -103,7 +101,7 @@ class GeographyExecutionSuite {
     byte[] wkb = getTestWKBPoint();
     Geography geography = Geography.fromWkb(wkb, 4326);
     assertNotNull(geography);
-    assertArrayEquals(wkb, geography.toWkb(ENDIANNESS_NDR));
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
     assertEquals(4326, geography.srid());
   }
 
@@ -112,7 +110,7 @@ class GeographyExecutionSuite {
     byte[] wkb = getTestWKBPoint();
     Geography geography = Geography.fromWkb(wkb);
     assertNotNull(geography);
-    assertArrayEquals(wkb, geography.toWkb(ENDIANNESS_NDR));
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
     assertEquals(4326, geography.srid());
   }
 
@@ -180,7 +178,7 @@ class GeographyExecutionSuite {
     Geography geography = Geography.fromBytes(testGeographyVal);
     // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
     byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
-    assertArrayEquals(wkb, geography.toWkb(ENDIANNESS_NDR));
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
   }
 
   @Test
