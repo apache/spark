@@ -268,7 +268,8 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
       // Disable char/varchar read-side handling for better performance.
       SQLConf.READ_SIDE_CHAR_PADDING.key -> "false",
       SQLConf.LEGACY_NO_CHAR_PADDING_IN_PREDICATE.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB") {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10MB",
+      SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
       val qe = sql(queryString).queryExecution
       val plan = qe.executedPlan
       val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
