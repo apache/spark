@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.PathElement.PathRef
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
@@ -2478,6 +2479,7 @@ object SQLConf {
       .doc("Default SQL PATH used when no SET PATH has been issued in the session; this is " +
         "also the value to which `SET PATH = DEFAULT_PATH` expands. Accepts the full SET PATH " +
         "grammar; an inner DEFAULT_PATH token resolves to the spark-builtin default ordering. " +
+        "The PATH keyword is not allowed in this conf value. " +
         "When empty, the spark-builtin default ordering controlled by " +
         "`spark.sql.functionResolution.sessionOrder` applies. Validated for syntax at set time; " +
         "redundant entries are tolerated (lookup uses first-match resolution). The interactive " +
@@ -2487,9 +2489,11 @@ object SQLConf {
       .checkValue(
         v =>
           v == null || v.trim.isEmpty ||
-            Try(CatalystSqlParser.parsePathElements(v.trim)).isSuccess,
+            Try(CatalystSqlParser.parsePathElements(v.trim))
+              .toOption
+              .exists(!_.contains(PathRef)),
         "The value must be empty or a comma-separated SET PATH element list " +
-          "(same grammar as SET PATH).")
+          "(same grammar as SET PATH, except PATH is not allowed).")
       .createWithDefault("")
 
   // Whether to retain group by columns or not in GroupedData.agg.

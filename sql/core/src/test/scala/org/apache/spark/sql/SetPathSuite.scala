@@ -664,6 +664,15 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("DEFAULT_PATH conf: PATH keyword is rejected on SET spark.sql.defaultPath") {
+    withPathEnabled {
+      val e = intercept[SparkIllegalArgumentException] {
+        sql("SET spark.sql.defaultPath = PATH, system.builtin")
+      }
+      assert(e.getCondition.startsWith("INVALID_CONF_VALUE"), e.getMessage)
+    }
+  }
+
   test("DEFAULT_PATH conf: PATH disabled returns no fallback") {
     withSQLConf(
         SQLConf.PATH_ENABLED.key -> "false",
@@ -761,13 +770,14 @@ class SetPathSuite extends SharedSparkSession {
   }
 
   test("PATH enabled: SET PATH with user schema before system.builtin still resolves builtins") {
-    // Exercises the `leadingSystemFunctionKinds` else-branch in CatalogManager: prefix before
-    // the first user catalog entry has no system entries, so kinds are taken from the full path.
+    // Exercises systemFunctionKindsFromPath with a user-catalog entry preceding
+    // system.builtin: the helper flat-scans the path, so Builtin still appears
+    // in the kinds list and unqualified `abs` resolves.
     withPathEnabled {
       sql("CREATE SCHEMA IF NOT EXISTS path_user_before_builtin")
       try {
         sql("SET PATH = spark_catalog.path_user_before_builtin, system.builtin")
-        // `abs` is a builtin; if the else-branch did not surface Builtin in the kinds,
+        // `abs` is a builtin; if Builtin did not appear in the kinds list,
         // unqualified `abs(-1)` would fail with UNRESOLVED_ROUTINE.
         checkAnswer(sql("SELECT abs(-1)"), Row(1))
       } finally {
