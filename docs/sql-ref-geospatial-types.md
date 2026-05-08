@@ -155,7 +155,7 @@ Spark includes a pre-built SRID registry that combines coordinate systems from t
 
 | Spark Version | PROJ Version |
 |---------------|--------------|
-| 4.2.0 | 9.7.1 |
+| 4.2.0 | 9.8.1 |
 
 The SRID registry is pinned to the PROJ version shown above and is not synced live with external databases.
 
