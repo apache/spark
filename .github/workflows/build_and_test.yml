@@ -436,6 +436,10 @@ jobs:
       with:
         distribution: temurin
         java-version: ${{ matrix.java }}
+    - name: Install Python packages (Python 3.9, Python3.8)
+      run: |
+        python3.9 -m pip install -r ./dev/requirements.txt
+        python3.8 -m pip install -r ./dev/requirements.txt
     - name: List Python packages (Python 3.9, Python3.8)
       run: |
         python3.9 -m pip list
