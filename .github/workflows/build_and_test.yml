@@ -166,9 +166,6 @@ jobs:
               \"ui\" : \"$ui\",
             }"
           echo $precondition # For debugging
-          # TEMP for PR #55726: only run pyspark + pyspark-pandas + pyspark-install. REVERT BEFORE MERGE.
-          precondition='{ "build": "false", "pyspark": "true", "pyspark-pandas": "true", "pyspark-install": "true", "sparkr": "false", "tpcds-1g": "false", "docker-integration-tests": "false", "lint" : "false", "java17" : "false", "java25" : "false", "docs" : "false", "yarn" : "false", "k8s-integration-tests" : "false", "buf" : "false", "ui" : "false" }'
-          echo "TEMP override: $precondition"
           # Remove `\n` to avoid "Invalid format" error
           precondition="${precondition//$'\n'/}"
           echo "required=$precondition" >> $GITHUB_OUTPUT
@@ -607,7 +604,7 @@ jobs:
     - name: Upload compile artifact
       uses: actions/upload-artifact@v6
       with:
-        name: spark-compile-${{ github.run_id }}
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
         path: compile-artifact.tar.gz
         retention-days: 1
         if-no-files-found: error
@@ -740,7 +737,7 @@ jobs:
       continue-on-error: true
       uses: actions/download-artifact@v6
       with:
-        name: spark-compile-${{ github.run_id }}
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
       id: extract-precompiled
       if: steps.download-precompiled.outcome == 'success'
