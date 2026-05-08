@@ -752,6 +752,7 @@ jobs:
       run: |
         if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
           export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
         fi
         if [[ "$MODULES_TO_TEST" == *"pyspark-pipelines"* ]]; then
           export SKIP_PACKAGING=false
