@@ -206,9 +206,9 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
-        self.transpiled = []
         # Extract Python UDF details if transpilation is enabled.
-        transpiled = []
+        self.transpiled: list = []
+        self._transpiled_param_names: list[str] = []
         # When we have a transpiled rewrite, ``__call__`` resolves any
         # user-supplied kwargs against this positional parameter list so
         # the JVM-side ``_udf_param_N`` substitution sees the inputs in
@@ -222,6 +222,11 @@ class UserDefinedFunction:
             if session is None
             else session.conf.get("spark.sql.experimental.optimizer.transpilePyUDFS") == "true"
         )
+        ansi_enabled = (
+            False
+            if session is None
+            else session.conf.get("spark.sql.ansi.enabled") == "true"
+        )
         self._transpile_errors = []
         # Transpilation only attempts to reproduce ANSI-mode Spark SQL semantics
         # (no silent integer overflow, divide-by-zero raises, etc.). Running it
@@ -229,31 +234,29 @@ class UserDefinedFunction:
         # maintain to verify Python-vs-SQL equivalence, so we gate on ANSI here
         # and warn the user instead of trying to transpile in a mode we don't
         # claim to support yet.
-        if transpile_enabled:
-            ansi_enabled = session.conf.get("spark.sql.ansi.enabled") == "true"
-            if not ansi_enabled:
-                warnings.warn(
-                    "Python UDF transpilation "
-                    "(spark.sql.experimental.optimizer.transpilePyUDFS) is only "
-                    "supported when ANSI mode is enabled "
-                    "(spark.sql.ansi.enabled=true). Skipping transpilation for "
-                    f"{func} -- enable ANSI mode or set transpilePyUDFS=false to "
-                    "silence this warning."
-                )
-                self._transpile_errors.append("Transpilation only functions in ANSI mode.")
-                transpile_enabled = False
-        if transpile_enabled:
+        if transpile_enabled and not ansi_enabled:
+            warnings.warn(
+                "Python UDF transpilation "
+                "(spark.sql.experimental.optimizer.transpilePyUDFS) is only "
+                "supported when ANSI mode is enabled "
+                "(spark.sql.ansi.enabled=true). Skipping transpilation for "
+                f"{func} -- enable ANSI mode or set transpilePyUDFS=false to "
+                "silence this warning."
+            )
+            self._transpile_errors.append("Transpilation only functions in ANSI mode.")
+            transpile_enabled = False
+        if transpile_enabled and session:
             # Import only if needed, also avoid circular import loops.
             from pyspark.sql.transpile import _transpile_func
 
             try:
-                transpiled, errors, transpiled_param_names = _transpile_func(
+                self.transpiled, errors, self._transpiled_param_names = _transpile_func(
                     session, func, returnType
                 )
                 if errors:
                     warnings.warn(f"Errors encountered during transpilation attempts: {errors}")
                     self._transpile_errors.extend(errors)
-                if not transpiled:
+                if not self.transpiled:
                     warnings.warn(f"Unable to transpile UDF {func}")
                     self._transpile_errors.append("Transpilation attempted but no result")
             except Exception as e:
@@ -262,11 +265,9 @@ class UserDefinedFunction:
                 # surface the failure as a warning so users can opt to
                 # investigate without losing their query.
                 warnings.warn(f"Exception transpiling UDF {func}: {e}")
-                transpiled = []
-                transpiled_param_names = []
+                self.transpiled = []
+                self._transpiled_param_names = []
                 self._transpile_errors.append(f"Exception during transpilation: {e}")
-        self.transpiled = transpiled
-        self._transpiled_param_names = transpiled_param_names
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
