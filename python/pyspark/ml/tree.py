@@ -431,7 +431,7 @@ class _TreeClassifierParams(Params):
         Gets the value of impurity or its default value.
         """
         return self.getOrDefault(self.impurity)
-    @since("5.0.0")
+    @since("4.3.0")
     def getPruneTree(self) -> bool:
         """
         Gets the value of pruneTree or its default value.
