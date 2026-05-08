@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.util.{Geography, Geometry, STUtils}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 
 /**
@@ -51,55 +52,69 @@ sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
 private[sql] object ExpressionDefaults {
   val DEFAULT_GEOGRAPHY_SRID: Int = Geography.DEFAULT_SRID
   val DEFAULT_GEOMETRY_SRID: Int = Geometry.DEFAULT_SRID
+  val DEFAULT_WKB_ENDIANNESS: String = "NDR"
 }
 
 /** ST writer expressions. */
 
 /**
- * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+ * Returns the input GEOGRAPHY or GEOMETRY value in WKB format using the specified endianness, if
+ * provided. If no endianness is provided, it defaults to little endian.
  * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
  * for more details on the WKB format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(geo) - Returns the geospatial value (value of type GEOGRAPHY or GEOMETRY) "
-    + "in WKB format.",
+  usage = "_FUNC_(geo[, endianness]) - Returns the geospatial value (value of type GEOGRAPHY or "
+    + "GEOMETRY) in WKB format using the specified endianness ('NDR' for little-endian, 'XDR' for "
+    + "big-endian), if provided. Defaults to little-endian encoding.",
   arguments = """
     Arguments:
       * geo - A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+      * endianness - The optional endianness of the output WKB, 'NDR' for little-endian (default)
+                     or 'XDR' for big-endian.
   """,
   examples = """
     Examples:
       > SELECT hex(_FUNC_(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')));
        0101000000000000000000F03F0000000000000040
-      > SELECT hex(_FUNC_(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040')));
-       0101000000000000000000F03F0000000000000040
+      > SELECT hex(_FUNC_(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'), 'XDR'));
+       00000000013FF00000000000004000000000000000
   """,
   since = "4.1.0",
   group = "st_funcs"
 )
-case class ST_AsBinary(geo: Expression)
+case class ST_AsBinary(geo: Expression, endianness: Expression)
     extends RuntimeReplaceable
     with GeospatialInputTypes
-    with UnaryLike[Expression] {
+    with BinaryLike[Expression] {
+
+  // If no endianness is given, default to little-endian encoding which is represented by "NDR".
+  def this(geo: Expression) = {
+    this(geo, Literal(ExpressionDefaults.DEFAULT_WKB_ENDIANNESS))
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(GeographyType, GeometryType)
+    TypeCollection(GeographyType, GeometryType),
+    StringTypeWithCollation(supportsTrimCollation = true)
   )
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     BinaryType,
     "stAsBinary",
-    Seq(geo),
+    Seq(geo, endianness),
     returnNullable = false
   )
 
   override def prettyName: String = "st_asbinary"
 
-  override def child: Expression = geo
+  override def left: Expression = geo
 
-  override protected def withNewChildInternal(newChild: Expression): ST_AsBinary =
-    copy(geo = newChild)
+  override def right: Expression = endianness
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): ST_AsBinary = copy(geo = newLeft, endianness = newRight)
 }
 
 /** ST reader expressions. */
