@@ -778,5 +778,4 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       }
     }
   }
-
 }
