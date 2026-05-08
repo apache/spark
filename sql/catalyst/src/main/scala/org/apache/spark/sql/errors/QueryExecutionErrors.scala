@@ -1194,6 +1194,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new java.util.HashMap[String, String]())
   }
 
+  def cannotAcquireMemoryForWindowAggregateError(
+      requestedBytes: Long,
+      receivedBytes: Long): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "UNABLE_TO_ACQUIRE_MEMORY",
+      java.util.Map.of(
+        "requestedBytes", requestedBytes.toString,
+        "receivedBytes", receivedBytes.toString))
+  }
+
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2108")
   }
