@@ -1025,7 +1025,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     // (rather than a local) so leaf operators (`RangeExec`, `SampleExec`)
     // see the child-local index regardless of where their code is emitted.
     // `SampleExec.doConsume` uses `addMutableState`, whose initializer is
-    // emitted into the state-init function, not the helper — a local in
+    // emitted into the state-init function, not the helper - a local in
     // the helper would not be in scope there. The expression resolves
     // against `partitionIndex` (the helper parameter inside the helper,
     // and the `BufferedRowIterator` field elsewhere) in every context.
