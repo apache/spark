@@ -547,6 +547,9 @@ jobs:
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Optional optimization: if this job fails or is cancelled, the pyspark
+    # matrix entries fall back to running the SBT build locally as before.
+    continue-on-error: true
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -669,7 +672,6 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       SKIP_PACKAGING: true
-      SKIP_BUILD: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
@@ -730,13 +732,22 @@ jobs:
           echo ""
         done
     - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
       uses: actions/download-artifact@v6
       with:
         name: spark-compile-${{ github.run_id }}
     - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
       run: |
         tar -xjf compile-artifact.tar.bz2
         rm compile-artifact.tar.bz2
+    - name: Set SKIP_SCALA_BUILD when precompiled artifact is usable
+      if: steps.extract-precompiled.outcome == 'success'
+      run: echo "SKIP_SCALA_BUILD=true" >> $GITHUB_ENV
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
