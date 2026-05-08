@@ -35,6 +35,10 @@ class ExpandingAdvMixin(ExpandingTestingFuncMixin):
     def test_expanding_var(self):
         self._test_expanding_func("var", int_almost=True)
 
+    def test_expanding_sem(self):
+        self._test_expanding_func("sem", int_almost=True)
+        self._test_expanding_func(lambda x: x.sem(ddof=0), lambda x: x.sem(ddof=0), int_almost=True)
+
     def test_expanding_skew(self):
         self._test_expanding_func("skew", int_almost=True)
 
