@@ -19,8 +19,6 @@ package org.apache.spark.sql.connect
 
 import java.util
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -58,7 +56,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   }
 
   /** Get a catalog from the server-side session by name. */
-  private def serverCatalog[T <: TableCatalog: ClassTag](
+  private def serverCatalog[T <: TableCatalog](
       serverSession: classic.SparkSession, name: String): T =
     serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
 
