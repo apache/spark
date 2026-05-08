@@ -311,21 +311,26 @@ jobs:
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
           if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
             echo "Reusing precompiled artifact, skipping local Maven clean install."
-            # The assembly module is excluded from the artifact (see precompile-maven).
-            # Connect tests strongly depend on a built assembly module; rebuild it here.
+            # SPARK-51628 regression coverage is naturally preserved on the reuse
+            # path: the precompile artifact excludes assembly/, so non-connect
+            # tests already run with the assembly module's jars dir missing.
+            # Connect tests strongly depend on a built assembly module; rebuild
+            # it here.
             if [ "$MODULES_TO_TEST" = "connect" ]; then
               echo "Building assembly module for connect tests."
               ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -pl assembly install
             fi
           else
             ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
+            # SPARK-51628: wipe the assembly module so tests exercise the
+            # SPARK-51600 prepend fallback path. Connect tests strongly depend
+            # on a built assembly module, so they are excluded.
+            if [ "$MODULES_TO_TEST" != "connect" ]; then
+              echo "Clean up the assembly module before maven testing"
+              ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
+            fi
           fi
-          
-          if [ "$MODULES_TO_TEST" != "connect" ]; then
-            echo "Clean up the assembly module before maven testing"
-            ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
-          fi
-          
+
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" && "$INPUT_BRANCH" == "branch-4.0" ]]; then
