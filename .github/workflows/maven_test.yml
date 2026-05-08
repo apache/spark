@@ -115,7 +115,11 @@ jobs:
           ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
       - name: Package compile output
         run: |
-          find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
+          # Exclude assembly/ from the artifact: 11 of 12 matrix entries wipe it
+          # right after extraction (SPARK-51628 regression-test-for-SPARK-51600),
+          # and the connect entry rebuilds it via `mvn install -pl assembly`.
+          find . \( -path './build' -o -path './.git' -o -path './assembly' \) -prune \
+            -o -type d -name target -print0 \
             | tar --null -czf compile-target.tar.gz -T -
           if [ -d "$HOME/.m2/repository/org/apache/spark" ]; then
             tar -C "$HOME/.m2/repository/org/apache" -czf compile-m2-spark.tar.gz spark
@@ -305,6 +309,12 @@ jobs:
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
           if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
             echo "Reusing precompiled artifact, skipping local Maven clean install."
+            # The assembly module is excluded from the artifact (see precompile-maven).
+            # Connect tests strongly depend on a built assembly module; rebuild it here.
+            if [ "$MODULES_TO_TEST" = "connect" ]; then
+              echo "Building assembly module for connect tests."
+              ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -pl assembly install
+            fi
           else
             ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
           fi
