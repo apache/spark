@@ -2526,7 +2526,7 @@ object SQLConf {
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(sys.env.get("SPARK_SQL_WSCG_UNION_ENABLED").contains("true"))
 
   val WHOLESTAGE_UNION_MAX_CHILDREN =
     buildConf("spark.sql.codegen.wholeStage.union.maxChildren")
