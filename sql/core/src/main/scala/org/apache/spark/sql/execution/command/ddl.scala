@@ -1108,44 +1108,45 @@ object DDLUtils extends Logging {
 
   // Checks correctness of table's column names and types.
   private[sql] def checkTableColumns(table: CatalogTable, schema: StructType): Unit = {
-    table.provider.foreach {
-      _.toLowerCase(Locale.ROOT) match {
-        case HIVE_PROVIDER =>
-          val serde = table.storage.serde
-          if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
-            throw hiveTableWithAnsiIntervalsError(table.identifier)
-          } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
-            checkDataColNames("orc", schema)
-          } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
-            serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
-            serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
-            checkDataColNames("parquet", schema)
-          } else if (serde == HiveSerDe.sourceToSerDe("avro").get.serde) {
-            checkDataColNames("avro", schema)
-          }
-        case "parquet" => checkDataColNames("parquet", schema)
-        case "orc" => checkDataColNames("orc", schema)
-        case "avro" => checkDataColNames("avro", schema)
-        case _ =>
-      }
+    val format = table.provider.flatMap { _.toLowerCase(Locale.ROOT) match {
+      case HIVE_PROVIDER =>
+        val serde = table.storage.serde
+        if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
+          throw hiveTableWithAnsiIntervalsError(table.identifier)
+        } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
+          lookupFileFormat("orc")
+        } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
+          serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
+          serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
+          lookupFileFormat("parquet")
+        } else if (serde == HiveSerDe.sourceToSerDe("avro").get.serde) {
+          lookupFileFormat("avro")
+        } else {
+          None
+        }
+      case provider => lookupFileFormat(provider)
+    }}
+
+    format.foreach { f =>
+      DataSourceUtils.checkFieldNames(f, schema)
+      DataSourceUtils.verifySchema(f, schema)
     }
   }
 
-  def checkDataColNames(provider: String, schema: StructType): Unit = {
+  def lookupFileFormat(provider: String): Option[FileFormat] = {
     val source = try {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
     } catch {
       case e: Throwable =>
         logError(log"Failed to find data source: ${MDC(LogKeys.DATA_SOURCE, provider)} " +
-          log"when check data column names.", e)
-        return
+          log"when checking table columns.", e)
+        return None
     }
     source match {
-      case f: FileFormat => DataSourceUtils.checkFieldNames(f, schema)
+      case f: FileFormat => Some(f)
       case f: FileDataSourceV2 =>
-        DataSourceUtils.checkFieldNames(
-          f.fallbackFileFormat.getDeclaredConstructor().newInstance(), schema)
-      case _ =>
+        Some(f.fallbackFileFormat.getDeclaredConstructor().newInstance())
+      case _ => None
     }
   }
 

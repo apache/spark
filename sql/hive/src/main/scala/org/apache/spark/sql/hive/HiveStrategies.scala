@@ -162,7 +162,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 /**
  * Replaces generic operations with specific variants that are designed to work with Hive.
  *
- * Note that, this rule must be run after `PreprocessTableCreation` and
+ * Note that, this rule must be run after `PreprocessTableDDL` and
  * `PreprocessTableInsertion`.
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
@@ -207,7 +207,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
  * - When scanning Hive-serde Parquet/ORC tables
  *
  * This rule must be run before all other DDL post-hoc resolution rules, i.e.
- * `PreprocessTableCreation`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
+ * `PreprocessTableDDL`, `PreprocessTableInsertion`, `DataSourceAnalysis` and `HiveAnalysis`.
  */
 case class RelationConversions(
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {

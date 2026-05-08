@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -133,9 +134,9 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 }
 
 /**
- * Preprocess [[CreateTable]], to do some normalization and checking.
+ * Preprocess table DDL commands, to do some normalization and checking.
  */
-case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class PreprocessTableDDL(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
@@ -322,6 +323,15 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       SchemaUtils.checkTransformDuplication(
         partitioning, "in the partitioning", isCaseSensitive)
 
+      val provider = create match {
+        case c: CreateTable => c.tableSpec.provider
+        case c: CreateTableAsSelect => c.tableSpec.provider
+        case c: ReplaceTable => c.tableSpec.provider
+        case c: ReplaceTableAsSelect => c.tableSpec.provider
+        case _ => None
+      }
+      checkColumns(provider, schema)
+
       if (schema.isEmpty) {
         if (partitioning.nonEmpty) {
           throw QueryCompilationErrors.specifyPartitionNotAllowedWhenTableSchemaNotDefinedError()
@@ -345,6 +355,26 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         create.withPartitioning(normalizedPartitions)
       }
+
+    case a @ AddColumns(ResolvedTable(_, _, t, _), cols) if a.resolved =>
+      checkColumns(
+        Option(t.properties().get(TableCatalog.PROP_PROVIDER)),
+        StructType(cols.map(c => StructField(c.colName, c.dataType, c.nullable))))
+      a
+
+    case r @ ReplaceColumns(ResolvedTable(_, _, t, _), cols) if r.resolved =>
+      checkColumns(
+        Option(t.properties().get(TableCatalog.PROP_PROVIDER)),
+        StructType(cols.map(c => StructField(c.colName, c.dataType, c.nullable))))
+      r
+  }
+
+  /** Checks the schema is supported by the destination [[FileFormat]]. */
+  private def checkColumns(provider: Option[String], schema: StructType): Unit = {
+    provider.flatMap(DDLUtils.lookupFileFormat).foreach { format =>
+      DataSourceUtils.checkFieldNames(format, schema)
+      DataSourceUtils.verifySchema(format, schema)
+    }
   }
 
   private def fallBackV2ToV1(cls: Class[_]): Class[_] =

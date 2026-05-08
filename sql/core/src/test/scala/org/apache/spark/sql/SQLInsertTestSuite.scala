@@ -387,7 +387,8 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
       }.getMessage
-      assert(e.contains("Cannot use \"INTERVAL\""))
+      assert(e.contains("Cannot use \"INTERVAL\"") ||
+        e.contains("UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE"))
     }
   }
 

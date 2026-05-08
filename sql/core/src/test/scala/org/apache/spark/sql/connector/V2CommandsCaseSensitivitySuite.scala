@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.execution.datasources.PreprocessTableCreation
+import org.apache.spark.sql.execution.datasources.PreprocessTableDDL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
@@ -45,7 +45,7 @@ class V2CommandsCaseSensitivitySuite
     toAttributes(schema))
 
   override protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = {
-    Seq(PreprocessTableCreation(spark.sessionState.catalog))
+    Seq(PreprocessTableDDL(spark.sessionState.catalog))
   }
 
   test("CreateTableAsSelect: using top level field for partitioning") {
