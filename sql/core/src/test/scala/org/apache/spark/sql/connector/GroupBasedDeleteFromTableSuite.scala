@@ -121,6 +121,11 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
       checkReplacedPartitions(Seq("software"))
       checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+
+      val summary = getDeleteSummary()
+      assert(summary.groupFilterTimeMs() > 0,
+        s"Expected groupFilterTimeMs > 0 when the runtime group filter subquery fires, " +
+          s"got ${summary.groupFilterTimeMs()}")
     }
   }
 
@@ -234,7 +239,7 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
         Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
       checkReplacedPartitions(Seq("software", "hr"))
-      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2)
+      checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2, groupFilterTimeMissing = true)
     }
   }
 }

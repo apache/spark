@@ -39,13 +39,25 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   protected def checkUpdateMetrics(
       numUpdatedRows: Long,
-      numCopiedRows: Long): Unit = {
+      numCopiedRows: Long,
+      groupFilterTimeMissing: Boolean = false): Unit = {
     val summary = getUpdateSummary()
     assert(summary.numUpdatedRows() === numUpdatedRows,
       s"Expected numUpdatedRows=$numUpdatedRows, got ${summary.numUpdatedRows()}")
     val expectedCopied = if (deltaUpdate) 0L else numCopiedRows
     assert(summary.numCopiedRows() === expectedCopied,
       s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+    assert(summary.executionTimeMs() >= 0,
+      s"Expected executionTimeMs >= 0, got ${summary.executionTimeMs()}")
+    if (groupFilterTimeMissing) {
+      assert(summary.groupFilterTimeMs() === -1L,
+        s"Expected groupFilterTimeMs == -1, got ${summary.groupFilterTimeMs()}")
+    } else {
+      assert(summary.groupFilterTimeMs() >= 0,
+        s"Expected groupFilterTimeMs >= 0, got ${summary.groupFilterTimeMs()}")
+    }
+    assert(summary.writeJobTimeMs() >= 0,
+      s"Expected writeJobTimeMs >= 0, got ${summary.writeJobTimeMs()}")
   }
 
   test("update table containing added column with default value") {
@@ -157,7 +169,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
 
-    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
   }
 
   test("update with basic filters") {
@@ -173,7 +185,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "invalid") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
 
-    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1, groupFilterTimeMissing = deltaUpdate)
   }
 
   test("update with aliases") {
@@ -236,7 +248,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "hr") :: Row(2, 200, "hardware") :: Row(3, null, "hr") :: Nil)
 
-    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
   }
 
   test("update with literal true condition") {
@@ -252,7 +264,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, -1, "hardware") :: Row(3, -1, "hr") :: Nil)
 
-    checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0, groupFilterTimeMissing = true)
   }
 
   test("update without condition") {
@@ -268,7 +280,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, -1, "hardware") :: Row(3, -1, "hr") :: Nil)
 
-    checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0, groupFilterTimeMissing = true)
   }
 
   test("update with NULL conditions on partition columns") {
@@ -283,7 +295,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, null) :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
-    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
 
     // should update one matching row with a null-safe condition
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep <=> NULL")
@@ -305,14 +317,14 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, null, "hr") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
-    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
 
     // should update one matching row with a null-safe condition
     sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE salary <=> NULL")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, null, "invalid") :: Row(2, 200, "hr") :: Row(3, 300, "hardware") :: Nil)
-    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1, groupFilterTimeMissing = deltaUpdate)
   }
 
   test("update with IN and NOT IN predicates") {
@@ -332,7 +344,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 200, "hardware") :: Row(3, null, "hr") :: Nil)
-    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
 
     sql(s"UPDATE $tableNameAsString SET salary = 100 WHERE salary NOT IN (1, 10)")
     checkAnswer(
@@ -394,7 +406,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(-1, Row(Seq(-1), Map("k" -> "v"))), "hr") :: Nil)
-    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0, groupFilterTimeMissing = true)
 
     // set primitive, array, map columns to NULL (proper casts should be in inserted)
     sql(s"UPDATE $tableNameAsString SET s.c1 = NULL, s.c2 = NULL WHERE pk = 1")
@@ -411,7 +423,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, Row(1, Row(Seq(1), null)), "hr") :: Nil)
-    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0, groupFilterTimeMissing = true)
   }
 
   test("update fields inside NULL structs") {
@@ -521,7 +533,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
+      checkUpdateMetrics(
+        numUpdatedRows = 2, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
     }
   }
 
@@ -574,7 +587,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+      checkUpdateMetrics(
+        numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
 
       sql(
         s"""UPDATE $tableNameAsString
@@ -585,7 +599,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "hr") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
+      checkUpdateMetrics(
+        numUpdatedRows = 2, numCopiedRows = 1, groupFilterTimeMissing = deltaUpdate)
 
       sql(
         s"""UPDATE $tableNameAsString
@@ -625,7 +640,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 0, numCopiedRows = 0)
+      checkUpdateMetrics(
+        numUpdatedRows = 0, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -636,7 +652,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+      checkUpdateMetrics(
+        numUpdatedRows = 1, numCopiedRows = 1, groupFilterTimeMissing = deltaUpdate)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -647,7 +664,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "invalid") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+      checkUpdateMetrics(
+        numUpdatedRows = 1, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -700,7 +718,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "hr") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
+      checkUpdateMetrics(
+        numUpdatedRows = 2, numCopiedRows = 1, groupFilterTimeMissing = deltaUpdate)
 
       sql(
         s"""UPDATE $tableNameAsString t
@@ -713,7 +732,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "invalid") :: Row(3, null, "invalid") :: Nil)
-      checkUpdateMetrics(numUpdatedRows = 3, numCopiedRows = 0)
+      checkUpdateMetrics(
+        numUpdatedRows = 3, numCopiedRows = 0, groupFilterTimeMissing = deltaUpdate)
     }
   }
 
@@ -739,7 +759,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 1, "invalid") :: Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
 
-      checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+      checkUpdateMetrics(
+        numUpdatedRows = 1, numCopiedRows = 1, groupFilterTimeMissing = deltaUpdate)
     }
   }
 

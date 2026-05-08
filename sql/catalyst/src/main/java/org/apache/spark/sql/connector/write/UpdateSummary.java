@@ -36,4 +36,17 @@ public interface UpdateSummary extends WriteSummary {
    * Returns the number of rows copied unmodified, or -1 if not found.
    */
   long numCopiedRows();
+
+  /**
+   * Returns the time, in milliseconds, spent in the runtime group-filter subquery that identifies
+   * which target files contain rows matching the update condition. Returns -1 when no such
+   * subquery was injected.
+   */
+  long groupFilterTimeMs();
+
+  /**
+   * Returns the wall-clock time, in milliseconds, of the main write job that scans pruned
+   * target files, applies the updates, and writes output.
+   */
+  long writeJobTimeMs();
 }

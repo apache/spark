@@ -486,7 +486,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsInserted === 3L)
       assert(mergeSummary.numTargetRowsCopied === 0L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -522,7 +522,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsInserted === 2L)
       assert(mergeSummary.numTargetRowsCopied === 0L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -561,7 +561,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsInserted === 3L)
       assert(mergeSummary.numTargetRowsCopied === 0L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -594,7 +594,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(Row(1, 100, "hr"), Row(2, 200, "hardware")))
 
-      val summary = getMergeSummary()
+      val summary = getMergeSummary(groupFilterTimeMissing = deltaMerge)
       assert(summary.numTargetRowsUpdated === 0L)
       assert(summary.numTargetRowsDeleted === 0L)
       assert(summary.numTargetRowsInserted === 0L)
@@ -660,7 +660,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         sql(s"SELECT * FROM $tableNameAsString"),
         Seq(Row(1, 100, "hr"), Row(2, 200, "hardware")))
 
-      val summary = getMergeSummary()
+      val summary = getMergeSummary(groupFilterTimeMissing = deltaMerge)
       assert(summary.numTargetRowsUpdated === 0L)
       assert(summary.numTargetRowsDeleted === 0L)
       assert(summary.numTargetRowsInserted === 0L)
@@ -2414,7 +2414,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(3, 300, "hr"),
           Row(5, 400, "executive"))) // inserted
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsCopied === 0L)
       assert(mergeSummary.numTargetRowsInserted === 1L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -2468,7 +2468,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(4, 400, "marketing"),
           Row(5, -1, "executive"))) // updated
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
       assert(mergeSummary.numTargetRowsInserted === 0L)
       assert(mergeSummary.numTargetRowsUpdated === 2L)
@@ -2524,7 +2524,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           // Row(5, 500, "executive") deleted
       )
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
       assert(mergeSummary.numTargetRowsInserted === 0L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -2581,7 +2581,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(5, -1, "executive"), // updated
           Row(6, -1, "dummy"))) // inserted
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
       assert(mergeSummary.numTargetRowsInserted === 1L)
       assert(mergeSummary.numTargetRowsUpdated === 2L)
@@ -2638,7 +2638,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           // Row(5, 500, "executive") deleted
           Row(6, -1, "dummy"))) // inserted
 
-      val mergeSummary = getMergeSummary()
+      val mergeSummary = getMergeSummary(groupFilterTimeMissing = true)
       assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
       assert(mergeSummary.numTargetRowsInserted === 1L)
       assert(mergeSummary.numTargetRowsUpdated === 0L)
@@ -2678,7 +2678,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                |""".stripMargin
           )
 
-          val mergeMetrics = getMergeSummary()
+          val mergeMetrics = getMergeSummary(groupFilterTimeMissing = true)
           assert(mergeMetrics.numTargetRowsCopied === (if (deltaMerge) 0L else 3L))
           assert(mergeMetrics.numTargetRowsInserted === 1L)
           assert(mergeMetrics.numTargetRowsUpdated === 0L)
@@ -2794,10 +2794,22 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
-  private def getMergeSummary(): MergeSummary = {
+  protected def getMergeSummary(groupFilterTimeMissing: Boolean = false): MergeSummary = {
     val table = catalog.loadTable(ident)
-    table.asInstanceOf[InMemoryTable].commits.last.writeSummary.get
+    val summary = table.asInstanceOf[InMemoryTable].commits.last.writeSummary.get
       .asInstanceOf[MergeSummary]
+    assert(summary.executionTimeMs() >= 0,
+      s"Expected executionTimeMs >= 0, got ${summary.executionTimeMs()}")
+    if (groupFilterTimeMissing) {
+      assert(summary.groupFilterTimeMs() === -1L,
+        s"Expected groupFilterTimeMs == -1, got ${summary.groupFilterTimeMs()}")
+    } else {
+      assert(summary.groupFilterTimeMs() >= 0,
+        s"Expected groupFilterTimeMs >= 0, got ${summary.groupFilterTimeMs()}")
+    }
+    assert(summary.writeJobTimeMs() >= 0,
+      s"Expected writeJobTimeMs >= 0, got ${summary.writeJobTimeMs()}")
+    summary
   }
 
   private def assertNoLeftBroadcastOrReplication(query: String): Unit = {

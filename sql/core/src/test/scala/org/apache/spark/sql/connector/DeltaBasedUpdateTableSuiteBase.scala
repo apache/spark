@@ -93,6 +93,6 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, -1, "invalid") :: Row(2, 2, 200, "software") :: Row(3, 3, 300, "hr") :: Nil)
 
-    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0, groupFilterTimeMissing = true)
   }
 }
