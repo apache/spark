@@ -60,6 +60,18 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       serverSession: classic.SparkSession, name: String): T =
     serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
 
+  /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
+  private def externalAppend(
+      cat: TableCatalog,
+      ident: Identifier,
+      schema: StructType,
+      row: InternalRow): Unit = {
+    val extTable = cat
+      .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+      .asInstanceOf[InMemoryBaseTable]
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
+  }
+
   /** Ensure views and table are dropped even if the test body throws. */
   private def withTableAndView(
       session: SparkSession,
@@ -116,12 +128,12 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         assertRows(session.table("v").collect(), Seq(Row(1, 100)))
 
         // external writer adds (2, 200) via direct catalog API
-        val schema = StructType.fromDDL("id INT, salary INT")
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
         assertRows(session.table("v").collect(), Seq(Row(1, 100), Row(2, 200)))
       }
@@ -144,11 +156,11 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
 
         val serverSession = getServerSession(session)
         val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
-        val schema = StructType.fromDDL("id INT, salary INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
         // Caching connector returns stale table: external write invisible
         assertRows(session.table("v").collect(), Seq(Row(1, 100)))
@@ -202,12 +214,11 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, addCol)
 
         // external writer adds data with new schema
-        val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
+          row = InternalRow(2, 200, -1))
 
         // view preserves original 2-column schema, filter still applied
         assertRows(session.table("v").collect(), Seq(Row(1, 100), Row(2, 200)))
@@ -234,12 +245,11 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
         cat.alterTable(ident, addCol)
 
-        val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
+          row = InternalRow(2, 200, -1))
 
         // Caching connector returns stale table: external changes invisible
         assertRows(session.table("v").collect(), Seq(Row(1, 100)))
