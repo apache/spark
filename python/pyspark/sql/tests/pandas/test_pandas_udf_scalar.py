@@ -745,6 +745,30 @@ class ScalarPandasUDFTestsMixin:
             actual = df.select(g(f(col("id"))).alias("struct")).collect()
             self.assertEqual(expected, actual)
 
+    def test_scalar_iter_udf_struct_input_and_output(self):
+        return_type = StructType([StructField("id", LongType()), StructField("str", StringType())])
+
+        @pandas_udf(return_type, PandasUDFType.SCALAR_ITER)
+        def iter_struct(it):
+            for s in it:
+                if not isinstance(s, pd.DataFrame):
+                    raise TypeError(type(s).__name__)
+                yield pd.DataFrame({"id": s["id"] + 1, "str": s["str"].str.upper()})
+
+        df = self.spark.range(3).select(
+            struct(col("id"), col("id").cast("string").alias("str")).alias("s")
+        )
+        expected = [
+            Row(out=Row(id=1, str="0")),
+            Row(out=Row(id=2, str="1")),
+            Row(out=Row(id=3, str="2")),
+        ]
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 1}):
+            actual = df.select(iter_struct("s").alias("out")).collect()
+
+        self.assertEqual(expected, actual)
+
     def test_vectorized_udf_wrong_return_type(self):
         with self.quiet():
             self.check_vectorized_udf_wrong_return_type()
