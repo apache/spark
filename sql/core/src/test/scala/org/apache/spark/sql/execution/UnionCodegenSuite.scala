@@ -602,6 +602,57 @@ class UnionCodegenSuite extends QueryTest with SharedSparkSession {
         "numOutputRows should be 0 for all-empty union")
     }
   }
+
+  test("SPARK-56482: partitioning-aware union falls back to non-codegen") {
+    // After repartition, both children expose a `HashPartitioning` on the same key,
+    // so `UnionExec.outputPartitioning` is non-Unknown and the codegen path is denied.
+    // AQE is disabled here so the executedPlan exposes the UnionExec directly
+    // (under AQE the plan is wrapped in `AdaptiveSparkPlanExec`, which does not
+    // surface its inputPlan via `children`).
+    withSQLConf(
+      SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val a = rangeDF(100).repartition(4, col("id"))
+      val b = rangeDF(100, 200).repartition(4, col("id"))
+      val df = a.union(b)
+      assert(!unionInsideWSCG(df),
+        "Partitioning-aware union must not fuse into WSCG")
+      val unionExec = df.queryExecution.executedPlan.collectFirst {
+        case u: UnionExec => u
+      }.get
+      assert(!unionExec.metrics.contains("numOutputRows"),
+        "numOutputRows metric must not be registered on the partitioning-aware path")
+      assertFlagParity(() => a.union(b).orderBy("id"))
+    }
+  }
+
+  test("SPARK-56482: input_file_name child fuses (Nondeterministic but partition-index-free)") {
+    // `InputFileName` is `Nondeterministic` but reads from `InputFileBlockHolder`
+    // (a per-task thread-local) and does not embed `partitionIndex`. The gate's
+    // narrow check should let this fuse.
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      rangeDF(20).write.parquet(path)
+      val a = spark.read.parquet(path).select(col("id"), input_file_name().as("f"))
+      val b = spark.read.parquet(path).select(col("id"), input_file_name().as("f"))
+      val df = a.union(b).filter(col("id") > 0)
+      assert(unionInsideWSCG(df),
+        "Union with input_file_name child should fuse into WSCG")
+      assertFlagParity(() => a.union(b).orderBy("id", "f"))
+    }
+  }
+
+  test("SPARK-56482: union with sample children fuses (or falls back) without crashing") {
+    // `SampleExec.doConsume` reads `currentPartitionIndexVar` from inside an
+    // `addMutableState` initializer, which is emitted into the state-init
+    // function rather than the per-child helper. The bound expression must
+    // therefore resolve in any emission scope, not just inside the helper.
+    val a = rangeDF(20).sample(false, 0.5, 1L)
+    val b = rangeDF(20).sample(false, 0.5, 1L)
+    val df = a.union(b).filter(col("id") > 0)
+    df.collect()
+    assertFlagParity(() => a.union(b).orderBy("id"))
+  }
 }
 
 /** Runs [[UnionCodegenSuite]] with ANSI mode enabled. */
