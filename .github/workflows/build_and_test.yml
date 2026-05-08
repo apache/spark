@@ -100,7 +100,7 @@ jobs:
               \"build\": \"$build\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
-              \"sparkr\": \"false",
+              \"sparkr\": \"false\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"scala-213\": \"$build\",
