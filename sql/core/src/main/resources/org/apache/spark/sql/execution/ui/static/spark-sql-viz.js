@@ -751,18 +751,10 @@ function setupZoomAndPan(svg, zoomLayer) {
 
   svg.call(planVizZoom);
 
-  // Fit the graph to the viewport on initial render.
-  fitToViewport(svg);
-}
-
-/* Compute the transform that fits the current viewBox content into the SVG's
- * displayed size, then apply it via d3-zoom. The SVG's viewBox already maps
- * content to fit the displayed area (preserveAspectRatio="xMidYMid meet" by
- * default), so the identity transform is the natural fit. */
-function fitToViewport(svgArg) {
-  var svg = svgArg || planVizContainer().select("svg");
-  if (!svg || svg.empty() || !planVizZoom) return;
-  svg.call(planVizZoom.transform, d3.zoomIdentity);
+  // Initialize the toolbar label; the SVG's viewBox + xMidYMid meet already
+  // provides the natural fit, and the zoom-layer has no transform, so no
+  // explicit transform is required here.
+  updateZoomLevelLabel(1);
 }
 
 function updateZoomLevelLabel(scale) {
