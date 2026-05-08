@@ -575,9 +575,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "exprWithSeed" -> toSQLExpr(e)))
 
           case p: Parameter =>
-            p.failAnalysis(
-              errorClass = "UNBOUND_SQL_PARAMETER",
-              messageParameters = Map("name" -> p.name))
+         //  p.failAnalysis(
+           //   errorClass = "UNBOUND_SQL_PARAMETER",
+             // messageParameters = Map("name" -> p.name))
 
           case ma @ MultiAlias(child, names) if child.resolved && !child.isInstanceOf[Generator] =>
             ma.failAnalysis(
