@@ -44,18 +44,18 @@ if TYPE_CHECKING:
 class AbstractTranspiler(object):
     """Base class for transpilers. All experimental."""
 
-    varieties = {}
+    varieties: dict[str, type[AbstractTranspiler]] = {}
     # Specify the "friendly" name a user can add to spark.sql.experimental.optimizer.transpilers
     # to enable this transpiler.
-    variety = None
+    variety: str = ""
 
     @classmethod
-    def register(cls):
+    def register(cls) -> None:
         AbstractTranspiler.varieties[cls.variety] = cls
 
     def _transpile_from_ast(
         self,
-        src: str,
+        src: Optional[str],
         ast_info: ast.AST,
         function_ast: ast.FunctionDef,
         params: List[str],
@@ -113,7 +113,7 @@ class CatalystTranspiler(AbstractTranspiler):
         safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
 
-    def _convert_chunk(self, params: List[str], body: ast.AST) -> Column:
+    def _convert_chunk(self, params: List[str], body: ast.AST | None) -> Column:
         match body:
             case None:
                 # Special case literal None, the implicit return None
@@ -252,7 +252,7 @@ class CatalystTranspiler(AbstractTranspiler):
 
     def _transpile_from_ast(
         self,
-        src: str,
+        src: Optional[str],
         ast_info: ast.AST,
         function_ast: ast.FunctionDef,
         params: List[str],
@@ -280,7 +280,10 @@ CatalystTranspiler.register()
 
 def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     """Get the transpilers we should try."""
-    transpiler_names = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers").split(",")
+    configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
+    if not configured_transpilers:
+        return []
+    transpiler_names = configured_transpilers.split(",")
     return [
         AbstractTranspiler.varieties[name]()
         for name in transpiler_names
@@ -288,7 +291,7 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     ]
 
 
-def _get_src_ast_from_func(func) -> Tuple[Optional[str], Optional[ast.AST]]:
+def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.AST]]:
     """Try and get the AST from a given callable"""
     # Note: consider maybe dill? (see the JYTHON PR)
     # inspect getsource does not work for functions defined in vanilla
@@ -299,9 +302,10 @@ def _get_src_ast_from_func(func) -> Tuple[Optional[str], Optional[ast.AST]]:
         src = textwrap.dedent(src).strip()
         ast_info = ast.parse(src)
     except Exception:
-        src = inspect.getsource(func.__call__)
-        src = textwrap.dedent(src).strip()
-        ast_info = ast.parse(src)
+        if hasattr(func, "__call__"):
+            src = inspect.getsource(func.__call__)
+            src = textwrap.dedent(src).strip()
+            ast_info = ast.parse(src)
     return src, ast_info
 
 
@@ -327,7 +331,7 @@ def _get_function_from_ast(body: ast.AST) -> ast.FunctionDef | None:
     Returns ``None`` when no single unambiguous function can be identified.
     Not yet handled: local class variables.
     """
-    if not body.body:
+    if not hasattr(body, "body") or not body.body:
         return None
 
     stmt = body.body[0]
@@ -377,12 +381,14 @@ def _transpile_func(
             return ([], ["Error getting ast for function, can not transpile"], [])
         # Get the lambda body and parameters
         function_ast = _get_function_from_ast(ast)
+        if function_ast is None:
+            return ([], ["Error extracting function body from ast, can not transpile"], [])
         params = _get_parameter_list(function_ast)
         # Strip ``self`` for the caller-facing param list -- callers will
         # match user-supplied kwargs against this, and the user doesn't
         # name ``self`` at the call site.
         public_params = params[1:] if params and params[0] == "self" else list(params)
-        transpiled = []
+        transpiled: list[Column] = []
         errors = []
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
@@ -391,7 +397,10 @@ def _transpile_func(
                 transpiled_column = transpiler._transpile_from_ast(
                     src, ast, function_ast, params, returnType
                 )
-                transpiled.append(transpiled_column)
+                if transpiled_column:
+                    transpiled.append(transpiled_column)
+                else:
+                    errors.append(f"Transpiler {transpiler} returned no column")
             except Exception as e:
                 errors.append(str(e))
         return (transpiled, errors, public_params)
