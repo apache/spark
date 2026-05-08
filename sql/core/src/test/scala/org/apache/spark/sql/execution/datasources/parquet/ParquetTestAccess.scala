@@ -25,6 +25,7 @@ import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.schema.LogicalTypeAnnotation
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -129,7 +130,8 @@ object ParquetTestAccess {
       classOf[String],
       classOf[String],
       classOf[String],
-      classOf[String])
+      classOf[String],
+      java.lang.Integer.TYPE)
     c.setAccessible(true)
     c
   }
@@ -140,12 +142,16 @@ object ParquetTestAccess {
       datetimeRebaseMode: String,
       datetimeRebaseTz: String,
       int96RebaseMode: String,
-      int96RebaseTz: String): ParquetVectorUpdaterFactory = {
+      int96RebaseTz: String,
+      bulkThreshold: Int =
+        SQLConf.PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD.defaultValue.get
+      ): ParquetVectorUpdaterFactory = {
     try {
       factoryCtor.newInstance(
         logicalTypeAnnotation, convertTz,
         datetimeRebaseMode, datetimeRebaseTz,
-        int96RebaseMode, int96RebaseTz).asInstanceOf[ParquetVectorUpdaterFactory]
+        int96RebaseMode, int96RebaseTz,
+        java.lang.Integer.valueOf(bulkThreshold)).asInstanceOf[ParquetVectorUpdaterFactory]
     } catch {
       case e: ReflectiveOperationException => throw rethrow(e)
     }

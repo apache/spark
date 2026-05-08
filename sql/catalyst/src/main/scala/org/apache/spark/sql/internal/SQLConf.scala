@@ -1672,6 +1672,22 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  // Must stay in sync with the legacy-ctor literal in
+  // `VectorizedParquetRecordReader` (see comment there).
+  val PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD =
+    buildConf("spark.sql.parquet.vectorized.updater.bulkThreshold")
+      .internal()
+      .doc("The minimum run length at which type-converting Parquet vector updaters " +
+        "(currently only INT32 -> Long widening) take a bulk read+convert path instead " +
+        "of the per-row read+convert+write loop. Set to a value greater than the batch " +
+        "size to force the per-row path; set to 1 to always take the bulk path. Only " +
+        "PLAIN-encoded values benefit; readers without a specialized override fall back " +
+        "to the per-row default and the threshold has no effect there.")
+      .version("5.0.0")
+      .intConf
+      .checkValue(_ >= 1, "The bulk threshold must be at least 1.")
+      .createWithDefault(8)
+
   val PARQUET_FIELD_ID_WRITE_ENABLED =
     buildConf("spark.sql.parquet.fieldId.write.enabled")
       .doc("Field ID is a native field of the Parquet schema spec. When enabled, " +
@@ -7677,6 +7693,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(PARQUET_VECTORIZED_READER_NULL_TYPE_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
+  def parquetVectorizedUpdaterBulkThreshold: Int =
+    getConf(PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 

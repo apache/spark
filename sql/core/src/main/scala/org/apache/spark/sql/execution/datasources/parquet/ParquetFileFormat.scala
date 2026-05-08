@@ -190,6 +190,7 @@ class ParquetFileFormat
     val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
     val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
     val capacity = sqlConf.parquetVectorizedReaderBatchSize
+    val bulkThreshold = sqlConf.parquetVectorizedUpdaterBulkThreshold
     val enableParquetFilterPushDown: Boolean = sqlConf.parquetFilterPushDown
     val pushDownDate = sqlConf.parquetFilterPushDownDate
     val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
@@ -291,7 +292,7 @@ class ParquetFileFormat
           buildVectorizedIterator(
             hadoopAttemptContext, split, file.partitionValues, partitionSchema, convertTz,
             datetimeRebaseSpec, int96RebaseSpec, enableOffHeapColumnVector, returningBatch,
-            capacity, openedFooter, shouldCloseInputStream)
+            capacity, bulkThreshold, openedFooter, shouldCloseInputStream)
         } else {
           logDebug(s"Falling back to parquet-mr")
           buildRowBasedIterator(
@@ -318,6 +319,7 @@ class ParquetFileFormat
       enableOffHeapColumnVector: Boolean,
       returningBatch: Boolean,
       batchSize: Int,
+      bulkThreshold: Int,
       openedFooter: OpenedParquetFooter,
       shouldCloseInputStream: AtomicBoolean): Iterator[InternalRow] = {
     // scalastyle:on argcount
@@ -329,7 +331,8 @@ class ParquetFileFormat
       int96RebaseSpec.mode.toString,
       int96RebaseSpec.timeZone,
       enableOffHeapColumnVector && TaskContext.get() != null,
-      batchSize)
+      batchSize,
+      bulkThreshold)
     // SPARK-37089: We cannot register a task completion listener to close this iterator here
     // because downstream exec nodes have already registered their listeners. Since listeners
     // are executed in reverse order of registration, a listener registered here would close the

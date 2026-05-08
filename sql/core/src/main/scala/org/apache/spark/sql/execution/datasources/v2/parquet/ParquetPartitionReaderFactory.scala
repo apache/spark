@@ -77,6 +77,7 @@ case class ParquetPartitionReaderFactory(
   private val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
   private val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
   private val capacity = sqlConf.parquetVectorizedReaderBatchSize
+  private val bulkThreshold = sqlConf.parquetVectorizedUpdaterBulkThreshold
   private val enableParquetFilterPushDown: Boolean = sqlConf.parquetFilterPushDown
   private val pushDownDate = sqlConf.parquetFilterPushDownDate
   private val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
@@ -366,7 +367,8 @@ case class ParquetPartitionReaderFactory(
       int96RebaseSpec.mode.toString,
       int96RebaseSpec.timeZone,
       enableOffHeapColumnVector && taskContext.isDefined,
-      capacity)
+      capacity,
+      bulkThreshold)
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.
     parquetReaderCallback.advanceFile(iter)

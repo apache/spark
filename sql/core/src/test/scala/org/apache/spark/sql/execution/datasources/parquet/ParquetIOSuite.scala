@@ -1887,6 +1887,66 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("INT32 -> Long widening produces identical results across bulkThreshold settings") {
+    // Round-trips an INT32 Parquet file read back with a Long schema, exercising
+    // IntegerToLongUpdater on the vectorized path. Three threshold settings cover the
+    // matrix: 1 (always bulk), the SQLConf default (production), and Int.MaxValue
+    // (always per-row). Each is exercised against a non-null column (REQUIRED, no
+    // def-levels) and a nullable column (OPTIONAL, def-levels split runs and force
+    // `readValue` calls alongside `readValues`). `withAllParquetReaders` also exercises
+    // the row-based (parquet-mr) reader, which ignores bulkThreshold; its inclusion is
+    // incidental and provides additional correctness coverage.
+    withTempPath { file =>
+      val n = 5000
+      // Generates a deterministic INT32 sample. Mixes sign, zero, MIN/MAX boundaries to
+      // catch sign-extension regressions; reused for both the non-null and nullable cases.
+      def sampleAt(i: Int): Int = i % 5 match {
+        case 0 => Int.MinValue + i
+        case 1 => -1
+        case 2 => 0
+        case 3 => Int.MaxValue - i
+        case _ => i * 13 - 7
+      }
+
+      val nonNullData = (0 until n).map(i => Row(sampleAt(i)))
+      // Every 7th row is null: splits the run pattern enough to force the PACKED def-level
+      // path to interleave value runs with null runs at sub-batch lengths.
+      val nullableData = (0 until n).map { i =>
+        if (i % 7 == 0) Row(null) else Row(sampleAt(i))
+      }
+
+      val nonNullWriteSchema = new StructType().add("v", IntegerType, nullable = false)
+      val nonNullReadSchema = new StructType().add("v", LongType, nullable = false)
+      val nullableWriteSchema = new StructType().add("v", IntegerType, nullable = true)
+      val nullableReadSchema = new StructType().add("v", LongType, nullable = true)
+
+      val nonNullPath = new java.io.File(file, "nonnull").getCanonicalPath
+      val nullablePath = new java.io.File(file, "nullable").getCanonicalPath
+      spark.createDataFrame(spark.sparkContext.parallelize(nonNullData, 4), nonNullWriteSchema)
+        .write.parquet(nonNullPath)
+      spark.createDataFrame(spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
+        .write.parquet(nullablePath)
+
+      val confKey = SQLConf.PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD
+      val thresholds = Seq("1", confKey.defaultValue.get.toString, Int.MaxValue.toString)
+      val expectedNonNull = nonNullData.map(r => Row(r.getInt(0).toLong))
+      val expectedNullable = nullableData.map { r =>
+        if (r.isNullAt(0)) Row(null) else Row(r.getInt(0).toLong)
+      }
+
+      thresholds.foreach { threshold =>
+        withSQLConf(confKey.key -> threshold) {
+          withAllParquetReaders {
+            checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath),
+              expectedNonNull)
+            checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath),
+              expectedNullable)
+          }
+        }
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
