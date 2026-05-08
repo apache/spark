@@ -19,8 +19,6 @@ package org.apache.spark.sql.connect
 
 import java.util
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -45,10 +43,22 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   private val T = "testcat.ns1.ns2.tbl"
   private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
 
-  /** Get the catalog from the server-side session. */
-  private def serverCatalog[T <: TableCatalog: ClassTag](
+  /** Get a catalog from the server-side session by name. */
+  private def serverCatalog[T <: TableCatalog](
       serverSession: classic.SparkSession, name: String): T =
     serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
+
+  /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
+  private def externalAppend(
+      cat: TableCatalog,
+      ident: Identifier,
+      schema: StructType,
+      row: InternalRow): Unit = {
+    val extTable = cat
+      .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
+      .asInstanceOf[InMemoryBaseTable]
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
+  }
 
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
     assert(
@@ -78,11 +88,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
         val schema = StructType.fromDDL("id INT, salary INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema, row = InternalRow(2, 200))
 
         val df2 = session.table(T)
 
@@ -113,11 +120,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
         // external writer adds (2, 200, -1) with new schema
         val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(
-          Array(new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
 
         val df2 = session.table(T)
 
@@ -147,10 +151,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
         // external writer adds (2) with 1-col schema
         val schema1 = StructType.fromDDL("id INT")
-        val extTable = cat
-          .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
-          .asInstanceOf[InMemoryBaseTable]
-        extTable.withData(Array(new BufferedRows(Seq.empty, schema1).withRow(InternalRow(2))))
+        externalAppend(
+          cat = cat, ident = ident, schema = schema1, row = InternalRow(2))
 
         val df2 = session.table(T)
 
