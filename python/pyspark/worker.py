@@ -75,7 +75,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamPandasUDFSerializer,
     ArrowStreamPandasUDTFSerializer,
-    CogroupArrowUDFSerializer,
+    ArrowStreamCoGroupSerializer,
     CogroupPandasUDFSerializer,
     ApplyInPandasWithStateSerializer,
     TransformWithStateInPandasSerializer,
@@ -523,37 +523,6 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
                 errorClass="UDF_RETURN_TYPE",
                 messageParameters={"expected": "pandas.Series", "actual": type(result).__name__},
             )
-
-
-def wrap_cogrouped_map_arrow_udf(f, return_type, argspec, runner_conf):
-    import pyarrow as pa
-
-    if runner_conf.assign_cols_by_name:
-        expected_cols_and_types = {
-            col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
-        }
-    else:
-        expected_cols_and_types = [
-            (col.name, to_arrow_type(col.dataType, timezone="UTC")) for col in return_type.fields
-        ]
-
-    def wrapped(left_key_table, left_value_table, right_key_table, right_value_table):
-        if len(argspec.args) == 2:
-            result = f(left_value_table, right_value_table)
-        elif len(argspec.args) == 3:
-            key_table = left_key_table if left_key_table.num_rows > 0 else right_key_table
-            key = tuple(c[0] for c in key_table.columns)
-            result = f(key, left_value_table, right_value_table)
-
-        verify_return_type(result, pa.Table)
-        verify_arrow_result(result, runner_conf.assign_cols_by_name, expected_cols_and_types)
-
-        return result.to_batches()
-
-    return lambda kl, vl, kr, vr: (
-        wrapped(kl, vl, kr, vr),
-        to_arrow_type(return_type, timezone="UTC"),
-    )
 
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -1097,7 +1066,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         return args_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec, runner_conf)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
-        return args_offsets, wrap_cogrouped_map_arrow_udf(func, return_type, argspec, runner_conf)
+        return func, args_offsets, return_type, len(argspec.args)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return wrap_grouped_agg_pandas_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
@@ -2325,7 +2294,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-            ser = CogroupArrowUDFSerializer(assign_cols_by_name=runner_conf.assign_cols_by_name)
+            ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupPandasUDFSerializer(
                 timezone=runner_conf.timezone,
@@ -2999,6 +2968,71 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
 
+    if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
+        import pyarrow as pa
+
+        assert num_udfs == 1, "One COGROUPED_MAP_ARROW UDF expected here."
+        cogrouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
+
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+
+        # Pre-compute expected column names/types for strict result validation.
+        # Cogrouped map has a strict contract: missing, extra, or type-mismatched
+        # columns must raise; no silent coercion.
+        if runner_conf.assign_cols_by_name:
+            expected_cols_and_types = {
+                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
+            }
+            reorder_names = [col.name for col in return_type.fields]
+        else:
+            expected_cols_and_types = [
+                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
+                for col in return_type.fields
+            ]
+            reorder_names = None
+
+        select_columns = ArrowBatchTransformer.select_columns
+        left_key_cols, left_val_cols = parsed_offsets[0]
+        right_key_cols, right_val_cols = parsed_offsets[1]
+
+        def table_from_batches(batches, cols):
+            return pa.Table.from_batches([select_columns(b, cols) for b in batches])
+
+        def cogrouped_func(
+            split_index: int,
+            data: Iterator[Tuple[list[pa.RecordBatch], list[pa.RecordBatch]]],
+        ) -> Iterator[pa.RecordBatch]:
+            """Apply cogroupBy Arrow UDF."""
+            for left_batches, right_batches in data:
+                left_keys = table_from_batches(left_batches, left_key_cols)
+                left_values = table_from_batches(left_batches, left_val_cols)
+                right_keys = table_from_batches(right_batches, right_key_cols)
+                right_values = table_from_batches(right_batches, right_val_cols)
+
+                if num_udf_args == 2:
+                    result = cogrouped_udf(left_values, right_values)
+                else:
+                    key_table = left_keys if left_keys.num_rows > 0 else right_keys
+                    key = tuple(c[0] for c in key_table.columns)
+                    result = cogrouped_udf(key, left_values, right_values)
+
+                verify_return_type(result, pa.Table)
+                verify_arrow_result(
+                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                )
+
+                for batch in result.to_batches():
+                    if reorder_names is not None:
+                        # Names and types already validated equal; pure reorder, no cast.
+                        batch = pa.RecordBatch.from_arrays(
+                            [batch.column(name) for name in reorder_names],
+                            names=reorder_names,
+                        )
+                    yield ArrowBatchTransformer.wrap_struct(batch)
+
+        # profiling is not supported for UDF
+        return cogrouped_func, None, ser, ser
+
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
         and not runner_conf.use_legacy_pandas_udf_conversion
@@ -3419,32 +3453,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             df1_vals = [a[0][o] for o in parsed_offsets[0][1]]
             df2_keys = [a[1][o] for o in parsed_offsets[1][0]]
             df2_vals = [a[1][o] for o in parsed_offsets[1][1]]
-            return f(df1_keys, df1_vals, df2_keys, df2_vals)
-
-    elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
-        import pyarrow as pa
-
-        # We assume there is only one UDF here because cogrouped map doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-        arg_offsets, f = udfs[0]
-
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-
-        def batch_from_offset(batch, offsets):
-            return pa.RecordBatch.from_arrays(
-                arrays=[batch.columns[o] for o in offsets],
-                names=[batch.schema.names[o] for o in offsets],
-            )
-
-        def table_from_batches(batches, offsets):
-            return pa.Table.from_batches([batch_from_offset(batch, offsets) for batch in batches])
-
-        def mapper(a):
-            df1_keys = table_from_batches(a[0], parsed_offsets[0][0])
-            df1_vals = table_from_batches(a[0], parsed_offsets[0][1])
-            df2_keys = table_from_batches(a[1], parsed_offsets[1][0])
-            df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
