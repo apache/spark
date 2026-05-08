@@ -3512,8 +3512,32 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Scenario 7 (type widening from INT to BIGINT)
-  test("temp view with stored plan detects type widening") {
+  // Scenario 7.1 (session type widening from INT to BIGINT)
+  test("temp view with stored plan detects session type widening") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // session type widening via SQL
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
+    }
+  }
+
+  // Scenario 7.2 (external type widening from INT to BIGINT)
+  test("temp view with stored plan detects external type widening") {
     val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
@@ -3533,6 +3557,37 @@ class DataSourceV2DataFrameSuite
         parameters = Map(
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
+    }
+  }
+
+  // Scenario 7.2 connector w/ cache (external type widening, caching connector)
+  test("connector w/ cache: temp view stale after external type widening") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external type widening via catalog API
+      val updateType = TableChange.updateColumnType(Array("salary"), LongType)
+      catalog("cachingcat").alterTable(ident, updateType)
+
+      // Caching connector returns stale table: type change invisible, no error
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, type change detected
+      sql(s"REFRESH TABLE $t")
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`cachingcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
           "errors" -> "- `salary` type has changed from INT to BIGINT"))
     }
