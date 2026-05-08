@@ -151,8 +151,9 @@ class CatalogManager(
 
   /**
    * Cache for [[confDefaultPathEntries]]: stores the expanded [[SessionPathEntry]] list keyed
-   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and the [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]]
-   * value (the only conf that affects the expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
+   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and
+   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] value (the only conf that affects the
+   * expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
    * `CurrentSchemaEntry` markers are preserved unresolved so the cache stays valid across
    * `USE SCHEMA`.
    */
