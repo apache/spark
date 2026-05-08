@@ -3024,11 +3024,10 @@ class DataSourceV2DataFrameSuite
       catalogName: String,
       ident: Identifier,
       schema: StructType,
-      rows: InternalRow*): Unit = {
+      row: InternalRow): Unit = {
     val extTable = catalog(catalogName).loadTable(ident,
       util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-    extTable.withData(Array(
-      rows.foldLeft(new BufferedRows(Seq.empty, schema))((buf, row) => buf.withRow(row))))
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
   }
 
   // Scenario 1.1 (session write)
@@ -3063,7 +3062,7 @@ class DataSourceV2DataFrameSuite
         catalogName = "testcat",
         ident = ident,
         schema = StructType.fromDDL("id INT, salary INT"),
-        InternalRow(2, 200))
+        row = InternalRow(2, 200))
 
       checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
     }
@@ -3085,7 +3084,7 @@ class DataSourceV2DataFrameSuite
         catalogName = "cachingcat",
         ident = ident,
         schema = StructType.fromDDL("id INT, salary INT"),
-        InternalRow(2, 200))
+        row = InternalRow(2, 200))
 
       // Caching connector returns stale table: external write invisible
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
@@ -3134,7 +3133,7 @@ class DataSourceV2DataFrameSuite
         catalogName = "testcat",
         ident = ident,
         schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
-        InternalRow(2, 200, -1))
+        row = InternalRow(2, 200, -1))
 
       // view preserves original 2-column schema, filter still applied
       checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
@@ -3160,7 +3159,7 @@ class DataSourceV2DataFrameSuite
         catalogName = "cachingcat",
         ident = ident,
         schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
-        InternalRow(2, 200, -1))
+        row = InternalRow(2, 200, -1))
 
       // Caching connector returns stale table: external changes invisible
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
