@@ -719,7 +719,7 @@ jobs:
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
-      RUN_HYPOTHESIS: fromJson(needs.precondition.outputs.required).transpile
+      RUN_HYPOTHESIS: ${{ fromJson(needs.precondition.outputs.required).transpile }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
