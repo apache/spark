@@ -644,7 +644,8 @@ def main():
         run_build_tests()
 
     # spark build
-    build_apache_spark(build_tool, extra_profiles)
+    if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
+        build_apache_spark(build_tool, extra_profiles)
 
     # backwards compatibility checks
     if build_tool == "sbt":
@@ -653,7 +654,8 @@ def main():
             detect_binary_inop_with_mima(extra_profiles)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
+        if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
+            build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
     run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
