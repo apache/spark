@@ -3019,6 +3019,18 @@ class DataSourceV2DataFrameSuite
   // (to demonstrate that the stored plan is non-trivial), and then verifies the view
   // behavior after various table modifications (session or external).
 
+  /** Appends rows to a DSv2 table via the catalog API, bypassing the session. */
+  private def externalAppend(
+      catalogName: String,
+      ident: Identifier,
+      schema: StructType,
+      rows: InternalRow*): Unit = {
+    val extTable = catalog(catalogName).loadTable(ident,
+      util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
+    extTable.withData(Array(
+      rows.foldLeft(new BufferedRows(Seq.empty, schema))((buf, row) => buf.withRow(row))))
+  }
+
   // Scenario 1.1 (session write)
   test("temp view with stored plan reflects session write") {
     val t = "testcat.ns1.ns2.tbl"
@@ -3047,11 +3059,11 @@ class DataSourceV2DataFrameSuite
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
 
       // external writer adds (2, 200) via direct catalog API
-      val schema = StructType.fromDDL("id INT, salary INT")
-      val extTable = catalog("testcat").loadTable(ident,
-        util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+      externalAppend(
+        catalogName = "testcat",
+        ident = ident,
+        schema = StructType.fromDDL("id INT, salary INT"),
+        InternalRow(2, 200))
 
       checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
     }
@@ -3069,11 +3081,11 @@ class DataSourceV2DataFrameSuite
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
 
       // external writer adds (2, 200) via catalog API (bypasses cache)
-      val schema = StructType.fromDDL("id INT, salary INT")
-      val extTable = catalog("cachingcat").loadTable(ident,
-        util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema).withRow(InternalRow(2, 200))))
+      externalAppend(
+        catalogName = "cachingcat",
+        ident = ident,
+        schema = StructType.fromDDL("id INT, salary INT"),
+        InternalRow(2, 200))
 
       // Caching connector returns stale table: external write invisible
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
@@ -3118,11 +3130,11 @@ class DataSourceV2DataFrameSuite
       catalog("testcat").alterTable(ident, addCol)
 
       // external writer adds data with new schema
-      val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-      val extTable = catalog("testcat").loadTable(ident,
-        util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+      externalAppend(
+        catalogName = "testcat",
+        ident = ident,
+        schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
+        InternalRow(2, 200, -1))
 
       // view preserves original 2-column schema, filter still applied
       checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
@@ -3144,11 +3156,11 @@ class DataSourceV2DataFrameSuite
       val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
       catalog("cachingcat").alterTable(ident, addCol)
 
-      val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
-      val extTable = catalog("cachingcat").loadTable(ident,
-        util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
-      extTable.withData(Array(
-        new BufferedRows(Seq.empty, schema3).withRow(InternalRow(2, 200, -1))))
+      externalAppend(
+        catalogName = "cachingcat",
+        ident = ident,
+        schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
+        InternalRow(2, 200, -1))
 
       // Caching connector returns stale table: external changes invisible
       checkAnswer(spark.table("v"), Seq(Row(1, 100)))
@@ -3159,7 +3171,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Scenario 3.2 (external column removal)
   // Scenario 3.1 (session column removal)
   test("temp view with stored plan detects session column removal") {
     val t = "testcat.ns1.ns2.tbl"
