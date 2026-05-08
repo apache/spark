@@ -3848,16 +3848,28 @@ class FunctionsTestsMixin:
 
     def test_st_asbinary(self):
         df = self.spark.createDataFrame(
-            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
-            ["wkb"],
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), "XDR")],
+            ["wkb", "end"],
         )
         results = df.select(
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "NDR")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "XDR")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), F.col("end"))),
             F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "NDR")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "XDR")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), F.col("end"))),
         ).collect()
         expected = Row(
             "0101000000000000000000F03F0000000000000040",
             "0101000000000000000000F03F0000000000000040",
+            "00000000013FF00000000000004000000000000000",
+            "00000000013FF00000000000004000000000000000",
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+            "00000000013FF00000000000004000000000000000",
+            "00000000013FF00000000000004000000000000000",
         )
         self.assertEqual(results, [expected])
 

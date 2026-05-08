@@ -666,6 +666,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def stInvalidArgumentErrorInvalidEndiannessValue(
+      endianness: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_ENDIANNESS_VALUE",
+      messageParameters = Map("endianness" -> endianness)
+    )
+  }
+
   def stInvalidSridValueError(srid: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "ST_INVALID_SRID_VALUE",

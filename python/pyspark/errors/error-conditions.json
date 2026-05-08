@@ -958,6 +958,12 @@
     ],
     "sqlState" : "22023"
   },
+  "ST_INVALID_ENDIANNESS_VALUE" : {
+    "message" : [
+      "Endianness '<endianness>' must be either 'NDR' (little-endian) or 'XDR' (big-endian)."
+    ],
+    "sqlState" : "22023"
+  },
   "ST_INVALID_SRID_VALUE" : {
     "message" : [
       "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
