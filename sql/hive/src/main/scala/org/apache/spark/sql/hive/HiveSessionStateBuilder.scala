@@ -100,6 +100,8 @@ class HiveSessionStateBuilder(
     override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
       ApplyCharTypePadding +:
+      ResolveSQLFunctions +:
+      ResolveDeserializer +:
       singlePassCustomPostHocResolutionRules
 
     override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {
