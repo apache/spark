@@ -1888,15 +1888,12 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
-  test("INT32 -> Long widening produces identical results across bulkThreshold settings") {
+  test("INT32 -> Long widening end-to-end via vectorized read path") {
     // Round-trips an INT32 Parquet file read back with a Long schema, exercising
-    // IntegerToLongUpdater on the vectorized path. Three threshold settings cover the
-    // matrix: 1 (always bulk), the SQLConf default (production), and Int.MaxValue
-    // (always per-row). Each is exercised against a non-null column (REQUIRED, no
-    // def-levels) and a nullable column (OPTIONAL, def-levels split runs and force
+    // IntegerToLongUpdater on the vectorized path. Covers a non-null column (REQUIRED,
+    // no def-levels) and a nullable column (OPTIONAL, def-levels split runs and force
     // `readValue` calls alongside `readValues`). `withAllParquetReaders` also exercises
-    // the row-based (parquet-mr) reader, which ignores bulkThreshold; its inclusion is
-    // incidental and provides additional correctness coverage.
+    // the row-based (parquet-mr) reader, which provides additional correctness coverage.
     withTempPath { file =>
       val n = 5000
       // Generates a deterministic INT32 sample. Mixes sign, zero, MIN/MAX boundaries to
@@ -1928,22 +1925,14 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       spark.createDataFrame(spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
         .write.parquet(nullablePath)
 
-      val confKey = SQLConf.PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD
-      val thresholds = Seq("1", confKey.defaultValue.get.toString, Int.MaxValue.toString)
       val expectedNonNull = nonNullData.map(r => Row(r.getInt(0).toLong))
       val expectedNullable = nullableData.map { r =>
         if (r.isNullAt(0)) Row(null) else Row(r.getInt(0).toLong)
       }
 
-      thresholds.foreach { threshold =>
-        withSQLConf(confKey.key -> threshold) {
-          withAllParquetReaders {
-            checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath),
-              expectedNonNull)
-            checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath),
-              expectedNullable)
-          }
-        }
+      withAllParquetReaders {
+        checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath), expectedNonNull)
+        checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath), expectedNullable)
       }
     }
   }

@@ -54,9 +54,6 @@ public class ParquetVectorUpdaterFactory {
   private final String datetimeRebaseTz;
   private final String int96RebaseMode;
   private final String int96RebaseTz;
-  // Minimum run length for type-converting updaters to take a bulk read+convert path.
-  // See SQLConf.PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD.
-  private final int bulkThreshold;
 
   ParquetVectorUpdaterFactory(
       LogicalTypeAnnotation logicalTypeAnnotation,
@@ -64,15 +61,13 @@ public class ParquetVectorUpdaterFactory {
       String datetimeRebaseMode,
       String datetimeRebaseTz,
       String int96RebaseMode,
-      String int96RebaseTz,
-      int bulkThreshold) {
+      String int96RebaseTz) {
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.convertTz = convertTz;
     this.datetimeRebaseMode = datetimeRebaseMode;
     this.datetimeRebaseTz = datetimeRebaseTz;
     this.int96RebaseMode = int96RebaseMode;
     this.int96RebaseTz = int96RebaseTz;
-    this.bulkThreshold = bulkThreshold;
   }
 
   public ParquetVectorUpdater getUpdater(ColumnDescriptor descriptor, DataType sparkType) {
@@ -98,7 +93,7 @@ public class ParquetVectorUpdaterFactory {
           // fallbacks. We read them as long values.
           return new UnsignedIntegerUpdater();
         } else if (sparkType == DataTypes.LongType || canReadAsLongDecimal(descriptor, sparkType)) {
-          return new IntegerToLongUpdater(bulkThreshold);
+          return new IntegerToLongUpdater();
         } else if (canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new IntegerToBinaryUpdater();
         } else if (sparkType == DataTypes.ByteType) {
@@ -362,29 +357,13 @@ public class ParquetVectorUpdaterFactory {
   }
 
   static class IntegerToLongUpdater implements ParquetVectorUpdater {
-    private final int bulkThreshold;
-
-    IntegerToLongUpdater(int bulkThreshold) {
-      this.bulkThreshold = bulkThreshold;
-    }
-
     @Override
     public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      // Bulk path: one `readIntegersAsLongs` call lets specialized readers (e.g. PLAIN) read
-      // source bytes once and convert in a tight in-method loop, replacing `total` virtual
-      // dispatches to `readInteger()`. Unspecialized readers inherit the interface default,
-      // which is equivalent in cost to the per-row branch below.
-      if (total >= bulkThreshold) {
-        valuesReader.readIntegersAsLongs(total, values, offset);
-      } else {
-        for (int i = 0; i < total; i += 1) {
-          values.putLong(offset + i, valuesReader.readInteger());
-        }
-      }
+      valuesReader.readIntegersAsLongs(total, values, offset);
     }
 
     @Override

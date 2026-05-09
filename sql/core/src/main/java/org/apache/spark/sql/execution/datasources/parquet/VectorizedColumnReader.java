@@ -110,8 +110,7 @@ public class VectorizedColumnReader {
       String datetimeRebaseTz,
       String int96RebaseMode,
       String int96RebaseTz,
-      ParsedVersion writerVersion,
-      int bulkThreshold) throws IOException {
+      ParsedVersion writerVersion) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReadStore.getPageReader(descriptor);
     this.readState = new ParquetReadState(descriptor, isRequired,
@@ -123,8 +122,7 @@ public class VectorizedColumnReader {
       datetimeRebaseMode,
       datetimeRebaseTz,
       int96RebaseMode,
-      int96RebaseTz,
-      bulkThreshold);
+      int96RebaseTz);
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {

@@ -149,35 +149,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  /**
-   * Threshold passed to {@link ParquetVectorUpdaterFactory} to gate bulk-conversion paths
-   * inside type-converting updaters.
-   */
-  private final int bulkThreshold;
-
-  public VectorizedParquetRecordReader(
-      ZoneId convertTz,
-      String datetimeRebaseMode,
-      String datetimeRebaseTz,
-      String int96RebaseMode,
-      String int96RebaseTz,
-      boolean useOffHeap,
-      int capacity,
-      int bulkThreshold) {
-    this.convertTz = convertTz;
-    this.datetimeRebaseMode = datetimeRebaseMode;
-    this.datetimeRebaseTz = datetimeRebaseTz;
-    this.int96RebaseMode = int96RebaseMode;
-    this.int96RebaseTz = int96RebaseTz;
-    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
-    this.capacity = capacity;
-    this.bulkThreshold = bulkThreshold;
-  }
-
-  // Legacy ctor for callers predating the bulkThreshold parameter. Delegates with the SQLConf
-  // default literal; this value MUST stay in sync with
-  // SQLConf.PARQUET_VECTORIZED_UPDATER_BULK_THRESHOLD's createWithDefault. SQLConf cannot
-  // reference a constant declared here because catalyst does not depend on sql/core.
   public VectorizedParquetRecordReader(
       ZoneId convertTz,
       String datetimeRebaseMode,
@@ -186,8 +157,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       String int96RebaseTz,
       boolean useOffHeap,
       int capacity) {
-    this(convertTz, datetimeRebaseMode, datetimeRebaseTz, int96RebaseMode, int96RebaseTz,
-      useOffHeap, capacity, /* bulkThreshold */ 8);
+    this.convertTz = convertTz;
+    this.datetimeRebaseMode = datetimeRebaseMode;
+    this.datetimeRebaseTz = datetimeRebaseTz;
+    this.int96RebaseMode = int96RebaseMode;
+    this.int96RebaseTz = int96RebaseTz;
+    MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
+    this.capacity = capacity;
   }
 
   // For test only.
@@ -522,7 +498,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         ParquetColumn column = cv.getColumn();
         VectorizedColumnReader reader = new VectorizedColumnReader(
           column.descriptor().get(), column.required(), pages, convertTz, datetimeRebaseMode,
-          datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion, bulkThreshold);
+          datetimeRebaseTz, int96RebaseMode, int96RebaseTz, writerVersion);
         cv.setColumnReader(reader);
       } else {
         // Not in missing columns and is a complex type: this must be a struct
