@@ -19,12 +19,16 @@
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:focal-20221019
 
-ENV FULL_REFRESH_DATE 20221118
+ENV FULL_REFRESH_DATE 20260510
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
+
+RUN echo 'deb https://mirrors.edge.kernel.org/ubuntu focal main restricted universe multiverse' > /etc/apt/sources.list.d/mirror.list && \
+    echo 'deb https://mirrors.edge.kernel.org/ubuntu focal-updates main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list && \
+    echo 'deb https://mirrors.edge.kernel.org/ubuntu focal-security main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list
 
 RUN apt-get clean
 RUN apt-get update
@@ -55,7 +59,7 @@ RUN $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
+RUN apt-get update && apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
           libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev \
           libtiff5-dev libjpeg-dev
 RUN Rscript -e "install.packages(c('remotes'), repos='https://cloud.r-project.org/')"
