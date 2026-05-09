@@ -138,9 +138,26 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         "b STRING,",
         "ts TIMESTAMP)",
         defaultUsing,
-        "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
-        "CLUSTERED BY (b)",
-        "INTO 16 BUCKETS"
+        "PARTITIONED BY (a, bucket(16, b), years(ts), months(ts), days(ts), hours(ts))"
+      ))
+    }
+  }
+
+  test("SPARK-56755: show create table[partitioned by multi bucket transforms]") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""
+           |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) $defaultUsing
+           |PARTITIONED BY (bucket(4, a), bucket(8, b), years(ts))
+         """.stripMargin)
+      val showDDL = getShowCreateDDL(t, false)
+      assert(showDDL === Array(
+        s"CREATE TABLE $t (",
+        "a INT,",
+        "b STRING COLLATE UTF8_BINARY,",
+        "ts TIMESTAMP)",
+        defaultUsing,
+        "PARTITIONED BY (bucket(4, a), bucket(8, b), years(ts))"
       ))
     }
   }
