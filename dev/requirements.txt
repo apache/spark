@@ -3,10 +3,10 @@ py4j
 
 # PySpark dependencies (optional)
 numpy
-pyarrow<13.0.0
-pandas
+pyarrow<13.0.0,=>4.0.0
+pandas=>1.0.5,<3
 scipy
-plotly
+plotly<6
 mlflow>=2.3.1
 scikit-learn
 matplotlib
