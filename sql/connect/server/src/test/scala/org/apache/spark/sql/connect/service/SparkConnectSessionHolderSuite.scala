@@ -441,7 +441,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
                 println(
                   s"===== onTimeout cleanUpAll suppressed " +
                     s"${t.getClass.getSimpleName}: ${t.getMessage} =====")
-                // scalastyle:on println
+              // scalastyle:on println
             }
           }) {
           runPythonForeachBatchTerminationTestBody(sessionHolder)
