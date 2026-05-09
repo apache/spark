@@ -43,7 +43,7 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        default: '{"PYSPARK_IMAGE_TO_TEST": "python-312", "PYTHON_TO_TEST": "python3.12", "SPARK_SQL_WSCG_UNION_ENABLED": "true"}'
+        default: '{"PYSPARK_IMAGE_TO_TEST": "python-312", "PYTHON_TO_TEST": "python3.12"}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
@@ -1417,7 +1417,6 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
-        SPARK_SQL_WSCG_UNION_ENABLED: ${{ fromJSON(inputs.envs).SPARK_SQL_WSCG_UNION_ENABLED }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.preferSortMergeJoin=true
@@ -1426,7 +1425,6 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
-        SPARK_SQL_WSCG_UNION_ENABLED: ${{ fromJSON(inputs.envs).SPARK_SQL_WSCG_UNION_ENABLED }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=10485760
     - name: Run TPC-DS queries (Shuffled hash join)
@@ -1434,7 +1432,6 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
       env:
         SPARK_ANSI_SQL_MODE: ${{ fromJSON(inputs.envs).SPARK_ANSI_SQL_MODE }}
-        SPARK_SQL_WSCG_UNION_ENABLED: ${{ fromJSON(inputs.envs).SPARK_SQL_WSCG_UNION_ENABLED }}
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
