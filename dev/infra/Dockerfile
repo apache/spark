@@ -26,9 +26,9 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 ARG APT_INSTALL="apt-get install --no-install-recommends -y"
 
-RUN echo 'deb https://mirrors.edge.kernel.org/ubuntu focal main restricted universe multiverse' > /etc/apt/sources.list.d/mirror.list && \
-    echo 'deb https://mirrors.edge.kernel.org/ubuntu focal-updates main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list && \
-    echo 'deb https://mirrors.edge.kernel.org/ubuntu focal-security main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list
+RUN echo 'deb http://mirrors.edge.kernel.org/ubuntu focal main restricted universe multiverse' > /etc/apt/sources.list.d/mirror.list && \
+    echo 'deb http://mirrors.edge.kernel.org/ubuntu focal-updates main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list && \
+    echo 'deb http://mirrors.edge.kernel.org/ubuntu focal-security main restricted universe multiverse' >> /etc/apt/sources.list.d/mirror.list
 
 RUN apt-get clean
 RUN apt-get update
