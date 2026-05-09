@@ -1,0 +1,11 @@
+---
+description: Run Spark Scala lint before any commit; never commit without passing lint-scala
+alwaysApply: true
+---
+
+# Apache Spark: lint before commit
+
+- Before **any** `git commit` that changes Scala (or when preparing a commit batch), run `./dev/lint-scala` from the repo root and fix all Scalastyle and Scalafmt failures.
+- **Do not** tell the user a change is ready to commit or push until `./dev/lint-scala` has passed in this environment (or the user has confirmed it passed).
+- Common CI failures: **line length > 100** (wrap Scaladoc and code), import order, spacing.
+- If `./dev/lint-scala` fixes files (e.g. scalafmt), include those fixes in the same commit.

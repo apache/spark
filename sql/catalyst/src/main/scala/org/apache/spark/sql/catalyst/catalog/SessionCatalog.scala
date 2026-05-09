@@ -124,7 +124,8 @@ class SessionCatalog(
    * [[org.apache.spark.sql.connector.catalog.CatalogManager]]'s constructor via
    * [[bindCatalogManagerForSessionFunctionKinds]] so unqualified lookups and the security check
    * that blocks temp functions from shadowing builtins read the effective SQL PATH (post-`SET
-   * PATH`, with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already applied).
+   * PATH`, with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already
+   * applied).
    *
    * When unset (e.g. standalone [[SessionCatalog]] in tests), kinds derive from
    * [[SQLConf.systemPathOrder]] -- the seeded default path -- without assuming other legacy
@@ -151,7 +152,8 @@ class SessionCatalog(
 
   /**
    * Session function kinds in resolution order for unqualified lookups: test override if set,
-   * else live PATH from [[catalogManagerForSessionFunctionKinds]], else [[SQLConf.systemPathOrder]].
+   * else live PATH from [[catalogManagerForSessionFunctionKinds]], else
+   * [[SQLConf.systemPathOrder]].
    */
   private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] =
     sessionFunctionKindsTestOverride.getOrElse {
