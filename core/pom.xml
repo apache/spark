@@ -561,7 +561,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client,jetty-session,jetty-compression-server,jetty-compression-common,jetty-compression-gzip
+                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-ee10-proxy,jetty-client,jetty-session,jetty-compression-server,jetty-compression-common,jetty-compression-gzip
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>
