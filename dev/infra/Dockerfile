@@ -31,7 +31,7 @@ RUN apt-get update
 RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools python3.8 python3.9
 RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
 
 RUN add-apt-repository ppa:pypy/ppa
 RUN apt update
@@ -43,7 +43,7 @@ RUN mkdir -p /usr/local/pypy/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
     ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
 
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
+RUN curl -sS https://bootstrap.pypa.io/pip/3.8/get-pip.py | pypy3
 
 RUN $APT_INSTALL gnupg ca-certificates pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /etc/apt/sources.list
@@ -64,7 +64,10 @@ RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='htt
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib
+RUN printf 'pythran==0.12.2\nbeniget==0.4.1\ngast==0.5.3\n' > /tmp/pypy-constraints.txt && \
+    PIP_CONSTRAINT=/tmp/pypy-constraints.txt pypy3 -m pip install 'scipy<1.10' && \
+    SETUPTOOLS_USE_DISTUTILS=stdlib PIP_CONSTRAINT=/tmp/pypy-constraints.txt pypy3 -m pip install numpy 'pandas<=2.0.3' coverage matplotlib && \
+    rm /tmp/pypy-constraints.txt
 RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
