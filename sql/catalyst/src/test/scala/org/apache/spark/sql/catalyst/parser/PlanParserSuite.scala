@@ -994,8 +994,8 @@ class PlanParserSuite extends AnalysisTest {
     val fragment2 = "tablesample(bucket 11 out of 10)"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.1"),
       context = ExpectedContext(
         fragment = fragment2,
         start = 16,
@@ -1157,8 +1157,8 @@ class PlanParserSuite extends AnalysisTest {
     // > 100 PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (150 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.5) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.5"),
       context = ExpectedContext(
         fragment = "tablesample system (150 percent)",
         start = 16,
@@ -1166,8 +1166,8 @@ class PlanParserSuite extends AnalysisTest {
     // Negative PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (-10 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (-0.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "-0.1"),
       context = ExpectedContext(
         fragment = "tablesample system (-10 percent)",
         start = 16,

@@ -288,6 +288,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidTableSampleFractionError(fraction: Double, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TABLESAMPLE_FRACTION",
+      messageParameters = Map("fraction" -> fraction.toString),
+      ctx)
+  }
+
   def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_ESC",

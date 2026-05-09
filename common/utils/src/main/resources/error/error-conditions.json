@@ -4832,6 +4832,12 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TABLESAMPLE_FRACTION" : {
+    "message" : [
+      "Sampling fraction (<fraction>) must be on interval [0, 1]."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TEMP_OBJ_QUALIFIER" : {
     "message" : [
       "Temporary <objectType> <objectName> cannot be qualified with <qualifier>. Temporary objects can only be qualified with SESSION or SYSTEM.SESSION."

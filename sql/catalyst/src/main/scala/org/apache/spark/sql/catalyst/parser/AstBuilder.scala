@@ -2513,9 +2513,9 @@ class AstBuilder extends DataTypeAstBuilder
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
       val eps = RandomSampler.roundingEpsilon
-      validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
-        s"Sampling fraction ($fraction) must be on interval [0, 1]",
-        ctx)
+      if (fraction < 0.0 - eps || fraction > 1.0 + eps) {
+        throw QueryParsingErrors.invalidTableSampleFractionError(fraction, ctx)
+      }
       val method = if (isSystem) SampleMethod.System else SampleMethod.Bernoulli
       Sample(0.0, fraction, withReplacement = false, seed, query, method)
     }
