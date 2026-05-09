@@ -31,8 +31,8 @@ import org.apache.datasketches.memory.MemoryRequestServer;
 import org.apache.datasketches.memory.ReadOnlyException;
 import org.apache.datasketches.memory.Resource;
 
-// temp copied for testing
-// https://github.com/apache/datasketches-memory/pull/272
+// Ported from https://github.com/apache/datasketches-memory/pull/272
+// which relaxes the `checkJavaVersion` to allow Java 25
 
 /**
  * Implements the root Resource methods plus some common static variables and check methods.
