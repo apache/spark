@@ -1974,7 +1974,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Add a [[WithWindowDefinition]] operator to a logical plan.
+   * Add a [[WithWindowDefinition]] operator to a logical plan, or for pipe SQL, substitute
+   * [[UnresolvedWindowExpression]]s with [[WindowExpression]]s directly.
    */
   private def withWindowClause(
       ctx: WindowClauseContext,
@@ -2012,7 +2013,20 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
-    WithWindowDefinition(windowMapView.map(identity), query, forPipeSQL)
+    val windowDefinitions = windowMapView.map(identity)
+    if (forPipeSQL) {
+      // For pipe SQL, substitute window references directly. Each pipe operator's WINDOW clause
+      // is scoped to that operator only, and the definitions and expressions are in the same
+      // grammar rule, so we can resolve them here without a WithWindowDefinition wrapper.
+      query.transformExpressions {
+        case UnresolvedWindowExpression(child, WindowSpecReference(windowName)) =>
+          val spec = windowDefinitions.getOrElse(windowName,
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
+          WindowExpression(child, spec)
+      }
+    } else {
+      WithWindowDefinition(windowDefinitions, query)
+    }
   }
 
   /**

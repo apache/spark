@@ -691,8 +691,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
                   UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false),
                   WindowSpecReference("w")), None)
             ),
-            UnresolvedRelation(TableIdentifier("testData"))),
-          forPipeSQL = false
+            UnresolvedRelation(TableIdentifier("testData")))
         ),
         ioSchema))
 
@@ -1035,7 +1034,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
     checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
     // Window
-    def checkWindow(query: String): Unit = check(query, Seq(WITH_WINDOW_DEFINITION))
+    def checkWindow(query: String): Unit = check(query, Seq(WINDOW_EXPRESSION))
     checkWindow(
       """
         |TABLE windowTestData

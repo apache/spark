@@ -30,18 +30,37 @@ class STFunctionsSuite extends SharedSparkSession {
 
   test("st_asbinary") {
     // Test data: Well-Known Binary (WKB) representations.
-    val df = Seq[(String)](
-      (
-        "0101000000000000000000f03f0000000000000040"
-      )).toDF("wkb")
+    val wkbNdr = "0101000000000000000000f03f0000000000000040"
+    val wkbXdr = "00000000013ff00000000000004000000000000000"
+    val df = Seq[(String, String, String, String)](
+        (wkbNdr, wkbXdr, "NDR", "XDR")
+      ).toDF("wkbNDR", "wkbXDR", "endNDR", "endXDR")
     // ST_GeogFromWKB/ST_GeomFromWKB and ST_AsBinary.
     checkAnswer(
       df.select(
-        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkb"))))).as("col0"),
-        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkb"))))).as("col1")),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbNDR"))))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbNDR")), "NDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbNDR")), $"endNDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbNDR")), "XDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbNDR")), $"endXDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbXDR"))))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbXDR")), "NDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbXDR")), $"endNDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbXDR")), "XDR"))),
+        lower(hex(st_asbinary(st_geogfromwkb(unhex($"wkbXDR")), $"endXDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbNDR"))))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbNDR")), "NDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbNDR")), $"endNDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbNDR")), "XDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbNDR")), $"endXDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbXDR"))))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbXDR")), "NDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbXDR")), $"endNDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbXDR")), "XDR"))),
+        lower(hex(st_asbinary(st_geomfromwkb(unhex($"wkbXDR")), $"endXDR")))),
       Row(
-        "0101000000000000000000f03f0000000000000040",
-        "0101000000000000000000f03f0000000000000040"))
+        wkbNdr, wkbNdr, wkbNdr, wkbXdr, wkbXdr, wkbNdr, wkbNdr, wkbNdr, wkbXdr, wkbXdr,
+        wkbNdr, wkbNdr, wkbNdr, wkbXdr, wkbXdr, wkbNdr, wkbNdr, wkbNdr, wkbXdr, wkbXdr))
   }
 
   test("st_geogfromwkb") {
