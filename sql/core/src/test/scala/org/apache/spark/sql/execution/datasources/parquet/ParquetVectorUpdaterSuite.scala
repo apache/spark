@@ -31,12 +31,12 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types._
 
 /**
- * Correctness tests for `ParquetVectorUpdater` implementations that take a bulk
- * read+convert path on the Parquet vectorized read.
+ * Correctness tests for the INT32 -> Long widening Updater (`IntegerToLongUpdater`)
+ * on the Parquet vectorized read path.
  *
- * Covers the INT32 -> Long widening Updater (`IntegerToLongUpdater`) at boundary batch
- * lengths, sign-extension on negative INT32 values, the singular `readValue` path,
- * and the factory's long-decimal dispatch (INT32 + DECIMAL(p<=9) -> DecimalType(p<=18)).
+ * Covers boundary batch lengths, sign-extension on negative INT32 values, the singular
+ * `readValue` path, and the factory's long-decimal dispatch
+ * (INT32 + DECIMAL(p<=9) -> DecimalType(p in (9, 18])).
  */
 class ParquetVectorUpdaterSuite extends SparkFunSuite {
 
@@ -150,12 +150,11 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
   //      when the Spark target is a DecimalType(precision in (9, 18]) ----
 
   test("IntegerToLongUpdater handles INT32 -> DecimalType(p<=18) via canReadAsLongDecimal") {
-    // Parquet limits INT32 storage to precision <= 9 (max digits in int32), so the source
-    // must be DECIMAL(9, 0); the Spark target DecimalType(15, 0) widens to a long-decimal
-    // (precision > 9 and <= 18). The factory routes this through `canReadAsLongDecimal` and
-    // returns IntegerToLongUpdater, which writes via `putLong` identical to the LongType
-    // case. This test confirms the dispatch wiring stays intact when the SQL target is a
-    // long-decimal rather than LongType.
+    // Parquet caps INT32 DECIMAL precision at 9 (max digits in int32), so the source is
+    // DECIMAL(9, 0); the Spark target DecimalType(15, 0) is a long-decimal (precision in
+    // (9, 18]). The factory routes this through `canReadAsLongDecimal` to
+    // IntegerToLongUpdater, which writes via `putLong` exactly like the LongType case.
+    // This test confirms the dispatch wiring stays intact for long-decimal targets.
     val desc = int32DecimalDescriptor(precision = 9, scale = 0)
     val targetType = DataTypes.createDecimalType(15, 0)
     val input = Array(0, 1, 42, -7, Int.MinValue, Int.MaxValue, 1234567)
