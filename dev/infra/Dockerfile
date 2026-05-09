@@ -19,7 +19,7 @@
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:focal-20221019
 
-ENV FULL_REFRESH_DATE 20221118
+ENV FULL_REFRESH_DATE 20260510
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -47,7 +47,7 @@ RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' >> /et
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/'
-RUN apt-get update && $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev
+RUN apt-get update && $APT_INSTALL r-base libcurl4-openssl-dev qpdf libssl-dev zlib1g-dev libuv1-dev
 RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'e1071', 'survival', 'arrow', 'roxygen2', 'xml2'), repos='https://cloud.r-project.org/')"
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
@@ -64,7 +64,7 @@ RUN printf 'beniget==0.4.1\npyproject-metadata<0.9.0\n' > /tmp/pypy-constraints.
     PIP_CONSTRAINT=/tmp/pypy-constraints.txt pypy3 -m pip install numpy scipy coverage matplotlib && \
     SETUPTOOLS_USE_DISTUTILS=stdlib pypy3 -m pip install 'pandas<=2.0.3' && \
     rm /tmp/pypy-constraints.txt
-RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
+RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting 'plotly<6.0' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
