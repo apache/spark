@@ -101,7 +101,10 @@ class InternalField:
 
     @staticmethod
     def from_struct_field(
-        struct_field: StructField, *, use_extension_dtypes: bool = False
+        struct_field: StructField,
+        *,
+        use_extension_dtypes: bool = False,
+        use_arrow_dtypes: bool = False,
     ) -> "InternalField":
         """
         Returns a new InternalField object created from the given StructField.
@@ -114,6 +117,8 @@ class InternalField:
             The StructField used to create a new InternalField object.
         use_extension_dtypes : bool
             If True, try to use the extension dtypes.
+        use_arrow_dtypes : bool
+            If True, try to use the pyarrow-backed dtypes.
 
         Returns
         -------
@@ -121,7 +126,9 @@ class InternalField:
         """
         return InternalField(
             dtype=spark_type_to_pandas_dtype(
-                struct_field.dataType, use_extension_dtypes=use_extension_dtypes
+                struct_field.dataType,
+                use_extension_dtypes=use_extension_dtypes,
+                use_arrow_dtypes=use_arrow_dtypes,
             ),
             struct_field=struct_field,
         )

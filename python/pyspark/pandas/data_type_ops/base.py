@@ -47,22 +47,15 @@ from pyspark.sql.types import (
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.typedef.typehints import (
-    extension_dtypes_available,
-    extension_float_dtypes_available,
     extension_object_dtypes_available,
     handle_dtype_as_extension_dtype,
+    is_pyarrow_backed_dtype,
     is_str_dtype,
     spark_type_to_pandas_dtype,
 )
 
-if extension_dtypes_available:
-    from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
-
-if extension_float_dtypes_available:
-    from pandas import Float32Dtype, Float64Dtype
-
 if extension_object_dtypes_available:
-    from pandas import BooleanDtype, StringDtype
+    from pandas import StringDtype
 
 
 def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = True) -> bool:
@@ -98,7 +91,9 @@ def transform_boolean_operand_to_numeric(
         assert spark_type, "spark_type must be provided if the operand is a boolean IndexOpsMixin"
         assert isinstance(spark_type, NumericType), "spark_type must be NumericType"
         dtype = spark_type_to_pandas_dtype(
-            spark_type, use_extension_dtypes=operand._internal.data_fields[0].is_extension_dtype
+            spark_type,
+            use_extension_dtypes=operand._internal.data_fields[0].is_extension_dtype,
+            use_arrow_dtypes=is_pyarrow_backed_dtype(operand.dtype),
         )
         return operand._with_new_scol(
             operand.spark.column.cast(spark_type),
@@ -284,17 +279,12 @@ class DataTypeOps(object, metaclass=ABCMeta):
         elif isinstance(spark_type, DecimalType):
             return object.__new__(DecimalOps)
         elif isinstance(spark_type, FractionalType):
-            if extension_float_dtypes_available and type(dtype) in [Float32Dtype, Float64Dtype]:
+            if handle_dtype_as_extension_dtype(dtype):
                 return object.__new__(FractionalExtensionOps)
             else:
                 return object.__new__(FractionalOps)
         elif isinstance(spark_type, IntegralType):
-            if extension_dtypes_available and type(dtype) in [
-                Int8Dtype,
-                Int16Dtype,
-                Int32Dtype,
-                Int64Dtype,
-            ]:
+            if handle_dtype_as_extension_dtype(dtype):
                 return object.__new__(IntegralExtensionOps)
             else:
                 return object.__new__(IntegralOps)
@@ -307,7 +297,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             else:
                 return object.__new__(StringOps)
         elif isinstance(spark_type, BooleanType):
-            if extension_object_dtypes_available and isinstance(dtype, BooleanDtype):
+            if handle_dtype_as_extension_dtype(dtype):
                 return object.__new__(BooleanExtensionOps)
             else:
                 return object.__new__(BooleanOps)
@@ -427,7 +417,22 @@ class DataTypeOps(object, metaclass=ABCMeta):
         from pyspark.pandas.base import IndexOpsMixin
 
         if _should_return_all_false(left, right):
-            left_scol = left._with_new_scol(F.lit(False))
+            use_extension_dtypes = handle_dtype_as_extension_dtype(left.dtype) or (
+                isinstance(right, IndexOpsMixin) and handle_dtype_as_extension_dtype(right.dtype)
+            )
+            use_arrow_dtypes = is_pyarrow_backed_dtype(left.dtype) or (
+                isinstance(right, IndexOpsMixin) and is_pyarrow_backed_dtype(right.dtype)
+            )
+            field = left._internal.data_fields[0].copy(
+                dtype=spark_type_to_pandas_dtype(
+                    BooleanType(),
+                    use_extension_dtypes=use_extension_dtypes,
+                    use_arrow_dtypes=use_arrow_dtypes,
+                ),
+                spark_type=BooleanType(),
+                nullable=False,
+            )
+            left_scol = left._with_new_scol(F.lit(False), field=field)
             if isinstance(right, IndexOpsMixin):
                 return left_scol.rename(None)  # type: ignore[attr-defined]
             else:
@@ -510,12 +515,20 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 index_spark_columns=index_spark_columns,
                 data_spark_columns=data_spark_columns,
                 index_fields=[
-                    InternalField.from_struct_field(index_field)
-                    for index_field in sdf_new.select(index_spark_columns).schema.fields
+                    InternalField.from_struct_field(
+                        index_field,
+                        use_extension_dtypes=field.is_extension_dtype,
+                        use_arrow_dtypes=is_pyarrow_backed_dtype(field.dtype),
+                    )
+                    for index_field, field in zip(
+                        sdf_new.select(index_spark_columns).schema.fields,
+                        left._internal.index_fields,
+                    )
                 ],
                 data_fields=[
                     InternalField.from_struct_field(
-                        sdf_new.select(data_spark_columns).schema.fields[0]
+                        sdf_new.select(data_spark_columns).schema.fields[0],
+                        use_arrow_dtypes=is_pyarrow_backed_dtype(left.dtype),
                     )
                 ],
             )
@@ -531,7 +544,22 @@ class DataTypeOps(object, metaclass=ABCMeta):
         _sanitize_list_like(right)
 
         if _should_return_all_false(left, right):
-            left_scol = left._with_new_scol(F.lit(True))
+            use_extension_dtypes = handle_dtype_as_extension_dtype(left.dtype) or (
+                isinstance(right, IndexOpsMixin) and handle_dtype_as_extension_dtype(right.dtype)
+            )
+            use_arrow_dtypes = is_pyarrow_backed_dtype(left.dtype) or (
+                isinstance(right, IndexOpsMixin) and is_pyarrow_backed_dtype(right.dtype)
+            )
+            field = left._internal.data_fields[0].copy(
+                dtype=spark_type_to_pandas_dtype(
+                    BooleanType(),
+                    use_extension_dtypes=use_extension_dtypes,
+                    use_arrow_dtypes=use_arrow_dtypes,
+                ),
+                spark_type=BooleanType(),
+                nullable=False,
+            )
+            left_scol = left._with_new_scol(F.lit(True), field=field)
             if isinstance(right, IndexOpsMixin):
                 return left_scol.rename(None)  # type: ignore[attr-defined]
             else:

@@ -22,10 +22,14 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_arrow_dtypes_available,
+    extension_object_dtypes_available,
+)
 
 if extension_object_dtypes_available:
     from pandas import StringDtype
@@ -348,6 +352,29 @@ class StringExtensionOpsTestsMixin:
                 self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
             )
             self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+
+    @unittest.skipIf(
+        not extension_arrow_dtypes_available
+        or LooseVersion(pd.__version__) < LooseVersion("3.0.0"),
+        "PyArrow-backed string dtype support requires pandas 3 and pyarrow",
+    )
+    def test_pyarrow_backed_string_comparisons(self):
+        import pyarrow as pa
+
+        pser = pd.Series(["x", "y", "z", None], dtype="string")
+        other_pser = pd.Series([None, "z", "y", "x"], dtype="string")
+        psser = ps.from_pandas(pser)
+        other_psser = ps.from_pandas(other_pser)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            expected = (pser == other_pser) | (pser == pser)
+            actual = ((psser == other_psser) | (psser == psser)).sort_index().to_pandas()
+
+        self.assertIsInstance(expected.dtype, pd.ArrowDtype)
+        self.assertEqual(expected.dtype.pyarrow_dtype, pa.bool_())
+        self.assertIsInstance(actual.dtype, pd.ArrowDtype)
+        self.assertEqual(actual.dtype.pyarrow_dtype, pa.bool_())
+        self.assert_eq(expected, actual)
 
 
 class StringExtensionOpsTests(

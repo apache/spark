@@ -57,10 +57,18 @@ try:
     except ImportError:
         extension_float_dtypes_available = False
 
+    try:
+        from pandas import ArrowDtype
+
+        extension_arrow_dtypes_available = True
+    except ImportError:
+        extension_arrow_dtypes_available = False
+
 except ImportError:
     extension_dtypes_available = False
     extension_object_dtypes_available = False
     extension_float_dtypes_available = False
+    extension_arrow_dtypes_available = False
     extension_dtypes = ()
 
 import pyarrow as pa
@@ -246,6 +254,24 @@ def as_spark_type(
                 return types.FloatType()
             elif isinstance(tpe, Float64Dtype) or (isinstance(tpe, str) and tpe == "Float64"):
                 return types.DoubleType()
+        if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+            pyarrow_type = tpe.pyarrow_dtype
+            if pa.types.is_string(pyarrow_type) or pa.types.is_large_string(pyarrow_type):
+                return types.StringType()
+            elif pa.types.is_boolean(pyarrow_type):
+                return types.BooleanType()
+            elif pa.types.is_int8(pyarrow_type):
+                return types.ByteType()
+            elif pa.types.is_int16(pyarrow_type):
+                return types.ShortType()
+            elif pa.types.is_int32(pyarrow_type):
+                return types.IntegerType()
+            elif pa.types.is_int64(pyarrow_type):
+                return types.LongType()
+            elif pa.types.is_float32(pyarrow_type):
+                return types.FloatType()
+            elif pa.types.is_float64(pyarrow_type):
+                return types.DoubleType()
 
     if raise_error:
         raise TypeError("Type %s was not understood." % tpe)
@@ -254,9 +280,28 @@ def as_spark_type(
 
 
 def spark_type_to_pandas_dtype(
-    spark_type: types.DataType, *, use_extension_dtypes: bool = False
+    spark_type: types.DataType,
+    *,
+    use_extension_dtypes: bool = False,
+    use_arrow_dtypes: bool = False,
 ) -> Dtype:
     """Return the given Spark DataType to pandas dtype."""
+
+    if use_arrow_dtypes and extension_arrow_dtypes_available:
+        if isinstance(spark_type, types.BooleanType):
+            return ArrowDtype(pa.bool_())
+        elif isinstance(spark_type, types.ByteType):
+            return ArrowDtype(pa.int8())
+        elif isinstance(spark_type, types.ShortType):
+            return ArrowDtype(pa.int16())
+        elif isinstance(spark_type, types.IntegerType):
+            return ArrowDtype(pa.int32())
+        elif isinstance(spark_type, types.LongType):
+            return ArrowDtype(pa.int64())
+        elif isinstance(spark_type, types.FloatType):
+            return ArrowDtype(pa.float32())
+        elif isinstance(spark_type, types.DoubleType):
+            return ArrowDtype(pa.float64())
 
     if use_extension_dtypes and extension_dtypes_available:
         # IntegralType
@@ -329,14 +374,31 @@ def spark_type_to_pandas_dtype(
 def is_str_dtype(tpe: Dtype) -> bool:
     if LooseVersion(pd.__version__) < "3.0.0":
         return False
+    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        pyarrow_type = tpe.pyarrow_dtype
+        if pa.types.is_string(pyarrow_type) or pa.types.is_large_string(pyarrow_type):
+            return True
     if extension_object_dtypes_available:
         return isinstance(tpe, StringDtype) and tpe.na_value is np.nan
+    return False
+
+
+def is_pyarrow_backed_dtype(tpe: Dtype) -> bool:
+    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        return True
+
+    if extension_object_dtypes_available and isinstance(tpe, StringDtype):
+        storage = getattr(tpe, "storage", None)
+        return isinstance(storage, str) and storage.startswith("pyarrow") and tpe.na_value is pd.NA
+
     return False
 
 
 def handle_dtype_as_extension_dtype(tpe: Dtype) -> bool:
     if is_str_dtype(tpe):
         return False
+    if extension_arrow_dtypes_available and isinstance(tpe, ArrowDtype):
+        return True
     else:
         return isinstance(tpe, extension_dtypes)
 

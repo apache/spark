@@ -54,7 +54,7 @@ from pyspark.pandas._typing import (
     Name,
     DataFrameOrSeries,
 )
-from pyspark.pandas.typedef.typehints import as_spark_type
+from pyspark.pandas.typedef.typehints import as_spark_type, is_pyarrow_backed_dtype
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes.base import Index
@@ -218,6 +218,7 @@ def combine_frames(
         # If the same named index is found, that's used.
         index_column_names = []
         index_use_extension_dtypes = []
+        index_use_arrow_dtypes = []
         for (
             i,
             ((this_column, this_name, this_field), (that_column, that_name, that_field)),
@@ -234,6 +235,9 @@ def combine_frames(
                 index_column_names.append(column_name)
                 index_use_extension_dtypes.append(
                     any(field.is_extension_dtype for field in [this_field, that_field])
+                )
+                index_use_arrow_dtypes.append(
+                    any(is_pyarrow_backed_dtype(field.dtype) for field in [this_field, that_field])
                 )
                 merged_index_scols.append(
                     F.when(this_scol.isNotNull(), this_scol).otherwise(that_scol).alias(column_name)
@@ -275,14 +279,22 @@ def combine_frames(
         schema = joined_df.select(*index_spark_columns, *new_data_columns).schema
 
         index_fields = [
-            InternalField.from_struct_field(struct_field, use_extension_dtypes=use_extension_dtypes)
-            for struct_field, use_extension_dtypes in zip(
-                schema.fields[: len(index_spark_columns)], index_use_extension_dtypes
+            InternalField.from_struct_field(
+                struct_field,
+                use_extension_dtypes=use_extension_dtypes,
+                use_arrow_dtypes=use_arrow_dtypes,
+            )
+            for struct_field, use_extension_dtypes, use_arrow_dtypes in zip(
+                schema.fields[: len(index_spark_columns)],
+                index_use_extension_dtypes,
+                index_use_arrow_dtypes,
             )
         ]
         data_fields = [
             InternalField.from_struct_field(
-                struct_field, use_extension_dtypes=field.is_extension_dtype
+                struct_field,
+                use_extension_dtypes=field.is_extension_dtype,
+                use_arrow_dtypes=is_pyarrow_backed_dtype(field.dtype),
             )
             for struct_field, field in zip(
                 schema.fields[len(index_spark_columns) :],
