@@ -71,10 +71,21 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * </ul>
  * <p>
  * Streaming reads support carry-over removal, update detection, and net change
- * computation. Net change collapses are kept in the state store keyed by row identity;
- * row identities only touched in the latest observed commit are held back until either a
- * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
- * past them, or the source terminates.
+ * computation. Two streaming-specific behaviors to be aware of:
+ * <ul>
+ *   <li><b>Output is delayed by one commit.</b> When a micro-batch ingests a
+ *       commit, that commit's output rows are buffered and not emitted in the
+ *       same batch. They are emitted by the next micro-batch -- the one that
+ *       ingests the following commit. The last commit's output is emitted
+ *       when the source terminates.</li>
+ *   <li><b>netChanges only merges changes that are buffered together.</b> For
+ *       a typical CDC source that produces at most one change per row per
+ *       commit, only one commit's changes are buffered at a time per row, so
+ *       the streaming output is the same as {@code computeUpdates}. Multiple
+ *       commits' changes are merged only when those commits touch the same
+ *       row before the older one's output has been emitted. For full-range
+ *       collapse, use a batch read.</li>
+ * </ul>
  * <p>
  * <b>Pushdown contract.</b> When any post-processing pass applies (carry-over
  * removal, update detection, or netChanges), Spark only pushes predicates
