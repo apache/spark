@@ -154,7 +154,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING COLLATE UTF8_BINARY,",
+        "b STRING,",
         "ts TIMESTAMP)",
         defaultUsing,
         "PARTITIONED BY (bucket(4, a), bucket(8, b), years(ts))"
