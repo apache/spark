@@ -1974,7 +1974,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Add a [[WithWindowDefinition]] operator to a logical plan.
+   * Add a [[WithWindowDefinition]] operator to a logical plan, or for pipe SQL, substitute
+   * [[UnresolvedWindowExpression]]s with [[WindowExpression]]s directly.
    */
   private def withWindowClause(
       ctx: WindowClauseContext,
@@ -2012,7 +2013,20 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
-    WithWindowDefinition(windowMapView.map(identity), query, forPipeSQL)
+    val windowDefinitions = windowMapView.map(identity)
+    if (forPipeSQL) {
+      // For pipe SQL, substitute window references directly. Each pipe operator's WINDOW clause
+      // is scoped to that operator only, and the definitions and expressions are in the same
+      // grammar rule, so we can resolve them here without a WithWindowDefinition wrapper.
+      query.transformExpressions {
+        case UnresolvedWindowExpression(child, WindowSpecReference(windowName)) =>
+          val spec = windowDefinitions.getOrElse(windowName,
+            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
+          WindowExpression(child, spec)
+      }
+    } else {
+      WithWindowDefinition(windowDefinitions, query)
+    }
   }
 
   /**
@@ -2362,41 +2376,83 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
 
-      // Resolve the join type and join condition
-      val (joinType, condition) = Option(ctx.joinCriteria) match {
-        case Some(c) if c.USING != null =>
-          if (ctx.LATERAL != null) {
-            throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
-          }
-          (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
-        case Some(c) if c.booleanExpression != null =>
-          (baseJoinType, Option(expression(c.booleanExpression)))
-        case Some(c) =>
-          throw SparkException.internalError(s"Unimplemented joinCriteria: $c")
-        case None if ctx.NATURAL != null =>
-          if (ctx.LATERAL != null) {
-            throw QueryParsingErrors.incompatibleJoinTypesError(
-              joinType1 = ctx.LATERAL.toString, joinType2 = ctx.NATURAL.toString, ctx = ctx
-            )
-          }
-          if (baseJoinType == Cross) {
-            throw QueryParsingErrors.incompatibleJoinTypesError(
-              joinType1 = ctx.NATURAL.toString, joinType2 = baseJoinType.toString, ctx = ctx
-            )
-          }
-          (NaturalJoin(baseJoinType), None)
-        case None =>
-          (baseJoinType, None)
-      }
-      if (ctx.LATERAL != null) {
-        if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
-          throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
-        }
-        LateralJoin(base, LateralSubquery(plan(ctx.right)), joinType, condition)
+      if (ctx.nearestByClause != null) {
+        withNearestByJoin(ctx, base, baseJoinType)
       } else {
-        Join(base, plan(ctx.right), joinType, condition, JoinHint.NONE)
+        // Resolve the join type and join condition
+        val (joinType, condition) = Option(ctx.joinCriteria) match {
+          case Some(c) if c.USING != null =>
+            if (ctx.LATERAL != null) {
+              throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
+            }
+            (UsingJoin(baseJoinType, visitIdentifierList(c.identifierList)), None)
+          case Some(c) if c.booleanExpression != null =>
+            (baseJoinType, Option(expression(c.booleanExpression)))
+          case Some(c) =>
+            throw SparkException.internalError(s"Unimplemented joinCriteria: $c")
+          case None if ctx.NATURAL != null =>
+            if (ctx.LATERAL != null) {
+              throw QueryParsingErrors.incompatibleJoinTypesError(
+                joinType1 = ctx.LATERAL.toString, joinType2 = ctx.NATURAL.toString, ctx = ctx
+              )
+            }
+            if (baseJoinType == Cross) {
+              throw QueryParsingErrors.incompatibleJoinTypesError(
+                joinType1 = ctx.NATURAL.toString, joinType2 = baseJoinType.toString, ctx = ctx
+              )
+            }
+            (NaturalJoin(baseJoinType), None)
+          case None =>
+            (baseJoinType, None)
+        }
+        if (ctx.LATERAL != null) {
+          if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
+            throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
+          }
+          LateralJoin(base, LateralSubquery(plan(ctx.right)), joinType, condition)
+        } else {
+          Join(base, plan(ctx.right), joinType, condition, JoinHint.NONE)
+        }
       }
     }
+  }
+
+  /**
+   * Build a [[NearestByJoin]] from the parsed `NEAREST BY` clause attached to a join relation.
+   * Validates that the clause is not combined with `LATERAL` and that the base join type is one
+   * of the supported types (`INNER` or `LEFT OUTER`), parses `num_results` (with bounds checks),
+   * the direction (`DISTANCE` / `SIMILARITY`), and the ranking expression.
+   */
+  private def withNearestByJoin(
+      ctx: JoinRelationContext,
+      base: LogicalPlan,
+      baseJoinType: JoinType): NearestByJoin = {
+    if (ctx.LATERAL != null) {
+      throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
+    }
+    if (!Seq(Inner, LeftOuter).contains(baseJoinType)) {
+      throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
+        ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
+    }
+    val clause = ctx.nearestByClause
+    val approx = clause.APPROX != null
+    val numResults = Option(clause.num).map { n =>
+      // Guard against literals that overflow Long.
+      val value = try n.getText.toLong catch {
+        case _: NumberFormatException =>
+          throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
+            ctx, n.getText, NearestByJoin.MaxNumResults)
+      }
+      if (value < 1 || value > NearestByJoin.MaxNumResults) {
+        throw QueryParsingErrors.nearestByJoinNumResultsOutOfRangeError(
+          ctx, value.toString, NearestByJoin.MaxNumResults)
+      }
+      value.toInt
+    }.getOrElse(1)
+    val direction = if (clause.DISTANCE != null) NearestByDistance else NearestBySimilarity
+    val rankingExpr = expression(clause.expression)
+    NearestByJoin(
+      base, plan(ctx.right), baseJoinType, approx, numResults, rankingExpr, direction)
   }
 
   /**
@@ -7023,11 +7079,13 @@ class AstBuilder extends DataTypeAstBuilder
       dataTypeOpt.map { dt => default.copy(child = Cast(default.child, dt)) }.getOrElse(default)
     }
     CreateVariable(
-      ctx.identifierReferences.asScala.map (
-        identifierReference => {
-          withIdentClause(identifierReference, UnresolvedIdentifier(_))
-        }
-      ).toSeq,
+      ctx.identifierReferences.asScala.map { identifierReference =>
+        // Give each `UnresolvedIdentifier` its own origin pointing at the variable name
+        // fragment so analyzer-time errors (e.g. UNRESOLVED_VARIABLE) can highlight just
+        // that identifier rather than the whole `DECLARE ...` statement.
+        withIdentClause(identifierReference, parts =>
+          withOrigin(identifierReference) { UnresolvedIdentifier(parts) })
+      }.toSeq,
       defaultExpression,
       ctx.REPLACE() != null
     )
@@ -7043,7 +7101,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
     DropVariable(
-      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      withIdentClause(ctx.identifierReference(), parts =>
+        withOrigin(ctx.identifierReference()) { UnresolvedIdentifier(parts) }),
       ctx.EXISTS() != null
     )
   }
@@ -7168,7 +7227,7 @@ class AstBuilder extends DataTypeAstBuilder
       // The SET variable source is a query
       val variables = multipartIdentifierList.multipartIdentifier.asScala.map { variableIdent =>
         val varName = visitMultipartIdentifier(variableIdent)
-        UnresolvedAttribute(varName)
+        withOrigin(variableIdent) { UnresolvedAttribute(varName) }
       }.toSeq
       SetVariable(variables, visitQuery(query))
     } else {
@@ -7180,7 +7239,7 @@ class AstBuilder extends DataTypeAstBuilder
           case n: NamedExpression => n
           case e => Alias(e, varIdent.last)()
         }
-        (UnresolvedAttribute(varIdent), varNamedExpr)
+        (withOrigin(assign.key) { UnresolvedAttribute(varIdent) }, varNamedExpr)
       }.toSeq.unzip
       SetVariable(variables, Project(values, OneRowRelation()))
     }

@@ -139,6 +139,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .add("s", "string")
       .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(tableType)
+    // Mockito returns false for unstubbed Boolean methods, so analyzer code paths that
+    // dispatch through `CatalogTable.isViewLike` (e.g. `Analyzer.lookupTableOrView`'s v1
+    // session-catalog branch) would misclassify a mocked VIEW fixture as a table. Stub
+    // the method to compute from the just-stubbed `tableType` so any view-like type
+    // (VIEW today, METRIC_VIEW or future kinds) resolves correctly.
+    when(t.isViewLike).thenReturn(CatalogTable.isViewLike(tableType))
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
@@ -146,6 +152,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.properties).thenReturn(Map.empty)
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
+    if (tableType == CatalogTableType.VIEW) {
+      // Stub the view-only fields that resolution reads through `V1ViewInfo.builderFrom`.
+      // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
+      // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
+      when(t.viewText).thenReturn(None)
+      when(t.viewCatalogAndNamespace).thenReturn(Seq.empty)
+      when(t.viewSQLConfigs).thenReturn(Map.empty)
+      when(t.viewQueryColumnNames).thenReturn(Seq.empty)
+    }
     V1Table(t)
   }
 
@@ -228,6 +243,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .thenReturn(defaultPath)
     when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
       .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -253,6 +271,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       any[String], any[Seq[String]], any[String], any[Seq[String]]))
       .thenReturn(defaultPath2)
     when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
       .thenReturn(defaultPath2)
     manager
   }

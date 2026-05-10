@@ -526,9 +526,15 @@ case class HashAggregateExec(
       finishRegularHashMap
     }
 
+    // `partitionIndex` is passed as a parameter so any bare `partitionIndex`
+    // reference in the child's produce resolves to the local parameter, not
+    // the protected `BufferedRowIterator.partitionIndex` field. When
+    // `addNewFunction` spills this helper into a nested class (as can happen
+    // once the outer class passes the code-size threshold), the bare field
+    // reference fails with `IllegalAccessError`.
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
-         |private void $doAgg() throws java.io.IOException {
+         |private void $doAgg(int partitionIndex) throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          |  $finishHashMap
          |}
@@ -615,7 +621,7 @@ case class HashAggregateExec(
        |  $addHookToCloseFastHashMap
        |  $hashMapTerm = $thisPlan.createHashMap();
        |  long $beforeAgg = System.nanoTime();
-       |  $doAggFuncName();
+       |  $doAggFuncName(partitionIndex);
        |  $aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
        |}
        |// output the result

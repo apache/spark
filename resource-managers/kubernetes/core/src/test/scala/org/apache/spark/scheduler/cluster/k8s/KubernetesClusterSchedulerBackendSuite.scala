@@ -160,6 +160,10 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(configMapResource).create()
   }
 
+  test("SPARK-56684: kubernetesClient is exposed within the k8s package") {
+    assert(schedulerBackendUnderTest.kubernetesClient eq kubernetesClient)
+  }
+
   test("Stop all components") {
     when(podsWithNamespace.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)

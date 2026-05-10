@@ -24,6 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
@@ -629,6 +630,23 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.head.contains("`metadata`.`value`.`timestamp` BIGINT has been added"))
   }
 
+  test("validateColumnIds - multiple errors") {
+    val originalCols = Seq(
+      colWithId("salary", IntegerType, nullable = true, id = "id-1"),
+      colWithId("bonus", IntegerType, nullable = true, id = "id-2"))
+    val currentCols = Array(
+      colWithId("salary", IntegerType, nullable = true, id = "id-100"),
+      colWithId("bonus", IntegerType, nullable = true, id = "id-200"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = V2TableUtil.validateColumnIds(
+      table = table,
+      originalCapturedCols = originalCols)
+    assert(errors == Seq(
+      "`salary` column ID has changed from id-1 to id-100",
+      "`bonus` column ID has changed from id-2 to id-200"))
+  }
+
   // simple table without metadata column support
   private case class TestTable(
       override val name: String,
@@ -675,6 +693,23 @@ class V2TableUtilSuite extends SparkFunSuite {
 
   private def col(name: String, dataType: DataType, nullable: Boolean): Column = {
     Column.create(name, dataType, nullable)
+  }
+
+  private def colWithId(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      id: String): Column = {
+    ColumnImpl(
+      name = name,
+      dataType = dataType,
+      nullable = nullable,
+      comment = null,
+      defaultValue = null,
+      generationExpression = null,
+      identityColumnSpec = null,
+      metadataInJSON = null,
+      id = id)
   }
 
   private def metaCol(

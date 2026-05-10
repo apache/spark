@@ -47,6 +47,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   private val collationNonPreservingSources = Seq("orc", "csv", "json", "text")
   private val allFileBasedDataSources = collationPreservingSources ++  collationNonPreservingSources
   private val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
+  private val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
 
   @inline
   private def isSortMergeForced: Boolean = {
@@ -2737,5 +2738,398 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         |  FROM range(3)
         |)""".stripMargin
     checkAnswer(sql(q), Seq(Row(1L), Row(1L), Row(0L)))
+  }
+
+  test("execute immediate parameter with explicit COLLATE has implicit strength") {
+    collations.foreach { collation =>
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COLLATION(? || "world" COLLATE $collation)'
+             | USING 'hello' COLLATE UNICODE""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COLLATION(? || "world" COLLATE $collation)'
+             | USING 'hello' COLLATE UTF8_LCASE""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE 'SELECT ? = "HELLO" COLLATE $collation'
+             | USING 'hello' COLLATE UTF8_LCASE""".stripMargin),
+        Row(collation == "UTF8_LCASE" || collation == "UNICODE_CI"))
+    }
+  }
+
+  test("execute immediate parameter without explicit COLLATE") {
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT COLLATION(? || "world")'
+          | USING 'hello'""".stripMargin),
+      Row(s"${fullyQualifiedPrefix}UTF8_BINARY"))
+
+    collations.foreach { collation =>
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COLLATION(? || "world" COLLATE $collation)'
+             | USING 'hello'""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+    }
+  }
+
+  test("execute immediate parameter implicit vs column collation") {
+    withTable("t") {
+      sql(
+        """CREATE TABLE t (
+          |  lcase_col STRING COLLATE UTF8_LCASE,
+          |  unicode_col STRING COLLATE UNICODE
+          |) USING parquet""".stripMargin)
+      sql("INSERT INTO t VALUES ('hello', 'hello')")
+
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE
+            | 'SELECT ? = lcase_col FROM t'
+            | USING 'hello' COLLATE UTF8_LCASE""".stripMargin),
+        Row(true))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """EXECUTE IMMEDIATE
+              | 'SELECT ? = unicode_col FROM t'
+              | USING 'hello' COLLATE UTF8_LCASE""".stripMargin)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(CAST(hello AS STRING COLLATE UTF8_LCASE) = unicode_col)\""),
+        queryContext = Array(
+          ExpectedContext("EXECUTE IMMEDIATE", "", 7, 21, "? = unicode_col")))
+    }
+  }
+
+  test("execute immediate complex type parameter collation and strength") {
+    withTable("t") {
+      sql(
+        """CREATE TABLE t (
+          |  lcase_col STRING COLLATE UTF8_LCASE,
+          |  unicode_col STRING COLLATE UNICODE
+          |) USING parquet""".stripMargin)
+      sql("INSERT INTO t VALUES ('hello', 'hello')")
+
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE
+            | 'SELECT ?[0] = lcase_col FROM t'
+            | USING ARRAY('hello' COLLATE UTF8_LCASE)""".stripMargin),
+        Row(true))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """EXECUTE IMMEDIATE
+              | 'SELECT ?[0] = unicode_col FROM t'
+              | USING ARRAY('hello' COLLATE UTF8_LCASE)""".stripMargin)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(array(hello)[0] = unicode_col)\""),
+        queryContext = Array(
+          ExpectedContext("EXECUTE IMMEDIATE", "", 7, 24, "?[0] = unicode_col")))
+
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE
+            | 'SELECT element_at(?, 1) = lcase_col FROM t'
+            | USING ARRAY('hello' COLLATE UTF8_LCASE)""".stripMargin),
+        Row(true))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """EXECUTE IMMEDIATE
+              | 'SELECT element_at(?, 1) = unicode_col FROM t'
+              | USING ARRAY('hello' COLLATE UTF8_LCASE)""".stripMargin)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(element_at(array(hello), 1) = unicode_col)\""),
+        queryContext = Array(
+          ExpectedContext("EXECUTE IMMEDIATE", "", 7, 36,
+            "element_at(?, 1) = unicode_col")))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT element_at(?, "key") = lcase_col FROM t'
+             | USING MAP('key', 'hello' COLLATE UTF8_LCASE)""".stripMargin),
+        Row(true))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""EXECUTE IMMEDIATE
+               | 'SELECT element_at(?, "key") = unicode_col FROM t'
+               | USING MAP('key', 'hello' COLLATE UTF8_LCASE)""".stripMargin)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(element_at(map(key, hello), key) = unicode_col)\""),
+        queryContext = Array(
+          ExpectedContext(
+            "EXECUTE IMMEDIATE", "", 7, 40,
+            """element_at(?, "key") = unicode_col""")))
+
+      checkAnswer(
+        sql(
+          """EXECUTE IMMEDIATE
+            | 'SELECT ?.f1 = lcase_col FROM t'
+            | USING NAMED_STRUCT('f1', 'hello' COLLATE UTF8_LCASE)""".stripMargin),
+        Row(true))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """EXECUTE IMMEDIATE
+              | 'SELECT ?.f1 = unicode_col FROM t'
+              | USING NAMED_STRUCT('f1', 'hello' COLLATE UTF8_LCASE)""".stripMargin)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(named_struct(f1, hello).f1 = unicode_col)\""),
+        queryContext = Array(
+          ExpectedContext("EXECUTE IMMEDIATE", "", 7, 24, "?.f1 = unicode_col")))
+    }
+  }
+
+  test("execute immediate complex type parameter with explicit COLLATE") {
+    collations.foreach { collation =>
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE 'SELECT COLLATION(?[0])'
+             | USING ARRAY('hello' COLLATE $collation)""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE 'SELECT COLLATION(element_at(?, "value"))'
+             | USING MAP('value', 'hello' COLLATE $collation)""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE 'SELECT COLLATION(?.f1)'
+             | USING NAMED_STRUCT('f1', 'hello' COLLATE $collation)""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+    }
+  }
+
+  test("execute immediate variable parameter preserves collation") {
+    collations.foreach { collation =>
+      withSessionVariable("v1") {
+        sql(s"DECLARE VARIABLE v1 STRING COLLATE $collation DEFAULT 'hello'")
+        checkAnswer(
+          sql("EXECUTE IMMEDIATE 'SELECT COLLATION(?)' USING v1"),
+          Row(s"$fullyQualifiedPrefix$collation"))
+      }
+    }
+  }
+
+  test("execute immediate variable parameter has implicit strength") {
+    collations.foreach { collation =>
+      withSessionVariable("v1") {
+        sql("DECLARE VARIABLE v1 STRING COLLATE UTF8_LCASE DEFAULT 'hello'")
+        checkAnswer(
+          sql(
+            s"""EXECUTE IMMEDIATE 'SELECT ? = "HELLO" COLLATE $collation'
+               | USING v1""".stripMargin),
+          Row(collation == "UTF8_LCASE" || collation == "UNICODE_CI"))
+      }
+    }
+  }
+
+  test("execute immediate variable parameter implicit vs column collation") {
+    withTable("t") {
+      sql(
+        """CREATE TABLE t (
+          |  lcase_col STRING COLLATE UTF8_LCASE,
+          |  unicode_col STRING COLLATE UNICODE
+          |) USING parquet""".stripMargin)
+      sql("INSERT INTO t VALUES ('hello', 'hello')")
+
+      withSessionVariable("v1") {
+        sql("DECLARE VARIABLE v1 STRING COLLATE UTF8_LCASE DEFAULT 'hello'")
+        checkAnswer(
+          sql("EXECUTE IMMEDIATE 'SELECT ? = lcase_col FROM t' USING v1"),
+          Row(true))
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("EXECUTE IMMEDIATE 'SELECT ? = unicode_col FROM t' USING v1")
+          },
+          condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+          parameters = Map("expr" ->
+            "\"(CAST(hello AS STRING COLLATE UTF8_LCASE) = unicode_col)\""),
+          queryContext = Array(
+            ExpectedContext("EXECUTE IMMEDIATE", "", 7, 21, "? = unicode_col")))
+      }
+    }
+  }
+
+  test("execute immediate two parameters with different collations") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """EXECUTE IMMEDIATE 'SELECT ? = ?'
+            | USING 'hello' COLLATE UTF8_LCASE, 'hello' COLLATE UNICODE""".stripMargin)
+      },
+      condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+      parameters = Map("expr" ->
+        "\"(CAST(hello AS STRING COLLATE UTF8_LCASE) = CAST(hello AS STRING COLLATE UNICODE))\""),
+      queryContext = Array(
+        ExpectedContext("EXECUTE IMMEDIATE", "", 7, 11, "? = ?")))
+
+    withSessionVariable("v1", "v2") {
+      sql("DECLARE VARIABLE v1 STRING COLLATE UTF8_LCASE DEFAULT 'hello'")
+      sql("DECLARE VARIABLE v2 STRING COLLATE UNICODE DEFAULT 'hello'")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("EXECUTE IMMEDIATE 'SELECT ? = ?' USING v1, v2")
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(CAST(hello AS STRING COLLATE UTF8_LCASE) = CAST(hello AS STRING COLLATE UNICODE))\""),
+        queryContext = Array(
+          ExpectedContext("EXECUTE IMMEDIATE", "", 7, 11, "? = ?")))
+    }
+
+    withSessionVariable("v1") {
+      sql("DECLARE VARIABLE v1 STRING COLLATE UNICODE DEFAULT 'hello'")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            """EXECUTE IMMEDIATE 'SELECT ? = ?'
+              | USING v1, 'hello' COLLATE UTF8_LCASE""".stripMargin)
+        },
+        condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+        parameters = Map("expr" ->
+          "\"(CAST(hello AS STRING COLLATE UNICODE) = CAST(hello AS STRING COLLATE UTF8_LCASE))\""),
+        queryContext = Array(
+          ExpectedContext("EXECUTE IMMEDIATE", "", 7, 11, "? = ?")))
+    }
+  }
+
+  test("execute immediate null parameter with collation") {
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT COLLATION(COALESCE(?, "hello"))'
+          | USING NULL""".stripMargin),
+      Row(s"${fullyQualifiedPrefix}UTF8_BINARY"))
+
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT COALESCE(?, "hello") = "hello"'
+          | USING NULL""".stripMargin),
+      Row(true))
+
+    withSessionVariable("v1") {
+      sql("DECLARE VARIABLE v1 STRING COLLATE UTF8_LCASE")
+      checkAnswer(
+        sql("EXECUTE IMMEDIATE 'SELECT ?, COLLATION(?)' USING v1, v1"),
+        Row(null, s"${fullyQualifiedPrefix}UTF8_LCASE"))
+    }
+
+    // Both COALESCE sides have default strength but different collations, so the result
+    // is the IndeterminateCollation, whose name is "null".
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT COLLATION(COALESCE(?, "hello"))'
+          | USING CAST(NULL AS STRING COLLATE UNICODE)""".stripMargin),
+      Row("null"))
+
+    withTable("t") {
+      sql(
+        """CREATE TABLE t (
+          |  lcase_col STRING COLLATE UTF8_LCASE,
+          |  unicode_col STRING COLLATE UNICODE
+          |) USING parquet""".stripMargin)
+      sql("INSERT INTO t VALUES ('hello', 'hello')")
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COALESCE(?, lcase_col) FROM t'
+             | USING CAST(NULL AS STRING COLLATE UTF8_LCASE)""".stripMargin),
+        Row("hello"))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COALESCE(?, unicode_col) FROM t'
+             | USING CAST(NULL AS STRING COLLATE UTF8_LCASE)""".stripMargin),
+        Row("hello"))
+
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COALESCE(?, unicode_col) FROM t'
+             | USING NULL""".stripMargin),
+        Row("hello"))
+    }
+  }
+
+  test("execute immediate named parameter collation strength") {
+    collations.foreach { collation =>
+      checkAnswer(
+        sql(
+          s"""EXECUTE IMMEDIATE
+             | 'SELECT COLLATION(:p || "world" COLLATE $collation)'
+             | USING 'hello' COLLATE UNICODE AS p""".stripMargin),
+        Row(s"$fullyQualifiedPrefix$collation"))
+    }
+
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE
+          | 'SELECT :p = "HELLO" COLLATE UTF8_LCASE'
+          | USING 'hello' COLLATE UNICODE AS p""".stripMargin),
+      Row(true))
+  }
+
+  test("parameterized query vs column collation") {
+    withTable("t") {
+      sql(
+        """CREATE TABLE t (
+          |  binary_col STRING,
+          |  unicode_col STRING COLLATE UNICODE
+          |) USING parquet""".stripMargin)
+      sql("INSERT INTO t VALUES ('hello', 'hello')")
+
+      checkAnswer(
+        spark.sql(
+          "SELECT :p = binary_col FROM t",
+          Map("p" -> "hello")),
+        Row(true))
+
+      checkAnswer(
+        spark.sql(
+          "SELECT :p = unicode_col FROM t",
+          Map("p" -> "hello")),
+        Row(true))
+    }
+  }
+
+  test("parameterized query collation strength") {
+    checkAnswer(
+      spark.sql(
+        "SELECT :p = 'HELLO', :p = 'HELLO' COLLATE UTF8_LCASE",
+        Map("p" -> "hello")),
+      Row(false, true))
   }
 }

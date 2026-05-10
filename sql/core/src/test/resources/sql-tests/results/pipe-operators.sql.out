@@ -3480,7 +3480,7 @@ table windowTestData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",
@@ -3564,7 +3564,7 @@ table windowTestData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "MISSING_WINDOW_SPECIFICATION",
   "sqlState" : "42P20",

@@ -376,9 +376,9 @@ class PlanParserSuite extends AnalysisTest {
     val limitWindowClauses = Seq(
       ("", (p: LogicalPlan) => p),
       (" limit 10", (p: LogicalPlan) => p.limit(10)),
-      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p, forPipeSQL = false)),
+      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p)),
       (" window w1 as () limit 10", (p: LogicalPlan) =>
-        WithWindowDefinition(ws, p, forPipeSQL = false).limit(10))
+        WithWindowDefinition(ws, p).limit(10))
     )
 
     val orderSortDistrClusterClauses = Seq(
@@ -529,7 +529,7 @@ class PlanParserSuite extends AnalysisTest {
          |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
-      WithWindowDefinition(ws1, plan, forPipeSQL = false))
+      WithWindowDefinition(ws1, plan))
   }
 
   test("lateral view") {
@@ -824,6 +824,145 @@ class PlanParserSuite extends AnalysisTest {
         LateralSubquery(table("c").select(star()).as("cc")),
         Inner, None).select(star())
     )
+  }
+
+  test("nearest-by join") {
+    assertEqual(
+      "select * from t join u approx nearest 5 by similarity t.a + u.a",
+      NearestByJoin(
+        table("t"),
+        table("u"),
+        Inner,
+        approx = true,
+        numResults = 5,
+        rankingExpression = $"t.a" + $"u.a",
+        direction = NearestBySimilarity).select(star()))
+
+    assertEqual(
+      "select * from t inner join u exact nearest 3 by distance t.a - u.a",
+      NearestByJoin(
+        table("t"),
+        table("u"),
+        Inner,
+        approx = false,
+        numResults = 3,
+        rankingExpression = $"t.a" - $"u.a",
+        direction = NearestByDistance).select(star()))
+
+    assertEqual(
+      "select * from t left outer join u approx nearest by similarity t.a + u.a",
+      NearestByJoin(
+        table("t"),
+        table("u"),
+        LeftOuter,
+        approx = true,
+        numResults = 1,
+        rankingExpression = $"t.a" + $"u.a",
+        direction = NearestBySimilarity).select(star()))
+
+    // Unsupported join type.
+    val sqlRightOuter =
+      "select * from t right outer join u approx nearest 1 by similarity t.a"
+    checkError(
+      exception = parseException(sqlRightOuter),
+      condition = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "RIGHT OUTER",
+        "supported" -> "'INNER', 'LEFT OUTER'"),
+      context = ExpectedContext(
+        fragment = "right outer join u approx nearest 1 by similarity t.a",
+        start = 16,
+        stop = 68))
+
+    val sqlFullOuter =
+      "select * from t full outer join u approx nearest 1 by similarity t.a"
+    checkError(
+      exception = parseException(sqlFullOuter),
+      condition = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "FULL OUTER",
+        "supported" -> "'INNER', 'LEFT OUTER'"),
+      context = ExpectedContext(
+        fragment = "full outer join u approx nearest 1 by similarity t.a",
+        start = 16,
+        stop = 67))
+
+    val sqlCross =
+      "select * from t cross join u approx nearest 1 by similarity t.a"
+    checkError(
+      exception = parseException(sqlCross),
+      condition = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "CROSS",
+        "supported" -> "'INNER', 'LEFT OUTER'"),
+      context = ExpectedContext(
+        fragment = "cross join u approx nearest 1 by similarity t.a",
+        start = 16,
+        stop = 62))
+
+    // LATERAL + NEAREST BY not allowed.
+    val sqlLateral =
+      "select * from t join lateral (select * from u) uu approx nearest 1 by similarity 1"
+    checkError(
+      exception = parseException(sqlLateral),
+      condition = "UNSUPPORTED_FEATURE.LATERAL_JOIN_NEAREST_BY",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "join lateral (select * from u) uu approx nearest 1 by similarity 1",
+        start = 16,
+        stop = 81))
+
+    // num_results out of range.
+    val sqlTooSmall =
+      "select * from t join u approx nearest 0 by similarity t.a"
+    checkError(
+      exception = parseException(sqlTooSmall),
+      condition = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      parameters = Map("numResults" -> "0", "min" -> "1", "max" -> "100000"),
+      context = ExpectedContext(
+        fragment = "join u approx nearest 0 by similarity t.a",
+        start = 16,
+        stop = 56))
+
+    val sqlTooLarge =
+      "select * from t join u approx nearest 100001 by distance t.a"
+    checkError(
+      exception = parseException(sqlTooLarge),
+      condition = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      parameters = Map("numResults" -> "100001", "min" -> "1", "max" -> "100000"),
+      context = ExpectedContext(
+        fragment = "join u approx nearest 100001 by distance t.a",
+        start = 16,
+        stop = 59))
+
+    // Literal that overflows Long (>19 digits) should surface as the standard out-of-range
+    // error, not an unwrapped NumberFormatException.
+    val sqlOverflow =
+      "select * from t join u approx nearest 99999999999999999999 by distance t.a"
+    checkError(
+      exception = parseException(sqlOverflow),
+      condition = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      parameters = Map(
+        "numResults" -> "99999999999999999999",
+        "min" -> "1",
+        "max" -> "100000"),
+      context = ExpectedContext(
+        fragment = "join u approx nearest 99999999999999999999 by distance t.a",
+        start = 16,
+        stop = 73))
+  }
+
+  test("nearest-by keywords are non-reserved (usable as identifiers)") {
+    // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
+    // non-reserved so they can continue to be used as column or table identifiers.
+    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
+      // As a column identifier in the SELECT list.
+      parsePlan(s"select $kw from t")
+      // As a table identifier in the FROM clause.
+      parsePlan(s"select * from $kw")
+    }
+    // All five together in a single SELECT list.
+    parsePlan("select approx, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {

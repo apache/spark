@@ -916,23 +916,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def unresolvedVariableError(name: Seq[String], searchPath: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNRESOLVED_VARIABLE",
-      messageParameters = Map(
-        "variableName" -> toSQLId(name),
-        "searchPath" -> toSQLId(searchPath)))
-  }
-
   def unresolvedVariableError(
       name: Seq[String],
-      searchPath: Seq[String],
+      pathEntries: Seq[Seq[String]],
       origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_VARIABLE",
       messageParameters = Map(
         "variableName" -> toSQLId(name),
-        "searchPath" -> toSQLId(searchPath)),
+        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")),
       origin = origin)
   }
 
@@ -2242,7 +2234,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "currentTableId" -> currentTableId))
   }
 
-  def columnsChangedAfterAnalysis(
+  def columnIdMismatchAfterAnalysis(
+      tableName: String,
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
+  def columnsMissingOrAddedAfterAnalysis(
       tableName: String,
       errors: Seq[String]): Throwable = {
     new AnalysisException(
@@ -2816,6 +2818,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def invalidMetricViewYamlError(message: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_METRIC_VIEW_YAML",
+      messageParameters = Map("message" -> message),
+      cause = Some(cause))
+  }
+
   def noSuchStructFieldInGivenFieldsError(
       fieldName: String, fields: Array[StructField]): Throwable = {
     new AnalysisException(
@@ -3313,6 +3322,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(table)))
   }
 
+  def showCreateTableNotSupportedOnMetricViewError(table: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW",
+      messageParameters = Map("tableName" -> toSQLId(table)))
+  }
+
   def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
@@ -3673,6 +3688,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "createMode" -> toDSOption(createMode)))
   }
 
+  def schemaEvolutionNotSupportedForCreateTableWriteError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
+      messageParameters = Map.empty)
+  }
+
+  def schemaEvolutionNotSupportedForReplaceTableWriteError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+      messageParameters = Map.empty)
+  }
+
+  def schemaEvolutionNotSupportedForV1TableWriteError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
+      messageParameters = Map.empty)
+  }
+
   def partitionByDoesNotAllowedWhenUsingInsertIntoError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO",
@@ -3866,18 +3899,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       changelogName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
-  def cdcNetChangesNotYetSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.NET_CHANGES_NOT_YET_SUPPORTED",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
-  def cdcStreamingPostProcessingNotSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
       messageParameters = Map("changelogName" -> changelogName))
   }
 

@@ -654,53 +654,6 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         return "ArrowStreamAggPandasUDFSerializer"
 
 
-# Serializer for SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_PANDAS_ITER_UDF
-class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    def __init__(
-        self,
-        *,
-        timezone,
-        safecheck,
-        assign_cols_by_name,
-        prefer_int_ext_dtype,
-        int_to_decimal_coercion_enabled,
-    ):
-        super().__init__(
-            timezone=timezone,
-            safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
-            df_for_struct=False,
-            struct_in_pandas="dict",
-            ndarray_as_list=False,
-            prefer_int_ext_dtype=prefer_int_ext_dtype,
-            arrow_cast=True,
-            input_type=None,
-            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-        )
-
-    def load_stream(self, stream):
-        """
-        Deserialize Grouped ArrowRecordBatches and yield raw Iterator[pa.RecordBatch].
-        Each outer iterator element represents a group.
-        """
-        for batches in ArrowStreamGroupSerializer.load_stream(self, stream):
-            yield batches
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in batches:
-                pass
-
-    def dump_stream(self, iterator, stream):
-        """
-        Flatten the grouped iterator structure.
-        """
-        # Flatten: Iterator[Iterator[[(df, spark_type)]]] -> Iterator[[(df, spark_type)]]
-        flattened_iter = (batch for generator in iterator for batch in generator)
-        super().dump_stream(flattened_iter, stream)
-
-    def __repr__(self):
-        return "GroupPandasUDFSerializer"
-
-
 class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     """
     Serializes pyarrow.RecordBatch data with Arrow streaming format.

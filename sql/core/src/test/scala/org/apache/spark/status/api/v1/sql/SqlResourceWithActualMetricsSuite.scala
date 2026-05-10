@@ -30,7 +30,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.test.SharedSparkSession
@@ -42,7 +41,7 @@ case class Salary(personId: Int, salary: Double)
  * Sql Resource Public API Unit Tests running query and extracting the metrics.
  */
 class SqlResourceWithActualMetricsSuite
-  extends SharedSparkSession with SQLMetricsTestUtils with SQLHelper {
+  extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
 

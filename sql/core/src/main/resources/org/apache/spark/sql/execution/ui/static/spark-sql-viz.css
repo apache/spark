@@ -138,5 +138,38 @@ svg path.linked {
 }
 
 #plan-viz-graph {
-  overflow-x: auto;
+  position: relative;
+}
+
+#plan-viz-graph svg {
+  width: 100%;
+  height: 70vh;
+  max-height: 70vh;
+  display: block;
+  cursor: grab;
+  background-color: var(--bs-body-bg);
+  user-select: none;
+}
+
+#plan-viz-graph svg.grabbing {
+  cursor: grabbing;
+}
+
+/* Allow text selection inside HTML labels (detailed mode metrics tables) */
+#plan-viz-graph svg foreignObject,
+#plan-viz-graph svg foreignObject * {
+  user-select: text;
+}
+
+.plan-viz-zoom-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 10;
+}
+
+.plan-viz-zoom-toolbar #plan-viz-zoom-level {
+  display: inline-block;
+  min-width: 3.25rem;
+  font-variant-numeric: tabular-nums;
 }
