@@ -34,9 +34,10 @@ RUN echo 'deb https://mirrors.edge.kernel.org/ubuntu jammy main restricted unive
 
 RUN apt-get clean
 RUN apt-get update
-RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools
+RUN $APT_INSTALL software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools gnupg ca-certificates dirmngr
 # branch-3.5 tests use python3.8 and python3.9 explicitly; Jammy ships python3.10 by default,
 # so pull 3.8/3.9 from the deadsnakes PPA (same approach used by master for python3.9).
+# gnupg/ca-certificates/dirmngr must be installed first so add-apt-repository can import the PPA key.
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update
 RUN $APT_INSTALL python3.8 python3.8-distutils python3.9 python3.9-distutils
@@ -59,7 +60,7 @@ RUN mkdir -p /usr/local/pypy/pypy3.10 && \
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
-RUN $APT_INSTALL gnupg ca-certificates pandoc
+RUN $APT_INSTALL pandoc
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
 RUN gpg -a --export E084DAB9 | apt-key add -
