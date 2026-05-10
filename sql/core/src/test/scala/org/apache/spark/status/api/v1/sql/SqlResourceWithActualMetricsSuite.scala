@@ -215,6 +215,69 @@ class SqlResourceWithActualMetricsSuite
     }
   }
 
+  test("SPARK-56811: sqlTable groups sub-executions under their root execution") {
+    // CACHE TABLE produces a root execution plus an inner sub-execution that
+    // shares its rootExecutionId. This is the canonical case where the SQL
+    // listing should fold the sub row under the root rather than flattening it.
+    spark.sql("CREATE OR REPLACE TEMP VIEW spark_56811 AS SELECT id FROM RANGE(10)")
+      .collect()
+    spark.sql("CACHE TABLE spark_56811_cached AS SELECT * FROM spark_56811").collect()
+
+    eventually(timeout(10.seconds), interval(1.second)) {
+      val baseUrl = spark.sparkContext.ui.get.webUrl +
+        s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/sqlTable"
+
+      // Grouping ON: roots only, with subExecutions embedded on the root that
+      // owns a sub-execution.
+      val groupedUrl = new URI(
+        s"$baseUrl?start=0&length=100&draw=1&groupSubExecution=true").toURL
+      val (groupedCode, groupedOpt, _) = getContentAndCode(groupedUrl)
+      assert(groupedCode === HttpServletResponse.SC_OK)
+      val groupedJson = JsonMethods.parse(groupedOpt.get)
+      val groupedRecordsTotal = (groupedJson \ "recordsTotal").extract[Long]
+      val groupedRecordsFiltered = (groupedJson \ "recordsFiltered").extract[Long]
+      val groupedRows = (groupedJson \ "aaData").children
+      assert(groupedRecordsTotal === groupedRows.size,
+        "with no filter, recordsTotal should match returned root count")
+      assert(groupedRecordsFiltered === groupedRows.size,
+        "with no filter, recordsFiltered should match returned root count")
+      groupedRows.foreach { row =>
+        // Every row in grouped mode is a root: id == rootExecutionId.
+        val id = (row \ "id").extract[Long]
+        val rootId = (row \ "rootExecutionId").extract[Long]
+        assert(id === rootId, s"grouped row $id should be a root (root=$rootId)")
+      }
+      val rootsWithSubs = groupedRows.filter { row =>
+        (row \ "subExecutions").children.nonEmpty
+      }
+      assert(rootsWithSubs.nonEmpty,
+        "CACHE TABLE should produce at least one root with sub-executions")
+      rootsWithSubs.foreach { row =>
+        val rootId = (row \ "id").extract[Long]
+        (row \ "subExecutions").children.foreach { sub =>
+          assert((sub \ "rootExecutionId").extract[Long] === rootId,
+            "sub-execution should reference its parent root")
+          assert((sub \ "id").extract[Long] !== rootId,
+            "sub-execution must not have the same id as its root")
+        }
+      }
+
+      // Grouping OFF: flat list of every execution, with no embedded subs.
+      val flatUrl = new URI(
+        s"$baseUrl?start=0&length=100&draw=2&groupSubExecution=false").toURL
+      val (flatCode, flatOpt, _) = getContentAndCode(flatUrl)
+      assert(flatCode === HttpServletResponse.SC_OK)
+      val flatJson = JsonMethods.parse(flatOpt.get)
+      val flatRows = (flatJson \ "aaData").children
+      assert(flatRows.size > groupedRows.size,
+        "flat listing should contain at least one extra sub-execution row")
+      flatRows.foreach { row =>
+        assert((row \ "subExecutions").children.isEmpty,
+          "flat listing should not embed subExecutions")
+      }
+    }
+  }
+
   test("SPARK-56137: sqlList returns ISO date format in submissionTime") {
     withSQLConf(ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       spark.sql("SELECT 'date_format_test'").collect()
