@@ -60,7 +60,7 @@ RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='htt
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN printf 'beniget==0.4.1\npyproject-metadata<0.9.0\n' > /tmp/pypy-constraints.txt && \
+RUN printf 'beniget==0.4.1\npyproject-metadata==0.8.1\n' > /tmp/pypy-constraints.txt && \
     PIP_CONSTRAINT=/tmp/pypy-constraints.txt pypy3 -m pip install numpy scipy coverage matplotlib && \
     SETUPTOOLS_USE_DISTUTILS=stdlib pypy3 -m pip install 'pandas<=2.0.3' && \
     rm /tmp/pypy-constraints.txt
