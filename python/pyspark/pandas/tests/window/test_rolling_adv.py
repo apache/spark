@@ -32,6 +32,10 @@ class RollingAdvMixin(RollingTestingFuncMixin):
     def test_rolling_var(self):
         self._test_rolling_func("var")
 
+    def test_rolling_sem(self):
+        self._test_rolling_func("sem")
+        self._test_rolling_func(lambda x: x.sem(ddof=0), lambda x: x.sem(ddof=0))
+
     def test_rolling_skew(self):
         self._test_rolling_func("skew")
 
