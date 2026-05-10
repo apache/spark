@@ -68,7 +68,16 @@ RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='htt
 # See more in SPARK-39735
 ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
-RUN pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib
+# pypy3.8 lacks `ast.MatchStar` (a Python 3.10+ pattern-matching AST node),
+# so `beniget` fails with `AttributeError: module 'gast' has no attribute
+# 'MatchStar'` when pip builds scipy from source if a pre-0.5.3 `gast` is
+# resolved into the build-isolation overlay. Force gast>=0.5.3 (which defines
+# MatchStar as its own node class) via PIP_CONSTRAINT so the overlay pip picks
+# it up too.
+RUN echo 'gast>=0.5.3' > /tmp/pypy3-pip-constraints.txt && \
+    PIP_CONSTRAINT=/tmp/pypy3-pip-constraints.txt \
+        pypy3 -m pip install numpy 'pandas<=2.0.3' scipy coverage matplotlib && \
+    rm -f /tmp/pypy3-pip-constraints.txt
 RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting plotly>=4.8 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*'
 
 # Add Python deps for Spark Connect.
