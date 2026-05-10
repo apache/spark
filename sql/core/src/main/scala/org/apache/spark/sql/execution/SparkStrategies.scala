@@ -178,6 +178,143 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports both equi-joins and non-equi-joins.
    *     Supports only inner like joins.
    */
+  /**
+   * Plans AS-OF joins using a dedicated sort-merge operator when the
+   * conf is enabled.
+   */
+  object AsOfJoinSelection extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case j @ AsOfJoin(left, right, asOfCondition, condition, joinType,
+          orderExpression, _) if conf.sortMergeAsOfJoinEnabled =>
+        val (leftKeys, rightKeys, residual) = condition match {
+          case Some(cond) => extractEquiJoinKeys(cond, left, right)
+          case None => (Seq.empty[Expression], Seq.empty[Expression], None)
+        }
+        val (leftAsOf, rightAsOf) = extractAsOfExprs(
+          asOfCondition, orderExpression, left, right)
+
+        joins.SortMergeAsOfJoinExec(
+          leftKeys, rightKeys, leftAsOf, rightAsOf,
+          asOfCondition, orderExpression, joinType, residual,
+          planLater(left), planLater(right)) :: Nil
+      case _ => Nil
+    }
+
+    /**
+     * Extract equi-join key pairs and residual (non-equi) condition
+     * from a conjunction. Only EqualTo is treated as equi-key;
+     * EqualNullSafe is excluded because the Scanner does not implement
+     * null-safe comparison semantics.
+     */
+    private def extractEquiJoinKeys(
+        condition: Expression,
+        left: LogicalPlan,
+        right: LogicalPlan): (Seq[Expression], Seq[Expression], Option[Expression]) = {
+      val leftKeys =
+        new scala.collection.mutable.ArrayBuffer[Expression]()
+      val rightKeys =
+        new scala.collection.mutable.ArrayBuffer[Expression]()
+      val residuals =
+        new scala.collection.mutable.ArrayBuffer[Expression]()
+
+      flattenAnd(condition).foreach {
+        case EqualTo(l, r)
+            if l.references.subsetOf(left.outputSet) &&
+              r.references.subsetOf(right.outputSet) =>
+          leftKeys += l; rightKeys += r
+        case EqualTo(l, r)
+            if r.references.subsetOf(left.outputSet) &&
+              l.references.subsetOf(right.outputSet) =>
+          leftKeys += r; rightKeys += l
+        case other =>
+          residuals += other
+      }
+      val residual = residuals.reduceOption(And)
+      (leftKeys.toSeq, rightKeys.toSeq, residual)
+    }
+
+    private def flattenAnd(expr: Expression): Seq[Expression] = expr match {
+      case And(l, r) => flattenAnd(l) ++ flattenAnd(r)
+      case other => Seq(other)
+    }
+
+    private def extractAsOfExprs(
+        asOfCondition: Expression,
+        orderExpression: Expression,
+        left: LogicalPlan,
+        right: LogicalPlan): (Expression, Expression) = {
+      val leftAttrs = left.outputSet
+      val rightAttrs = right.outputSet
+
+      def find(expr: Expression): Option[(Expression, Expression)] = expr match {
+        case GreaterThanOrEqual(l, r)
+            if l.references.subsetOf(leftAttrs) && r.references.subsetOf(rightAttrs) =>
+          Some((l, r))
+        case GreaterThan(l, r)
+            if l.references.subsetOf(leftAttrs) && r.references.subsetOf(rightAttrs) =>
+          Some((l, r))
+        case LessThanOrEqual(l, r)
+            if l.references.subsetOf(leftAttrs) && r.references.subsetOf(rightAttrs) =>
+          Some((l, r))
+        case LessThan(l, r)
+            if l.references.subsetOf(leftAttrs) && r.references.subsetOf(rightAttrs) =>
+          Some((l, r))
+        case GreaterThanOrEqual(l, r)
+            if l.references.subsetOf(rightAttrs) && r.references.subsetOf(leftAttrs) =>
+          Some((r, l))
+        case GreaterThan(l, r)
+            if l.references.subsetOf(rightAttrs) && r.references.subsetOf(leftAttrs) =>
+          Some((r, l))
+        case And(l, r) => find(l).orElse(find(r))
+        case _ => None
+      }
+
+      find(asOfCondition).orElse {
+        // For Nearest direction, asOfCondition may be TrueLiteral.
+        // Extract as-of keys from the orderExpression instead.
+        findFromOrder(orderExpression, leftAttrs, rightAttrs)
+      }.getOrElse {
+        // Last resort: find attributes from orderExpression
+        val allAttrs = orderExpression.collect {
+          case a: AttributeReference => a
+        }
+        val leftExpr = allAttrs.find(a => leftAttrs.contains(a)).getOrElse {
+          throw new IllegalStateException(
+            "Cannot extract left as-of key from AS-OF join condition " +
+            s"or order expression: $asOfCondition / $orderExpression")
+        }
+        val rightExpr = allAttrs.find(a => rightAttrs.contains(a)).getOrElse {
+          throw new IllegalStateException(
+            "Cannot extract right as-of key from AS-OF join condition " +
+            s"or order expression: $asOfCondition / $orderExpression")
+        }
+        (leftExpr, rightExpr)
+      }
+    }
+
+    /** Extract as-of key pair from orderExpression (distance metric). */
+    private def findFromOrder(
+        expr: Expression,
+        leftAttrs: AttributeSet,
+        rightAttrs: AttributeSet): Option[(Expression, Expression)] = {
+      expr match {
+        // Backward: Subtract(leftAsOf, rightAsOf)
+        // Forward: Subtract(rightAsOf, leftAsOf)
+        case Subtract(l, r, _)
+            if l.references.subsetOf(leftAttrs) &&
+              r.references.subsetOf(rightAttrs) =>
+          Some((l, r))
+        case Subtract(l, r, _)
+            if l.references.subsetOf(rightAttrs) &&
+              r.references.subsetOf(leftAttrs) =>
+          Some((r, l))
+        // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
+        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
+        case _ => None
+      }
+    }
+  }
+
   object JoinSelection extends Strategy with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
 
