@@ -890,14 +890,14 @@
       "Number of columns of the returned data doesn't match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
+  "RESULT_COLUMN_TYPES_MISMATCH": {
+    "message": [
+      "Column types of the returned data do not match specified schema. Mismatch: <mismatch>."
+    ]
+  },
   "RESULT_ROWS_MISMATCH": {
     "message": [
       "The number of output rows (<output_length>) must match the number of input rows (<input_length>)."
-    ]
-  },
-  "RESULT_TYPE_MISMATCH_FOR_ARROW_UDF": {
-    "message": [
-      "Columns do not match in their data type: <mismatch>."
     ]
   },
   "RETRIES_EXCEEDED": {

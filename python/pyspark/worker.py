@@ -475,7 +475,7 @@ def verify_arrow_result(table, assign_cols_by_name, expected_cols_and_types):
 
         if type_mismatch:
             raise PySparkRuntimeError(
-                errorClass="RESULT_TYPE_MISMATCH_FOR_ARROW_UDF",
+                errorClass="RESULT_COLUMN_TYPES_MISMATCH",
                 messageParameters={
                     "mismatch": ", ".join(
                         "column '{}' (expected {}, actual {})".format(name, expected, actual)
