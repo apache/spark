@@ -527,7 +527,6 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val jsonStr = df.collect()(0).getString(0)
         val json = parse(jsonStr)
         val tables = (json \ "tables").asInstanceOf[JArray].arr
-        // Verify no duplicate entries
         val names = tables.map(t => (t \ "name").extract[String])
         assert(names.distinct.length == names.length, s"Duplicate entries found: $names")
         val tempView = tables.find(t => (t \ "name").extract[String] == "tv")
@@ -553,7 +552,6 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val tables = (json \ "tables").asInstanceOf[JArray].arr
         assert(tables.length == 2, s"Expected 2 entries (tbl + $localTmpViewName), got: $tables")
 
-        // Verify no duplicate entries
         val names = tables.map(e => (e \ "name").extract[String])
         assert(names.distinct.length == names.length, s"Duplicate entries found: $names")
 
@@ -649,6 +647,55 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
           tables.find(e => (e \ "name").extract[String] == localTmpViewName)
         assert(localTempViewEntry.isDefined)
         assert((localTempViewEntry.get \ "isTemporary").extract[Boolean] == true)
+      }
+    }
+  }
+
+  test("SHOW TABLES AS JSON - LIKE pattern filters results") {
+    withNamespaceAndTable("ns", "tab_matched") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      withTable(s"$catalog.ns.other") {
+        sql(s"CREATE TABLE $catalog.ns.other (id INT) $defaultUsing")
+        val jsonStr = sql(s"SHOW TABLES IN $catalog.ns LIKE 'tab_matched' AS JSON")
+          .collect()(0).getString(0)
+        val tables = (parse(jsonStr) \ "tables").asInstanceOf[JArray].arr
+        assert(tables.exists(e => (e \ "name").extract[String] == "tab_matched"))
+        assert(!tables.exists(e => (e \ "name").extract[String] == "other"))
+      }
+    }
+  }
+
+  test("SHOW TABLES AS JSON - without IN clause uses current namespace") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      sql(s"USE $catalog.ns")
+      val jsonStr = sql("SHOW TABLES AS JSON").collect()(0).getString(0)
+      val tables = (parse(jsonStr) \ "tables").asInstanceOf[JArray].arr
+      assert(tables.exists(e => (e \ "name").extract[String] == "tbl"))
+    }
+  }
+
+  test("SHOW TABLES AS JSON - output wraps table entries in a tables key") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      val jsonStr = sql(s"SHOW TABLES IN $catalog.ns AS JSON").collect()(0).getString(0)
+      val json = parse(jsonStr)
+      assert(json \ "tables" != JNothing)
+    }
+  }
+
+  test("SHOW TABLES AS JSON - same result regardless of useV1Command") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+      val query = s"SHOW TABLES IN $catalog.ns AS JSON"
+      val resultDefault = sql(query).collect()(0).getString(0)
+      withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> "true") {
+        val resultV1 = sql(query).collect()(0).getString(0)
+        val namesDefault = (parse(resultDefault) \ "tables").asInstanceOf[JArray].arr
+          .map(e => (e \ "name").extract[String]).sorted
+        val namesV1 = (parse(resultV1) \ "tables").asInstanceOf[JArray].arr
+          .map(e => (e \ "name").extract[String]).sorted
+        assert(namesDefault === namesV1)
       }
     }
   }
