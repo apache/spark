@@ -129,7 +129,9 @@ def build_spark_scala_and_java_docs_if_necessary
     return
   end
 
-  command = "build/sbt -Pkinesis-asl unidoc"
+  # Drop stale genjavadoc trees (target/java) before unifying Javadoc; leftover stubs
+  # (e.g. from a partial or Test/doc run) can make JavaUnidoc fail (SPARK-56827).
+  command = "build/sbt -Pkinesis-asl cleanGenjavadocOutput unidoc"
   puts "Running '#{command}'..."
 
   # Two filter passes on the unidoc output:
