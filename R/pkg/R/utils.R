@@ -593,6 +593,13 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
+    # Primitive functions (e.g. `+`, `max`, `min`) have no R-level closure
+    # to clean: `environment(func) <- newEnv` raises a deprecation warning
+    # in recent R versions ("setting environment(<primitive function>) is
+    # not possible") which can be converted to an error. Return them as-is.
+    if (is.primitive(func)) {
+      return(func)
+    }
     newEnv <- new.env(parent = .GlobalEnv)
     func.body <- body(func)
     oldEnv <- environment(func)

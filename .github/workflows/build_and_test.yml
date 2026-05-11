@@ -436,14 +436,12 @@ jobs:
       with:
         distribution: temurin
         java-version: ${{ matrix.java }}
-    - name: Install Python packages (Python 3.9, Python3.8)
+    - name: Install Python packages (Python 3.9)
       run: |
         python3.9 -m pip install -r ./dev/requirements.txt
-        python3.8 -m pip install -r ./dev/requirements.txt
-    - name: List Python packages (Python 3.9, Python3.8)
+    - name: List Python packages (Python 3.9)
       run: |
         python3.9 -m pip list
-        python3.8 -m pip list
     - name: Install Conda for pip packaging test
       if: ${{ matrix.modules == 'pyspark-errors' }}
       run: |
@@ -723,11 +721,14 @@ jobs:
       run: ./dev/lint-r
     - name: Run documentation build
       run: |
+        # SparkR is disabled in this fork's CI (see precondition above), so
+        # always skip the R API doc build to avoid pulling pkgdown / R toolchain
+        # into the docs job.
+        export SKIP_RDOC=1
         if [ -f "./dev/is-changed.py" ]; then
-          # Skip PySpark and SparkR docs while keeping Scala/Java/SQL docs
+          # Skip PySpark docs when no PySpark module changed; keep Scala/Java/SQL docs
           pyspark_modules=`cd dev && python3.9 -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
-          if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
         cd docs
         bundle exec jekyll build

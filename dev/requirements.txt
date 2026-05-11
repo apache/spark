@@ -3,8 +3,8 @@ py4j
 
 # PySpark dependencies (optional)
 numpy
-pyarrow<13.0.0,=>4.0.0
-pandas<3,=>1.0.5
+pyarrow>=4.0.0,<13.0.0
+pandas>=1.0.5,<3
 scipy
 plotly<6
 mlflow>=2.3.1
@@ -34,13 +34,10 @@ pydata_sphinx_theme
 ipython
 nbsphinx
 numpydoc
-jinja2<3.0.0
 sphinx<3.1.0
 sphinx-plotly-directive
 sphinx-copybutton<0.5.3
 docutils<0.18.0
-# See SPARK-38279.
-markupsafe==2.0.1
 
 # Development scripts
 jira

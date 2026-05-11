@@ -798,13 +798,19 @@ def _new_type_holders(
             not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
         )
     else:
-        # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11
+        # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11.
+        # GenericAlias is only available on Python 3.11+ and _GenericAlias is a
+        # private typing internal; resolve them via getattr so mypy (running under
+        # python_version 3.9) does not flag a missing typing attribute, and the
+        # 3.11+ runtime still sees the real classes.
+        _typing_generic_alias: type = getattr(typing, "GenericAlias", type(None))
+        _typing_private_generic_alias: type = getattr(typing, "_GenericAlias", type(None))
         is_unnamed_params = all(
             not isinstance(param, slice)
             and (
                 not isinstance(param, Iterable)
-                or isinstance(param, typing.GenericAlias)
-                or isinstance(param, typing._GenericAlias)
+                or isinstance(param, _typing_generic_alias)
+                or isinstance(param, _typing_private_generic_alias)
             )
             for param in params
         )

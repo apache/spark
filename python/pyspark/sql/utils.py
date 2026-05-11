@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from pyspark.sql.window import Window
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
-has_numpy = False
+has_numpy: bool = False
 try:
     import numpy as np  # noqa: F401
 

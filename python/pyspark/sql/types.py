@@ -1205,8 +1205,8 @@ class UserDefinedType(DataType):
         m = __import__(pyModule, globals(), locals(), [pyClass])
         if not hasattr(m, pyClass):
             raise PySparkValueError(
-                errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={"operation": "unpickling user defined types"},
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={"operation": "unpickling user defined types"},
             )
         else:
             UDT = getattr(m, pyClass)
