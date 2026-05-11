@@ -55,8 +55,6 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  * @param minInfoGain Minimum information gain a split must get. Default value is 0.0.
  *                    If a split has less information gain than minInfoGain,
  *                    this split will not be considered as a valid split.
- * @param pruneTree If this is true, the final training tree will undergo a pruning in which
- *                  nodes with the same prediction are merged.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.  If too small, then 1 node will be split per iteration, and
  *                      its aggregates may exceed this size.
@@ -67,6 +65,8 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                           E.g. 10 means that the cache will get checkpointed every 10 updates. If
  *                           the checkpoint directory is not set in
  *                           [[org.apache.spark.SparkContext]], this setting is ignored.
+ * @param pruneTree If this is true, the final training tree will undergo a pruning in which
+ *                  nodes with the same prediction are merged.
  */
 @Since("1.0.0")
 class Strategy @Since("1.3.0") (
@@ -79,12 +79,12 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
     @Since("1.2.0") @BeanProperty var minInstancesPerNode: Int = 1,
     @Since("1.2.0") @BeanProperty var minInfoGain: Double = 0.0,
-    @Since("4.3.0") @BeanProperty var pruneTree: Boolean = true,
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
     @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
     @Since("3.0.0") @BeanProperty var minWeightFractionPerNode: Double = 0.0,
+    @Since("4.3.0") @BeanProperty var pruneTree: Boolean = true,
     @BeanProperty private[spark] var bootstrap: Boolean = false) extends Serializable {
 
   /**
@@ -116,13 +116,12 @@ class Strategy @Since("1.3.0") (
       categoricalFeaturesInfo: Map[Int, Int],
       minInstancesPerNode: Int,
       minInfoGain: Double,
-      pruneTree: Boolean,
       maxMemoryInMB: Int,
       subsamplingRate: Double,
       useNodeIdCache: Boolean,
       checkpointInterval: Int) = {
     this(algo, impurity, maxDepth, numClasses, maxBins, quantileCalculationStrategy,
-      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, pruneTree, maxMemoryInMB,
+      categoricalFeaturesInfo, minInstancesPerNode, minInfoGain, maxMemoryInMB,
       subsamplingRate, useNodeIdCache, checkpointInterval, 0.0)
   }
   // scalastyle:on argcount
@@ -204,8 +203,8 @@ class Strategy @Since("1.3.0") (
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode,
-      minInfoGain, pruneTree, maxMemoryInMB, subsamplingRate, useNodeIdCache,
-      checkpointInterval, minWeightFractionPerNode)
+      minInfoGain, maxMemoryInMB, subsamplingRate, useNodeIdCache,
+      checkpointInterval, minWeightFractionPerNode, pruneTree)
   }
 }
 
