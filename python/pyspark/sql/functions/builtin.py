@@ -26379,15 +26379,21 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_asbinary(geo: "ColumnOrName") -> Column:
+def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
 
     .. versionadded:: 4.1.0
+
+    .. versionchanged:: 4.2.0
+        Added the optional `endianness` parameter.
 
     Parameters
     ----------
     geo : :class:`~pyspark.sql.Column` or str
         A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+    endianness : :class:`~pyspark.sql.Column` or str, optional
+        The optional endianness of the output WKB, 'NDR' for little-endian (default) or 'XDR' for
+        big-endian.
 
     Examples
     --------
@@ -26396,15 +26402,31 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 2: Getting WKB from GEOMETRY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
+
+    Example 3: Getting WKB (little-endian) from GEOGRAPHY.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'), 'NDR'))).collect()
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
+
+    Example 4: Getting WKB (big-endian) from GEOMETRY.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'), 'XDR'))).collect()
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), XDR))='00000000013FF00000000000004000000000000000')]
     """
-    return _invoke_function_over_columns("st_asbinary", geo)
+    if endianness is None:
+        return _invoke_function_over_columns("st_asbinary", geo)
+    else:
+        _endianness = lit(endianness) if isinstance(endianness, str) else endianness
+        return _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 @_try_remote_functions
@@ -26423,7 +26445,7 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geogfromwkb", wkb)
 
@@ -26448,7 +26470,7 @@ def st_geomfromwkb(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
     """
     if srid is None:
         return _invoke_function_over_columns("st_geomfromwkb", wkb)

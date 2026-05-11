@@ -25,6 +25,8 @@ import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
+import java.nio.ByteOrder;
+
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
 
@@ -112,13 +114,28 @@ public final class STUtils {
 
   /** Methods for implementing ST expressions. */
 
+  private static ByteOrder parseEndianness(UTF8String endianness) {
+    String endiannessString = endianness.toString();
+    if (endiannessString.equalsIgnoreCase("NDR")) return ByteOrder.LITTLE_ENDIAN;
+    if (endiannessString.equalsIgnoreCase("XDR")) return ByteOrder.BIG_ENDIAN;
+    throw QueryExecutionErrors.stInvalidArgumentErrorInvalidEndiannessValue(endiannessString);
+  }
+
   // ST_AsBinary
   public static byte[] stAsBinary(GeographyVal geo) {
-    return fromPhysVal(geo).toWkb();
+    return fromPhysVal(geo).toWkb(ByteOrder.LITTLE_ENDIAN);
+  }
+
+  public static byte[] stAsBinary(GeographyVal geo, UTF8String endianness) {
+    return fromPhysVal(geo).toWkb(parseEndianness(endianness));
   }
 
   public static byte[] stAsBinary(GeometryVal geo) {
-    return fromPhysVal(geo).toWkb();
+    return fromPhysVal(geo).toWkb(ByteOrder.LITTLE_ENDIAN);
+  }
+
+  public static byte[] stAsBinary(GeometryVal geo, UTF8String endianness) {
+    return fromPhysVal(geo).toWkb(parseEndianness(endianness));
   }
 
   // ST_AsEWKT

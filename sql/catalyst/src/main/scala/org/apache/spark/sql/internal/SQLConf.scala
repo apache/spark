@@ -630,7 +630,7 @@ object SQLConf {
       .doc("When true, enables geospatial types (GEOGRAPHY/GEOMETRY) and ST functions.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefaultFunction(() => Utils.isTesting)
+      .createWithDefault(true)
 
   val TYPES_FRAMEWORK_ENABLED =
     buildConf("spark.sql.types.framework.enabled")

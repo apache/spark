@@ -217,7 +217,7 @@
     <tink.version>1.20.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.12.Final</netty.version>
-    <netty-tcnative.version>2.0.76.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>

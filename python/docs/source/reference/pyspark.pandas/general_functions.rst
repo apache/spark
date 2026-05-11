@@ -64,3 +64,10 @@ Top-level dealing with datetimelike data
    date_range
    to_timedelta
    timedelta_range
+
+Utility functions
+-----------------
+.. autosummary::
+   :toctree: api/
+
+   show_versions
