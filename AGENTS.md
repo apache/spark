@@ -47,8 +47,6 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
 | `SharedSparkSession` | `sql/core` | Itself extends `QueryTest`, so concrete suites just `extends SharedSparkSession`. Default for tests under `sql/core`. |
 | `TestHiveSingleton` | `sql/hive` | Mixed in alongside `QueryTest`, e.g. `class X extends QueryTest with TestHiveSingleton`. Used by tests under `sql/hive`. |
 
-Linearization gotcha: the first item in the `extends` clause must transitively extend a class (i.e. carry a non-`Object` superclass). All three bases above plus `SharedSparkSession` carry the `SparkFunSuite` chain, so any of them can appear first. A "pure helper" trait (e.g. `*ErrorsBase`, `*Helper`) does not — if you put one first, mix in a class-bearing trait immediately after, or compilation fails with `superclass Object is not a subclass of the superclass SparkFunSuite of the mixin trait ...`. Quick check: `grep "^trait <Name>"` — if it ends in `extends DataTypeErrorsBase` or another pure trait, it does not carry the class chain.
-
 ## Build and Test
 
 Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
