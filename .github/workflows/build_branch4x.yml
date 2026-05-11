@@ -22,7 +22,7 @@ name: "Build (branch-4.x, Scala 2.13, Hadoop 3, JDK 17)"
 on:
   schedule:
     # UTC 11: avoids overlap with branch-4.2 flagship (UTC 13) and branch-4.1 (UTC 12); see branch-41/42 workflow crons at 14:00 for maven.
-    - cron: '0 11 * * *'
+    - cron: '0 11 */2 * *'
   workflow_dispatch:
 
 jobs:

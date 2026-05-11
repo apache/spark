@@ -21,7 +21,7 @@ name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 25)"
 
 on:
   schedule:
-    - cron: '0 14 * * *'
+    - cron: '0 14 */2 * *'
   workflow_dispatch:
 
 jobs:

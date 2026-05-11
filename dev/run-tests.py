@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 from sparktestsupport.utils import (
+    check_upgraded_pom_dependencies,
     determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
@@ -559,10 +560,18 @@ def main():
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_ref=os.environ["APACHE_SPARK_REF"]
                 )
+                if "pom.xml" in changed_files:
+                    check_upgraded_pom_dependencies(
+                        os.environ["GITHUB_SHA"], target_ref=os.environ["APACHE_SPARK_REF"]
+                    )
             elif is_github_prev_sha:
                 changed_files = identify_changed_files_from_git_commits(
                     os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
                 )
+                if "pom.xml" in changed_files:
+                    check_upgraded_pom_dependencies(
+                        os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
+                    )
 
             dangling_python_tests = determine_dangling_python_tests(changed_files)
             if dangling_python_tests:
@@ -644,7 +653,8 @@ def main():
         run_build_tests()
 
     # spark build
-    build_apache_spark(build_tool, extra_profiles)
+    if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
+        build_apache_spark(build_tool, extra_profiles)
 
     # backwards compatibility checks
     if build_tool == "sbt":
@@ -653,7 +663,8 @@ def main():
             detect_binary_inop_with_mima(extra_profiles)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
-        build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
+        if os.environ.get("SKIP_SCALA_BUILD", "false") != "true":
+            build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)
 
     # run the test suites
     run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)

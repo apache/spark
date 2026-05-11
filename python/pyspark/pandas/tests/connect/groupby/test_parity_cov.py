@@ -15,11 +15,16 @@
 # limitations under the License.
 #
 
+from pyspark.pandas.tests.groupby.test_cov import CovMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.tests.test_utils import UtilsTestsMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class ConnectUtilsTests(UtilsTestsMixin, ReusedConnectTestCase):
+class CovParityTests(
+    CovMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

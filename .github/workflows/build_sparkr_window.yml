@@ -20,7 +20,7 @@ name: "Build / SparkR-only (master, 4.4.3, windows-2025)"
 
 on:
   schedule:
-    - cron: '0 17 * * *'
+    - cron: '0 17 */2 * *'
   workflow_dispatch:
 
 jobs:
