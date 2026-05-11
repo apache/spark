@@ -664,13 +664,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropNamespace(ResolvedNamespace(catalog, ns, _), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
-    case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, asJson, output) =>
-      if (asJson) {
-        ShowTablesJsonExec(
-          output, catalog.asTableCatalog, ns, pattern.getOrElse("*"), isExtended = false) :: Nil
-      } else {
-        ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
-      }
+    case ShowTables(ResolvedNamespace(catalog, ns, _), pattern, output) =>
+      ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     // SHOW VIEWS on a v2 ViewCatalog. `ResolveSessionCatalog` rewrites the SHOW VIEWS plan to
     // v1 `ShowViewsCommand` only when the catalog is NOT a `ViewCatalog`; non-`ViewCatalog`
@@ -681,17 +676,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowViews(ResolvedNamespace(catalog: ViewCatalog, ns, _), pattern, output) =>
       ShowViewsExec(output, catalog, ns, pattern) :: Nil
 
-    case ShowTablesExtended(
-        ResolvedNamespace(catalog, ns, _),
-        pattern,
-        asJson,
-        output) =>
-      if (asJson) {
-        ShowTablesJsonExec(
-          output, catalog.asTableCatalog, ns, pattern, isExtended = true) :: Nil
-      } else {
-        ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
-      }
+    case ShowTablesExtended(ResolvedNamespace(catalog, ns, _), pattern, output) =>
+      ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case ShowTablePartition(r: ResolvedTable, part, output) =>
       ShowTablePartitionExec(output, r.catalog, r.identifier,

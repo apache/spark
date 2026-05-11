@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CurrentNamespace, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.{ShowTablePartition, ShowTables, ShowTablesExtended}
+import org.apache.spark.sql.execution.command.ShowTablesJsonCommand
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
@@ -51,18 +52,16 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("show tables as json") {
+    val parse = spark.sessionState.sqlParser.parsePlan _
     comparePlans(
-      parsePlan("SHOW TABLES AS JSON"),
-      ShowTables(CurrentNamespace, None, asJson = true,
-        output = ShowTables.getJsonOutputAttrs))
+      parse("SHOW TABLES AS JSON"),
+      ShowTablesJsonCommand(CurrentNamespace, None, isExtended = false))
     comparePlans(
-      parsePlan("SHOW TABLES IN ns1 AS JSON"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), None, asJson = true,
-        output = ShowTables.getJsonOutputAttrs))
+      parse("SHOW TABLES IN ns1 AS JSON"),
+      ShowTablesJsonCommand(UnresolvedNamespace(Seq("ns1")), None, isExtended = false))
     comparePlans(
-      parsePlan("SHOW TABLES IN ns1 LIKE '*test*' AS JSON"),
-      ShowTables(UnresolvedNamespace(Seq("ns1")), Some("*test*"), asJson = true,
-        output = ShowTables.getJsonOutputAttrs))
+      parse("SHOW TABLES IN ns1 LIKE '*test*' AS JSON"),
+      ShowTablesJsonCommand(UnresolvedNamespace(Seq("ns1")), Some("*test*"), isExtended = false))
   }
 
   test("show table extended") {
@@ -98,20 +97,21 @@ class ShowTablesParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("show table extended as json") {
+    val parse = spark.sessionState.sqlParser.parsePlan _
     comparePlans(
-      parsePlan("SHOW TABLE EXTENDED LIKE '*test*' AS JSON"),
-      ShowTablesExtended(CurrentNamespace, "*test*", asJson = true,
-        output = ShowTables.getJsonOutputAttrs))
+      parse("SHOW TABLE EXTENDED LIKE '*test*' AS JSON"),
+      ShowTablesJsonCommand(CurrentNamespace, Some("*test*"), isExtended = true))
     comparePlans(
-      parsePlan(s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*' AS JSON"),
-      ShowTablesExtended(UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), "*test*",
-        asJson = true, output = ShowTables.getJsonOutputAttrs))
+      parse(s"SHOW TABLE EXTENDED IN $catalog.ns1.ns2 LIKE '*test*' AS JSON"),
+      ShowTablesJsonCommand(
+        UnresolvedNamespace(Seq(catalog, "ns1", "ns2")), Some("*test*"), isExtended = true))
   }
 
   test("show table extended as json with partition should fail") {
     checkError(
       exception = intercept[AnalysisException] {
-        parsePlan("SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09') AS JSON")
+        spark.sessionState.sqlParser.parsePlan(
+          "SHOW TABLE EXTENDED LIKE '*test*' PARTITION(ds='2008-04-09') AS JSON")
       },
       condition = "UNSUPPORTED_FEATURE.SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION",
       parameters = Map.empty
