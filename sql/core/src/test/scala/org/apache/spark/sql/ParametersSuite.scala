@@ -2486,6 +2486,17 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  test("CREATE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... FROM cte") {
+    withTable("t_cte_ctas") {
+      spark.sql(
+        """CREATE TABLE IDENTIFIER(:tname) USING PARQUET AS
+          |WITH transformation AS (SELECT 3 AS a)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_ctas"))
+      checkAnswer(spark.table("t_cte_ctas"), Row(3))
+    }
+  }
+
   test("Analyzed plan does not leave WithCTE wrapping a CTEInChildren " +
        "when IDENTIFIER(:p) is the INSERT target") {
     // After analysis, the WithCTE must be pushed into the InsertIntoStatement's query child
