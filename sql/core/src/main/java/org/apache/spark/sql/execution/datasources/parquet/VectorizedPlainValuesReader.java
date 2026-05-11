@@ -156,6 +156,18 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
+  @Override
+  public final void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    // No `hasArray` bulk-copy path: source (int32) and target (int64) have different byte
+    // widths so a contiguous byte copy is impossible. Matches the pattern in peer
+    // type-converting bulk methods such as `readUnsignedIntegers`.
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, buffer.getInt());
+    }
+  }
+
   // A fork of `readIntegers` to rebase the date values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.

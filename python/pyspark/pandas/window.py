@@ -131,6 +131,19 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._apply_as_series_or_frame(var)
 
+    def sem(self, ddof: int = 1) -> FrameLike:
+        if not isinstance(ddof, int):
+            raise TypeError("ddof must be integer")
+
+        def sem(scol: Column) -> Column:
+            count = F.count(scol).over(self._window)
+            return F.when(
+                (F.row_number().over(self._unbounded_window) >= self._min_periods) & (count > ddof),
+                F.stddev(scol).over(self._window) / F.sqrt(count - ddof),
+            ).otherwise(F.lit(None))
+
+        return self._apply_as_series_or_frame(sem)
+
     def skew(self) -> FrameLike:
         def skew(scol: Column) -> Column:
             return F.when(
@@ -834,6 +847,63 @@ class Rolling(RollingLike[FrameLike]):
         6  0.0    0.0
         """
         return super().var()
+
+    def sem(self, ddof: int = 1) -> FrameLike:
+        """
+        Calculate the rolling standard error of the mean.
+
+        .. versionadded:: 4.3.0
+
+        .. note:: the current implementation of this API uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        Parameters
+        ----------
+        ddof : int, default 1
+            Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
+            where N represents the number of elements.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the rolling calculation.
+
+        See Also
+        --------
+        pyspark.pandas.Series.rolling : Calling object with Series data.
+        pyspark.pandas.DataFrame.rolling : Calling object with DataFrames.
+        pyspark.pandas.Series.sem : Equivalent method for Series.
+        pyspark.pandas.DataFrame.sem : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
+        >>> s.rolling(3).sem()
+        0         NaN
+        1         NaN
+        2    0.408248
+        3    0.707107
+        4    0.707107
+        5    0.816497
+        6    0.000000
+        dtype: float64
+
+        For DataFrame, each rolling standard error of the mean is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.rolling(2).sem()
+                  A          B
+        0       NaN        NaN
+        1  0.000000   0.000000
+        2  0.707107   7.778175
+        3  0.707107   9.192388
+        4  1.414214  16.970563
+        5  0.000000   0.000000
+        6  0.000000   0.000000
+        """
+        return super().sem(ddof)
 
     def skew(self) -> FrameLike:
         """
@@ -2006,6 +2076,63 @@ class Expanding(ExpandingLike[FrameLike]):
         6  0.619048   87.000000
         """
         return super().var()
+
+    def sem(self, ddof: int = 1) -> FrameLike:
+        """
+        Calculate the expanding standard error of the mean.
+
+        .. versionadded:: 4.3.0
+
+        .. note:: the current implementation of this API uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        Parameters
+        ----------
+        ddof : int, default 1
+            Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
+            where N represents the number of elements.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returns the same object type as the caller of the expanding calculation.
+
+        See Also
+        --------
+        pyspark.pandas.Series.expanding : Calling object with Series data.
+        pyspark.pandas.DataFrame.expanding : Calling object with DataFrames.
+        pyspark.pandas.Series.sem : Equivalent method for Series.
+        pyspark.pandas.DataFrame.sem : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        >>> s = ps.Series([5, 5, 6, 7, 5, 5, 5])
+        >>> s.expanding(3).sem()
+        0         NaN
+        1         NaN
+        2    0.408248
+        3    0.552771
+        4    0.447214
+        5    0.374166
+        6    0.321208
+        dtype: float64
+
+        For DataFrame, each expanding standard error of the mean is computed column-wise.
+
+        >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
+        >>> df.expanding(2).sem()
+                  A         B
+        0       NaN       NaN
+        1  0.000000  0.000000
+        2  0.408248  4.490731
+        3  0.552771  6.589132
+        4  0.447214  5.315073
+        5  0.374166  4.439970
+        6  0.321208  3.807887
+        """
+        return super().sem(ddof)
 
     def skew(self) -> FrameLike:
         """

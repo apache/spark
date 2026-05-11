@@ -930,7 +930,7 @@ jobs:
     - name: Install dependencies for Python CodeGen check (branch-3.5, branch-4.0, branch-4.1)
       if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0' || inputs.branch == 'branch-4.1'
       run: |
-        python3.12 -m pip install 'black==26.3.1' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.12 -m pip install 'black==23.12.1' 'protobuf==6.33.5' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.12 -m pip list
     - name: Install dependencies for Python CodeGen check
       if: ${{ inputs.branch != 'branch-3.5' && inputs.branch != 'branch-4.0' && inputs.branch != 'branch-4.1' }}
