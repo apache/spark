@@ -57,7 +57,8 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
 
   /** Get a catalog from the server-side session by name. */
   private def serverCatalog[T <: TableCatalog](
-      serverSession: classic.SparkSession, name: String): T =
+      serverSession: classic.SparkSession,
+      name: String): T =
     serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
@@ -77,8 +78,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       session: SparkSession,
       table: String,
       views: Seq[String],
-      clearCachingCatalog: Boolean = false)(
-      fn: => Unit): Unit = {
+      clearCachingCatalog: Boolean = false)(fn: => Unit): Unit = {
     try {
       fn
     } finally {
@@ -96,10 +96,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 1.1 (session write)
   test("[connect] temp view with stored plan reflects session write") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -116,10 +113,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 1.2 (external write)
   test("[connect] temp view with stored plan reflects external write") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -144,10 +138,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external write") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -175,10 +169,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 2.1 (session ADD COLUMN)
   test("[connect] temp view with stored plan preserves schema after session ADD COLUMN") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -197,10 +188,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 2.2 (external ADD COLUMN)
   test("[connect] temp view with stored plan preserves schema after external ADD COLUMN") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -230,10 +218,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external ADD COLUMN") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -264,10 +252,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 3.1 (session column removal)
   test("[connect] temp view with stored plan detects session column removal") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -294,10 +279,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 3.2 (external column removal)
   test("[connect] temp view with stored plan detects external column removal") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -328,10 +310,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external column removal") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -365,10 +347,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 4.1 (session drop and recreate table)
   test("[connect] temp view with stored plan resolves to session-recreated table") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -400,10 +379,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 4.2 (external drop and recreate table)
   test("[connect] temp view with stored plan resolves to externally recreated table") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -441,10 +417,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external drop/recreate") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -476,9 +452,9 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] temp view with stored plan after session drop and re-add column same type") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v", "v_no_filter", "v_filter_is_null")) {
+        session = session,
+        table = T,
+        views = Seq("v", "v_no_filter", "v_filter_is_null")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -509,9 +485,9 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] temp view with stored plan after external drop and re-add column same type") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v", "v_no_filter", "v_filter_is_null")) {
+        session = session,
+        table = T,
+        views = Seq("v", "v_no_filter", "v_filter_is_null")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -545,10 +521,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external drop/re-add column") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -575,10 +551,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 6.1 (session drop and re-add column with different type)
   test("[connect] temp view with stored plan detects session column type change") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -606,10 +579,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 6.2 (external drop and re-add column with different type)
   test("[connect] temp view with stored plan detects external column type change") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -641,10 +611,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external column type change") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -679,10 +649,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 7.1 (session type widening from INT to BIGINT)
   test("[connect] temp view with stored plan detects session type widening") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -709,10 +676,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   // Scenario 7.2 (external type widening from INT to BIGINT)
   test("[connect] temp view with stored plan detects external type widening") {
     withSession { session =>
-      withTableAndViews(
-          session = session,
-          table = T,
-          views = Seq("v")) {
+      withTableAndViews(session = session, table = T, views = Seq("v")) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
 
@@ -744,10 +708,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: temp view stale after external type widening") {
     withSession { session =>
       withTableAndViews(
-          session = session,
-          table = CT,
-          views = Seq("v"),
-          clearCachingCatalog = true) {
+        session = session,
+        table = CT,
+        views = Seq("v"),
+        clearCachingCatalog = true) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
