@@ -295,7 +295,7 @@ case class AppendDataExec(
   override protected def withNewChildInternal(newChild: SparkPlan): AppendDataExec =
     copy(query = newChild)
 
-  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] =
+  override protected def getWriteSummary(): Option[WriteSummary] =
     Some(InsertSummaryImpl(numInsertedRows = numOutputRowsMetric.value))
 }
 
@@ -315,7 +315,7 @@ case class InsertOnlyMergeExec(
   override protected def withNewChildInternal(newChild: SparkPlan): InsertOnlyMergeExec =
     copy(query = newChild)
 
-  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] =
+  override protected def getWriteSummary(): Option[WriteSummary] =
     Some(MergeSummaryImpl(
       numTargetRowsCopied = 0L,
       numTargetRowsDeleted = 0L,
@@ -631,7 +631,7 @@ trait V2TableWriteExec
       val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
       SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, Seq(numOutputRowsMetric))
 
-      val writeSummary = getWriteSummary(query)
+      val writeSummary = getWriteSummary()
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
       writeSummary match {
         case Some(summary) => batchWrite.commit(messages, summary)
