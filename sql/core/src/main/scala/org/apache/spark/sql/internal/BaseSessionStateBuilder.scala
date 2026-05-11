@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, Query
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
-import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck, LeafRunnableCommandResolver}
+import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
@@ -194,8 +194,7 @@ abstract class BaseSessionStateBuilder(
       customHintResolutionRules
 
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
-      new LogicalRelationResolver,
-      new LeafRunnableCommandResolver
+      new LogicalRelationResolver
     )
 
     override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
@@ -206,8 +205,6 @@ abstract class BaseSessionStateBuilder(
     override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
       DetectAmbiguousSelfJoin +:
       ApplyCharTypePadding +:
-      ResolveSQLFunctions +:
-      ResolveDeserializer +:
       singlePassCustomPostHocResolutionRules
 
     override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = {

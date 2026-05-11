@@ -747,23 +747,6 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("single-pass: count(*) rewrite respects PATH temp-before-builtin gate") {
-    withSQLConf(
-      SQLConf.PATH_ENABLED.key -> "true",
-      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      sql("SET PATH = system.builtin, system.session")
-      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x")
-      try {
-        sql("SET PATH = system.session, system.builtin")
-        checkAnswer(
-          sql("SELECT count(*) FROM VALUES (CAST(NULL AS INT)) AS t(c)"),
-          Row(null))
-      } finally {
-        sql("DROP TEMPORARY FUNCTION IF EXISTS session.count")
-      }
-    }
-  }
-
   test("PATH enabled: explicit SET PATH with system.session AFTER a user catalog still " +
       "reaches temp functions") {
     // Explicit paths are honored as written: placing `system.session` after a user catalog
