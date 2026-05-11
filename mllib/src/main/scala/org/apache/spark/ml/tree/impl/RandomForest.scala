@@ -271,7 +271,7 @@ private[spark] object RandomForest extends Logging with Serializable {
               uid,
               rootNode.toNode(strategy.pruneTree),
               numFeatures,
-              strategy.getNumClasses)
+              strategy.getNumClasses())
           }
         } else {
           topNodes.map { rootNode =>
@@ -284,7 +284,7 @@ private[spark] object RandomForest extends Logging with Serializable {
             new DecisionTreeClassificationModel(
               rootNode.toNode(strategy.pruneTree),
               numFeatures,
-              strategy.getNumClasses)
+              strategy.getNumClasses())
           }
         } else {
           topNodes.map(rootNode =>
