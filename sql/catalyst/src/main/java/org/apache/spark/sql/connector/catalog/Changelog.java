@@ -73,18 +73,18 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * Streaming reads support carry-over removal, update detection, and net change
  * computation. Two streaming-specific behaviors to be aware of:
  * <ul>
- *   <li><b>Output is delayed by one commit.</b> When a micro-batch ingests a
- *       commit, that commit's output rows are buffered and not emitted in the
- *       same batch. They are emitted by the next micro-batch -- the one that
- *       ingests the following commit. The last commit's output is emitted
- *       when the source terminates.</li>
- *   <li><b>netChanges only merges changes that are buffered together.</b> For
- *       a typical CDC source that produces at most one change per row per
- *       commit, only one commit's changes are buffered at a time per row, so
- *       the streaming output is the same as {@code computeUpdates}. Multiple
- *       commits' changes are merged only when those commits touch the same
- *       row before the older one's output has been emitted. For full-range
- *       collapse, use a batch read.</li>
+ *   <li><b>Output is buffered until the watermark advances past the commit.</b>
+ *       When a micro-batch ingests a commit, that commit's output rows are
+ *       buffered in state and not emitted in the same batch. They are emitted
+ *       by a later micro-batch -- whichever one advances the watermark past
+ *       the commit's {@code _commit_timestamp}. The last commit's output is
+ *       emitted when the source terminates.</li>
+ *   <li><b>netChanges only merges changes that are buffered together.</b>
+ *       When each row identity appears in at most one commit within any
+ *       buffered window, the streaming output is the same as
+ *       {@code computeUpdates}. Cross-commit merging only happens when
+ *       several commits touch the same row before the earliest one's output
+ *       has been released. For full-range collapse, use a batch read.</li>
  * </ul>
  * <p>
  * <b>Pushdown contract.</b> When any post-processing pass applies (carry-over
