@@ -232,11 +232,23 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     }
   }
 
-  // Same semantics as SparkFunSuite.retry, but prints the retry events to stdout so they
-  // appear in the GitHub Actions job log. SparkFunSuite.retry uses log4j, which in our test
-  // setup only writes to target/unit-tests.log (surfaced as an artifact, not in the live log).
-  // TODO(SPARK-56586): consolidate with SparkFunSuite.retry once that helper supports
-  // console-visible retry notices.
+  // Log and swallow best-effort cleanup failures so they do not mask a primary test
+  // failure. InterruptedException re-asserts the interrupt flag on the current thread;
+  // fatal errors (OOM, StackOverflow, LinkageError) propagate.
+  private def runQuietly(label: String, op: => Unit): Unit = {
+    try op
+    catch {
+      case _: InterruptedException => Thread.currentThread().interrupt()
+      case NonFatal(t) =>
+        // scalastyle:off println
+        println(s"===== $label suppressed ${t.getClass.getSimpleName}: ${t.getMessage} =====")
+      // scalastyle:on println
+    }
+  }
+
+  // Same semantics as SparkFunSuite.retry, but prints to stdout so retries show up in the
+  // GitHub Actions job log (SparkFunSuite.retry's log4j output only lands in
+  // target/unit-tests.log, surfaced as an artifact rather than in the live log).
   private def retryWithVisibleLog(maxAttempts: Int)(body: => Unit): Unit = {
     var attempt = 1
     var done = false
@@ -252,8 +264,10 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
             s"===== Attempt $attempt/$maxAttempts failed " +
               s"(${t.getClass.getSimpleName}: ${t.getMessage}); retrying =====")
           // scalastyle:on println
-          afterEach()
-          beforeEach()
+          // A leaked worker from this attempt may still hold sockets/listeners; do not
+          // let afterEach/beforeEach throwing on that residual state abort the retry loop.
+          runQuietly("afterEach", afterEach())
+          runQuietly("beforeEach", beforeEach())
           attempt += 1
       }
     }
@@ -286,18 +300,16 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
       // finally and stop holding global state (SparkConnectService, listeners, ...).
       onTimeout()
       // Also interrupt the worker so any interruptible blocking call (e.g. the Thread.join
-      // inside StreamExecution.interruptAndAwaitExecutionThreadTermination, which fires when
-      // spark.sql.streaming.stopTimeout is 0/infinite) wakes up. onTimeout() handles socket
-      // hangs; this handles the join/wait family.
+      // inside StreamExecution.interruptAndAwaitExecutionThreadTermination) wakes up.
       worker.interrupt()
-      // Give the now-unblocked worker time to finish its cleanup before we declare defeat.
-      // 30s covers the body's 4s Thread.sleep plus SparkConnectService.stop().
+      // Grace period for the now-unblocked worker to run its own finally
+      // (SparkConnectService.stop() then the ~4s settle sleep).
       val gracePeriodMs = 30.seconds.toMillis
       worker.join(gracePeriodMs)
       val te = new TimeoutException(
         s"Test body did not complete within $timeoutMillis ms " +
           s"(after a $gracePeriodMs ms post-cleanup grace period)")
-      // If the body actually finished during the grace window, surface the original failure
+      // If the body finished during the grace window, surface the original failure
       // as the cause so a slow assertion failure is not misreported as a pure hang.
       if (!worker.isAlive && error != null) te.initCause(error)
       throw te
@@ -306,9 +318,8 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
   }
 
   private def runPythonForeachBatchTerminationTestBody(sessionHolder: SessionHolder): Unit = {
-    // Suffix query names so a retry after a timed-out attempt does not collide with a leaked
-    // query from the previous attempt (the leaked thread can still hold the old query name in
-    // spark.streams.active).
+    // Unique query names per attempt: a leaked query from a timed-out attempt may still
+    // occupy the old name in spark.streams.active.
     val suffix = s"_${System.nanoTime()}"
     val q1Name = s"foreachBatch_termination_test_q1$suffix"
     val q2Name = s"foreachBatch_termination_test_q2$suffix"
@@ -321,9 +332,16 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     var ourNewListeners = Set.empty[StreamingQueryListener]
 
     try {
+      // A previous timed-out attempt's leaked worker may still hold `started=true`, which
+      // would make `start()` below a no-op and cause this attempt to share (and later
+      // re-stop) the stale server. Force-stop first so `start()` creates a fresh instance;
+      // the identity check in `finally` then distinguishes attempts.
+      if (SparkConnectService.started) {
+        runQuietly("stale SparkConnectService.stop()", SparkConnectService.stop())
+      }
       SparkConnectService.start(spark.sparkContext)
-      // Identity-check the server in `finally`: a leaked finally from a previous attempt's
-      // worker thread must not tear down a service belonging to a later attempt.
+      // Identity-check the server in `finally`: a previous attempt's leaked finally must
+      // not tear down a service belonging to a later attempt.
       capturedServer = SparkConnectService.server
 
       val pythonFn = dummyPythonFunction(sessionHolder)(streamingForeachBatchFunction)
@@ -380,28 +398,29 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         assert(runner2.isWorkerStopped().get)
       }
 
-      // Only check this attempt's queries stopped (a previous timed-out attempt may have
-      // leaked queries into spark.streams.active that we cannot synchronously clean up).
+      // Only assert this attempt's queries stopped; a previous timed-out attempt may have
+      // leaked queries into spark.streams.active that we cannot synchronously clean up.
       assert(!spark.streams.active.exists(q => q.name == q1Name || q.name == q2Name))
-      // Attempt-scoped variant of the original `listListeners().length == 1` assertion:
-      // exactly one new listener (the cleaner listener) should have been registered by this
-      // attempt, regardless of any listeners a leaked previous attempt may still hold.
+      // Scoped to this attempt: exactly one new listener (the cleaner listener) should
+      // have been registered, regardless of any listeners leaked by a prior attempt.
       assert(
         ourNewListeners.size == 1,
         s"expected exactly 1 new listener registered by this attempt, " +
           s"got ${ourNewListeners.size}")
     } finally {
       // Only stop the service if it is still the one this attempt started; otherwise a
-      // leaked finally from a previous attempt would shut down the live service belonging to
-      // whichever attempt is currently running.
+      // previous attempt's leaked finally would tear down the live service of the current
+      // attempt.
       if (capturedServer != null && (SparkConnectService.server eq capturedServer)) {
-        SparkConnectService.stop()
-        // Wait for things to calm down.
-        Thread.sleep(4.seconds.toMillis)
+        // Cleanup is best-effort: any failure must not mask the primary failure in the
+        // try block, and the listener cleanup below must still run.
+        runQuietly("SparkConnectService.stop()", SparkConnectService.stop())
+        runQuietly("settle sleep", Thread.sleep(4.seconds.toMillis))
       }
       // Remove only the listeners this attempt registered; never touch a concurrent
-      // attempt's process-termination listener.
-      ourNewListeners.foreach(spark.streams.removeListener)
+      // attempt's process-termination listener. Wrapped in `runQuietly` so a throw here
+      // cannot mask a primary failure in the try block.
+      runQuietly("removeListeners", ourNewListeners.foreach(spark.streams.removeListener))
     }
   }
 
@@ -411,39 +430,23 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assume(PythonTestDepsChecker.isConnectDepsAvailable)
     // scalastyle:on assume
 
-    // Bound query.stop() so it cannot hang indefinitely on a stuck streaming execution
-    // thread. The default for spark.sql.streaming.stopTimeout is 0 (wait forever), which
-    // turns a stuck batch into an unkillable test. 30s is an order of magnitude larger
-    // than the body's typical green-path runtime (~5s) but small enough that an outer
-    // attempt-level retry can recover within the 2-minute cap below.
+    // Bound query.stop() so it cannot hang indefinitely: spark.sql.streaming.stopTimeout
+    // defaults to 0 (wait forever), which turns a stuck batch into an unkillable test.
+    // 30s is small enough to fit under the outer per-attempt cap with room to spare.
     withSQLConf(SQLConf.STREAMING_STOP_TIMEOUT.key -> "30000") {
       retryWithVisibleLog(maxAttempts = 3) {
-        // Create the SessionHolder here (not inside the body) so the wrapper can reach into
-        // it on timeout. The body runs on a fresh daemon thread so the test thread can move
-        // on when the body hangs inside a non-interruptible socket read. On timeout, closing
-        // the cleaner cache closes the Python worker sockets; that unblocks the hung
-        // dataIn.readInt and the leaked thread can run its own finally (stop
-        // SparkConnectService, remove listeners) before the next retry starts.
-        // Outer cap budget: body uses up to 30s + 30s `eventually` plus a 4s sleep plus
-        // service start/stop overhead; 2 minutes leaves comfortable headroom on slow CI
-        // runners while still strictly bounding the original 150-minute hang.
+        // Run the body on a fresh daemon thread so the test thread can recover from a
+        // hang in a non-interruptible socket read. SessionHolder is created outside the
+        // body so onTimeout can close its Python worker sockets via cleanerCache; that
+        // unblocks the hung dataIn.readInt so the leaked thread's finally can settle
+        // before the next retry. 2-minute cap strictly bounds the original 150-minute hang.
         val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
         awaitTestBodyInNewThread(
           timeoutMillis = TimeUnit.MINUTES.toMillis(2),
-          onTimeout = () => {
-            try sessionHolder.streamingForeachBatchRunnerCleanerCache.cleanUpAll()
-            catch {
-              case t: Throwable =>
-                // Surface suppressed cleanup errors: a failure here is exactly the case
-                // where the next attempt is most likely to also hang, so silently dropping
-                // it would make diagnosis impossible.
-                // scalastyle:off println
-                println(
-                  s"===== onTimeout cleanUpAll suppressed " +
-                    s"${t.getClass.getSimpleName}: ${t.getMessage} =====")
-              // scalastyle:on println
-            }
-          }) {
+          onTimeout = () =>
+            runQuietly(
+              "onTimeout cleanUpAll",
+              sessionHolder.streamingForeachBatchRunnerCleanerCache.cleanUpAll())) {
           runPythonForeachBatchTerminationTestBody(sessionHolder)
         }
       }
