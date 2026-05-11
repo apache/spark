@@ -56,7 +56,7 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *                    If a split has less information gain than minInfoGain,
  *                    this split will not be considered as a valid split.
  * @param pruneTree If this is true, the final training tree will undergo a pruning in which
- *                  nodes with the same classifications are merged.
+ *                  nodes with the same prediction are merged.
  * @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation. Default value is
  *                      256 MB.  If too small, then 1 node will be split per iteration, and
  *                      its aggregates may exceed this size.

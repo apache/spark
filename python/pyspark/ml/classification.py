@@ -1864,6 +1864,7 @@ class DecisionTreeClassifier(
         """
         return self._set(maxBins=value)
 
+    @since("4.3.0")
     def setPruneTree(self, value: bool) -> "DecisionTreeClassifier":
         """
         Sets the value of :py:attr:`pruneTree`.
@@ -2175,6 +2176,7 @@ class RandomForestClassifier(
         """
         return self._set(maxBins=value)
 
+    @since("4.3.0")
     def setPruneTree(self, value: bool) -> "RandomForestClassifier":
         """
         Sets the value of :py:attr:`pruneTree`.
