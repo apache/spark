@@ -430,9 +430,10 @@ class Dataset[T] private[sql] (
       mode: String,
       direction: String): DataFrame = {
     // Validate locally so Connect users see the same errors as the classic path without a
-    // server round-trip. Acceptance lists must stay aligned with `NearestByJoinType` /
-    // `NearestByJoinMode` / `NearestByDirection` in sql/catalyst, which `sql/connect/common`
-    // cannot import.
+    // server round-trip. The validation logic mirrors `NearestByJoinType.apply` /
+    // `NearestByJoinMode.apply` / `NearestByDirection.apply` in sql/catalyst, which
+    // `sql/connect/common` cannot import; the acceptance lists themselves are shared via
+    // `NearestByJoinValidation` in sql-api.
     Dataset.validateNearestByJoinArgs(numResults, joinType, mode, direction)
     sparkSession.newDataFrame(Seq(rankingExpression)) { builder =>
       builder.getNearestByJoinBuilder

@@ -1280,7 +1280,7 @@ message LateralJoin {
 
 // Relation of type [[NearestByJoin]].
 //
-// For each row on the left side, returns up to `num_results` rows from the right side ordered
+// For each row on the left side, returns up to `num_results` rows from the right side ranked
 // by `ranking_expression`.
 message NearestByJoin {
   // (Required) Left (query) input relation.

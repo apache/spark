@@ -4670,7 +4670,7 @@ global___LateralJoin = LateralJoin
 class NearestByJoin(google.protobuf.message.Message):
     """Relation of type [[NearestByJoin]].
 
-    For each row on the left side, returns up to `num_results` rows from the right side ordered
+    For each row on the left side, returns up to `num_results` rows from the right side ranked
     by `ranking_expression`.
     """
 

@@ -2908,7 +2908,7 @@ class DataFrame:
             ``exact`` forces brute-force evaluation and requires the ranking expression to be
             deterministic.
         direction : str
-            ``"distance"`` (smallest values first) or ``"similarity"`` (largest values first).
+            ``"distance"`` (smallest value first) or ``"similarity"`` (largest value first).
         joinType : str, keyword-only, optional
             Default ``inner``. Must be one of: ``inner``, ``leftouter``.
 
