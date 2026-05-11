@@ -6058,7 +6058,7 @@ object SQLConf {
         "per RFC 8259 section 7. When false, restores the legacy permissive behavior in which " +
         "the unpaired surrogate is silently replaced by the Unicode replacement character " +
         "during UTF-8 encoding, causing data corruption that diverges from strict JSON parsers.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)

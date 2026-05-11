@@ -122,7 +122,7 @@ class JacksonParser(
   }
 
   private val variantAllowDuplicateKeys = SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS)
-  private val variantvalidateUnicodeInJsonParsing =
+  private val variantValidateUnicodeInJsonParsing =
     SQLConf.get.getConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING)
 
   protected final def parseVariant(parser: JsonParser): VariantVal = {
@@ -134,7 +134,7 @@ class JacksonParser(
     }
     try {
       val v = VariantBuilder.parseJson(
-        parser, variantAllowDuplicateKeys, variantvalidateUnicodeInJsonParsing)
+        parser, variantAllowDuplicateKeys, variantValidateUnicodeInJsonParsing)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
