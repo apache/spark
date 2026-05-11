@@ -248,6 +248,34 @@ case class DecimalAddNoOverflowCheck(
 }
 
 /**
+ * A subtract expression for decimal values which is only used internally.
+ *
+ * Note that, this expression does not check overflow which is different from `Subtract`.
+ */
+case class DecimalSubtractNoOverflowCheck(
+    left: Expression,
+    right: Expression,
+    override val dataType: DataType) extends BinaryOperator {
+  require(dataType.isInstanceOf[DecimalType])
+
+  override def inputType: AbstractDataType = DecimalType
+  override def symbol: String = "-"
+  private def decimalMethod: String = "$minus"
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  override protected def nullSafeEval(input1: Any, input2: Any): Any =
+    numeric.minus(input1, input2)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DecimalSubtractNoOverflowCheck =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
  * A divide expression for decimal values which is only used internally by Avg.
  *
  * It will fail when nullOnOverflow is false follows:

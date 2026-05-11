@@ -1954,6 +1954,35 @@ class FunctionsTestsMixin:
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_counter_diff_window_function(self):
+        df = self.spark.createDataFrame(
+            [
+                (1, datetime.datetime(2024, 1, 1), 100),
+                (2, datetime.datetime(2024, 1, 1), 200),
+                (3, datetime.datetime(2024, 1, 1), 400),
+                (4, datetime.datetime(2024, 1, 2), 50),
+                (5, datetime.datetime(2024, 1, 2), 150),
+            ],
+            ["t", "st", "c"],
+        )
+        w = Window.orderBy("t")
+
+        rows = df.select("t", F.counter_diff("c").over(w).alias("d")).orderBy("t").collect()
+        self.assertEqual(
+            [(r.t, r.d) for r in rows],
+            [(1, None), (2, 100), (3, 200), (4, None), (5, 100)],
+        )
+
+        rows = (
+            df.select("t", F.counter_diff("c", startTime="st").over(w).alias("d"))
+            .orderBy("t")
+            .collect()
+        )
+        self.assertEqual(
+            [(r.t, r.d) for r in rows],
+            [(1, None), (2, 100), (3, 200), (4, None), (5, 100)],
+        )
+
     def test_window_functions_without_partitionBy(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         w = Window.orderBy("key", df.value)

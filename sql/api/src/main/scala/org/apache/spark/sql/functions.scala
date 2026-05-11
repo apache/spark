@@ -2532,6 +2532,63 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Window function: computes the differences between consecutive cumulative counter values in a
+   * time series, thereby converting the counter from the cumulative to the delta format.
+   *
+   * Gracefully handles counter resets by returning NULL. Counter resets are detected when the
+   * counter value decreases.
+   *
+   * Use the PARTITION BY clause of the window to separate independent counters. This is done by
+   * specifying all columns which uniquely identify a time series. These are typically the counter
+   * name and any attributes tied to the counter.
+   *
+   * Use the ORDER BY clause of the window to order the observations by the associated timestamp
+   * in ascending order.
+   *
+   * @param value
+   *   A cumulative counter. Must be a numeric data type. Must be non-negative.
+   *
+   * @return
+   *   The difference between the current and previous counter value within the window partition,
+   *   according to the order defined by the window's ORDER BY clause.
+   *
+   * @group window_funcs
+   * @since 4.2.0
+   */
+  def counter_diff(value: Column): Column = Column.fn("counter_diff", value)
+
+  /**
+   * Window function: returns the difference between consecutive cumulative counter values in a
+   * time series. With this operation, the counter is converted from cumulative to delta format.
+   *
+   * Gracefully handles counter resets by returning NULL. Counter resets are detected when the
+   * counter value decreases, or when the start time advances between rows.
+   *
+   * Use the PARTITION BY clause of the window to separate independent counters. This is done by
+   * specifying all columns which uniquely identify a time series. These are typically the counter
+   * name and any attributes tied to the counter.
+   *
+   * Use the ORDER BY clause of the window to order the observations by the associated timestamp
+   * in ascending order.
+   *
+   * @param value
+   *   A cumulative counter. Must be a numeric data type. Must be non-negative.
+   *
+   * @param startTime
+   *   An optional timestamp parameter which indicates when the counter was last set to zero. Used
+   *   to signal counter resets.
+   *
+   * @return
+   *   The difference between the current and previous counter value within the window partition,
+   *   according to the order defined by the window's ORDER BY clause.
+   *
+   * @group window_funcs
+   * @since 4.2.0
+   */
+  def counter_diff(value: Column, startTime: Column): Column =
+    Column.fn("counter_diff", value, startTime)
+
+  /**
    * Window function: returns the cumulative distribution of values within a window partition,
    * i.e. the fraction of rows that are below the current row.
    *

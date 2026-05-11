@@ -922,6 +922,7 @@ object FunctionRegistry {
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
     expression[PercentRank]("percent_rank"),
+    expressionBuilder("counter_diff", CounterDiffExpressionBuilder),
 
     // predicates
     expression[Between]("between"),
