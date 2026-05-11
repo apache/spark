@@ -1610,50 +1610,6 @@ object Unidoc {
       "so JavaUnidoc cannot pick up stale files (SPARK-56827)."
   )
 
-  /**
-   * Collect `target/java` directories under the given root. Skips large or irrelevant
-   * trees (VCS, venvs, generated test data) to keep the walk cheap.
-   */
-  private def genjavadocJavaOutputDirs(root: File): Seq[File] = {
-    val skipNames = Set(
-      ".bloop",
-      ".git",
-      ".github",
-      ".idea",
-      ".metals",
-      ".venv",
-      ".vscode",
-      "bin",
-      "build",
-      "dist",
-      "docs",
-      "metastore_db",
-      "node_modules",
-      "out",
-      "python",
-      "R",
-      "target",
-      "work"
-    )
-
-    def walk(dir: File): Seq[File] = {
-      val name = dir.getName
-      if (skipNames.contains(name) || name.startsWith("tpcds-")) {
-        Nil
-      } else {
-        val mine = {
-          val tj = dir / "target" / "java"
-          if (tj.isDirectory) Seq(tj) else Nil
-        }
-        val children = Option(dir.listFiles()).map(_.toIndexedSeq).getOrElse(Nil)
-        val subDirs = children.filter(_.isDirectory).flatMap(walk)
-        mine ++ subDirs
-      }
-    }
-
-    walk(root)
-  }
-
   protected def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
@@ -1780,8 +1736,10 @@ object Unidoc {
         connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore),
 
     cleanGenjavadocOutput := {
-      IO.delete(genjavadocJavaOutputDirs((ThisBuild / baseDirectory).value))
-      ()
+      val dirs = target.all(ScopeFilter(inAnyProject)).value
+        .map(_ / "java")
+        .filter(_.isDirectory)
+      IO.delete(dirs)
     }
   )
 }
