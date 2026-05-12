@@ -179,8 +179,8 @@ You can access them by doing
 |**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
-|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType or GeometryType(*srid*)|
-|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType or GeographyType(*srid*)|
+|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType(*srid*)|
+|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType(*srid*)|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
