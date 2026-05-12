@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{PlanCompressionOptions, RetryPolicy, SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils.{createSparkSession, port}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
@@ -53,7 +53,6 @@ class ClientE2ETestSuite
     extends QueryTest
     with ConnectFunSuite
     with RemoteSparkSession
-    with SQLHelper
     with PrivateMethodTester {
 
   test("throw SparkException with null filename in stack trace elements") {

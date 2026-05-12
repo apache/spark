@@ -150,18 +150,14 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    # For NumPy typing, NumPy version should be 1.21+
-    if LooseVersion(np.__version__) >= LooseVersion("1.21"):
-        if (
-            hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray
-            and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1
-        ):
-            # numpy.typing.NDArray
-            return types.ArrayType(
-                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)
-            )
+    if (
+        hasattr(tpe, "__origin__")
+        and tpe.__origin__ is np.ndarray
+        and hasattr(tpe, "__args__")
+        and len(tpe.__args__) > 1
+    ):
+        # numpy.typing.NDArray
+        return types.ArrayType(as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error))
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
         pass

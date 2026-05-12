@@ -21,7 +21,7 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{
   ChangelogProperties, Column, Identifier, InMemoryChangelogCatalog}
@@ -55,8 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * the same `_change_type` labels at the netChanges input.
  */
 trait ResolveChangelogTableNetChangesTestsBase
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with BeforeAndAfterEach {
 
   /**

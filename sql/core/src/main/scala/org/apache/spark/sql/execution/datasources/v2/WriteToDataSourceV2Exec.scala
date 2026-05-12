@@ -365,24 +365,24 @@ case class ReplaceDataExec(
     copy(query = newChild)
   }
 
-  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
-    if (rowLevelCommand == DELETE) {
-      // DELETE ReplaceData plans filter out the deleted rows early in the plan, and they don't
-      // reach this node. We need to calculate this value as numScannedRows - numCopiedRows.
-      val numScannedRows = collectFirst(query) {
-        case b: BatchScanExec if b.table.isInstanceOf[RowLevelOperationTable] =>
-          getMetricValue(b.metrics, "numOutputRows")
-      }
-      val numCopiedRows = getMetricValue(metrics, "numCopiedRows")
-      val numDeletedRows = if (numScannedRows.exists(_ >= 0) && numCopiedRows >= 0) {
-        numScannedRows.get - numCopiedRows
-      } else {
-        // One of the metrics couldn't be found, also mark numDeletedRows as not found.
-        -1L
-      }
-      metrics("numDeletedRows").set(numDeletedRows)
+  override protected def getDeleteSummary(): Option[DeleteSummaryImpl] = {
+    // DELETE ReplaceData plans filter out the deleted rows early in the plan, and they don't
+    // reach this node. We need to calculate this value as numScannedRows - numCopiedRows.
+    val numScannedRows = collectFirst(query) {
+      case b: BatchScanExec if b.table.isInstanceOf[RowLevelOperationTable] =>
+        getMetricValue(b.metrics, "numOutputRows")
     }
-    super.getWriteSummary(query)
+    val numCopiedRows = getMetricValue(sparkMetrics, "numCopiedRows")
+    val numDeletedRows = if (numScannedRows.exists(_ >= 0) && numCopiedRows >= 0) {
+      numScannedRows.get - numCopiedRows
+    } else {
+      // One of the metrics couldn't be found, also mark numDeletedRows as not found.
+      -1L
+    }
+
+    // SQLMetric.set is a no-op if value is -1, leaving the metric in its invalid state.
+    sparkMetrics("numDeletedRows").set(numDeletedRows)
+    super.getDeleteSummary().map(_.copy(numDeletedRows = numDeletedRows))
   }
 }
 
@@ -496,30 +496,39 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
     metrics.get(name).map(_.value).getOrElse(-1L)
   }
 
-  override protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+  override protected def getWriteSummary(): Option[WriteSummary] = {
     rowLevelCommand match {
-      case MERGE =>
-        collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
-          val metrics = n.metrics
-          MergeSummaryImpl(
-            getMetricValue(metrics, "numTargetRowsCopied"),
-            getMetricValue(metrics, "numTargetRowsDeleted"),
-            getMetricValue(metrics, "numTargetRowsUpdated"),
-            getMetricValue(metrics, "numTargetRowsInserted"),
-            getMetricValue(metrics, "numTargetRowsMatchedUpdated"),
-            getMetricValue(metrics, "numTargetRowsMatchedDeleted"),
-            getMetricValue(metrics, "numTargetRowsNotMatchedBySourceUpdated"),
-            getMetricValue(metrics, "numTargetRowsNotMatchedBySourceDeleted"))
-        }
-      case UPDATE =>
-        Some(UpdateSummaryImpl(
-          getMetricValue(sparkMetrics, "numUpdatedRows"),
-          getMetricValue(sparkMetrics, "numCopiedRows")))
-      case DELETE =>
-        Some(DeleteSummaryImpl(
-          getMetricValue(sparkMetrics, "numDeletedRows"),
-          getMetricValue(sparkMetrics, "numCopiedRows")))
+      case MERGE => getMergeSummary()
+      case UPDATE => getUpdateSummary()
+      case DELETE => getDeleteSummary()
     }
+  }
+
+  protected def getMergeSummary(): Option[MergeSummaryImpl] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+      val metrics = n.metrics
+      MergeSummaryImpl(
+        getMetricValue(metrics, "numTargetRowsCopied"),
+        getMetricValue(metrics, "numTargetRowsDeleted"),
+        getMetricValue(metrics, "numTargetRowsUpdated"),
+        getMetricValue(metrics, "numTargetRowsInserted"),
+        getMetricValue(metrics, "numTargetRowsMatchedUpdated"),
+        getMetricValue(metrics, "numTargetRowsMatchedDeleted"),
+        getMetricValue(metrics, "numTargetRowsNotMatchedBySourceUpdated"),
+        getMetricValue(metrics, "numTargetRowsNotMatchedBySourceDeleted"))
+    }
+  }
+
+  protected def getUpdateSummary(): Option[UpdateSummaryImpl] = {
+    Some(UpdateSummaryImpl(
+      getMetricValue(sparkMetrics, "numUpdatedRows"),
+      getMetricValue(sparkMetrics, "numCopiedRows")))
+  }
+
+  protected def getDeleteSummary(): Option[DeleteSummaryImpl] = {
+    Some(DeleteSummaryImpl(
+      getMetricValue(sparkMetrics, "numDeletedRows"),
+      getMetricValue(sparkMetrics, "numCopiedRows")))
   }
 }
 
@@ -582,7 +591,7 @@ trait V2TableWriteExec
         }
       )
 
-      val writeSummary = getWriteSummary(query)
+      val writeSummary = getWriteSummary()
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
       writeSummary match {
         case Some(summary) => batchWrite.commit(messages, summary)
@@ -610,7 +619,7 @@ trait V2TableWriteExec
     Nil
   }
 
-  protected def getWriteSummary(query: SparkPlan): Option[WriteSummary] = None
+  protected def getWriteSummary(): Option[WriteSummary] = None
 }
 
 trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serializable {

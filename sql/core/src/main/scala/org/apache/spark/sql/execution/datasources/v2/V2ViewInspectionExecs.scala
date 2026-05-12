@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableSummary, ViewInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -169,6 +169,15 @@ case class DescribeV2ViewExec(
       result += toCatalystRow("", "", "")
       result += toCatalystRow("# Detailed View Information", "", "")
       addIdentifierRows(result, catalogName, identifier, entityLabel = "View")
+      // Surface the view sub-kind so users see whether they're looking at a plain VIEW
+      // or a sub-kind like METRIC_VIEW. `ViewInfo`'s constructor unconditionally stamps
+      // `PROP_TABLE_TYPE` (defaulting to `VIEW`), so this row is always present and
+      // matches v1 `CatalogTable.toJsonLinkedHashMap`'s `Type` row for parity.
+      result += toCatalystRow(
+        "Type",
+        Option(viewInfo.properties.get(TableCatalog.PROP_TABLE_TYPE))
+          .getOrElse(TableSummary.VIEW_TABLE_TYPE),
+        "")
       // Promote first-class reserved fields (Owner / Comment / Collation) to top-level rows
       // before the EXTENDED Properties block, mirroring v1 `CatalogTable.toJsonLinkedHashMap`
       // which renders these as their own rows rather than burying them in `Table Properties`.

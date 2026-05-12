@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.LeftAnti
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastPartitioning, IdentityBroadcastMode}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.{joins, SparkPlan}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode}
@@ -41,8 +41,8 @@ object LogicalQueryStageStrategy extends Strategy {
       plan: LogicalPlan,
       isNullAware: Boolean): Boolean = plan match {
     case LogicalQueryStage(_, bqs: BroadcastQueryStageExec) =>
-      bqs.broadcast.mode match {
-        case HashedRelationBroadcastMode(_, stageIsNullAware) =>
+      bqs.broadcast.outputPartitioning match {
+        case BroadcastPartitioning(HashedRelationBroadcastMode(_, stageIsNullAware)) =>
           stageIsNullAware == isNullAware
         case _ => false
       }
@@ -51,8 +51,8 @@ object LogicalQueryStageStrategy extends Strategy {
 
   private def isBroadcastStageWithIdentityBroadcastMode(plan: LogicalPlan): Boolean = plan match {
     case LogicalQueryStage(_, bqs: BroadcastQueryStageExec) =>
-      bqs.broadcast.mode match {
-        case IdentityBroadcastMode => true
+      bqs.broadcast.outputPartitioning match {
+        case BroadcastPartitioning(IdentityBroadcastMode) => true
         case _ => false
       }
     case _ => false

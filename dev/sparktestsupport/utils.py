@@ -34,7 +34,7 @@ def determine_modules_for_files(filenames):
     Given a list of filenames, return the set of modules that contain those files.
     If a file is not associated with a more specific submodule, then this method will consider that
     file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions,
-    and `README.md` is always ignored.
+    and `README.md`, `AGENTS.md`, `CONTRIBUTING.md` are always ignored.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'pyspark-errors', 'sql']
@@ -42,10 +42,14 @@ def determine_modules_for_files(filenames):
     ['root']
     >>> [x.name for x in determine_modules_for_files(["sql/README.md"])]
     []
+    >>> [x.name for x in determine_modules_for_files(["AGENTS.md"])]
+    []
+    >>> [x.name for x in determine_modules_for_files(["CONTRIBUTING.md"])]
+    []
     """
     changed_modules = set()
     for filename in filenames:
-        if filename.endswith("README.md"):
+        if filename.endswith(("README.md", "AGENTS.md", "CONTRIBUTING.md")):
             continue
         if filename in (
             "scalastyle-config.xml",

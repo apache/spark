@@ -24,7 +24,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
   CatalogTable,
-  CatalogTableType,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
@@ -382,7 +381,7 @@ class RelationResolution(
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
       if (isStreaming) {
-        if (v1Table.tableType == CatalogTableType.VIEW) {
+        if (v1Table.isViewLike) {
           throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
             ident.quoted
           )

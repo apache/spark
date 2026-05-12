@@ -48,6 +48,8 @@ def build_spark_if_necessary
   command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")
+  # SPARK-53327: Use the modified ResourceImpl.class in spark-catalyst which is compatible with Java 25
+  system("zip -d assembly/target/scala-2.13/jars/datasketches-memory-3.0.2.jar org/apache/datasketches/memory/internal/ResourceImpl.class")
   $spark_package_is_built = true
 end
 
