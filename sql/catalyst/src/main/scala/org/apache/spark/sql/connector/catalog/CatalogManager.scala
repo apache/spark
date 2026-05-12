@@ -59,9 +59,7 @@ class CatalogManager(
   // pure data conversion (system entries from the path, in path order); the *decision* to use
   // path-order kinds for unqualified lookups lives at the Strategy layer (see callers of
   // [[CatalogManager.systemFunctionKindsFromPath]]).
-  v1SessionCatalog.setSessionFunctionKindsProvider(() =>
-    CatalogManager.systemFunctionKindsFromPath(
-      sqlResolutionPathEntries(currentCatalog.name(), currentNamespace.toSeq)))
+  v1SessionCatalog.bindCatalogManagerForSessionFunctionKinds(this)
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -151,8 +149,9 @@ class CatalogManager(
 
   /**
    * Cache for [[confDefaultPathEntries]]: stores the expanded [[SessionPathEntry]] list keyed
-   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and the [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]]
-   * value (the only conf that affects the expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
+   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and
+   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] value (the only conf that affects the
+   * expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
    * `CurrentSchemaEntry` markers are preserved unresolved so the cache stays valid across
    * `USE SCHEMA`.
    */
