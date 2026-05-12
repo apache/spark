@@ -57,7 +57,7 @@ class CustomAccessor:
         return self.item
 
     def check_length(self, col=None):
-        if type(self.obj) == ps.DataFrame or col is not None:
+        if isinstance(self.obj, ps.DataFrame) or col is not None:
             return len(self.obj[col])
         else:
             try:
@@ -147,13 +147,6 @@ class ExtensionTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_extension import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

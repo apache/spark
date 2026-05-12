@@ -18,63 +18,80 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedTableOrView}
-import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute,
+  UnresolvedPartitionSpec, UnresolvedTableOrView, UnresolvedTableOrViewSearchPathMode}
+import org.apache.spark.sql.catalyst.plans.logical.{DescribeColumn, DescribeRelation,
+  DescribeTablePartition}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DescribeTableParserSuite extends SharedSparkSession with AnalysisTest {
   private def parsePlan(statement: String) = spark.sessionState.sqlParser.parsePlan(statement)
+  private def unresolvedDescribeTable(name: String): UnresolvedTableOrView = {
+    UnresolvedTableOrView(
+      Seq(name),
+      "DESCRIBE TABLE",
+      allowTempView = true,
+      UnresolvedTableOrViewSearchPathMode.QueryLike)
+  }
 
   test("SPARK-17328: Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+        unresolvedDescribeTable("t"), isExtended = false))
     comparePlans(parsePlan("describe table t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
+        unresolvedDescribeTable("t"), isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        unresolvedDescribeTable("t"), isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
+        unresolvedDescribeTable("t"), isExtended = true))
+  }
+
+  test("describe table with partition spec") {
+    comparePlans(parsePlan("DESCRIBE TABLE t PARTITION (ds='2024-01-01')"),
+      DescribeTablePartition(
+        unresolvedDescribeTable("t"),
+        UnresolvedPartitionSpec(Map("ds" -> "2024-01-01")),
+        isExtended = false))
   }
 
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("col")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("abc.xyz")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("abc", "xyz")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("a.b", "x.y")),
         isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("col")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
+        unresolvedDescribeTable("t"),
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
 

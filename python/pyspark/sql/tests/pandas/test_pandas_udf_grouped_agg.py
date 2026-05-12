@@ -17,7 +17,7 @@
 
 import unittest
 import logging
-from typing import cast, Iterator, Tuple
+from typing import Iterator, Tuple
 
 from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row, functions as sf
@@ -33,15 +33,14 @@ from pyspark.sql.functions import (
 )
 from pyspark.sql.types import ArrayType, YearMonthIntervalType
 from pyspark.errors import AnalysisException, PySparkNotImplementedError, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
-
 
 if have_pandas:
     import pandas as pd
@@ -50,7 +49,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class GroupedAggPandasUDFTestsMixin:
     @property
@@ -215,7 +214,7 @@ class GroupedAggPandasUDFTestsMixin:
         with self.assertRaises(PySparkNotImplementedError) as pe:
 
             @pandas_udf(ArrayType(YearMonthIntervalType()), PandasUDFType.GROUPED_AGG)
-            def mean_and_std_udf(v):  # noqa: F811
+            def mean_and_std_udf(v):
                 return {v.mean(): v.std()}
 
         self.check_error(
@@ -586,7 +585,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         df = self.spark.range(0, 100)
 
-        with self.tempView("table"), self.temp_func("max_udf"):
+        with self.temp_view("table"), self.temp_func("max_udf"):
             df.createTempView("table")
             self.spark.udf.register("max_udf", max_udf)
 
@@ -613,7 +612,7 @@ class GroupedAggPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -638,7 +637,7 @@ class GroupedAggPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -678,7 +677,7 @@ class GroupedAggPandasUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -718,7 +717,7 @@ class GroupedAggPandasUDFTestsMixin:
         def biased_sum(v, w=None):
             return v.sum() + (w.sum() if w is not None else 100)
 
-        with self.tempView("v"), self.temp_func("biased_sum"):
+        with self.temp_view("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 
@@ -1130,9 +1129,9 @@ class GroupedAggPandasUDFTestsMixin:
             for person_series in it:
                 # Currently struct types are passed as Series of dicts
                 # In the future, they should be passed as pd.DataFrame (like scalar pandas UDFs)
-                assert isinstance(
-                    person_series, pd.Series
-                ), f"Expected Series, got {type(person_series)}"
+                assert isinstance(person_series, pd.Series), (
+                    f"Expected Series, got {type(person_series)}"
+                )
                 # Extract age values from dicts
                 ages = [p["age"] for p in person_series]
                 total_age += sum(ages)
@@ -1153,12 +1152,6 @@ class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

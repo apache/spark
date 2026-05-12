@@ -195,7 +195,7 @@ object Encoders {
   /**
    * Creates an encoder for Java Bean of type T.
    *
-   * T must be publicly accessible.
+   * T must be a concrete class (not an interface), and must be publicly accessible.
    *
    * supported types for java bean field:
    *   - primitive types: boolean, int, double, etc.

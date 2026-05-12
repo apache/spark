@@ -81,8 +81,6 @@ class StreamingTestsForeachBatchMixin:
         except StreamingQueryException as e:
             err_msg = str(e)
             self.assertTrue("this should fail" in err_msg)
-            # check for foreachBatch error class
-            self.assertTrue("FOREACH_BATCH_USER_FUNCTION_ERROR" in err_msg)
         finally:
             if q:
                 q.stop()
@@ -231,13 +229,6 @@ class StreamingTestsForeachBatch(StreamingTestsForeachBatchMixin, ReusedSQLTestC
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreach_batch import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

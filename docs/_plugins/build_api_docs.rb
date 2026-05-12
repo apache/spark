@@ -48,6 +48,8 @@ def build_spark_if_necessary
   command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")
+  # SPARK-53327: Use the modified ResourceImpl.class in spark-catalyst which is compatible with Java 25
+  system("zip -d assembly/target/scala-2.13/jars/datasketches-memory-3.0.2.jar org/apache/datasketches/memory/internal/ResourceImpl.class")
   $spark_package_is_built = true
 end
 
@@ -129,7 +131,61 @@ def build_spark_scala_and_java_docs_if_necessary
 
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
-  system(command) || raise("Unidoc generation failed")
+
+  # Two filter passes on the unidoc output:
+  #
+  # 1. Genjavadoc-stub diagnostic blocks (~28 `[error]` lines on stubs under
+  #    `target/java/`, plus 3-5 continuation lines each). Inert because
+  #    `--ignore-source-errors` is set; matched by message text so legitimate
+  #    doclint diagnostics on stub paths still pass through.
+  #
+  # 2. `-verbose` progress lines (~13K total): `Loading source file ...`,
+  #    `[parsing started/completed ...]`, `[loading /path/X.class]`,
+  #    `Generating .../X.html`. These are dominant in the log when `-verbose`
+  #    is set (which it is in `JavaUnidoc / unidoc / javacOptions` to surface
+  #    per-file `error: reference not found` diagnostics) but carry no signal
+  #    of their own. Suppressing them brings the visible log from ~17K to ~5K
+  #    lines on a typical run while leaving every diagnostic untouched.
+  ansi = /\e\[[0-9;]*[A-Za-z]/
+  stub_header = %r{
+    \[(?:error|warn)\]\s+
+    \S*?/target/java/\S+\.java:\d+(?::\d+)?:\s+
+    error:\s+
+    (?:cannot\s+find\s+symbol
+     |illegal\s+combination\s+of\s+modifiers
+     |non-static\s+type\s+variable\b
+     |.*?\s+is\s+not\s+public\s+in\s+\S+;\s+cannot\s+be\s+accessed\s+from\s+outside\s+package)
+  }x
+  stub_cont = %r{\A\s*\[(?:error|warn)\]\s+(?!/\S+\.java:\d+(?::\d+)?:\s)}
+  verbose_line = %r{
+    \[(?:error|warn)\]\s+
+    (?:Loading\s+source\s+file\s
+     |\[parsing\s+(?:started|completed)\s
+     |\[loading\s
+     |\[checking\s
+     |\[wrote\s
+     |Generating\s+\S+\.html
+    )
+  }x
+  in_stub = false
+  IO.popen("#{command} 2>&1", 'r') do |pipe|
+    pipe.each_line do |line|
+      plain = line.gsub(ansi, '')
+      if plain =~ verbose_line
+        in_stub = false
+        # suppress -verbose progress line
+      elsif plain =~ stub_header
+        in_stub = true
+      elsif in_stub && plain =~ stub_cont
+        # continuation of a stub block; suppress
+      else
+        in_stub = false
+        $stdout.write(line)
+        $stdout.flush
+      end
+    end
+  end
+  raise("Unidoc generation failed") unless $?.success?
 end
 
 def build_scala_and_java_docs

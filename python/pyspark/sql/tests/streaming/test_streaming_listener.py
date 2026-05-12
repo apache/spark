@@ -413,7 +413,9 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                         self.fail("Not getting terminated event after 50 seconds")
                 q.stop()
                 self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty()
-                self.check_terminated_event(terminated_event, "ZeroDivisionError")
+                self.check_terminated_event(
+                    terminated_event, "ZeroDivisionError", errorClass="PYTHON_EXCEPTION"
+                )
 
             finally:
                 self.spark.streams.removeListener(test_listener)
@@ -669,14 +671,6 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
+    from pyspark.testing import main
 
-    from pyspark.sql.tests.streaming.test_streaming_listener import *  # noqa: F401
-
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

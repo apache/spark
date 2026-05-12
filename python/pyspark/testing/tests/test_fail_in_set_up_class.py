@@ -30,18 +30,12 @@ class FailInSetUpClassTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.testing.tests.test_fail_in_set_up_class import *  # noqa: F401
+    from pyspark.testing import main
 
     # Do not keep XML report because the test is supposed to fail.
     # We do not want to confuse XML report consumers.
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
-            import xmlrunner
-
-            testRunner = xmlrunner.XMLTestRunner(output=tmpdir, verbosity=2)
-        except ImportError:
-            testRunner = None
-        try:
-            unittest.main(testRunner=testRunner, verbosity=2)
+            main(output=tmpdir)
         except SystemExit as e:
             assert e.code == 1, f"status code: {e.code}"

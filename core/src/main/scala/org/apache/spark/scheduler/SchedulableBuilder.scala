@@ -26,10 +26,9 @@ import scala.xml.{Node, XML}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE}
+import org.apache.spark.internal.config.{SCHEDULER_ALLOCATION_FILE, SCHEDULER_MODE, STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED, STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
@@ -61,6 +60,10 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext)
   extends SchedulableBuilder with Logging {
 
+  val streamingIdAwareLoggingEnabled: Boolean =
+    sc.conf.get(STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED)
+  val streamingQueryIdLength: Int =
+    sc.conf.get(STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH)
   val schedulerAllocFile = sc.conf.get(SCHEDULER_ALLOCATION_FILE)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = SparkContext.SPARK_SCHEDULER_POOL
@@ -216,18 +219,33 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext
       parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(parentPool)
-      logWarning(log"A job was submitted with scheduler pool " +
-        log"${MDC(SCHEDULER_POOL_NAME, poolName)}, which has not been " +
-        log"configured. This can happen when the file that pools are read from isn't set, or " +
-        log"when that file doesn't contain ${MDC(POOL_NAME, poolName)}. " +
-        log"Created ${MDC(CREATED_POOL_NAME, poolName)} with default " +
-        log"configuration (schedulingMode: " +
-        log"${MDC(LogKeys.SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
-        log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
-        log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}")
+      logWarning(
+        StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(
+          properties,
+          log"A job was submitted with scheduler pool " +
+          log"${MDC(SCHEDULER_POOL_NAME, poolName)}, which has not been " +
+          log"configured. This can happen when the file that pools are read from isn't set, or " +
+          log"when that file doesn't contain ${MDC(POOL_NAME, poolName)}. " +
+          log"Created ${MDC(CREATED_POOL_NAME, poolName)} with default " +
+          log"configuration (schedulingMode: " +
+          log"${MDC(LogKeys.SCHEDULING_MODE, DEFAULT_SCHEDULING_MODE)}, " +
+          log"minShare: ${MDC(MIN_SHARE, DEFAULT_MINIMUM_SHARE)}, " +
+          log"weight: ${MDC(WEIGHT, DEFAULT_WEIGHT)}",
+          streamingIdAwareLoggingEnabled,
+          streamingQueryIdLength
+        )
+      )
     }
     parentPool.addSchedulable(manager)
-    logInfo(log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} tasks to pool " +
-      log"${MDC(LogKeys.POOL_NAME, poolName)}")
+
+    logInfo(
+      StructuredStreamingIdAwareSchedulerLogging.constructStreamingLogEntry(
+        properties,
+        log"Added task set ${MDC(LogKeys.TASK_SET_MANAGER, manager.name)} tasks to pool " +
+        log"${MDC(LogKeys.POOL_NAME, poolName)}",
+        streamingIdAwareLoggingEnabled,
+        streamingQueryIdLength
+      )
+    )
   }
 }

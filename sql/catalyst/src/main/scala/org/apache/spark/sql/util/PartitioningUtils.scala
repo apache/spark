@@ -80,17 +80,17 @@ private[sql] object PartitioningUtils {
 
       val normalizedVal =
         if (SQLConf.get.charVarcharAsString) value else normalizedFiled.dataType match {
-          case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+          case c: CharType if value != null && value != DEFAULT_PARTITION_NAME =>
             val v = value match {
-              case Some(str: String) => Some(charTypeWriteSideCheck(str, len))
-              case str: String => charTypeWriteSideCheck(str, len)
+              case Some(str: String) => Some(charTypeWriteSideCheck(str, c.length))
+              case str: String => charTypeWriteSideCheck(str, c.length)
               case other => other
             }
             v.asInstanceOf[T]
-          case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+          case vc: VarcharType if value != null && value != DEFAULT_PARTITION_NAME =>
             val v = value match {
-              case Some(str: String) => Some(varcharTypeWriteSideCheck(str, len))
-              case str: String => varcharTypeWriteSideCheck(str, len)
+              case Some(str: String) => Some(varcharTypeWriteSideCheck(str, vc.length))
+              case str: String => varcharTypeWriteSideCheck(str, vc.length)
               case other => other
             }
             v.asInstanceOf[T]

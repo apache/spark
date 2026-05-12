@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.vectorized
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
@@ -259,6 +261,71 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
       val utf8 = s"str$i".getBytes("utf8")
       assert(array.get(i, BinaryType) === utf8)
       assert(arrayCopy.get(i, BinaryType) === utf8)
+    }
+  }
+
+  testVectors("putByteArray from ByteBuffer", 10, BinaryType) { testVector =>
+    def verifyPutByteArray(testVector: WritableColumnVector): Unit = {
+      (0 until 10).foreach { i =>
+        assert(testVector.getBinary(i) === s"str$i".getBytes("utf8"))
+      }
+    }
+
+    // Heap ByteBuffer
+    (0 until 10).foreach { i =>
+      val bytes = s"str$i".getBytes("utf8")
+      testVector.putByteArray(i, ByteBuffer.wrap(bytes), 0, bytes.length)
+    }
+    verifyPutByteArray(testVector)
+
+    // Direct ByteBuffer
+    testVector.reset()
+    (0 until 10).foreach { i =>
+      val bytes = s"str$i".getBytes("utf8")
+      val buf = ByteBuffer.allocateDirect(bytes.length)
+      buf.put(bytes)
+      testVector.putByteArray(i, buf, 0, bytes.length)
+    }
+    verifyPutByteArray(testVector)
+
+    // Read-only ByteBuffer (hasArray=false, isDirect=false)
+    testVector.reset()
+    (0 until 10).foreach { i =>
+      val bytes = s"str$i".getBytes("utf8")
+      val buf = ByteBuffer.wrap(bytes).asReadOnlyBuffer()
+      testVector.putByteArray(i, buf, 0, bytes.length)
+    }
+    verifyPutByteArray(testVector)
+  }
+
+  testVectors("putBytes from ByteBuffer", 16, ByteType) { testVector =>
+    val data = Array[Byte](10, 20, 30, 40, 50, 60, 70, 80)
+
+    // Heap ByteBuffer
+    testVector.putBytes(0, data.length, ByteBuffer.wrap(data), 0)
+    (0 until data.length).foreach { i =>
+      assert(testVector.getByte(i) === data(i))
+    }
+
+    // Direct ByteBuffer
+    val directBuf = ByteBuffer.allocateDirect(data.length)
+    directBuf.put(data)
+    testVector.putBytes(0, data.length, directBuf, 0)
+    (0 until data.length).foreach { i =>
+      assert(testVector.getByte(i) === data(i))
+    }
+
+    // Read-only ByteBuffer (hasArray=false, isDirect=false)
+    val readOnlyBuf = ByteBuffer.wrap(data).asReadOnlyBuffer()
+    testVector.putBytes(0, data.length, readOnlyBuf, 0)
+    (0 until data.length).foreach { i =>
+      assert(testVector.getByte(i) === data(i))
+    }
+
+    // With srcIndex offset
+    testVector.putBytes(0, 4, ByteBuffer.wrap(data), 4)
+    (0 until 4).foreach { i =>
+      assert(testVector.getByte(i) === data(i + 4))
     }
   }
 
@@ -1009,5 +1076,48 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     assert(row.get(1, DoubleType) === 3.45)
     assert(!row.isNullAt(2))
     assert(row.get(2, TimestampNTZType) === 1000L)
+  }
+
+  testVectors("putBooleans(byte)", 96, BooleanType) { testVector =>
+    // Test various bit patterns at aligned offsets
+    val patterns = Seq(
+      0x00.toByte,
+      0xFF.toByte,
+      0xAA.toByte,
+      0x55.toByte,
+      0x80.toByte,
+      0x01.toByte
+    )
+
+    patterns.zipWithIndex.foreach { case (pattern, idx) =>
+      val rowId = idx * 8
+      testVector.putBooleans(rowId, pattern)
+      (0 until 8).foreach { i =>
+        val expected = ((pattern & 0xFF) >>> i & 1) == 1
+        assert(testVector.getBoolean(rowId + i) === expected)
+      }
+    }
+
+    // Verify writes at different offsets don't corrupt adjacent data.
+    // Note: the loop above writes 6 patterns at rowId 0..40, so rowId 48+ is untouched.
+    testVector.putBooleans(48, 0xFF.toByte) // fill slots 48-55 with true
+    testVector.putBooleans(56, 0xAA.toByte) // write at offset 56
+    // Verify slots 48-55 are untouched
+    (0 until 8).foreach { i =>
+      assert(testVector.getBoolean(48 + i) === true,
+        s"slot ${48 + i} should still be true after writing at rowId=56")
+    }
+    // Verify offset-56 write is correct
+    (0 until 8).foreach { i =>
+      val expected = ((0xAA & 0xFF) >>> i & 1) == 1
+      assert(testVector.getBoolean(56 + i) === expected)
+    }
+
+    // Write at capacity boundary (last 8 slots: rowId=88, capacity=96)
+    testVector.putBooleans(88, 0x55.toByte)
+    (0 until 8).foreach { i =>
+      val expected = ((0x55 & 0xFF) >>> i & 1) == 1
+      assert(testVector.getBoolean(88 + i) === expected)
+    }
   }
 }

@@ -209,6 +209,10 @@ public class ParquetVectorUpdaterFactory {
         if (sparkType instanceof  StringType || sparkType == DataTypes.BinaryType ||
           canReadAsBinaryDecimal(descriptor, sparkType)) {
           return new BinaryUpdater();
+        } else if (sparkType instanceof GeometryType) {
+          return new GeometryUpdater();
+        } else if (sparkType instanceof GeographyType) {
+          return new GeographyUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
           return new BinaryToDecimalUpdater(descriptor, (DecimalType) sparkType);
         }
@@ -359,9 +363,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putLong(offset + i, valuesReader.readInteger());
-      }
+      valuesReader.readIntegersAsLongs(total, values, offset);
     }
 
     @Override
@@ -394,9 +396,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putDouble(offset + i, valuesReader.readInteger());
-      }
+      valuesReader.readIntegersAsDoubles(total, values, offset);
     }
 
     @Override
@@ -1041,6 +1041,74 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       values.putByteArray(offset, v.getBytesUnsafe());
+    }
+  }
+
+  private static final class GeometryUpdater implements ParquetVectorUpdater {
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
+      int srid = ((GeometryType) values.dataType()).srid();
+      values.putByteArray(offset,
+        WKBToGeometryConverter.INSTANCE.convert(v.getBytesUnsafe(), srid));
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      this.readValues(1, offset, values, valuesReader);
+    }
+
+    @Override
+    public void readValues(int total, int offset, WritableColumnVector values,
+       VectorizedValuesReader valuesReader) {
+      valuesReader.readGeometry(total, values, offset);
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipBinary(total);
+    }
+  }
+
+  private static final class GeographyUpdater implements ParquetVectorUpdater {
+
+    @Override
+    public void decodeSingleDictionaryId(
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
+      int srid = ((GeographyType) values.dataType()).srid();
+      values.putByteArray(offset,
+        WKBToGeographyConverter.INSTANCE.convert(v.getBytesUnsafe(), srid));
+    }
+
+    @Override
+    public void readValue(
+        int offset,
+        WritableColumnVector values,
+        VectorizedValuesReader valuesReader) {
+      this.readValues(1, offset, values, valuesReader);
+    }
+
+    @Override
+    public void readValues(int total, int offset, WritableColumnVector values,
+       VectorizedValuesReader valuesReader) {
+      valuesReader.readGeography(total, values, offset);
+    }
+
+    @Override
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipBinary(total);
     }
   }
 

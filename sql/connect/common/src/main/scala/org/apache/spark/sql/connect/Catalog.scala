@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.connect
 
-import org.apache.spark.sql.AnalysisException
+import java.util
+
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalog
-import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table, TablePartition}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, StringEncoder}
@@ -704,9 +708,205 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       .newDataset(Catalog.catalogEncoder) { builder =>
         builder.getCatalogBuilder.getListCatalogsBuilder.setPattern(pattern)
       }
+
+  /**
+   * Drops a persistent table. This does not remove temp views (use `dropTempView`).
+   *
+   * @param tableName
+   *   qualified or unqualified table name
+   * @since 4.2.0
+   */
+  override def dropTable(tableName: String, ifExists: Boolean, purge: Boolean): Unit = {
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getDropTableBuilder
+        .setTableName(tableName)
+        .setIfExists(ifExists)
+        .setPurge(purge)
+    }
+  }
+
+  /**
+   * Drops a persistent view.
+   *
+   * @param viewName
+   *   qualified or unqualified view name
+   * @since 4.2.0
+   */
+  override def dropView(viewName: String, ifExists: Boolean): Unit = {
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getDropViewBuilder
+        .setViewName(viewName)
+        .setIfExists(ifExists)
+    }
+  }
+
+  /**
+   * Creates a namespace (database/schema). `dbName` may be a multi-part identifier.
+   *
+   * @param dbName
+   *   namespace to create
+   * @param properties
+   *   optional properties (e.g. comment, location keys as used by `CREATE NAMESPACE`)
+   * @since 4.2.0
+   */
+  override def createDatabase(
+      dbName: String,
+      ifNotExists: Boolean,
+      properties: util.Map[String, String]): Unit = {
+    sparkSession.execute { builder =>
+      val b = builder.getCatalogBuilder.getCreateDatabaseBuilder
+        .setDbName(dbName)
+        .setIfNotExists(ifNotExists)
+      properties.asScala.foreach { case (k, v) => b.putProperties(k, v) }
+    }
+  }
+
+  /**
+   * Drops a namespace.
+   *
+   * @param dbName
+   *   namespace to drop
+   * @since 4.2.0
+   */
+  override def dropDatabase(dbName: String, ifExists: Boolean, cascade: Boolean): Unit = {
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getDropDatabaseBuilder
+        .setDbName(dbName)
+        .setIfExists(ifExists)
+        .setCascade(cascade)
+    }
+  }
+
+  /**
+   * Lists partition value strings for a table (same as `SHOW PARTITIONS`).
+   *
+   * @param tableName
+   *   qualified or unqualified table name
+   * @since 4.2.0
+   */
+  override def listPartitions(tableName: String): Dataset[TablePartition] = {
+    sparkSession.newDataset(Catalog.tablePartitionEncoder) { builder =>
+      builder.getCatalogBuilder.getListPartitionsBuilder.setTableName(tableName)
+    }
+  }
+
+  /**
+   * Lists views in the current namespace.
+   *
+   * @since 4.2.0
+   */
+  override def listViews(): Dataset[Table] = {
+    sparkSession.newDataset(Catalog.tableEncoder) { builder =>
+      builder.getCatalogBuilder.getListViewsBuilder
+    }
+  }
+
+  /**
+   * Lists views in the given namespace (can be catalog-qualified).
+   *
+   * @param dbName
+   *   namespace to list views from
+   * @since 4.2.0
+   */
+  @throws[AnalysisException]("namespace does not exist")
+  override def listViews(dbName: String): Dataset[Table] = {
+    sparkSession.newDataset(Catalog.tableEncoder) { builder =>
+      builder.getCatalogBuilder.getListViewsBuilder.setDbName(dbName)
+    }
+  }
+
+  /**
+   * Lists views in the given namespace with a name pattern (SQL LIKE string).
+   *
+   * @param dbName
+   *   namespace to list views from
+   * @param pattern
+   *   SQL LIKE pattern for view names
+   * @since 4.2.0
+   */
+  @throws[AnalysisException]("namespace does not exist")
+  override def listViews(dbName: String, pattern: String): Dataset[Table] = {
+    sparkSession.newDataset(Catalog.tableEncoder) { builder =>
+      builder.getCatalogBuilder.getListViewsBuilder
+        .setDbName(dbName)
+        .setPattern(pattern)
+    }
+  }
+
+  /**
+   * Returns all table properties as a map (same as `SHOW TBLPROPERTIES`).
+   *
+   * @param tableName
+   *   qualified or unqualified table or view name
+   * @since 4.2.0
+   */
+  override def getTableProperties(tableName: String): util.Map[String, String] = {
+    val df = sparkSession.newDataFrame { builder =>
+      builder.getCatalogBuilder.getGetTablePropertiesBuilder.setTableName(tableName)
+    }
+    val m = new util.HashMap[String, String]()
+    df.collect().foreach { row =>
+      m.put(row.getString(0), row.getString(1))
+    }
+    m
+  }
+
+  /**
+   * Returns the `SHOW CREATE TABLE` DDL string for a relation.
+   *
+   * @param tableName
+   *   qualified or unqualified table or view name
+   * @param asSerde
+   *   if true, request Hive serde DDL when applicable
+   * @since 4.2.0
+   */
+  override def getCreateTableString(tableName: String, asSerde: Boolean): String = {
+    sparkSession
+      .newDataset(StringEncoder) { builder =>
+        builder.getCatalogBuilder.getGetCreateTableStringBuilder
+          .setTableName(tableName)
+          .setAsSerde(asSerde)
+      }
+      .head()
+  }
+
+  /**
+   * Truncates a table (removes all data from the table; not supported for views).
+   *
+   * @param tableName
+   *   qualified or unqualified table name
+   * @since 4.2.0
+   */
+  override def truncateTable(tableName: String): Unit = {
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getTruncateTableBuilder.setTableName(tableName)
+    }
+  }
+
+  /**
+   * Computes table statistics (same as `ANALYZE TABLE ... COMPUTE STATISTICS`).
+   *
+   * @param tableName
+   *   qualified or unqualified table name
+   * @param noScan
+   *   if true, use `NOSCAN` mode
+   * @since 4.2.0
+   */
+  override def analyzeTable(tableName: String, noScan: Boolean): Unit = {
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getAnalyzeTableBuilder
+        .setTableName(tableName)
+        .setNoScan(noScan)
+    }
+  }
 }
 
 private object Catalog {
+  private val tablePartitionEncoder: AgnosticEncoder[TablePartition] =
+    ScalaReflection
+      .encoderFor(ScalaReflection.localTypeOf[TablePartition])
+      .asInstanceOf[AgnosticEncoder[TablePartition]]
+
   private val databaseEncoder: AgnosticEncoder[Database] = ScalaReflection
     .encoderFor(ScalaReflection.localTypeOf[Database])
     .asInstanceOf[AgnosticEncoder[Database]]

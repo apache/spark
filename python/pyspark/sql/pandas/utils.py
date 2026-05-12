@@ -56,12 +56,22 @@ def require_minimum_pandas_version() -> None:
                 "current_version": str(pandas.__version__),
             },
         )
+    if LooseVersion(pandas.__version__) >= LooseVersion("3.0.0"):
+        import warnings
+
+        warnings.warn(
+            "PySpark does not yet fully support pandas >= 3.0.0. "
+            "Some features may not work correctly. "
+            "It is recommended to use pandas < 3.0.0 for now.",
+            FutureWarning,
+            stacklevel=2,
+        )
 
 
 def require_minimum_pyarrow_version() -> None:
     """Raise ImportError if minimum version of pyarrow is not installed"""
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "15.0.0"
+    minimum_pyarrow_version = "18.0.0"
 
     import os
 

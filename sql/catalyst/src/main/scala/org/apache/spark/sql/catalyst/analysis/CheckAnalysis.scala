@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -42,6 +42,8 @@ import org.apache.spark.util.ArrayImplicits._
 trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString {
 
   protected def isView(nameParts: Seq[String]): Boolean
+
+  protected def conf: org.apache.spark.sql.internal.SQLConf
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -64,6 +66,74 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     throw new AnalysisException(
       errorClass = errorClass,
       messageParameters = messageParameters)
+  }
+
+  /**
+   * Search path shown in TABLE_OR_VIEW_NOT_FOUND for DDL (e.g. ALTER TABLE, COMMENT ON TABLE).
+   * Contains system.session and the current catalog namespace only. Not from SQLConf.
+   */
+  private def ddlSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
+    val sessionPath = Seq(
+      CatalogManager.SYSTEM_CATALOG_NAME,
+      CatalogManager.SESSION_NAMESPACE)
+    Seq(toSQLId(sessionPath), toSQLId(catalogPath))
+  }
+
+  /**
+   * Formats [[CatalogManager.sqlResolutionPathEntries]] with [[toSQLId]]
+   * for TABLE_OR_VIEW_NOT_FOUND error messages.
+   */
+  private def fullSearchPathForError(catalogPath: Seq[String]): Seq[String] = {
+    val catalog = catalogPath.head
+    val ns = catalogPath.tail.toSeq
+    catalogManager.sqlResolutionPathEntries(catalog, ns).map(toSQLId)
+  }
+
+  /**
+   * Catalog + namespace path for error messages. When resolving inside a view body,
+   * uses the view's defining catalog/namespace from AnalysisContext so the error
+   * reflects where the view was trying to resolve.
+   */
+  protected final def catalogPathForError: Seq[String] = {
+    val ctx = AnalysisContext.get.catalogAndNamespace
+    if (ctx.nonEmpty) ctx
+    else (currentCatalog.name +: catalogManager.currentNamespace).toSeq
+  }
+
+  /**
+   * Search path for TABLE_OR_VIEW_NOT_FOUND when the command targets only temp views
+   * (e.g. DROP TEMPORARY VIEW). Contains system.session only.
+   */
+  private def tempViewOnlySearchPathForError(): Seq[String] = {
+    Seq(toSQLId(Seq(
+      CatalogManager.SYSTEM_CATALOG_NAME,
+      CatalogManager.SESSION_NAMESPACE)))
+  }
+
+  /**
+   * Search path for TABLE_OR_VIEW_NOT_FOUND on unresolved relations in SELECT/DML/INSERT/time
+   * travel. Three-part `system.session.name` resolves only to session temp views, so only that
+   * scope is listed. Other names use [[fullSearchPathForError]] (sqlResolutionPathEntries order).
+   */
+  private def searchPathForUnresolvedRelation(multipartIdentifier: Seq[String]): Seq[String] = {
+    if (CatalogManager.isFullyQualifiedSystemSessionViewName(multipartIdentifier)) {
+      tempViewOnlySearchPathForError()
+    } else {
+      fullSearchPathForError(catalogPathForError)
+    }
+  }
+
+  /**
+   * Returns the first UnresolvedTableOrView in the plan tree, if any.
+   * Used to report table-not-found for DESCRIBE TABLE with full search path when the
+   * relation is wrapped in SubqueryAlias (e.g. by Hive analyzer).
+   */
+  private def firstUnresolvedTableOrView(plan: LogicalPlan): Option[UnresolvedTableOrView] = {
+    plan match {
+      case u: UnresolvedTableOrView => Some(u)
+      case s: SubqueryAlias if !s.child.resolved => firstUnresolvedTableOrView(s.child)
+      case _ => None
+    }
   }
 
   protected def hasMapType(dt: DataType): Boolean = {
@@ -157,6 +227,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       operator: LogicalPlan,
       a: Attribute,
       errorClass: String): Nothing = {
+    // An unresolved attribute tagged with `PLAN_ID_TAG` is a Spark Connect DataFrame column
+    // reference (`df.col_name` or `df["col_name"]`). If it ends up unresolved, it means the
+    // referenced column is not reachable from the current operator — typically because the
+    // user referenced a column from the wrong DataFrame. Raise the dedicated error so the
+    // message points at the wrong DataFrame reference instead of the generic unresolved column.
+    if (a.containsTag(LogicalPlan.PLAN_ID_TAG)) {
+      throw QueryCompilationErrors.cannotResolveDataFrameColumn(a)
+    }
     val missingCol = a.sql
     val candidates = operator.inputSet.toSeq
       .map(attr => attr.qualifier :+ attr.name)
@@ -254,13 +332,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
-        u.tableNotFound(u.multipartIdentifier)
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _, _) =>
+        u.tableNotFound(
+          u.multipartIdentifier,
+          searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
-        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
-        write.table.tableNotFound(tblName)
+        val ur = write.table.asInstanceOf[UnresolvedRelation]
+        write.table.tableNotFound(
+          ur.multipartIdentifier,
+          searchPathForUnresolvedRelation(ur.multipartIdentifier))
 
       // We should check for trailing comma errors first, since we would get less obvious
       // unresolved column errors if we do it bottom up
@@ -291,22 +373,49 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         u.schemaNotFound(u.multipartIdentifier)
 
       case u: UnresolvedTable =>
-        u.tableNotFound(u.multipartIdentifier)
+        // DDL: use TABLE_OR_VIEW_NOT_FOUND with search path filtered to system.session + catalog.
+        u.tableNotFound(
+          u.multipartIdentifier,
+          ddlSearchPathForError(catalogPathForError))
 
       case u: UnresolvedView =>
-        u.tableNotFound(u.multipartIdentifier)
+        u.tableNotFound(
+          u.multipartIdentifier,
+          ddlSearchPathForError(catalogPathForError))
+
+      case d: DescribeRelation if !d.relation.resolved =>
+        // DESCRIBE TABLE / DESC TABLE: same search path as SELECT
+        // (searchPathForUnresolvedRelation). Relation may be wrapped in SubqueryAlias (e.g. Hive).
+        firstUnresolvedTableOrView(d.relation).foreach { u =>
+          u.tableNotFound(
+            u.multipartIdentifier,
+            searchPathForUnresolvedRelation(u.multipartIdentifier))
+        }
 
       case u: UnresolvedTableOrView =>
-        u.tableNotFound(u.multipartIdentifier)
+        val catalogPath = catalogPathForError
+        val searchPath = u.tableNotFoundSearchPathMode match {
+          case UnresolvedTableOrViewSearchPathMode.QueryLike =>
+            if (CatalogManager.isFullyQualifiedSystemSessionViewName(u.multipartIdentifier)) {
+              tempViewOnlySearchPathForError()
+            } else {
+              fullSearchPathForError(catalogPath)
+            }
+          case UnresolvedTableOrViewSearchPathMode.Ddl =>
+            ddlSearchPathForError(catalogPath)
+        }
+        u.tableNotFound(u.multipartIdentifier, searchPath)
 
       case u: UnresolvedRelation =>
-        u.tableNotFound(u.multipartIdentifier)
+        u.tableNotFound(
+          u.multipartIdentifier,
+          searchPathForUnresolvedRelation(u.multipartIdentifier))
 
       case u: UnresolvedFunctionName =>
-        val catalogPath = (currentCatalog.name +: catalogManager.currentNamespace).mkString(".")
+        val searchPath = fullSearchPathForError(catalogPathForError)
         throw QueryCompilationErrors.unresolvedRoutineError(
           u.multipartIdentifier,
-          Seq("system.builtin", "system.session", catalogPath),
+          searchPath,
           u.origin)
 
       case u: UnresolvedHint =>
@@ -314,6 +423,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           msg = s"Hint not found: ${toSQLId(u.name)}",
           context = u.origin.getQueryContext,
           summary = u.origin.context.summary)
+
+      case r: V2TableReference =>
+        throw SparkException.internalError(
+          s"V2TableReference should be resolved during analysis: ${r.name}")
 
       case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
@@ -445,9 +558,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("funcName" -> toSQLExpr(w)))
 
           case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
-            if agg.isDistinct && listAgg.needSaveOrderValue =>
-            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-              listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+            if agg.isDistinct && listAgg.hasDistinctOrderAmbiguity =>
+              listAgg.throwDistinctOrderError()
 
           case w: WindowExpression =>
             WindowResolution.validateResolvedWindowExpression(w)
@@ -488,7 +600,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
-            u.tableNotFound(u.multipartIdentifier)
+            u.tableNotFound(
+              u.multipartIdentifier,
+              searchPathForUnresolvedRelation(u.multipartIdentifier))
+
+          case RelationChanges(u: UnresolvedRelation, _) =>
+            u.tableNotFound(
+              u.multipartIdentifier,
+              searchPathForUnresolvedRelation(u.multipartIdentifier))
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
@@ -537,6 +656,39 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
                 messageParameters = Map.empty)
             }
+
+          // Reject streaming inputs early. The optimizer rewrite is built around an
+          // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
+          // identifier (`__qid`). That shape doesn't compose cleanly with structured-streaming
+          // semantics: a stateful aggregate keyed by a freshly-generated identifier accumulates
+          // state indefinitely (every batch creates new keys, old keys never match again) and a
+          // cross-product against a streaming right side has no bounded state model today.
+          // Failing at analysis time is clearer than letting either fail at runtime. Streaming
+          // support is tracked as a follow-up; resolving it likely comes from a different
+          // grouping strategy or a dedicated physical operator.
+          case j: NearestByJoin if j.isStreaming =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+              messageParameters = Map.empty)
+
+          case j: NearestByJoin if !conf.crossJoinEnabled =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+              messageParameters = Map.empty)
+
+          case j @ NearestByJoin(_, _, _, _, _, rankingExpression, _)
+              if !RowOrdering.isOrderable(rankingExpression.dataType) =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.NON_ORDERABLE_RANKING_EXPRESSION",
+              messageParameters = Map(
+                "expression" -> toSQLExpr(rankingExpression),
+                "type" -> toSQLType(rankingExpression.dataType)))
+
+          case j @ NearestByJoin(_, _, _, false, _, rankingExpression, _)
+              if !rankingExpression.deterministic =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
+              messageParameters = Map("expression" -> toSQLExpr(rankingExpression)))
 
           case a: Aggregate =>
             a.groupingExpressions.foreach(
@@ -830,6 +982,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               context = j.origin.getQueryContext,
               summary = j.origin.context.summary)
 
+          case j: NearestByJoin if !j.duplicateResolved =>
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
+
           // TODO: although map type is not orderable, technically map type should be able to be
           // used in equality comparison, remove this type check once we support it.
           case o if mapColumnInSetOperation(o).isDefined =>
@@ -898,7 +1061,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           case j @ LateralJoin(_, right, _, _)
-              if j.getTagValue(LateralJoin.BY_TABLE_ARGUMENT).isEmpty =>
+              if !j.containsTag(LateralJoin.BY_TABLE_ARGUMENT) =>
             right.plan.foreach {
               case Generate(pyudtf: PythonUDTF, _, _, _, _, _)
                   if pyudtf.evalType == PythonEvalType.SQL_ARROW_UDTF =>
@@ -1071,9 +1234,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
               // We don't need to handle nested types here which shall fail before.
               def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                case (CharType(l1), CharType(l2)) => l1 == l2
-                case (CharType(l1), VarcharType(l2)) => l1 <= l2
-                case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                case (c1: CharType, c2: CharType) => c1.length == c2.length
+                case (c: CharType, v: VarcharType) => c.length <= v.length
+                case (v1: VarcharType, v2: VarcharType) => v1.length <= v2.length
                 case _ => Cast.canUpCast(from, to)
               }
               if (!canAlterColumnType(field.dataType, newDataType)) {

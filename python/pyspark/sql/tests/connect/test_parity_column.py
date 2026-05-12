@@ -22,19 +22,54 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.analyzer.strictDataFrameColumnResolution", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.analyzer.strictDataFrameColumnResolution")
+        finally:
+            super().tearDownClass()
+
     @unittest.skip("Requires JVM access.")
     def test_validate_column_types(self):
         super().test_validate_column_types()
 
+    def test_df_col_resolution_mode(self):
+        self.assertEqual(
+            self.spark.conf.get("spark.sql.analyzer.strictDataFrameColumnResolution"),
+            "true",
+        )
+
+
+class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
+    """Re-run the Column parity tests with
+    `spark.sql.analyzer.strictDataFrameColumnResolution=false` to exercise the
+    name-based fallback path for tagged UnresolvedAttributes."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.analyzer.strictDataFrameColumnResolution", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.analyzer.strictDataFrameColumnResolution")
+        finally:
+            super().tearDownClass()
+
+    def test_df_col_resolution_mode(self):
+        self.assertEqual(
+            self.spark.conf.get("spark.sql.analyzer.strictDataFrameColumnResolution"),
+            "false",
+        )
+
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_column import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

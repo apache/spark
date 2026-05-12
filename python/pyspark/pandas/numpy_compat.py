@@ -23,7 +23,6 @@ from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, LongType, BooleanType
 from pyspark.pandas.base import IndexOpsMixin
 
-
 unary_np_spark_mappings = {
     "abs": F.abs,
     "absolute": F.abs,
@@ -245,7 +244,7 @@ def _test() -> None:
         .appName("pyspark.pandas.numpy_compat tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.numpy_compat,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_groupby_expanding import GroupByExpandingTestingFuncMixin
 
 
 class GroupByExpandingAdvMixin(GroupByExpandingTestingFuncMixin):
+    def test_groupby_expanding_median(self):
+        self._test_groupby_expanding_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_groupby_expanding_quantile(self):
         self._test_groupby_expanding_func(
             lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")
@@ -46,13 +49,6 @@ class GroupByExpandingAdvTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.window.test_groupby_expanding_adv import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

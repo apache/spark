@@ -22,7 +22,7 @@ import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A client that communicates with the cluster manager to request or kill executors.
- * This is currently supported only in YARN mode.
+ * This is currently supported only in Kubernetes and YARN mode.
  */
 private[spark] trait ExecutorAllocationClient {
 

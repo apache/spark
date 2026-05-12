@@ -957,6 +957,42 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"t":"14-30-45.123456"}""")
   }
 
+  test("to_json - sortKeys with struct") {
+    val schema = StructType(
+      StructField("c", IntegerType) ::
+      StructField("a", IntegerType) ::
+      StructField("b", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(3, 1, 2), schema)
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), struct, UTC_OPT),
+      """{"a":1,"b":2,"c":3}""")
+    checkEvaluation(
+      StructsToJson(Map.empty, struct, UTC_OPT),
+      """{"c":3,"a":1,"b":2}""")
+  }
+
+  test("to_json - sortKeys with map") {
+    val schema = MapType(StringType, IntegerType)
+    val input = Literal(ArrayBasedMapData(Map(
+      UTF8String.fromString("c") -> 3,
+      UTF8String.fromString("a") -> 1,
+      UTF8String.fromString("b") -> 2)), schema)
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), input),
+      """{"a":1,"b":2,"c":3}""")
+  }
+
+  test("to_json - sortKeys with nested struct") {
+    val innerSchema = StructType(
+      StructField("z", IntegerType) :: StructField("y", IntegerType) :: Nil)
+    val outerSchema = StructType(
+      StructField("b", innerSchema) :: StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(create_row(2, 1), 0), outerSchema)
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), struct, UTC_OPT),
+      """{"a":0,"b":{"y":1,"z":2}}""")
+  }
+
   test("TIME type with arrays") {
     val inputSchema = ArrayType(StructType(StructField("t", TimeType(3)) :: Nil))
     val time1 = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("09:00:00.123"))

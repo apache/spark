@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.execution
 
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -36,8 +36,8 @@ import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralP
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
-import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
-import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
+import org.apache.spark.sql.connect.utils.{ErrorUtils, MetricGenerator, PipelineAnalysisContextUtils}
+import org.apache.spark.sql.execution.{CollectLimitExec, CollectTailExec, DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -95,7 +95,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
               session,
               transformer(tracker),
               tracker,
-              shuffleCleanupMode = shuffleCleanupMode)
+              shuffleCleanupModeOpt = Some(shuffleCleanupMode))
             qe.assertCommandExecuted()
             executeHolder.eventsManager.postFinished()
           case None =>
@@ -204,7 +204,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       }
       numSent += 1
     }
-
+    def sendCollectedRows(rows: Array[InternalRow]): Unit = {
+      executePlan.eventsManager.postFinished(Some(rows.length))
+      var offset = 0L
+      converter(rows.iterator).foreach { case (bytes, count) =>
+        sendBatch(bytes, count, offset)
+        offset += count
+      }
+    }
     dataframe.queryExecution.executedPlan match {
       case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
@@ -212,6 +219,14 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         converter(rows.iterator).foreach { case (bytes, count) =>
           sendBatch(bytes, count, offset)
           offset += count
+        }
+      case collectLimit: CollectLimitExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectLimitArrow")) {
+          sendCollectedRows(collectLimit.executeCollect())
+        }
+      case collectTail: CollectTailExec =>
+        SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectTailArrow")) {
+          sendCollectedRows(collectTail.executeCollect())
         }
       case _ =>
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
@@ -340,22 +355,30 @@ object SparkConnectPlanExecution {
       sessionId: String,
       serverSessionId: String,
       observationAndPlanIds: Map[String, Long],
-      metrics: Map[String, Seq[(Option[String], Any, Option[DataType])]]): ExecutePlanResponse = {
-    val observedMetrics = metrics.map { case (name, values) =>
-      val metrics = ExecutePlanResponse.ObservedMetrics
+      metrics: Map[String, Try[Seq[(Option[String], Any, Option[DataType])]]])
+      : ExecutePlanResponse = {
+    val observedMetrics = metrics.map { case (name, result) =>
+      val metricsBuilder = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-      values.foreach { case (keyOpt, value, dataTypeOpt) =>
-        dataTypeOpt match {
-          case Some(dataType) =>
-            metrics.addValues(toLiteralProto(value, dataType))
-          case None =>
-            metrics.addValues(toLiteralProto(value))
-        }
-        keyOpt.foreach(metrics.addKeys)
+      result match {
+        case Success(values) =>
+          values.foreach { case (keyOpt, value, dataTypeOpt) =>
+            dataTypeOpt match {
+              case Some(dataType) =>
+                metricsBuilder.addValues(toLiteralProto(value, dataType))
+              case None =>
+                metricsBuilder.addValues(toLiteralProto(value))
+            }
+            keyOpt.foreach(metricsBuilder.addKeys)
+          }
+        case Failure(throwable) =>
+          val (rootErrorIdx, errors) = ErrorUtils.throwableToProtoErrors(throwable)
+          metricsBuilder.setRootErrorIdx(rootErrorIdx)
+          metricsBuilder.addAllErrors(errors.asJava)
       }
-      observationAndPlanIds.get(name).foreach(metrics.setPlanId)
-      metrics.build()
+      observationAndPlanIds.get(name).foreach(metricsBuilder.setPlanId)
+      metricsBuilder.build()
     }
     // Prepare a response with the observed metrics.
     ExecutePlanResponse

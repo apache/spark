@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
-class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
+class JsonFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("function get_json_object") {
@@ -363,6 +363,32 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
       Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("from_json with NULL in options map values") {
+    val df = Seq("""{"str": "World"}""").toDS()
+    val schema = "str STRING"
+
+    checkAnswer(
+      df.selectExpr(
+        s"from_json(value, '$schema', map('key', 'value', 'mode', NULL))"
+      ),
+      Row(Row("World")) :: Nil
+    )
+  }
+
+  test("from_json with NULL in options map key") {
+    val df = Seq("""{"str": "World"}""").toDS()
+    val schema = "str STRING"
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.selectExpr(
+          s"from_json(value, '$schema', map('mode', 'PERMISSIVE', NULL, 'value'))"
+        ).show()
+      },
+      condition = "NULL_MAP_KEY"
+    )
   }
 
   test("to_json - struct") {

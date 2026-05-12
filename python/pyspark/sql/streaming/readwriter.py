@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import re
 import sys
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
@@ -171,8 +172,12 @@ class DataStreamReader(OptionUtils):
             self._jreader = self._jreader.schema(schema)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
-                messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "schema",
+                    "expected_type": "str or struct type",
+                    "arg_type": type(schema).__name__,
+                },
             )
         return self
 
@@ -241,6 +246,53 @@ class DataStreamReader(OptionUtils):
             self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
+    def name(self, source_name: str) -> "DataStreamReader":
+        """Specifies a name for the streaming source.
+
+        This name is used to identify the source in checkpoint metadata and enables
+        stable checkpoint locations for source evolution.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        source_name : str
+            the name to assign to this streaming source. Must contain only ASCII letters,
+            digits, and underscores.
+
+        Returns
+        -------
+        :class:`DataStreamReader`
+
+        Notes
+        -----
+        This API is experimental.
+
+        Examples
+        --------
+        >>> spark.readStream.format("rate").name("my_source")  # doctest: +SKIP
+        <...streaming.readwriter.DataStreamReader object ...>
+        """
+        if not isinstance(source_name, str):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "source_name",
+                    "expected_type": "str",
+                    "arg_type": type(source_name).__name__,
+                },
+            )
+
+        # Validate that source_name contains only ASCII letters, digits, and underscores
+        if not re.match(r"^[a-zA-Z0-9_]+$", source_name):
+            raise PySparkValueError(
+                errorClass="INVALID_STREAMING_SOURCE_NAME",
+                messageParameters={"source_name": source_name},
+            )
+
+        self._jreader = self._jreader.name(source_name)
+        return self
+
     def load(
         self,
         path: Optional[str] = None,
@@ -297,7 +349,7 @@ class DataStreamReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            if type(path) != str or len(path.strip()) == 0:
+            if not isinstance(path, str) or len(path.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "path", "arg_value": str(path)},
@@ -415,8 +467,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.json(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     def orc(
@@ -466,8 +522,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.orc(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     def parquet(
@@ -528,8 +588,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.parquet(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     def text(
@@ -597,8 +661,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.text(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     def csv(
@@ -720,8 +788,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.csv(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     def xml(
@@ -819,8 +891,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.xml(path))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "path", "arg_type": type(path).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "path",
+                    "expected_type": "str",
+                    "arg_type": type(path).__name__,
+                },
             )
 
     def table(self, tableName: str) -> "DataFrame":
@@ -866,6 +942,46 @@ class DataStreamReader(OptionUtils):
         """
         if isinstance(tableName, str):
             return self._df(self._jreader.table(tableName))
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
+            )
+
+    def changes(self, tableName: str) -> "DataFrame":
+        """Returns the row-level changes (Change Data Capture) from the specified table
+        as a streaming :class:`DataFrame`. Currently this API is only supported for
+        Data Source V2 tables whose catalog implements ``TableCatalog.loadChangelog()``.
+
+        Use :meth:`option` to specify the starting version/timestamp and processing options.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, name of the table.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> spark.readStream.option("startingVersion", "10").changes(
+        ...     "my_table"
+        ... )  # doctest: +SKIP
+        """
+        if isinstance(tableName, str):
+            return self._df(self._jreader.changes(tableName))
         else:
             raise PySparkTypeError(
                 errorClass="NOT_STR",
@@ -948,7 +1064,7 @@ class DataStreamWriter:
         >>> time.sleep(3)
         >>> q.stop()
         """
-        if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
+        if not outputMode or not isinstance(outputMode, str) or len(outputMode.strip()) == 0:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_NON_EMPTY_STR",
                 messageParameters={"arg_name": "outputMode", "arg_value": str(outputMode)},
@@ -1068,12 +1184,10 @@ class DataStreamWriter:
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def partitionBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Partitions the output by the given columns on the file system.
@@ -1126,12 +1240,10 @@ class DataStreamWriter:
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataStreamWriter": ...
 
     @overload
-    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter":
-        ...
+    def clusterBy(self, __cols: List[str]) -> "DataStreamWriter": ...
 
     def clusterBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         """Clusters the output by the given columns.
@@ -1212,7 +1324,7 @@ class DataStreamWriter:
         >>> q.name
         'streaming_query'
         """
-        if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
+        if not queryName or not isinstance(queryName, str) or len(queryName.strip()) == 0:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_NON_EMPTY_STR",
                 messageParameters={"arg_name": "queryName", "arg_value": str(queryName)},
@@ -1221,20 +1333,16 @@ class DataStreamWriter:
         return self
 
     @overload
-    def trigger(self, *, processingTime: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, processingTime: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, once: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, once: bool) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, continuous: str) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, continuous: str) -> "DataStreamWriter": ...
 
     @overload
-    def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
-        ...
+    def trigger(self, *, availableNow: bool) -> "DataStreamWriter": ...
 
     def trigger(
         self,
@@ -1243,6 +1351,7 @@ class DataStreamWriter:
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
         availableNow: Optional[bool] = None,
+        realTime: Optional[str] = None,
     ) -> "DataStreamWriter":
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
@@ -1268,6 +1377,10 @@ class DataStreamWriter:
         availableNow : bool, optional
             if set to True, set a trigger that processes all available data in multiple
             batches then terminates the query. Only one trigger can be set.
+        realTime : str, optional
+            a batch duration as a string, e.g. '5 seconds', '1 minute'.
+            Set a trigger that runs a real time mode query with
+            batch at the specified duration. Only one trigger can be set.
 
         Notes
         -----
@@ -1291,15 +1404,20 @@ class DataStreamWriter:
 
         >>> df.writeStream.trigger(availableNow=True)
         <...streaming.readwriter.DataStreamWriter object ...>
-        """
-        params = [processingTime, once, continuous, availableNow]
 
-        if params.count(None) == 4:
+        Trigger the query for real time mode execution every 5 seconds.
+
+        >>> df.writeStream.trigger(realTime='5 seconds')
+        <...streaming.readwriter.DataStreamWriter object ...>
+        """
+        params = [processingTime, once, continuous, availableNow, realTime]
+
+        if params.count(None) == 5:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
             )
-        elif params.count(None) < 3:
+        elif params.count(None) < 4:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
@@ -1308,7 +1426,7 @@ class DataStreamWriter:
         jTrigger = None
         assert self._spark._sc._jvm is not None
         if processingTime is not None:
-            if type(processingTime) != str or len(processingTime.strip()) == 0:
+            if not isinstance(processingTime, str) or len(processingTime.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={
@@ -1333,7 +1451,7 @@ class DataStreamWriter:
             ).Once()
 
         elif continuous is not None:
-            if type(continuous) != str or len(continuous.strip()) == 0:
+            if not isinstance(continuous, str) or len(continuous.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "continuous", "arg_value": str(continuous)},
@@ -1342,6 +1460,16 @@ class DataStreamWriter:
             jTrigger = getattr(
                 self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
             ).Continuous(interval)
+        elif realTime is not None:
+            if not isinstance(realTime, str) or len(realTime.strip()) == 0:
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},
+                )
+            batch_duration = realTime.strip()
+            jTrigger = getattr(
+                self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
+            ).RealTime(batch_duration)
         else:
             if availableNow is not True:
                 raise PySparkValueError(
@@ -1357,7 +1485,7 @@ class DataStreamWriter:
 
     @staticmethod
     def _construct_foreach_function(
-        f: Union[Callable[[Row], None], "SupportsProcess"]
+        f: Union[Callable[[Row], None], "SupportsProcess"],
     ) -> Callable[[Any, Iterator], Iterator]:
         from pyspark.taskcontext import TaskContext
 
@@ -1439,12 +1567,10 @@ class DataStreamWriter:
             return func_with_open_process_close
 
     @overload
-    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
-        ...
+    def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter": ...
 
     @overload
-    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter":
-        ...
+    def foreach(self, f: "SupportsProcess") -> "DataStreamWriter": ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         """
@@ -1814,7 +1940,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.streaming.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

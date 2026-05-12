@@ -495,6 +495,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       // If we have consumed all the tokens in the format string, but characters remain unconsumed
       // in the input string, then the input string does not match the format string.
       formatMatchFailure(input, numberFormat)
+    } else if (parsedBeforeDecimalPoint.isEmpty && parsedAfterDecimalPoint.isEmpty) {
+      // If no digits were collected (e.g. input was all whitespace), treat as format match failure.
+      formatMatchFailure(input, numberFormat)
     } else {
       parseResultToDecimalValue(negateResult)
     }

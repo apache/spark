@@ -28,7 +28,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.DataSourceOptions
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{RelationChanges, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.ChangelogInfoUtils
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -318,6 +319,19 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
       new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    val multipartIdentifier =
+      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val changelogInfo = ChangelogInfoUtils.fromOptions(
+      options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val relation = UnresolvedRelation(multipartIdentifier, options)
+    Dataset.ofRows(sparkSession, RelationChanges(relation, changelogInfo))
   }
 
   /** @inheritdoc */

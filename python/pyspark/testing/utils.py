@@ -20,6 +20,7 @@ import struct
 import sys
 import unittest
 import difflib
+import faulthandler
 import functools
 from decimal import Decimal
 from time import time, sleep
@@ -42,7 +43,6 @@ from pyspark.sql import Row
 from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
-
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
@@ -53,63 +53,74 @@ def have_package(name: str) -> bool:
 
 
 have_numpy = have_package("numpy")
-numpy_requirement_message = None if have_numpy else "No module named 'numpy'"
+numpy_requirement_message = "" if have_numpy else "No module named 'numpy'"
 
 have_scipy = have_package("scipy")
-scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
+scipy_requirement_message = "" if have_scipy else "No module named 'scipy'"
 
 have_sklearn = have_package("sklearn")
-sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+sklearn_requirement_message = "" if have_sklearn else "No module named 'sklearn'"
 
 have_torch = have_package("torch")
-torch_requirement_message = None if have_torch else "No module named 'torch'"
+torch_requirement_message = "" if have_torch else "No module named 'torch'"
 
 have_torcheval = have_package("torcheval")
-torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+torcheval_requirement_message = "" if have_torcheval else "No module named 'torcheval'"
 
 have_deepspeed = have_package("deepspeed")
-deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+deepspeed_requirement_message = "" if have_deepspeed else "No module named 'deepspeed'"
 
 have_plotly = have_package("plotly")
-plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
+plotly_requirement_message = "" if have_plotly else "No module named 'plotly'"
 
 have_matplotlib = have_package("matplotlib")
-matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+matplotlib_requirement_message = "" if have_matplotlib else "No module named 'matplotlib'"
 
 have_tabulate = have_package("tabulate")
-tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+tabulate_requirement_message = "" if have_tabulate else "No module named 'tabulate'"
 
 have_graphviz = have_package("graphviz")
-graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+graphviz_requirement_message = "" if have_graphviz else "No module named 'graphviz'"
 
 have_flameprof = have_package("flameprof")
-flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
+flameprof_requirement_message = "" if have_flameprof else "No module named 'flameprof'"
 
 have_jinja2 = have_package("jinja2")
-jinja2_requirement_message = None if have_jinja2 else "No module named 'jinja2'"
+jinja2_requirement_message = "" if have_jinja2 else "No module named 'jinja2'"
 
 have_openpyxl = have_package("openpyxl")
-openpyxl_requirement_message = None if have_openpyxl else "No module named 'openpyxl'"
+openpyxl_requirement_message = "" if have_openpyxl else "No module named 'openpyxl'"
 
 have_yaml = have_package("yaml")
-yaml_requirement_message = None if have_yaml else "No module named 'yaml'"
+yaml_requirement_message = "" if have_yaml else "No module named 'yaml'"
 
 have_grpc = have_package("grpc")
-grpc_requirement_message = None if have_grpc else "No module named 'grpc'"
+grpc_requirement_message = "" if have_grpc else "No module named 'grpc'"
 
 have_grpc_status = have_package("grpc_status")
-grpc_status_requirement_message = None if have_grpc_status else "No module named 'grpc_status'"
+grpc_status_requirement_message = "" if have_grpc_status else "No module named 'grpc_status'"
+
+have_zstandard = have_package("zstandard")
+zstandard_requirement_message = "" if have_zstandard else "No module named 'zstandard'"
+
+have_kafka = have_package("kafka")
+kafka_requirement_message = "" if have_kafka else "No module named 'kafka'"
+
+have_testcontainers = have_package("testcontainers")
+testcontainers_requirement_message = (
+    "" if have_testcontainers else "No module named 'testcontainers'"
+)
 
 
-googleapis_common_protos_requirement_message = None
+googleapis_common_protos_requirement_message = ""
 
 try:
-    from google.rpc import error_details_pb2
+    from google.rpc import error_details_pb2  # noqa: F401
 except ImportError as e:
     googleapis_common_protos_requirement_message = str(e)
-have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
+have_googleapis_common_protos = not googleapis_common_protos_requirement_message
 
-pandas_requirement_message = None
+pandas_requirement_message = ""
 try:
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
@@ -118,10 +129,10 @@ except Exception as e:
     # If Pandas version requirement is not satisfied, skip related tests.
     pandas_requirement_message = str(e)
 
-have_pandas = pandas_requirement_message is None
+have_pandas = not pandas_requirement_message
 
 
-pyarrow_requirement_message = None
+pyarrow_requirement_message = ""
 try:
     from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 
@@ -130,7 +141,7 @@ except Exception as e:
     # If Arrow version requirement is not satisfied, skip related tests.
     pyarrow_requirement_message = str(e)
 
-have_pyarrow = pyarrow_requirement_message is None
+have_pyarrow = not pyarrow_requirement_message
 
 
 connect_requirement_message = (
@@ -139,16 +150,17 @@ connect_requirement_message = (
     or grpc_requirement_message
     or googleapis_common_protos_requirement_message
     or grpc_status_requirement_message
+    or zstandard_requirement_message
 )
 
-should_test_connect = connect_requirement_message is None
+should_test_connect = not connect_requirement_message
 
 
 is_ansi_mode_test = True
 if os.environ.get("SPARK_ANSI_SQL_MODE") == "false":
     is_ansi_mode_test = False
 
-ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else None
+ansi_mode_not_supported_message = "ANSI mode is not supported" if is_ansi_mode_test else ""
 
 
 def read_int(b):
@@ -183,6 +195,9 @@ def eventually(
     timeout=30.0,
     catch_assertions=False,
     catch_timeout=False,
+    quiet=True,
+    interval=0.1,
+    expected_exceptions=tuple(),
 ):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
@@ -208,10 +223,25 @@ def eventually(
         If False (default), do not catch TimeoutError.
         If True, catch TimeoutError; continue, but save
         error to throw upon timeout.
+    quiet : bool
+        If True (default), do not print any output.
+        If False, print output.
+    interval : float
+        Number of seconds to wait between attempts.  Default 0.1 seconds.
     """
     assert timeout > 0
     assert isinstance(catch_assertions, bool)
     assert isinstance(catch_timeout, bool)
+    assert isinstance(quiet, bool)
+    assert isinstance(interval, float)
+    assert isinstance(expected_exceptions, (tuple, list))
+
+    expected_exceptions = list(expected_exceptions)
+    if catch_assertions:
+        expected_exceptions.append(AssertionError)
+    if catch_timeout:
+        expected_exceptions.append(TimeoutError)
+    expected_exceptions = tuple(expected_exceptions)
 
     def decorator(condition: Callable) -> Callable:
         assert isinstance(condition, Callable)
@@ -226,24 +256,17 @@ def eventually(
 
                 try:
                     lastValue = condition(*args, **kwargs)
-                except AssertionError as e:
-                    if catch_assertions:
-                        lastValue = e
-                    else:
-                        raise e
-                except TimeoutError as e:
-                    if catch_timeout:
-                        lastValue = e
-                    else:
-                        raise e
+                except expected_exceptions as e:
+                    lastValue = e
 
                 if lastValue is True or lastValue is None:
                     return
 
-                print(f"\nAttempt #{numTries} failed!\n{lastValue}")
-                sleep(0.01)
+                if not quiet:
+                    print(f"\nAttempt #{numTries} failed!\n{lastValue}")
+                sleep(interval)
 
-            if isinstance(lastValue, (AssertionError, TimeoutError)):
+            if isinstance(lastValue, expected_exceptions):
                 raise lastValue
             else:
                 raise AssertionError(
@@ -268,7 +291,19 @@ class QuietTest:
         self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
-class PySparkTestCase(unittest.TestCase):
+class PySparkBaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
+
+class PySparkTestCase(PySparkBaseTestCase):
     def setUp(self):
         from pyspark import SparkContext
 
@@ -281,7 +316,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
 
 
-class ReusedPySparkTestCase(unittest.TestCase):
+class ReusedPySparkTestCase(PySparkBaseTestCase):
     @classmethod
     def conf(cls):
         """
@@ -291,6 +326,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         from pyspark import SparkContext
 
         cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
@@ -301,7 +338,10 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.sc.stop()
+        try:
+            cls.sc.stop()
+        finally:
+            super().tearDownClass()
 
     def test_assert_classic_mode(self):
         from pyspark.sql import is_remote
@@ -419,12 +459,14 @@ class PySparkErrorTestUtils:
                     f"Expected message parameter key '{key}' was not found "
                     "in actual message parameters.",
                 )
-                self.assertRegex(
-                    actual[key],
-                    value,
-                    f"Expected message parameter value '{value}' does not match actual message "
-                    f"parameter value '{actual[key]}'.",
-                ),
+                (
+                    self.assertRegex(
+                        actual[key],
+                        value,
+                        f"Expected message parameter value '{value}' does not match actual message "
+                        f"parameter value '{actual[key]}'.",
+                    ),
+                )
         else:
             self.assertEqual(
                 expected, actual, f"Expected message parameters was '{expected}', got '{actual}'"
@@ -440,9 +482,9 @@ class PySparkErrorTestUtils:
                     expected, actual, f"Expected QueryContext was '{expected}', got '{actual}'"
                 )
                 if actual == QueryContextType.DataFrame:
-                    assert (
-                        fragment is not None
-                    ), "`fragment` is required when QueryContextType is DataFrame."
+                    assert fragment is not None, (
+                        "`fragment` is required when QueryContextType is DataFrame."
+                    )
                     expected = fragment
                     actual = actual_context.fragment()
                     self.assertEqual(
@@ -472,7 +514,7 @@ def assertSchemaEqual(
     expected : StructType
         The expected schema, for comparison with the actual schema.
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -559,13 +601,21 @@ def assertSchemaEqual(
     """
     if not isinstance(actual, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": type(actual).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "actual",
+                "expected_type": "struct type",
+                "arg_type": type(actual).__name__,
+            },
         )
     if not isinstance(expected, StructType):
         raise PySparkTypeError(
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "expected", "arg_type": type(expected).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "expected",
+                "expected_type": "struct type",
+                "arg_type": type(expected).__name__,
+            },
         )
 
     def compare_schemas_ignore_nullable(s1: StructType, s2: StructType):
@@ -682,7 +732,7 @@ def assertDataFrameEqual(
         The absolute tolerance, used in asserting approximate equality for float values in actual
         and expected. Set to 1e-8 by default. (See Notes)
     ignoreNullable : bool, default True
-        Specifies whether a column’s nullable property is included when checking for
+        Specifies whether a column's nullable property is included when checking for
         schema equality.
         When set to `True` (default), the nullable property of the columns being compared
         is not taken into account and the columns will be considered equal even if they have
@@ -931,7 +981,7 @@ def assertDataFrameEqual(
 
     has_arrow = False
     try:
-        import pyarrow
+        import pyarrow  # noqa: F401
 
         has_arrow = True
     except ImportError:
@@ -1013,9 +1063,9 @@ def assertDataFrameEqual(
                 return all(compare_vals(x, y) for x, y in zip(val1, val2))
             elif isinstance(val1, dict) and isinstance(val2, dict):
                 return (
-                    len(val1.keys()) == len(val2.keys())
+                    len(val1) == len(val2)
                     and val1.keys() == val2.keys()
-                    and all(compare_vals(val1[k], val2[k]) for k in val1.keys())
+                    and all(compare_vals(val1[k], val2[k]) for k in val1)
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
@@ -1041,7 +1091,6 @@ def assertDataFrameEqual(
         rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
     ):
         __tracebackhide__ = True
-        zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []
         has_diff_rows = False
@@ -1049,28 +1098,86 @@ def assertDataFrameEqual(
         rows_str1 = ""
         rows_str2 = ""
 
-        # count different rows
-        for r1, r2 in zipped:
-            if not compare_rows(r1, r2):
-                diff_rows_cnt += 1
-                has_diff_rows = True
-                if includeDiffRows:
-                    diff_rows.append((r1, r2))
-                rows_str1 += str(r1) + "\n"
-                rows_str2 += str(r2) + "\n"
+        def record_diff(r1, r2):
+            nonlocal diff_rows_cnt, has_diff_rows
+            diff_rows_cnt += 1
+            has_diff_rows = True
+            if includeDiffRows:
+                diff_rows.append((r1, r2))
+
+        # SPARK-54090: For checkRowOrder=False, the input lists have already
+        # been sorted by str(x).  When their lengths differ, the original
+        # zip_longest pairing causes a single missing/extra row to cascade
+        # into a mismatch on every subsequent row -- inflating both the diff
+        # count and the reported percentage.  Walk sorted lists of different
+        # lengths as a merge so only truly missing/extra rows contribute.
+        # When the lengths match, zip_longest aligns positions correctly and
+        # is preserved to keep field-level diffs reported as paired rows.
+        use_merge_walk = not checkRowOrder and len(rows1) != len(rows2)
+
+        if not use_merge_walk:
+            zipped = list(zip_longest(rows1, rows2))
+            for r1, r2 in zipped:
+                if not compare_rows(r1, r2):
+                    record_diff(r1, r2)
+                    rows_str1 += str(r1) + "\n"
+                    rows_str2 += str(r2) + "\n"
+                    if maxErrors is not None and diff_rows_cnt >= maxErrors:
+                        break
+                elif not showOnlyDiff:
+                    rows_str1 += str(r1) + "\n"
+                    rows_str2 += str(r2) + "\n"
+            total = len(zipped)
+        else:
+            i = j = 0
+            len1, len2 = len(rows1), len(rows2)
+            while i < len1 or j < len2:
+                if i < len1 and j < len2:
+                    r1, r2 = rows1[i], rows2[j]
+                    if compare_rows(r1, r2):
+                        if not showOnlyDiff:
+                            rows_str1 += str(r1) + "\n"
+                            rows_str2 += str(r2) + "\n"
+                        i += 1
+                        j += 1
+                        continue
+                    s1, s2 = str(r1), str(r2)
+                    if s1 < s2:
+                        record_diff(r1, None)
+                        rows_str1 += str(r1) + "\n"
+                        i += 1
+                    elif s1 > s2:
+                        record_diff(None, r2)
+                        rows_str2 += str(r2) + "\n"
+                        j += 1
+                    else:
+                        # Equal str() but compare_rows said they differ (e.g.
+                        # float values outside tolerance that still str-sort
+                        # identically).  Treat as a paired mismatch.
+                        record_diff(r1, r2)
+                        rows_str1 += str(r1) + "\n"
+                        rows_str2 += str(r2) + "\n"
+                        i += 1
+                        j += 1
+                elif i < len1:
+                    record_diff(rows1[i], None)
+                    rows_str1 += str(rows1[i]) + "\n"
+                    i += 1
+                else:
+                    record_diff(None, rows2[j])
+                    rows_str2 += str(rows2[j]) + "\n"
+                    j += 1
                 if maxErrors is not None and diff_rows_cnt >= maxErrors:
                     break
-            elif not showOnlyDiff:
-                rows_str1 += str(r1) + "\n"
-                rows_str2 += str(r2) + "\n"
+            total = max(len1, len2)
 
         generated_diff = _context_diff(
-            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=len(zipped)
+            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=total
         )
 
         if has_diff_rows:
             error_msg = "Results do not match: "
-            percent_diff = (diff_rows_cnt / len(zipped)) * 100
+            percent_diff = (diff_rows_cnt / total) * 100 if total else 0
             error_msg += "( %.5f %% )" % percent_diff
             error_msg += "\n" + "\n".join(generated_diff)
             data = diff_rows if includeDiffRows else None
@@ -1129,7 +1236,7 @@ def _test() -> None:
     globs = pyspark.testing.utils.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("testing.utils tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.testing.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

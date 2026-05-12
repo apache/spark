@@ -23,7 +23,7 @@ import org.apache.spark.util.JsonUtils.toJsonString
 import org.apache.spark.util.SparkClassUtils
 
 private[spark] object ErrorMessageFormat extends Enumeration {
-  val PRETTY, MINIMAL, STANDARD = Value
+  val PRETTY, MINIMAL, STANDARD, DEBUG = Value
 }
 
 /**
@@ -113,7 +113,7 @@ private[spark] object SparkThrowableHelper {
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
     import ErrorMessageFormat._
     format match {
-      case PRETTY => e.getMessage
+      case PRETTY | DEBUG => e.getMessage
       case MINIMAL | STANDARD if e.getCondition == null =>
         toJsonString { generator =>
           val g = generator.useDefaultPrettyPrinter()

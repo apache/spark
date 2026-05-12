@@ -21,7 +21,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -394,12 +393,12 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
         sql(s"create table t(i boolean) using $v2Format")
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql("alter table t add column s bigint default badvalue")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "ALTER TABLE ADD COLUMNS",
             "colName" -> "`s`",
@@ -410,7 +409,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql("alter table t alter column s set default badvalue")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "ALTER TABLE ALTER COLUMN",
             "colName" -> "`s`",

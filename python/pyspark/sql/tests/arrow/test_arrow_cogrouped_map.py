@@ -22,12 +22,8 @@ import logging
 from pyspark.errors import PythonException
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -37,7 +33,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pyarrow,
-    pyarrow_requirement_message,  # type: ignore[arg-type]
+    pyarrow_requirement_message,
 )
 class CogroupedMapInArrowTestsMixin:
     @property
@@ -151,7 +147,8 @@ class CogroupedMapInArrowTestsMixin:
                 with self.quiet():
                     with self.assertRaisesRegex(
                         PythonException,
-                        f"Columns do not match in their data type: {expected}",
+                        "Column types of the returned data do not match specified schema. "
+                        f"Mismatch: {expected}",
                     ):
                         self.cogrouped.applyInArrow(
                             lambda left, right: left, schema=schema
@@ -175,7 +172,8 @@ class CogroupedMapInArrowTestsMixin:
                     with self.quiet():
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             self.cogrouped.applyInArrow(
                                 lambda left, right: left, schema=schema
@@ -195,8 +193,8 @@ class CogroupedMapInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m. Unexpected: v, v2.\n",
+                "Column names of the returned data do not match specified schema. "
+                "Missing: m. Unexpected: v, v2.",
             ):
                 # stats returns three columns while here we set schema with two columns
                 self.cogrouped.applyInArrow(stats, schema="id long, m double").collect()
@@ -231,8 +229,7 @@ class CogroupedMapInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m.\n",
+                "Column names of the returned data do not match specified schema. Missing: m.",
             ):
                 # stats returns one column for even keys while here we set schema with two columns
                 self.cogrouped.applyInArrow(odd_means, schema="id long, m double").collect()
@@ -436,12 +433,6 @@ class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_cogrouped_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

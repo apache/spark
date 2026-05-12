@@ -39,7 +39,7 @@ import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
-class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper {
+class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
   import testImplicits._
 
   test("basic tests") {

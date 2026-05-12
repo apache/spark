@@ -17,7 +17,33 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.sql.catalyst.expressions.CursorDefinition
+
 /**
  * Trait which provides an interface extension for SQL scripting execution context.
+ * Provides APIs for cursor lookup that can be used during analysis without creating
+ * circular dependencies between catalyst and core modules.
  */
-trait SqlScriptingExecutionContextExtension {}
+trait SqlScriptingExecutionContextExtension {
+
+  /**
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Used for unqualified cursor references (e.g., `cursor`).
+   *
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
+   */
+  def findCursorByName(normalizedName: String): Option[CursorDefinition]
+
+  /**
+   * Find a cursor in a specific labeled scope.
+   * Used for qualified cursor references (e.g., `label.cursor`).
+   *
+   * @param normalizedScopeLabel The normalized label of the scope to search in
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
+   */
+  def findCursorInScope(
+      normalizedScopeLabel: String,
+      normalizedName: String): Option[CursorDefinition]
+}

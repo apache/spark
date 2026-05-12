@@ -12,7 +12,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`r`"
+    "relationName" : "`r`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -166,7 +167,7 @@ WithCTE
 -- !query
 DROP VIEW ZeroAndOne
 -- !query analysis
-DropTempViewCommand ZeroAndOne
+DropTempViewCommand ZeroAndOne, false
 
 
 -- !query
@@ -290,7 +291,7 @@ WithCTE
 -- !query
 DROP VIEW ZeroAndOne
 -- !query analysis
-DropTempViewCommand ZeroAndOne
+DropTempViewCommand ZeroAndOne, false
 
 
 -- !query
@@ -704,12 +705,6 @@ WithCTE
 
 
 -- !query
-SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION
--- !query analysis
-SetCommand (spark.sql.legacy.ctePrecedencePolicy,Some(EXCEPTION))
-
-
--- !query
 WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL
@@ -1058,7 +1053,7 @@ Project [level#x]
 -- !query
 DROP VIEW rv
 -- !query analysis
-DropTempViewCommand rv
+DropTempViewCommand rv, false
 
 
 -- !query
@@ -1409,7 +1404,7 @@ WithCTE
 -- !query
 DROP VIEW routes
 -- !query analysis
-DropTempViewCommand routes
+DropTempViewCommand routes, false
 
 
 -- !query

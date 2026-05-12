@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -173,6 +174,13 @@ class CodegenContext extends Logging {
    * BoundReference to generate code.
    */
   var currentVars: Seq[ExprCode] = null
+
+  /**
+   * Java expression used by leaf operators (e.g. `RangeExec`, `SampleExec`)
+   * in place of the stage's `partitionIndex` field. `UnionExec` overrides
+   * this per child so that fused children observe their child-local index.
+   */
+  var currentPartitionIndexVar: String = "partitionIndex"
 
   /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
@@ -1989,8 +1997,10 @@ object CodeGenerator extends Logging {
     }
   }
 
-  @tailrec
-  def javaClass(dt: DataType): Class[_] = dt match {
+  def javaClass(dt: DataType): Class[_] =
+    TypeOps(dt).map(_.getJavaClass).getOrElse(javaClassDefault(dt))
+
+  private def javaClassDefault(dt: DataType): Class[_] = dt match {
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE

@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import unittest
 
 import numpy as np
 
@@ -204,7 +203,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         paramGrid = ParamGridBuilder().addGrid(lr.regParam, [0.5, 1]).build()
         for param in paramGrid:
             for v in param.values():
-                assert type(v) == float
+                assert isinstance(v, float)
 
     def test_parallel_evaluation(self):
         dataset = self.spark.createDataFrame(
@@ -409,12 +408,6 @@ class TrainValidationSplitTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.tuning.test_tuning import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

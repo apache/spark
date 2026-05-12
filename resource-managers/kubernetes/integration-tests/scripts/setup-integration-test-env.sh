@@ -151,6 +151,13 @@ then
        # build the images directly using the minikube Docker daemon so no need to push
        $SPARK_INPUT_DIR/bin/docker-image-tool.sh -m -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build
        ;;
+
+    rancher-desktop)
+       # Only need to build as this will place it in our local Docker repo which is all
+       # we need for Rancher Desktop to work so no need to also push
+       $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build
+       ;;
+
     *)
        echo "Unrecognized deploy mode $DEPLOY_MODE" && exit 1
        ;;

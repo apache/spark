@@ -299,19 +299,40 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
           currentCtx.children.asScala.toSeq match {
             case Seq(_) => StringType
             case Seq(_, ctx: CollateClauseContext) =>
-              val collationNameParts = visitCollateClause(ctx).toArray
-              val collationId = CollationFactory.collationNameToId(
-                CollationFactory.resolveFullyQualifiedName(collationNameParts))
+              val collationId =
+                CollationFactory.fullyQualifiedNameToId(visitCollateClause(ctx).toArray)
               StringType(collationId)
           }
         case CHARACTER | CHAR =>
-          if (currentCtx.length == null) {
-            throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
-          } else CharType(currentCtx.length.getText.toInt)
+          (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
+            case (None, _) =>
+              throw QueryParsingErrors.charVarcharTypeMissingLengthError(
+                currentCtx.start.getText,
+                ctx)
+
+            case (Some(length), None) =>
+              CharType(length.getText.toInt)
+
+            case (Some(length), Some(collate)) =>
+              val collationId =
+                CollationFactory.fullyQualifiedNameToId(visitCollateClause(collate).toArray)
+              CharType(length.getText.toInt, collationId)
+          }
         case VARCHAR =>
-          if (currentCtx.length == null) {
-            throw QueryParsingErrors.charVarcharTypeMissingLengthError(typeCtx.getText, ctx)
-          } else VarcharType(currentCtx.length.getText.toInt)
+          (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
+            case (None, _) =>
+              throw QueryParsingErrors.charVarcharTypeMissingLengthError(
+                currentCtx.start.getText,
+                ctx)
+
+            case (Some(length), None) =>
+              VarcharType(length.getText.toInt)
+
+            case (Some(length), Some(collate)) =>
+              val collationId =
+                CollationFactory.fullyQualifiedNameToId(visitCollateClause(collate).toArray)
+              VarcharType(length.getText.toInt, collationId)
+          }
         case DECIMAL | DEC | NUMERIC =>
           if (currentCtx.precision == null) {
             DecimalType.USER_DEFAULT
@@ -328,10 +349,12 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
           } else {
             CalendarIntervalType
           }
+        case TIMESTAMP if currentCtx.withLocalTimeZone() != null =>
+          TimestampType
+        case TIMESTAMP if currentCtx.withoutTimeZone() != null =>
+          TimestampNTZType
         case TIMESTAMP =>
-          if (currentCtx.WITHOUT() == null) {
-            SqlApiConf.get.timestampType
-          } else TimestampNTZType
+          SqlApiConf.get.timestampType
         case TIME =>
           val precision = if (currentCtx.precision == null) {
             TimeType.DEFAULT_PRECISION

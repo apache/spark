@@ -291,6 +291,37 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(Not(IsNull($"b")), IsNotNull($"b"))
   }
 
+  test("SPARK-54881: simplify Not(Expr) in single pass") {
+    def executeRuleOnce(exprToTest: Expression, optimizedExprExpected: Expression): Unit = {
+      val planAfterRuleApp = BooleanSimplification.apply(testRelation.where(exprToTest).analyze)
+      val expectedOptPlan = testRelation.where(optimizedExprExpected).analyze
+      comparePlans(expectedOptPlan, planAfterRuleApp)
+    }
+    // check simplify Not(A <= B OR A >= B) to (a > b AND a < b) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b") || ($"a" >= $"b")),
+      $"a" > $"b" && $"a" < $"b"
+    )
+
+    // check simplify Not((expr1 OR expr2) OR (expr3 AND expr4)) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b" || $"c" > $"a" + 4) || ($"a" >= $"b" && $"c" < $"a")),
+      And(
+        And($"a" > $"b", $"c" <= $"a" + 4),
+        Or($"a" < $"b", $"c" >= $"a")
+      )
+    )
+
+    // check simplify Not((expr1 OR expr2) AND (expr3 OR expr4)) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b" || $"c" > $"a" + 4) && ($"a" >= $"b" || $"c" < $"a")),
+      Or(
+        And($"a" > $"b", $"c" <= $"a" + 4),
+        And($"a" < $"b", $"c" >= $"a")
+      )
+    )
+  }
+
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
     val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)

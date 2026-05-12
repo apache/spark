@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
@@ -99,31 +97,6 @@ object InternalRowComparableWrapper {
       partitionRow: InternalRow,
       partitionExpression: Seq[Expression]): InternalRowComparableWrapper = {
     new InternalRowComparableWrapper(partitionRow, partitionExpression.map(_.dataType))
-  }
-
-  def mergePartitions(
-      leftPartitioning: Seq[InternalRow],
-      rightPartitioning: Seq[InternalRow],
-      partitionExpression: Seq[Expression],
-      intersect: Boolean = false): Seq[InternalRowComparableWrapper] = {
-    val partitionDataTypes = partitionExpression.map(_.dataType)
-    val leftPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
-    val internalRowComparableWrapperFactory =
-      getInternalRowComparableWrapperFactory(partitionDataTypes)
-    leftPartitioning
-      .map(internalRowComparableWrapperFactory)
-      .foreach(partition => leftPartitionSet.add(partition))
-    val rightPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
-    rightPartitioning
-      .map(internalRowComparableWrapperFactory)
-      .foreach(partition => rightPartitionSet.add(partition))
-
-    val result = if (intersect) {
-      leftPartitionSet.intersect(rightPartitionSet)
-    } else {
-      leftPartitionSet.union(rightPartitionSet)
-    }
-    result.toSeq
   }
 
   /** Creates a shared factory method for a given row schema to avoid excessive cache lookups. */

@@ -146,15 +146,16 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       assert(pod.getSpec.getPriorityClassName === podGroup.getSpec.getPriorityClassName))
   }
 
-  private def createOrReplaceResource(resource: Queue): Unit = {
+  private def applyResource(resource: Queue): Unit = {
     kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
       .queues()
       .inNamespace(kubernetesTestComponents.namespace)
-      .createOrReplace(resource)
+      .resource(resource)
+      .serverSideApply()
     testResources += resource
   }
 
-  private def createOrReplaceQueue(name: String,
+  private def applyQueue(name: String,
       cpu: Option[String] = None,
       memory: Option[String] = None): Unit = {
     val queueBuilder = new QueueBuilder()
@@ -170,14 +171,14 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     memory.foreach{ memory =>
       queueBuilder.editOrNewSpec().addToCapability("memory", new Quantity(memory)).endSpec()
     }
-    createOrReplaceResource(queueBuilder.build())
+    applyResource(queueBuilder.build())
   }
 
-  private def createOrReplaceYAMLResource(yamlPath: String): Unit = {
+  private def applyYAMLResource(yamlPath: String): Unit = {
     kubernetesTestComponents.kubernetesClient
       .load(new FileInputStream(yamlPath))
       .inNamespace(kubernetesTestComponents.namespace)
-      .createOrReplace()
+      .serverSideApply()
     testYAMLPaths += yamlPath
   }
 
@@ -345,7 +346,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // Create a queue with driver + executor CPU capacity
     val jobCores = driverCores + executorCores
     val queueName = s"queue-$jobCores"
-    createOrReplaceQueue(name = queueName, cpu = Some(s"$jobCores"))
+    applyQueue(name = queueName, cpu = Some(s"$jobCores"))
     val testContent =
       s"""
          |apiVersion: scheduling.volcano.sh/v1beta1
@@ -374,7 +375,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   test("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
     val groupName = generateGroupName("min-mem")
     // Create a queue with 3G memory capacity
-    createOrReplaceQueue(name = "queue-3g", memory = Some("3Gi"))
+    applyQueue(name = "queue-3g", memory = Some("3Gi"))
     // Submit 3 jobs with minMemory = 3g
     val jobNum = 3
     (1 to jobNum).map { i =>
@@ -390,8 +391,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enabled)", k8sTestTag, volcanoTag) {
     // Disabled queue0 and enabled queue1
-    createOrReplaceQueue(name = "queue0", cpu = Some("0.001"))
-    createOrReplaceQueue(name = "queue1")
+    applyQueue(name = "queue0", cpu = Some("0.001"))
+    applyQueue(name = "queue1")
     val QUEUE_NUMBER = 2
     // Submit jobs into disabled queue0 and enabled queue1
     // By default is 4 (2 jobs in each queue)
@@ -415,8 +416,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   test("SPARK-38188: Run SparkPi jobs with 2 queues (all enabled)", k8sTestTag, volcanoTag) {
     val groupName = generateGroupName("queue-enable")
     // Enable all queues
-    createOrReplaceQueue(name = "queue1")
-    createOrReplaceQueue(name = "queue0")
+    applyQueue(name = "queue1")
+    applyQueue(name = "queue0")
     val QUEUE_NUMBER = 2
     // Submit jobs into disabled queue0 and enabled queue1
     // By default is 4 (2 jobs in each queue)
@@ -437,8 +438,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   test("SPARK-38423: Run driver job to validate priority order", k8sTestTag, volcanoTag) {
     // Prepare the priority resource and queue
-    createOrReplaceQueue(name = "queue", cpu = Some("0.001"))
-    createOrReplaceYAMLResource(VOLCANO_PRIORITY_YAML)
+    applyQueue(name = "queue", cpu = Some("0.001"))
+    applyYAMLResource(VOLCANO_PRIORITY_YAML)
     // Submit 3 jobs with different priority
     val priorities = Seq("low", "medium", "high")
     priorities.foreach { p =>
@@ -468,7 +469,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
 
     // Enable queue to let jobs running one by one
-    createOrReplaceQueue(name = "queue", cpu = Some(s"$driverCores"))
+    applyQueue(name = "queue", cpu = Some(s"$driverCores"))
 
     // Verify scheduling order follow the specified priority
     Eventually.eventually(TIMEOUT, INTERVAL) {

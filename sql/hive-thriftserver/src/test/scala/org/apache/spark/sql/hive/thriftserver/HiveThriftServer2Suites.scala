@@ -40,14 +40,13 @@ import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.hive.service.rpc.thrift.TRowSet
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
@@ -565,11 +564,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   }
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
-    val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-    assume(new File(jarPath).exists)
     withJdbcStatement("test_udtf") { statement =>
       try {
-        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+        val jarURL = TestUDTFJar.jar.toURI.toString
 
         Seq(
           s"ADD JAR $jarURL",
@@ -1002,9 +999,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement("test_udtf")(
       { statement =>
-        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-        assume(new File(jarPath).exists)
-        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+        val jarURL = TestUDTFJar.jar.toURI.toString
 
         // Configurations and temporary functions added in this session should be visible to all
         // the other sessions.
@@ -1181,7 +1176,7 @@ object ServerMode extends Enumeration {
   val binary, http = Value
 }
 
-abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAfterAll with Logging {
+abstract class HiveThriftServer2TestBase extends SparkFunSuite with Logging {
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")

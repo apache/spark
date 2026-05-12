@@ -86,6 +86,8 @@ public final class ColumnarBatchRow extends InternalRow {
           row.update(i, getArray(i).copy());
         } else if (pdt instanceof PhysicalMapType) {
           row.update(i, getMap(i).copy());
+        } else if (pdt instanceof PhysicalVariantType) {
+          row.update(i, getVariant(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -213,6 +215,8 @@ public final class ColumnarBatchRow extends InternalRow {
       return getMap(ordinal);
     } else if (dataType instanceof VariantType) {
       return getVariant(ordinal);
+    } else if (dataType instanceof UserDefinedType<?> udt) {
+      return get(ordinal, udt.sqlType());
     } else {
       throw new SparkUnsupportedOperationException(
         "_LEGACY_ERROR_TEMP_3152", Map.of("dataType", String.valueOf(dataType)));

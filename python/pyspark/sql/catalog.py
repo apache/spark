@@ -17,7 +17,7 @@
 
 import sys
 import warnings
-from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, NamedTuple, List, Optional, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError
 from pyspark.storagelevel import StorageLevel
@@ -77,10 +77,15 @@ class Function(NamedTuple):
     isTemporary: bool
 
 
-class Catalog:
-    """User-facing catalog API, accessible through `SparkSession.catalog`.
+class TablePartition(NamedTuple):
+    partition: str
 
-    This is a thin wrapper around its Scala implementation org.apache.spark.sql.catalog.Catalog.
+
+class Catalog:
+    """Spark SQL catalog interface.
+
+    Use :attr:`~pyspark.sql.SparkSession.catalog` on an active session. This class is a thin
+    wrapper around ``org.apache.spark.sql.catalog.Catalog``.
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
@@ -94,9 +99,14 @@ class Catalog:
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
     def currentCatalog(self) -> str:
-        """Returns the current default catalog in this session.
+        """Returns the current catalog in this session.
 
         .. versionadded:: 3.4.0
+
+        Returns
+        -------
+        str
+            The current catalog name.
 
         Examples
         --------
@@ -106,14 +116,14 @@ class Catalog:
         return self._jcatalog.currentCatalog()
 
     def setCurrentCatalog(self, catalogName: str) -> None:
-        """Sets the current default catalog in this session.
+        """Sets the current catalog in this session.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
         catalogName : str
-            name of the catalog to set
+            Name of the catalog to set.
 
         Examples
         --------
@@ -122,16 +132,18 @@ class Catalog:
         return self._jcatalog.setCurrentCatalog(catalogName)
 
     def listCatalogs(self, pattern: Optional[str] = None) -> List[CatalogMetadata]:
-        """Returns a list of catalogs in this session.
+        """Returns a list of catalogs available in this session.
+
+        With ``pattern``, returns only catalogs whose name matches that pattern.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
         pattern : str, optional
-            The pattern that the catalog name needs to match.
+            Pattern that catalog names must match.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         Returns
         -------
@@ -161,16 +173,327 @@ class Catalog:
             )
         return catalogs
 
+    def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
+        """Drops a persistent table.
+
+        This does not remove temp views; use :meth:`Catalog.dropTempView`.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            Name of the table to drop. May be qualified with catalog and database (namespace).
+        ifExists : bool, optional
+            If ``True``, do not fail when the table does not exist.
+        purge : bool, optional
+            If ``True``, skip moving data to a trash directory when the catalog supports it.
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_drop_doc")
+        >>> _ = spark.sql("CREATE TABLE tbl_drop_doc (id INT) USING parquet")
+        >>> spark.catalog.dropTable("tbl_drop_doc")
+        >>> spark.catalog.tableExists("tbl_drop_doc")
+        False
+        """
+        self._jcatalog.dropTable(tableName, ifExists, purge)
+
+    def dropView(self, viewName: str, ifExists: bool = False) -> None:
+        """Drops a persistent view.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        viewName : str
+            Name of the view to drop. May be qualified with catalog and database (namespace).
+        ifExists : bool, optional
+            If ``True``, do not fail when the view does not exist.
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP VIEW IF EXISTS view_drop_doc")
+        >>> _ = spark.sql("CREATE VIEW view_drop_doc AS SELECT 1 AS c")
+        >>> spark.catalog.dropView("view_drop_doc")
+        >>> spark.catalog.tableExists("view_drop_doc")
+        False
+        """
+        self._jcatalog.dropView(viewName, ifExists)
+
+    def createDatabase(
+        self, dbName: str, ifNotExists: bool = False, properties: Optional[Dict[str, str]] = None
+    ) -> None:
+        """Creates a namespace (database/schema).
+
+        ``dbName`` may be a multi-part identifier (for example ``catalog.schema``). Optional
+        ``properties`` follow ``CREATE NAMESPACE`` (for example comment or location keys).
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        dbName : str
+            Name of the namespace to create.
+        ifNotExists : bool, optional
+            If ``True``, do not fail when the namespace already exists.
+        properties : dict, optional
+            Map of namespace property keys to string values.
+
+        Examples
+        --------
+        >>> spark.catalog.dropDatabase("db_create_doc", ifExists=True, cascade=True)
+        >>> spark.catalog.createDatabase("db_create_doc")
+        >>> spark.catalog.databaseExists("db_create_doc")
+        True
+        >>> spark.catalog.dropDatabase("db_create_doc", cascade=True)
+        >>> spark.catalog.databaseExists("db_create_doc")
+        False
+        """
+        sc = self._sc
+        assert sc is not None
+        ju = sc._gateway.jvm.java.util  # type: ignore[union-attr]
+        m = ju.HashMap()
+        if properties:
+            for k, v in properties.items():
+                m.put(k, v)
+        self._jcatalog.createDatabase(dbName, ifNotExists, m)
+
+    def dropDatabase(self, dbName: str, ifExists: bool = False, cascade: bool = False) -> None:
+        """Drops a namespace.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        dbName : str
+            Name of the namespace to drop. May be qualified with catalog name.
+        ifExists : bool, optional
+            If ``True``, do not fail when the namespace does not exist.
+        cascade : bool, optional
+            If ``True``, also drop tables and functions in the namespace.
+
+        Examples
+        --------
+        >>> spark.catalog.dropDatabase("db_drop_doc", ifExists=True, cascade=True)
+        >>> spark.catalog.createDatabase("db_drop_doc")
+        >>> spark.catalog.dropDatabase("db_drop_doc", cascade=True)
+        >>> spark.catalog.databaseExists("db_drop_doc")
+        False
+        """
+        self._jcatalog.dropDatabase(dbName, ifExists, cascade)
+
+    def listPartitions(self, tableName: str) -> List[TablePartition]:
+        """Lists partition value strings for a table (same as ``SHOW PARTITIONS``).
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            Name of the partitioned table. May be qualified with catalog and database (namespace).
+
+        Returns
+        -------
+        list
+            A list of :class:`TablePartition` (each ``partition`` field is a spec string).
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_part_doc")
+        >>> _ = spark.sql(
+        ...     "CREATE TABLE tbl_part_doc (id INT, p INT) USING parquet PARTITIONED BY (p)"
+        ... )
+        >>> _ = spark.sql("INSERT INTO tbl_part_doc PARTITION (p = 1) SELECT 1")
+        >>> parts = [x.partition for x in spark.catalog.listPartitions("tbl_part_doc")]
+        >>> any("p=1" in s for s in parts)
+        True
+        >>> _ = spark.sql("DROP TABLE tbl_part_doc")
+        """
+        iter = self._jcatalog.listPartitions(tableName).toLocalIterator()
+        out: List[TablePartition] = []
+        while iter.hasNext():
+            j = iter.next()
+            out.append(TablePartition(partition=j.partition()))
+        return out
+
+    def listViews(self, dbName: Optional[str] = None, pattern: Optional[str] = None) -> List[Table]:
+        """Lists views in a namespace.
+
+        With no arguments, lists views in the current namespace. With ``dbName`` only, lists
+        views in that namespace (may be catalog-qualified). With ``pattern``, filters view names
+        with a SQL ``LIKE`` string; if ``pattern`` is given without ``dbName``, the current
+        database is used as the namespace.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        dbName : str, optional
+            Namespace to list views from. May be qualified with catalog name.
+        pattern : str, optional
+            SQL ``LIKE`` pattern for view names.
+
+        Returns
+        -------
+        list
+            A list of :class:`Table` (same row shape as :meth:`Catalog.listTables`).
+
+        Notes
+        -----
+        Raises :class:`AnalysisException` if ``dbName`` names a namespace that does not exist.
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP VIEW IF EXISTS view_list_doc")
+        >>> _ = spark.sql("CREATE VIEW view_list_doc AS SELECT 1 AS c")
+        >>> "view_list_doc" in [v.name for v in spark.catalog.listViews()]
+        True
+        >>> "view_list_doc" in [v.name for v in spark.catalog.listViews(pattern="view_list_*")]
+        True
+        >>> _ = spark.sql("DROP VIEW view_list_doc")
+        """
+        if pattern is not None and dbName is None:
+            dbName = self.currentDatabase()
+        if dbName is None:
+            iter = self._jcatalog.listViews().toLocalIterator()
+        elif pattern is None:
+            iter = self._jcatalog.listViews(dbName).toLocalIterator()
+        else:
+            iter = self._jcatalog.listViews(dbName, pattern).toLocalIterator()
+        views = []
+        while iter.hasNext():
+            jtable = iter.next()
+            jnamespace = jtable.namespace()
+            if jnamespace is not None:
+                namespace = [jnamespace[i] for i in range(0, len(jnamespace))]
+            else:
+                namespace = None
+            views.append(
+                Table(
+                    name=jtable.name(),
+                    catalog=jtable.catalog(),
+                    namespace=namespace,
+                    description=jtable.description(),
+                    tableType=jtable.tableType(),
+                    isTemporary=jtable.isTemporary(),
+                )
+            )
+        return views
+
+    def getTableProperties(self, tableName: str) -> Dict[str, str]:
+        """Returns all table properties as a dict (same as ``SHOW TBLPROPERTIES``).
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            Table or view name. May be qualified with catalog and database (namespace).
+
+        Returns
+        -------
+        dict
+            Map of property key to value.
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_props_doc")
+        >>> _ = spark.sql(
+        ...     "CREATE TABLE tbl_props_doc (id INT) USING parquet "
+        ...     "TBLPROPERTIES ('doc_prop_key' = 'doc_prop_val')"
+        ... )
+        >>> spark.catalog.getTableProperties("tbl_props_doc")["doc_prop_key"]
+        'doc_prop_val'
+        >>> _ = spark.sql("DROP TABLE tbl_props_doc")
+        """
+        jm = self._jcatalog.getTableProperties(tableName)
+        return {k: jm.get(k) for k in jm.keySet()}
+
+    def getCreateTableString(self, tableName: str, asSerde: bool = False) -> str:
+        """Returns the ``SHOW CREATE TABLE`` DDL string for a relation.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            Table or view name. May be qualified with catalog and database (namespace).
+        asSerde : bool, optional
+            If ``True``, request Hive serde DDL when applicable.
+
+        Returns
+        -------
+        str
+            DDL string from ``SHOW CREATE TABLE``.
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_ddl_doc")
+        >>> _ = spark.sql("CREATE TABLE tbl_ddl_doc (id INT) USING parquet")
+        >>> "CREATE" in spark.catalog.getCreateTableString("tbl_ddl_doc").upper()
+        True
+        >>> _ = spark.sql("DROP TABLE tbl_ddl_doc")
+        """
+        return self._jcatalog.getCreateTableString(tableName, asSerde)
+
+    def truncateTable(self, tableName: str) -> None:
+        """Truncates a table (removes all data from the table; not supported for views).
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            Name of the table to truncate. May be qualified with catalog and database (namespace).
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_tr_doc")
+        >>> _ = spark.sql("CREATE TABLE tbl_tr_doc (id INT) USING csv")
+        >>> _ = spark.sql("INSERT INTO tbl_tr_doc VALUES (1), (2)")
+        >>> spark.table("tbl_tr_doc").count()
+        2
+        >>> spark.catalog.truncateTable("tbl_tr_doc")
+        >>> spark.table("tbl_tr_doc").count()
+        0
+        >>> _ = spark.sql("DROP TABLE tbl_tr_doc")
+        """
+        self._jcatalog.truncateTable(tableName)
+
+    def analyzeTable(self, tableName: str, noScan: bool = False) -> None:
+        """Computes table statistics (same as SQL ``ANALYZE TABLE COMPUTE STATISTICS``).
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            Table or view name. May be qualified with catalog and database (namespace).
+        noScan : bool, optional
+            If ``True``, use ``NOSCAN`` mode (reuse existing column statistics where possible).
+
+        Examples
+        --------
+        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_an_doc")
+        >>> _ = spark.sql("CREATE TABLE tbl_an_doc (id INT) USING csv")
+        >>> _ = spark.sql("INSERT INTO tbl_an_doc VALUES (1)")
+        >>> spark.catalog.analyzeTable("tbl_an_doc")
+        >>> spark.catalog.analyzeTable("tbl_an_doc", noScan=True)
+        >>> _ = spark.sql("DROP TABLE tbl_an_doc")
+        """
+        self._jcatalog.analyzeTable(tableName, noScan)
+
     def currentDatabase(self) -> str:
         """
-        Returns the current default database in this session.
+        Returns the current database (namespace) in this session.
 
         .. versionadded:: 2.0.0
 
         Returns
         -------
         str
-            The current default database name.
+            The current database (namespace) name.
 
         Examples
         --------
@@ -181,9 +504,14 @@ class Catalog:
 
     def setCurrentDatabase(self, dbName: str) -> None:
         """
-        Sets the current default database in this session.
+        Sets the current database (namespace) in this session.
 
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        dbName : str
+            Name of the database (namespace) to set.
 
         Examples
         --------
@@ -193,16 +521,18 @@ class Catalog:
 
     def listDatabases(self, pattern: Optional[str] = None) -> List[Database]:
         """
-        Returns a list of databases available across all sessions.
+        Returns a list of databases (namespaces) available within the current catalog.
+
+        With ``pattern``, returns only databases whose name matches that pattern.
 
         .. versionadded:: 2.0.0
 
         Parameters
         ----------
         pattern : str, optional
-            The pattern that the database name needs to match.
+            Pattern that database names must match.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         Returns
         -------
@@ -310,32 +640,31 @@ class Catalog:
     def listTables(
         self, dbName: Optional[str] = None, pattern: Optional[str] = None
     ) -> List[Table]:
-        """Returns a list of tables/views in the specified database.
+        """Returns a list of tables/views in the current database (namespace), or in the database
+        given by ``dbName`` when provided (the name may be qualified with catalog).
+
+        With ``pattern``, returns only tables and views whose name matches the pattern. This
+        includes all temporary views.
 
         .. versionadded:: 2.0.0
 
         Parameters
         ----------
         dbName : str, optional
-            name of the database to list the tables.
+            Database (namespace) to list tables from. If omitted, the current database is used.
 
             .. versionchanged:: 3.4.0
                Allow ``dbName`` to be qualified with catalog name.
 
         pattern : str, optional
-            The pattern that the database name needs to match.
+            Pattern that table names must match.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         Returns
         -------
         list
             A list of :class:`Table`.
-
-        Notes
-        -----
-        If no database is specified, the current database and catalog
-        are used. This API includes all temporary views.
 
         Examples
         --------
@@ -442,29 +771,28 @@ class Catalog:
         self, dbName: Optional[str] = None, pattern: Optional[str] = None
     ) -> List[Function]:
         """
-        Returns a list of functions registered in the specified database.
+        Returns a list of functions registered in the current database (namespace), or in the
+        database given by ``dbName`` when provided (the name may be qualified with catalog).
+
+        With ``pattern``, returns only functions whose name matches the pattern. This includes all
+        built-in and temporary functions.
 
         .. versionadded:: 3.4.0
 
         Parameters
         ----------
         dbName : str, optional
-            name of the database to list the functions.
-            ``dbName`` can be qualified with catalog name.
+            Database (namespace) to list functions from. If omitted, the current database is used.
+            May be qualified with catalog name.
         pattern : str, optional
-            The pattern that the function name needs to match.
+            Pattern that function names must match.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         Returns
         -------
         list
             A list of :class:`Function`.
-
-        Notes
-        -----
-        If no database is specified, the current database and catalog
-        are used. This API includes all temporary functions.
 
         Examples
         --------
@@ -854,9 +1182,10 @@ class Catalog:
         else:
             if not isinstance(schema, StructType):
                 raise PySparkTypeError(
-                    errorClass="NOT_STRUCT",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "schema",
+                        "expected_type": "struct type",
                         "arg_type": type(schema).__name__,
                     },
                 )
@@ -1166,18 +1495,17 @@ class Catalog:
         self._jcatalog.refreshTable(tableName)
 
     def recoverPartitions(self, tableName: str) -> None:
-        """Recovers all the partitions of the given table and updates the catalog.
+        """Recovers all the partitions in the directory of a table and updates the catalog.
+
+        Only works with a partitioned table, and not a view.
 
         .. versionadded:: 2.1.1
 
         Parameters
         ----------
         tableName : str
-            name of the table to get.
-
-        Notes
-        -----
-        Only works with a partitioned table, and not a view.
+            Table name; may be qualified with catalog and database (namespace). If no database
+            identifier is provided, the name refers to a table in the current database.
 
         Examples
         --------
@@ -1187,11 +1515,13 @@ class Catalog:
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory(prefix="recoverPartitions") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
+        ...     p = d.replace("'", "''")
         ...     spark.range(1).selectExpr(
-        ...         "id as key", "id as value").write.partitionBy("key").mode("overwrite").save(d)
+        ...         "id as key", "id as value").write.partitionBy(
+        ...             "key").mode("overwrite").format("csv").save(d)
         ...     _ = spark.sql(
-        ...          "CREATE TABLE tbl1 (key LONG, value LONG)"
-        ...          "USING parquet OPTIONS (path '{}') PARTITIONED BY (key)".format(d))
+        ...         "CREATE TABLE tbl1 (key LONG, value LONG) USING csv OPTIONS (header false, path '{}') "
+        ...         "PARTITIONED BY (key)".format(p))
         ...     spark.table("tbl1").show()
         ...     spark.catalog.recoverPartitions("tbl1")
         ...     spark.table("tbl1").show()
@@ -1265,7 +1595,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[4]").appName("sql.catalog tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS

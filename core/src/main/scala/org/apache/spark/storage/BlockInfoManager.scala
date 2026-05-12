@@ -180,6 +180,33 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   private[this] val writeLocksByTask = new ConcurrentHashMap[TaskAttemptId, util.Set[BlockId]]
 
   /**
+   * Register a write lock on `blockId` for `taskAttemptId`. This method creates a new entry
+   * for the task if none exist yet.
+   */
+  private def registerWriteLockForTask(taskAttemptId: TaskAttemptId, blockId: BlockId): Unit = {
+    writeLocksByTask.compute(taskAttemptId, (_, blockIds) => {
+      val newBlockIds = if (blockIds == null) {
+        util.Collections.synchronizedSet(new util.HashSet[BlockId])
+      } else {
+        blockIds
+      }
+      newBlockIds.add(blockId)
+      newBlockIds
+    })
+  }
+
+  /**
+   * Unregister a write lock on `blockId` for `taskAttemptId`. The entry for the task is
+   * cleaned up later by `releaseAllLocksForTask`.
+   */
+  private def unregisterWriteLockForTask(taskAttemptId: TaskAttemptId, blockId: BlockId): Unit = {
+    writeLocksByTask.computeIfPresent(taskAttemptId, (_, blockIds) => {
+      blockIds.remove(blockId)
+      blockIds
+    })
+  }
+
+  /**
    * Tracks the set of blocks that each task has locked for reading, along with the number of times
    * that a block has been locked (since our read locks are re-entrant).
    */
@@ -333,7 +360,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
       val acquire = info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0
       if (acquire) {
         info.writerTask = taskAttemptId
-        writeLocksByTask.get(taskAttemptId).add(blockId)
+        registerWriteLockForTask(taskAttemptId, blockId)
         logTrace(s"Task $taskAttemptId acquired write lock for $blockId")
       }
       acquire
@@ -396,8 +423,11 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     logTrace(s"Task $taskAttemptId releasing lock for $blockId")
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != BlockInfo.NO_WRITER) {
-        info.writerTask = BlockInfo.NO_WRITER
-        writeLocksByTask.get(taskAttemptId).remove(blockId)
+        val blockIds = writeLocksByTask.get(info.writerTask)
+        if (blockIds != null) {
+          unregisterWriteLockForTask(info.writerTask, blockId)
+          info.writerTask = BlockInfo.NO_WRITER
+        }
       } else {
         // There can be a race between unlock and releaseAllLocksForTask which causes negative
         // reader counts. We need to check if the readLocksByTask per tasks are present, if they
@@ -489,23 +519,32 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(util.Set.of())
     writeLocks.forEach { blockId =>
       blockInfo(blockId) { (info, condition) =>
-        assert(info.writerTask == taskAttemptId)
-        info.writerTask = BlockInfo.NO_WRITER
-        condition.signalAll()
+        // Check the existence of `blockId` and also if it is still held by this task because
+        // `unlock` may have already released it concurrently. See SPARK-53807 for details.
+        if (writeLocks.contains(blockId) && info.writerTask == taskAttemptId) {
+          blocksWithReleasedLocks += blockId
+          info.writerTask = BlockInfo.NO_WRITER
+          condition.signalAll()
+        }
       }
-      blocksWithReleasedLocks += blockId
     }
 
     val readLocks = Option(readLocksByTask.remove(taskAttemptId))
       .getOrElse(ImmutableMultiset.of[BlockId])
     readLocks.entrySet().forEach { entry =>
       val blockId = entry.getElement
-      val lockCount = entry.getCount
-      blocksWithReleasedLocks += blockId
       blockInfo(blockId) { (info, condition) =>
-        info.readerCount -= lockCount
-        assert(info.readerCount >= 0)
-        condition.signalAll()
+        // Calculating lockCount by readLocks.count instead of entry.getCount is intentional. See
+        // discussion in SPARK-50771 and the corresponding PR.
+        val lockCount = readLocks.count(blockId)
+
+        // lockCount can be 0 if read locks for `blockId` are released in `unlock` concurrently.
+        if (lockCount > 0) {
+          blocksWithReleasedLocks += blockId
+          info.readerCount -= lockCount
+          assert(info.readerCount >= 0)
+          condition.signalAll()
+        }
       }
     }
 
@@ -582,7 +621,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
         }
         info.readerCount = 0
         info.writerTask = BlockInfo.NO_WRITER
-        writeLocksByTask.get(taskAttemptId).remove(blockId)
+        unregisterWriteLockForTask(taskAttemptId, blockId)
       }
       condition.signalAll()
     }

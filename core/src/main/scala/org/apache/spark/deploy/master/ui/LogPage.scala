@@ -23,7 +23,7 @@ import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.deploy.Utils.{getLog, DEFAULT_BYTES}
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, UIUtils, WebUIPage}
 
 private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with Logging {
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -41,17 +41,17 @@ private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with
       </span>
 
     val moreButton =
-      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-secondary">
+      <button type="button" class="log-more-btn btn btn-secondary">
         Load More
       </button>
 
     val newButton =
-      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-secondary">
+      <button type="button" class="log-new-btn btn btn-secondary">
         Load New
       </button>
 
     val alert =
-      <div class="no-new-alert alert alert-info" style="display: none;">
+      <div class="no-new-alert alert alert-info d-none">
         End of Log
       </div>
 
@@ -64,13 +64,13 @@ private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with
       <div>
         <p><a href="/">Back to Master</a></p>
         {range}
-        <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
+        <div class="log-content overflow-auto p-1" style="height:80vh;">
           <div>{moreButton}</div>
           <pre>{logText}</pre>
           {alert}
           <div>{newButton}</div>
         </div>
-        <script>{Unparsed(jsOnload)}</script>
+        <script nonce={CspNonce.get}>{Unparsed(jsOnload)}</script>
       </div>
 
     UIUtils.basicSparkPage(request, content, logType + " log page for master")

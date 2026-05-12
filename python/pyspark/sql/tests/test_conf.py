@@ -69,8 +69,9 @@ class ConfTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "str",
                     "arg_name": "key",
                     "arg_type": "int",
                 },
@@ -100,13 +101,6 @@ class ConfTests(ConfTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_conf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

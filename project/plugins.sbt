@@ -33,9 +33,9 @@ addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.5.0")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "9.9"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.9.1"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.9"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.9.1"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
@@ -46,3 +46,5 @@ addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.17.0")
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")
 
 addSbtPlugin("com.here.platform" % "sbt-bom" % "1.0.29")
+
+addSbtPlugin("ch.epfl.scala" % "sbt-bloop" % "2.0.17")

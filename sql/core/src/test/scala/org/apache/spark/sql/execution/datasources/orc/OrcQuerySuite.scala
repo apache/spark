@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -630,6 +630,74 @@ abstract class OrcQueryTest extends OrcTest {
       assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e4.getCause.getCause.getMessage.contains("Malformed ORC file"))
+    }
+  }
+
+  test("SPARK-55857: Enabling/disabling ignoreMissingFiles") {
+    def testIgnoreMissingFiles(options: Map[String, String]): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(1).toDF("a").write.orc(path1.toString)
+        spark.range(1, 2).toDF("a").write.orc(path2.toString)
+        // Create DataFrame before deleting to capture file references in the query plan,
+        // then delete to simulate a race condition between listing and reading.
+        val df = spark.read.options(options).orc(path1.toString, path2.toString)
+        fs.listStatus(path1)
+          .filter(f => f.isFile && !f.getPath.getName.startsWith("_"))
+          .foreach(f => fs.delete(f.getPath, false))
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+
+    def testIgnoreMissingFilesWithoutSchemaInfer(options: Map[String, String]): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(1).toDF("a").write.orc(path1.toString)
+        spark.range(1, 2).toDF("a").write.orc(path2.toString)
+        val df = spark.read.schema("a long").options(options)
+          .orc(path1.toString, path2.toString)
+        fs.listStatus(path1)
+          .filter(f => f.isFile && !f.getPath.getName.startsWith("_"))
+          .foreach(f => fs.delete(f.getPath, false))
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+
+    // Test ignoreMissingFiles = true
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options) = by match {
+        case "SQLConf" => ("true", Map.empty[String, String])
+        // Explicitly set SQLConf to false but still should ignore missing files
+        case "FormatOption" => ("false", Map("ignoreMissingFiles" -> "true"))
+      }
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+        testIgnoreMissingFiles(options)
+        testIgnoreMissingFilesWithoutSchemaInfer(options)
+      }
+    }
+
+    // Test ignoreMissingFiles = false
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options) = by match {
+        case "SQLConf" => ("false", Map.empty[String, String])
+        // Explicitly set SQLConf to true but still should not ignore missing files
+        case "FormatOption" => ("true", Map("ignoreMissingFiles" -> "false"))
+      }
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            testIgnoreMissingFiles(options)
+          },
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> ".*")
+        )
+      }
     }
   }
 

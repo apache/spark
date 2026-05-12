@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.math.{BigDecimal => JBigDecimal}
 import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
@@ -55,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
+class ParquetIOSuite extends ParquetTest with SharedSparkSession {
   import testImplicits._
 
   /**
@@ -765,6 +766,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  gridTest("Read external file with UNKNOWN type annotation")(
+    Seq(true, false)
+  ) { respectUnknown =>
+    withSQLConf(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key ->
+        respectUnknown.toString
+    ) {
+      withAllParquetReaders {
+        // Parquet file column void_col has physical type INT32 and logical type UNKNOWN and was
+        // not written by Spark, so this goes through Parquet --> Spark type conversion.
+        val df = readResourceParquetFile("test-data/void_in_parquet.parquet")
+        val inferredType = df.schema("void_col").dataType
+        val expected = if (respectUnknown) NullType else IntegerType
+        assert(inferredType == expected)
+      }
+    }
+  }
+
   test("vectorized reader: missing all struct fields") {
     for {
       offheapEnabled <- Seq(true, false)
@@ -1261,9 +1280,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val writer = createParquetWriter(schema, path, dictionaryEnabled)
 
         val factory = new SimpleGroupFactory(schema)
+        // Original range retained to avoid regression
         (-500 until 500).foreach { i =>
           val group = factory.newGroup()
             .append("a", i % 100L)
+          writer.write(group)
+        }
+        // Boundary values: zero, one, signed extremes interpreted as unsigned
+        Seq(0L, 1L, Long.MaxValue, Long.MinValue, -2L, -1L).foreach { v =>
+          val group = factory.newGroup().append("a", v)
           writer.write(group)
         }
         writer.close()
@@ -1273,10 +1298,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         val path = new Path(dir.toURI.toString, "part-r-0.parquet")
         makeRawParquetFile(path)
         readParquetFile(path.toString) { df =>
-          checkAnswer(df, (-500 until 500).map { i =>
-            val bi = UnsignedLong.fromLongBits(i % 100L).bigIntegerValue()
-            Row(new java.math.BigDecimal(bi))
-          })
+          val originalExpected = (-500 until 500).map { i =>
+            Row(new JBigDecimal(UnsignedLong.fromLongBits(i % 100L).bigIntegerValue()))
+          }
+          val boundaryExpected = Seq(0L, 1L, Long.MaxValue, Long.MinValue, -2L, -1L).map { v =>
+            Row(new JBigDecimal(UnsignedLong.fromLongBits(v).bigIntegerValue()))
+          }
+          checkAnswer(df, originalExpected ++ boundaryExpected)
         }
       }
     }
@@ -1856,6 +1884,91 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           val expected = (0 until numRecords).map { _ => lt }.toDF()
           checkAnswer(df, expected)
         }
+      }
+    }
+  }
+
+  // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
+  // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
+  private def widenSampleAt(i: Int): Int = i % 5 match {
+    case 0 => Int.MinValue + i
+    case 1 => -1
+    case 2 => 0
+    case 3 => Int.MaxValue - i
+    case _ => i * 13 - 7
+  }
+
+  test("INT32 -> Long widening end-to-end via vectorized read path") {
+    // Round-trips an INT32 Parquet file read back with a Long schema, exercising
+    // IntegerToLongUpdater on the vectorized path. Covers a non-null column (REQUIRED,
+    // no def-levels) and a nullable column (OPTIONAL, def-levels split runs and force
+    // `readValue` calls alongside `readValues`). `withAllParquetReaders` also exercises
+    // the row-based (parquet-mr) reader, which provides additional correctness coverage.
+    withTempPath { file =>
+      val n = 5000
+      val nonNullData = (0 until n).map(i => Row(widenSampleAt(i)))
+      // Every 7th row is null: splits the run pattern enough to force the PACKED def-level
+      // path to interleave value runs with null runs at sub-batch lengths.
+      val nullableData = (0 until n).map { i =>
+        if (i % 7 == 0) Row(null) else Row(widenSampleAt(i))
+      }
+
+      val nonNullWriteSchema = new StructType().add("v", IntegerType, nullable = false)
+      val nonNullReadSchema = new StructType().add("v", LongType, nullable = false)
+      val nullableWriteSchema = new StructType().add("v", IntegerType, nullable = true)
+      val nullableReadSchema = new StructType().add("v", LongType, nullable = true)
+
+      val nonNullPath = new java.io.File(file, "nonnull").getCanonicalPath
+      val nullablePath = new java.io.File(file, "nullable").getCanonicalPath
+      spark.createDataFrame(spark.sparkContext.parallelize(nonNullData, 4), nonNullWriteSchema)
+        .write.parquet(nonNullPath)
+      spark.createDataFrame(spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
+        .write.parquet(nullablePath)
+
+      val expectedNonNull = nonNullData.map(r => Row(r.getInt(0).toLong))
+      val expectedNullable = nullableData.map { r =>
+        if (r.isNullAt(0)) Row(null) else Row(r.getInt(0).toLong)
+      }
+
+      withAllParquetReaders {
+        checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath), expectedNonNull)
+        checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath), expectedNullable)
+      }
+    }
+  }
+
+  test("INT32 -> Double widening end-to-end via vectorized read path") {
+    // Round-trips an INT32 Parquet file read back with a Double schema, exercising
+    // IntegerToDoubleUpdater. Same REQUIRED/OPTIONAL coverage as the INT32 -> Long
+    // sibling test above; every INT32 fits losslessly in a double, so exact equality
+    // is the right assertion.
+    withTempPath { file =>
+      val n = 5000
+      val nonNullData = (0 until n).map(i => Row(widenSampleAt(i)))
+      val nullableData = (0 until n).map { i =>
+        if (i % 7 == 0) Row(null) else Row(widenSampleAt(i))
+      }
+
+      val nonNullWriteSchema = new StructType().add("v", IntegerType, nullable = false)
+      val nonNullReadSchema = new StructType().add("v", DoubleType, nullable = false)
+      val nullableWriteSchema = new StructType().add("v", IntegerType, nullable = true)
+      val nullableReadSchema = new StructType().add("v", DoubleType, nullable = true)
+
+      val nonNullPath = new java.io.File(file, "nonnull").getCanonicalPath
+      val nullablePath = new java.io.File(file, "nullable").getCanonicalPath
+      spark.createDataFrame(spark.sparkContext.parallelize(nonNullData, 4), nonNullWriteSchema)
+        .write.parquet(nonNullPath)
+      spark.createDataFrame(spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
+        .write.parquet(nullablePath)
+
+      val expectedNonNull = nonNullData.map(r => Row(r.getInt(0).toDouble))
+      val expectedNullable = nullableData.map { r =>
+        if (r.isNullAt(0)) Row(null) else Row(r.getInt(0).toDouble)
+      }
+
+      withAllParquetReaders {
+        checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath), expectedNonNull)
+        checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath), expectedNullable)
       }
     }
   }

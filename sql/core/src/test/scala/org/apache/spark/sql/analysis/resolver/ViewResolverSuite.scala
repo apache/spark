@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.analysis.resolver.{MetadataResolver, Resolver, ResolverRunner}
+import org.apache.spark.sql.catalyst.analysis.resolver.{
+  MetadataResolver,
+  Resolver,
+  ResolverRunner
+}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,7 +33,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class ViewResolverSuite extends QueryTest with SharedSparkSession {
+class ViewResolverSuite extends SharedSparkSession {
   private val catalogName = "spark_catalog"
   private val col1Integer = "col1".attr.int.withNullability(false)
   private val col2String = "col2".attr.string.withNullability(false)
@@ -196,10 +201,16 @@ class ViewResolverSuite extends QueryTest with SharedSparkSession {
       .child
       .asInstanceOf[View]
 
-    val resolverRunner = new ResolverRunner(new Resolver(spark.sessionState.catalogManager))
+    val resolverRunner = new ResolverRunner(
+      resolver = new Resolver(spark.sessionState.catalogManager)
+    )
 
     val resolvedView = resolverRunner
-      .resolve(unresolvedPlan)
+      .resolve(
+        plan = unresolvedPlan,
+        analyzerBridgeState = None,
+        tracker = new QueryPlanningTracker
+      )
       .asInstanceOf[Project]
       .child
       .asInstanceOf[SubqueryAlias]

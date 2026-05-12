@@ -141,18 +141,20 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("undefined function") {
-    checkError(
-      exception = intercept[AnalysisException](
-        sql("SELECT testcat.non_exist('abc')").collect()
-      ),
-      condition = "UNRESOLVED_ROUTINE",
-      parameters = Map(
-        "routineName" -> "`testcat`.`non_exist`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`.`default`]"),
-      context = ExpectedContext(
-        fragment = "testcat.non_exist('abc')",
-        start = 7,
-        stop = 30))
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SELECT testcat.non_exist('abc')").collect()
+        ),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`testcat`.`non_exist`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`]"),
+        context = ExpectedContext(
+          fragment = "testcat.non_exist('abc')",
+          start = 7,
+          stop = 30))
+    }
   }
 
   test("non-function catalog") {
@@ -185,7 +187,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 
@@ -197,10 +199,20 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
     assert(e.message.contains("Catalog testcat does not support DROP FUNCTION"))
 
-    val e1 = intercept[AnalysisException] {
-      sql("DROP FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("DROP FUNCTION default.ns1.ns2.fun")
+      },
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
+    )
+  }
+
+  test("DROP FUNCTION IF EXISTS in non-existing namespace should not fail") {
+    // This should not throw any exception - the namespace doesn't exist but IF EXISTS is specified
+    sql("DROP FUNCTION IF EXISTS non_existing_db.non_existing_func")
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -223,10 +235,15 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     }
     assert(e.message.contains("Catalog testcat does not support REFRESH FUNCTION"))
 
-    val e1 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.ns1.ns2.fun")
-    }
-    assert(e1.message.contains("requires a single-part namespace"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION default.ns1.ns2.fun")
+      },
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
+    )
   }
 
   test("built-in with non-function catalog should still work") {
@@ -701,6 +718,25 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     val df2 = sql("SELECT 3 as col1")
     comparePlans(df1.queryExecution.optimizedPlan, df2.queryExecution.optimizedPlan)
     checkAnswer(df1, Row(3) :: Nil)
+  }
+
+  test("simple function") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "simple_strlen"), SimpleStrLen)
+    checkAnswer(sql("SELECT testcat.ns.simple_strlen('abc')"), Row(3) :: Nil)
+    checkAnswer(sql("SELECT testcat.ns.simple_strlen('hello world')"), Row(11) :: Nil)
+  }
+}
+
+case object SimpleStrLen extends SimpleFunction with ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "simple_strlen"
+  override def description(): String = "simple string length function"
+
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
   }
 }
 

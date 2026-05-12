@@ -501,7 +501,6 @@ class MatrixUDTTests(MLlibTestCase):
 
 @unittest.skipIf(not have_scipy, "SciPy not installed")
 class SciPyTests(MLlibTestCase):
-
     """
     Test both vector operations and MLlib algorithms with SciPy sparse matrices,
     if SciPy is available.
@@ -667,12 +666,6 @@ class SciPyTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_linalg import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

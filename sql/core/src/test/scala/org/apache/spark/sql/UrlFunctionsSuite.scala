@@ -21,7 +21,7 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
+class UrlFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("url parse_url function") {

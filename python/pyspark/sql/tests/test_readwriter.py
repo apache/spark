@@ -19,7 +19,7 @@ import os
 import shutil
 import tempfile
 
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql import Row
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
@@ -163,6 +163,12 @@ class ReadwriterTestsMixin:
             )
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+            with self.assertRaises(PySparkTypeError):
+                df.write.bucketBy("x", "y")
+
+            with self.assertRaises(PySparkValueError):
+                df.write.bucketBy(2, ["x", "y"], "z")
+
     def test_cluster_by(self):
         data = [
             (1, "foo", 3.0),
@@ -293,6 +299,20 @@ class ReadwriterTestsMixin:
         with self.assertRaisesRegex(Exception, "'path' is not specified."):
             writer.save()
 
+    def test_changes_rejects_user_schema(self):
+        with self.assertRaises(AnalysisException) as ctx:
+            self.spark.read.schema("id LONG, data STRING").option("startingVersion", "1").changes(
+                "nonexistent_table"
+            )
+        self.assertIn("changes", str(ctx.exception))
+
+    def test_streaming_changes_rejects_user_schema(self):
+        with self.assertRaises(AnalysisException) as ctx:
+            self.spark.readStream.schema("id LONG, data STRING").option(
+                "startingVersion", "1"
+            ).changes("nonexistent_table")
+        self.assertIn("changes", str(ctx.exception))
+
 
 class ReadwriterV2TestsMixin:
     def test_api(self):
@@ -409,13 +429,6 @@ class ReadwriterV2Tests(ReadwriterV2TestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_readwriter import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

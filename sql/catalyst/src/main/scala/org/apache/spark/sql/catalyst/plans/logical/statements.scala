@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
@@ -141,6 +141,13 @@ case class QualifiedColType(
   def getV2Default(statement: String): ColumnDefaultValue =
     default.map(_.toV2(statement, colName)).orNull
 
+  /**
+   * Returns true if the default value's type has been coerced to match this column's dataType.
+   */
+  def isDefaultValueTypeCoerced: Boolean = default.forall { d =>
+    ColumnDefinition.isDefaultValueTypeMatched(d.child.dataType, dataType)
+  }
+
   override def children: Seq[Expression] = default.toSeq
 
   override protected def withNewChildrenInternal(
@@ -166,6 +173,10 @@ case class QualifiedColType(
  *                             Only valid for static partitions.
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
+ * @param replaceCriteriaOpt   If specified, indicates an INSERT REPLACE ON/USING operation,
+ *                             which atomically deletes existing rows that satisfy the replace
+ *                             criteria and then inserts the query result rows into the table.
+ * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -174,7 +185,14 @@ case class InsertIntoStatement(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    byName: Boolean = false) extends UnaryParsedStatement {
+    byName: Boolean = false,
+    replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
+    withSchemaEvolution: Boolean = false)
+  // Extends TransactionalWrite so that QueryExecution can detect a potential transaction on the
+  // unresolved logical plan before analysis runs. InsertIntoStatement is shared between V1 and V2
+  // inserts, but the LookupCatalog.TransactionalWrite extractor only matches when the target
+  // catalog implements TransactionalCatalogPlugin, so V1 inserts are never assigned a transaction.
+  extends UnaryParsedStatement with TransactionalWrite {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
@@ -182,8 +200,41 @@ case class InsertIntoStatement(
     "IF NOT EXISTS is only valid with static partitions")
   require(userSpecifiedCols.isEmpty || !byName,
     "BY NAME is only valid without specified cols")
+  require(replaceCriteriaOpt.isEmpty || userSpecifiedCols.isEmpty,
+    "userSpecifiedCols is not compatible with REPLACE USING/ON")
+  require(replaceCriteriaOpt.isEmpty || partitionSpec.isEmpty,
+    "partitionSpec is not compatible with REPLACE USING/ON")
+  require(replaceCriteriaOpt.isEmpty || overwrite,
+    "REPLACE USING/ON requires overwrite to be true")
 
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
+}
+
+sealed abstract class InsertReplaceCriteria extends Expression with Unevaluable {
+  override def nullable: Boolean = false
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+}
+
+/**
+ * Rows are matched by comparing equality on the specified columns,
+ * which must exist in both the table and the query.
+ */
+case class InsertReplaceUsing(cols: Seq[String]) extends InsertReplaceCriteria {
+  override def children: Seq[Expression] = Nil
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): InsertReplaceUsing = copy()
+}
+
+/**
+ * Rows are matched based on the specified boolean expression.
+ */
+case class InsertReplaceOn(
+    cond: Expression,
+    tableAliasOpt: Option[String]) extends InsertReplaceCriteria {
+  override def children: Seq[Expression] = Seq(cond)
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): InsertReplaceOn =
+    copy(cond = newChildren.head)
 }

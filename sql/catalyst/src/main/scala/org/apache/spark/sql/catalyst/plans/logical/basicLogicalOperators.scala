@@ -567,7 +567,62 @@ abstract class UnionBase extends LogicalPlan {
 }
 
 /**
+ * Extractor and helper methods for Union and SequentialStreamingUnion.
+ * Does not match other UnionBase subtypes like UnionLoop.
+ */
+object SequentialOrSimpleUnion {
+  /**
+   * Extractor that matches Union and SequentialStreamingUnion for optimizer rules.
+   */
+  def unapply(plan: LogicalPlan): Option[UnionBase] = plan match {
+    case u: Union => Some(u)
+    case u: SequentialStreamingUnion => Some(u)
+    case _ => None
+  }
+
+  /**
+   * Returns true if both unions are the same concrete type.
+   * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
+   */
+  def isSameType(u1: UnionBase, u2: UnionBase): Boolean = (u1, u2) match {
+    case (_: Union, _: Union) => true
+    case (_: SequentialStreamingUnion, _: SequentialStreamingUnion) => true
+    case _ => false
+  }
+
+  /**
+   * Extracts byName flag from Union or SequentialStreamingUnion.
+   */
+  def byName(u: UnionBase): Boolean = u match {
+    case union: Union => union.byName
+    case ssu: SequentialStreamingUnion => ssu.byName
+  }
+
+  /**
+   * Extracts allowMissingCol flag from Union or SequentialStreamingUnion.
+   */
+  def allowMissingCol(u: UnionBase): Boolean = u match {
+    case union: Union => union.allowMissingCol
+    case ssu: SequentialStreamingUnion => ssu.allowMissingCol
+  }
+
+  /**
+   * Creates a new union of the same type with the specified children.
+   * This is needed when the number of children may change (e.g., flattening) and we need
+   * to preserve the UnionBase return type rather than getting back LogicalPlan.
+   */
+  def withNewChildren(u: UnionBase, newChildren: Seq[LogicalPlan]): UnionBase = u match {
+    case union: Union => union.copy(children = newChildren)
+    case ssu: SequentialStreamingUnion => ssu.copy(children = newChildren)
+  }
+}
+
+/**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * NOTE: Child ordering is NOT semantically significant. Children are processed in parallel
+ * and their order does not affect the result. This allows Union-specific optimizations to
+ * reorder children (e.g., for performance), unlike SequentialStreamingUnion where order matters.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -886,8 +941,7 @@ object View {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan,
-    forPipeSQL: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
@@ -1296,36 +1350,60 @@ object Expand {
    * Apply the all of the GroupExpressions to every input row, hence we will get
    * multiple output rows for an input row.
    *
+   * This method performs the following steps:
+   *  1. Creates an array of Projections for the child projection, and replaces the projections'
+   *     expressions which equal GroupBy expressions with `Literal(null)`, if those expressions are
+   *     not set for this grouping set.
+   *  2. For each grouping set attribute:
+   *      - If the input attribute is in the invalid grouping expression set for this group,
+   *        replaces it with constant null.
+   *      - Otherwise, fixes the nullable field by using the nullability from
+   *        `childOutput ++ groupByAliases`. This is logic from the `UpdateAttributeNullability`
+   *        rule in which we align nullability of attributes with the output of the child plan.
+   *  3. The `groupingId` is added as the last output, using the bit mask as the concrete value for
+   *     it.
+   *  4. If `groupingSetsAttrs` has duplicate entries (e.g., `GROUPING SETS ((key), (key))`), adds
+   *     one more virtual grouping attribute (`_gen_grouping_pos`) to avoid wrongly grouping rows
+   *     with the same grouping ID.
+   * 5.  The `groupByAttrs` has different meaning in `Expand.output` (it could be the original
+   *     grouping expression or null), so new instances are created for the output.
+   *
    * @param groupingSetsAttrs The attributes of grouping sets
    * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
    * @param child Child operator
+   * @param childOutputOpt Optional child output. If not provided, then `child.output` is used
    */
   def apply(
     groupingSetsAttrs: Seq[Seq[Attribute]],
     groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
-    child: LogicalPlan): Expand = {
+    child: LogicalPlan,
+    childOutputOpt: Option[Seq[Attribute]] = None): Expand = {
+    val childOutput = childOutputOpt.getOrElse(child.output)
+
     val attrMap = Utils.toMapWithIndex(groupByAttrs)
 
     val hasDuplicateGroupingSets = groupingSetsAttrs.size !=
       groupingSetsAttrs.map(_.map(_.exprId).toSet).distinct.size
 
-    // Create an array of Projections for the child projection, and replace the projections'
-    // expressions which equal GroupBy expressions with Literal(null), if those expressions
-    // are not set for this grouping set.
+    val nullabilities = (childOutput ++ groupByAliases.map(_.toAttribute)).groupBy(_.exprId).map {
+      case (exprId, attributes) => exprId -> attributes.exists(_.nullable)
+    }
+
     val projections = groupingSetsAttrs.zipWithIndex.map { case (groupingSetAttrs, i) =>
-      val projAttrs = child.output ++ groupByAttrs.map { attr =>
+      val projAttrs = childOutput ++ groupByAttrs.map { attr =>
         if (!groupingSetAttrs.contains(attr)) {
-          // if the input attribute in the Invalid Grouping Expression set of for this group
-          // replace it with constant null
           Literal.create(null, attr.dataType)
         } else {
-          attr
+          if (nullabilities.contains(attr.exprId)) {
+            attr.withNullability(nullabilities(attr.exprId))
+          } else {
+            attr
+          }
         }
-      // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ {
         val bitMask = buildBitmask(groupingSetAttrs, attrMap)
         val dataType = GroupingID.dataType
@@ -1335,24 +1413,70 @@ object Expand {
       }
 
       if (hasDuplicateGroupingSets) {
-        // If `groupingSetsAttrs` has duplicate entries (e.g., GROUPING SETS ((key), (key))),
-        // we add one more virtual grouping attribute (`_gen_grouping_pos`) to avoid
-        // wrongly grouping rows with the same grouping ID.
         projAttrs :+ Literal.create(i, IntegerType)
       } else {
         projAttrs
       }
     }
 
-    // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
-    // grouping expression or null, so here we create new instance of it.
+    val taggedChildOutput =
+      if (SQLConf.get.getConf(SQLConf.EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED)) {
+        tagPassthroughDuplicates(childOutput, groupByAliases)
+      } else {
+        childOutput
+      }
+
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      child.output ++ groupByAttrs.map(_.newInstance()) :+ gid
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
-    Expand(projections, output, Project(child.output ++ groupByAliases, child))
+    Expand(projections, output, Project(childOutput ++ groupByAliases, child))
+  }
+
+  /**
+   * Tags child output attributes that will be duplicated in the Expand output with
+   * `__is_duplicate` metadata.
+   *
+   * When a `groupByAlias` wraps a simple attribute (e.g., `Alias(c1#0, "c1")`), the
+   * Expand output contains both the pass-through child attribute (`c1#0`) and a new
+   * grouping instance created via `newInstance()` (e.g., `c1#5`). Both share the same
+   * name, which causes `AMBIGUOUS_REFERENCE` errors during name-based resolution.
+   *
+   * By tagging the pass-through copy with `__is_duplicate`,
+   * `AttributeSeq.getCandidatesForResolution` filters it out when multiple candidates
+   * match by name, allowing the produced grouping attribute to be resolved instead.
+   * ExprId-based resolution (used for already-resolved expressions like aggregate
+   * functions) is unaffected by this metadata.
+   *
+   * Only child attributes whose ExprId matches a `groupByAlias` child that is a simple
+   * `Attribute` are tagged. Complex grouping expressions (e.g., `c1 + 1`) produce
+   * aliases with different names than any child column, so no name conflict arises.
+   */
+  private def tagPassthroughDuplicates(
+      childOutput: Seq[Attribute],
+      groupByAliases: Seq[Alias]): Seq[Attribute] = {
+    val duplicatedExprIds = new java.util.HashSet[ExprId](groupByAliases.size)
+    groupByAliases.foreach {
+      case Alias(attr: Attribute, _) => duplicatedExprIds.add(attr.exprId)
+      case _ =>
+    }
+
+    if (!duplicatedExprIds.isEmpty) {
+      childOutput.map { attr =>
+        if (duplicatedExprIds.contains(attr.exprId)) {
+          attr.withMetadata(new MetadataBuilder()
+            .withMetadata(attr.metadata)
+            .putNull("__is_duplicate")
+            .build())
+        } else {
+          attr
+        }
+      }
+    } else {
+      childOutput
+    }
   }
 }
 
@@ -1738,11 +1862,15 @@ case class SubqueryAlias(
   }
 
   override def metadataOutput: Seq[Attribute] = {
-    // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
-    if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
+    val canPropagate = if (conf.getConf(SQLConf.SUBQUERY_ALIAS_ALWAYS_PROPAGATE_METADATA_COLUMNS)) {
+      true
+    } else {
+      // Legacy behavior: only propagate metadata columns if child is a LeafNode or SubqueryAlias.
+      child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]
+    }
+    if (canPropagate) {
       val qualifierList = identifier.qualifier :+ alias
-      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
-      nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
+      child.metadataOutput.filter(!_.qualifiedAccessOnly).map(_.withQualifier(qualifierList))
     } else {
       Nil
     }
@@ -1783,6 +1911,40 @@ object SubqueryAlias {
   }
 }
 
+sealed trait SampleMethod extends Serializable
+object SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row independently selected. No I/O savings. */
+  case object Bernoulli extends SampleMethod
+  /** System-level sampling (SYSTEM). Entire partitions/splits included or skipped. */
+  case object System extends SampleMethod
+}
+
+object Sample {
+  /**
+   * Convenience constructor that wraps a concrete seed in [[Some]].
+   * Use the case-class constructor directly with [[None]] when no seed
+   * was specified and a random seed should be generated at execution time.
+   */
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child)
+  }
+
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan,
+      sampleMethod: SampleMethod): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child, sampleMethod)
+  }
+}
+
 /**
  * Sample the dataset.
  *
@@ -1790,15 +1952,19 @@ object SubqueryAlias {
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
- * @param seed the random seed
+ * @param seed the random seed. `Some(seed)` when the user explicitly specified a seed
+ *             (SQL `REPEATABLE` clause or programmatic API), `None` when no seed was
+ *             specified and a random seed should be generated at execution time.
  * @param child the LogicalPlan
+ * @param sampleMethod the sampling method (Bernoulli or System)
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
-    child: LogicalPlan) extends UnaryNode {
+    seed: Option[Long],
+    child: LogicalPlan,
+    sampleMethod: SampleMethod = SampleMethod.Bernoulli) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon
   val fraction = upperBound - lowerBound

@@ -95,7 +95,7 @@ public final class HttpAuthUtils {
    * {@code cu=<username>&rn=<randomNumber>&s=<cookieSignature>}
    */
   public static String createCookieToken(String clientUserName) {
-    StringBuffer sb = new StringBuffer();
+    StringBuilder sb = new StringBuilder();
     sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName)
       .append(COOKIE_ATTR_SEPARATOR);
     sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR)

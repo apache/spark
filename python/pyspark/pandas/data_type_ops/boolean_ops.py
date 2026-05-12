@@ -19,7 +19,7 @@ import numbers
 from typing import Any, Union
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_integer_dtype  # type: ignore[attr-defined]
+from pandas.api.types import CategoricalDtype, is_integer_dtype
 from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
@@ -36,7 +36,12 @@ from pyspark.pandas.data_type_ops.base import (
     _is_valid_for_logical_operator,
     _is_boolean_type,
 )
-from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef.typehints import (
+    as_spark_type,
+    handle_dtype_as_extension_dtype,
+    is_str_dtype,
+    pandas_on_spark_type,
+)
 from pyspark.pandas.utils import is_ansi_mode_enabled
 from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
@@ -243,7 +248,7 @@ class BooleanOps(DataTypeOps):
             and right is None
         ):
             raise TypeError("AND can not be applied to given types.")
-        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+        if isinstance(right, IndexOpsMixin) and handle_dtype_as_extension_dtype(right.dtype):
             return right.__and__(left)
         else:
 
@@ -268,7 +273,7 @@ class BooleanOps(DataTypeOps):
             and right is None
         ):
             raise TypeError("XOR can not be applied to given types.")
-        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+        if isinstance(right, IndexOpsMixin) and handle_dtype_as_extension_dtype(right.dtype):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
 
@@ -295,7 +300,7 @@ class BooleanOps(DataTypeOps):
             and right is None
         ):
             raise TypeError("OR can not be applied to given types.")
-        if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
+        if isinstance(right, IndexOpsMixin) and handle_dtype_as_extension_dtype(right.dtype):
             return right.__or__(left)
         else:
 
@@ -322,12 +327,12 @@ class BooleanOps(DataTypeOps):
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
-            if isinstance(dtype, extension_dtypes):
+            if handle_dtype_as_extension_dtype(dtype) or is_str_dtype(dtype):
                 scol = F.when(
                     index_ops.spark.column.isNotNull(),
                     F.when(index_ops.spark.column, "True").otherwise("False"),
                 )
-                nullable = index_ops.spark.nullable
+                nullable = index_ops.spark.nullable or is_str_dtype(dtype)
             else:
                 null_str = str(pd.NA) if isinstance(self, BooleanExtensionOps) else str(None)
                 casted = F.when(index_ops.spark.column, "True").otherwise("False")
@@ -336,13 +341,13 @@ class BooleanOps(DataTypeOps):
             return index_ops._with_new_scol(
                 scol,
                 field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type, nullable=nullable  # type: ignore[arg-type]
+                    dtype=dtype, spark_type=spark_type, nullable=nullable
                 ),
             )
         else:
             is_ansi = is_ansi_mode_enabled(index_ops._internal.spark_frame.sparkSession)
             if is_ansi and get_option("compute.eager_check"):
-                if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                if is_integer_dtype(dtype) and not handle_dtype_as_extension_dtype(dtype):
                     if index_ops.hasnans:
                         raise ValueError(
                             "Cannot convert %s with missing values to integer" % self.pretty_name

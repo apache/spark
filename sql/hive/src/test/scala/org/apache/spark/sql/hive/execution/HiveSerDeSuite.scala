@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.net.URI
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -35,7 +33,7 @@ import org.apache.spark.tags.SlowHiveTest
  * A set of tests that validates support for Hive SerDe.
  */
 @SlowHiveTest
-class HiveSerDeSuite extends HiveComparisonTest with PlanTest with BeforeAndAfterAll {
+class HiveSerDeSuite extends HiveComparisonTest with PlanTest {
   override def beforeAll(): Unit = {
     import TestHive._
     import org.apache.hadoop.hive.serde2.RegexSerDe

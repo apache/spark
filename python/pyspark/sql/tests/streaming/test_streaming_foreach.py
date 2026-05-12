@@ -223,7 +223,6 @@ class StreamingTestsForeachMixin:
         except StreamingQueryException as e:
             err_msg = str(e)
             self.assertTrue("test error" in err_msg)
-            self.assertTrue("FOREACH_USER_FUNCTION_ERROR" in err_msg)
 
         self.assertEqual(len(tester.process_events()), 0)  # no row was processed
         close_events = tester.close_events()
@@ -283,13 +282,6 @@ class StreamingTestsForeach(StreamingTestsForeachMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreach import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -16,11 +16,16 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
+import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.UTF8String;
+
+import java.nio.ByteOrder;
 
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
@@ -50,6 +55,23 @@ public final class STUtils {
   }
 
   /** Geospatial type casting utility methods. */
+
+  // Cast geometry to geography.
+  public static GeographyVal geometryToGeography(GeometryVal geometryVal) {
+    // We first need to check whether the input geometry has a geographic SRID.
+    int srid = stSrid(geometryVal);
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(String.valueOf(srid));
+    }
+    // We also need to check whether the input geometry has coordinates in geography bounds.
+    try {
+      byte[] wkb = stAsBinary(geometryVal);
+      new WkbReader(true).read(wkb, srid);
+    } catch (WkbParseException e) {
+      throw QueryExecutionErrors.wkbParseError(e.getParseError(), e.getPosition());
+    }
+    return toPhysVal(Geography.fromBytes(geometryVal.getBytes()));
+  }
 
   // Cast geography to geometry.
   public static GeometryVal geographyToGeometry(GeographyVal geographyVal) {
@@ -92,13 +114,37 @@ public final class STUtils {
 
   /** Methods for implementing ST expressions. */
 
+  private static ByteOrder parseEndianness(UTF8String endianness) {
+    String endiannessString = endianness.toString();
+    if (endiannessString.equalsIgnoreCase("NDR")) return ByteOrder.LITTLE_ENDIAN;
+    if (endiannessString.equalsIgnoreCase("XDR")) return ByteOrder.BIG_ENDIAN;
+    throw QueryExecutionErrors.stInvalidArgumentErrorInvalidEndiannessValue(endiannessString);
+  }
+
   // ST_AsBinary
   public static byte[] stAsBinary(GeographyVal geo) {
-    return fromPhysVal(geo).toWkb();
+    return fromPhysVal(geo).toWkb(ByteOrder.LITTLE_ENDIAN);
+  }
+
+  public static byte[] stAsBinary(GeographyVal geo, UTF8String endianness) {
+    return fromPhysVal(geo).toWkb(parseEndianness(endianness));
   }
 
   public static byte[] stAsBinary(GeometryVal geo) {
-    return fromPhysVal(geo).toWkb();
+    return fromPhysVal(geo).toWkb(ByteOrder.LITTLE_ENDIAN);
+  }
+
+  public static byte[] stAsBinary(GeometryVal geo, UTF8String endianness) {
+    return fromPhysVal(geo).toWkb(parseEndianness(endianness));
+  }
+
+  // ST_AsEWKT
+  public static UTF8String stAsEwkt(GeographyVal geo) {
+    return UTF8String.fromBytes(fromPhysVal(geo).toEwkt());
+  }
+
+  public static UTF8String stAsEwkt(GeometryVal geo) {
+    return UTF8String.fromBytes(fromPhysVal(geo).toEwkt());
   }
 
   // ST_GeogFromWKB
@@ -112,6 +158,10 @@ public final class STUtils {
   }
 
   public static GeometryVal stGeomFromWKB(byte[] wkb, int srid) {
+    // We only allow setting the SRID to valid values.
+    if(!GeometryType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
     return toPhysVal(Geometry.fromWkb(wkb, srid));
   }
 

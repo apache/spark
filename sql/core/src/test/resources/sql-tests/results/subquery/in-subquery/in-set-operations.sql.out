@@ -404,8 +404,8 @@ struct<t1a:string,t1b:smallint,t1c:int>
 val1d	NULL	16
 val1a	16	12
 val1e	10	NULL
-val1d	10	NULL
 val1e	10	NULL
+val1d	10	NULL
 val1b	8	16
 
 

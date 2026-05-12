@@ -24,7 +24,6 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
@@ -44,8 +43,7 @@ import org.apache.spark.util.Utils
 class DecommissionWorkerSuite
   extends SparkFunSuite
     with Logging
-    with LocalSparkContext
-    with BeforeAndAfterEach {
+    with LocalSparkContext {
 
   private var masterAndWorkerConf: SparkConf = null
   private var masterAndWorkerSecurityManager: SecurityManager = null

@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import pandas as pd
 
@@ -69,7 +68,9 @@ class SeriesCumulativeMixin:
         self.assert_eq(pser.cumsum().astype(int), psser.cumsum())
         self.assert_eq(pser.cumsum(skipna=False).astype(int), psser.cumsum(skipna=False))
 
-        with self.assertRaisesRegex(TypeError, r"Could not convert object \(string\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c", "d"]).cumsum()
 
     def test_cumprod(self):
@@ -110,7 +111,9 @@ class SeriesCumulativeMixin:
         self.assert_eq(pser.cumprod(), psser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False).astype(int), psser.cumprod(skipna=False))
 
-        with self.assertRaisesRegex(TypeError, r"Could not convert object \(string\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c", "d"]).cumprod()
 
 
@@ -123,12 +126,6 @@ class SeriesCumulativeTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.series.test_cumulative import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

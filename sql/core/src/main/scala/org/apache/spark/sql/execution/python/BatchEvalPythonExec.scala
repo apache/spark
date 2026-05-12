@@ -56,7 +56,6 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       pythonMetrics,
       jobArtifactUUID,
       sessionUUID,
-      conf.pythonUDFProfiler,
       binaryAsBytes)
   }
 
@@ -72,7 +71,6 @@ class BatchEvalPythonEvaluatorFactory(
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
-    profiler: Option[String],
     binaryAsBytes: Boolean)
   extends EvalPythonEvaluatorFactory(childOutput, udfs, output) {
 
@@ -91,7 +89,7 @@ class BatchEvalPythonEvaluatorFactory(
     val outputIterator =
       new PythonUDFWithNamedArgumentsRunner(
         funcs, PythonEvalType.SQL_BATCHED_UDF, argMetas, pythonMetrics,
-        jobArtifactUUID, sessionUUID, profiler)
+        jobArtifactUUID, sessionUUID)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler

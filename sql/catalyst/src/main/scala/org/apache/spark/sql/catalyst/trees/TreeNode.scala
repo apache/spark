@@ -196,6 +196,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     tags(tag) = value
   }
 
+  def containsTag[T](tag: TreeNodeTag[T]): Boolean = {
+    getTagValue[T](tag).isDefined
+  }
+
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
     if (isTagsEmpty) {
       None

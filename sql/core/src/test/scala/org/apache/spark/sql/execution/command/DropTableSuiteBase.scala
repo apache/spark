@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
  *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
  */
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
+  import testImplicits._
   override val command = "DROP TABLE"
 
   protected def createTable(tableName: String): Unit = {
@@ -74,6 +75,20 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"DROP TABLE IF EXISTS $catalog.ns.tbl")
       checkTables("ns")
     }
+  }
+
+  test("IF EXISTS with non-existent database") {
+    // DROP TABLE IF EXISTS should not throw when the database doesn't exist
+    sql(s"DROP TABLE IF EXISTS $catalog.non_existent_db.tbl")
+
+    // DROP TABLE without IF EXISTS should throw when the database doesn't exist
+    checkError(
+      intercept[AnalysisException] {
+        sql(s"DROP TABLE $catalog.non_existent_db.tbl")
+      },
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
+      parameters = Map("relationName" -> s"`$catalog`.`non_existent_db`.`tbl`")
+    )
   }
 
   test("SPARK-33174: DROP TABLE should resolve to a temporary view first") {

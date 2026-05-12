@@ -49,6 +49,7 @@ abstract class AbstractCommandBuilder {
   String master;
   String remote;
   protected String propertiesFile;
+  protected List<String> extraPropertiesFiles = new ArrayList<>();
   protected boolean loadSparkDefaults;
   final List<String> appArgs;
   final List<String> jars;
@@ -379,6 +380,16 @@ abstract class AbstractCommandBuilder {
       File propsFile = new File(propertiesFile);
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
       props = loadPropertiesFile(propsFile);
+    }
+
+    // Load extra properties files, later files override earlier ones
+    for (String extraFile : extraPropertiesFiles) {
+      File extraPropsFile = new File(extraFile);
+      checkArgument(extraPropsFile.isFile(), "Invalid properties file '%s'.", extraFile);
+      Properties extraProps = loadPropertiesFile(extraPropsFile);
+      for (Map.Entry<Object, Object> entry : extraProps.entrySet()) {
+        props.put(entry.getKey(), entry.getValue());
+      }
     }
 
     Properties defaultsProps = new Properties();

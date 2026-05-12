@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -57,6 +57,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
   private val table: Table = {
     val t = mock(classOf[SupportsDelete])
+    when(t.name()).thenReturn("tab")
     when(t.columns()).thenReturn(
       Array(Column.create("i", IntegerType), Column.create("s", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
@@ -138,6 +139,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .add("s", "string")
       .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(tableType)
+    // Mockito returns false for unstubbed Boolean methods, so analyzer code paths that
+    // dispatch through `CatalogTable.isViewLike` (e.g. `Analyzer.lookupTableOrView`'s v1
+    // session-catalog branch) would misclassify a mocked VIEW fixture as a table. Stub
+    // the method to compute from the just-stubbed `tableType` so any view-like type
+    // (VIEW today, METRIC_VIEW or future kinds) resolves correctly.
+    when(t.isViewLike).thenReturn(CatalogTable.isViewLike(tableType))
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
@@ -145,6 +152,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.properties).thenReturn(Map.empty)
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
+    if (tableType == CatalogTableType.VIEW) {
+      // Stub the view-only fields that resolution reads through `V1ViewInfo.builderFrom`.
+      // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
+      // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
+      when(t.viewText).thenReturn(None)
+      when(t.viewCatalogAndNamespace).thenReturn(Seq.empty)
+      when(t.viewSQLConfigs).thenReturn(Map.empty)
+      when(t.viewQueryColumnNames).thenReturn(Seq.empty)
+    }
     V1Table(t)
   }
 
@@ -220,6 +236,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(testCat.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -229,6 +255,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
@@ -236,6 +264,17 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath2 = SQLConf.get.resolutionSearchPath(
+      (v2SessionCatalog.name() +: Array("default")).toSeq)
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath2)
     manager
   }
 
@@ -768,7 +807,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     parseResolveCompare(s"DROP VIEW $tempViewName",
       DropTempViewCommand(tempViewIdent))
     parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
-      DropTempViewCommand(tempViewIdent))
+      DropTempViewCommand(tempViewIdent, ifExists = true))
   }
 
   test("drop view in v2 catalog") {
@@ -777,8 +816,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
     checkError(
       e,
-      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -930,9 +969,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
+            parsed1.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
+            parsed2.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map.empty, true, parsed2.output)
 
@@ -940,13 +981,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -956,15 +997,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
+            parsed3.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
+            case DescribeTablePartition(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
-              assert(partitionSpec == Map("a" -> "1"))
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+              assert(partitionSpec == UnresolvedPartitionSpec(Map("a" -> "1")))
+            case _ => fail("Expect DescribeTablePartition, but got:\n" + parsed3.treeString)
           }
         }
     }
@@ -1249,7 +1291,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _) =>
+        _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1257,9 +1299,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _) =>
+        _, _, _, _, _) =>
 
-      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
     }
   }
 
@@ -1267,7 +1309,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1305,23 +1347,93 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
       }
+    }
+  }
+
+  test("INSERT INTO REPLACE ON is unsupported for V2 tables") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 " +
+            "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
+    )
+  }
+
+  test("INSERT INTO REPLACE USING is unsupported for V2 tables") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE USING (i) " +
+            "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
+    )
+  }
+
+  test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_ON_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO REPLACE USING is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE USING (i) SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_USING_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO BY NAME REPLACE ON is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t BY NAME REPLACE ON t.i = 1 SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO BY NAME REPLACE USING is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t BY NAME REPLACE USING (i) SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED")
     }
   }
 
@@ -1585,10 +1697,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>
@@ -2966,6 +3078,36 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       sql2,
       Map("message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
       ExpectedContext(fragment = sql2, start = 0, stop = 61))
+  }
+
+  test("CTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"CREATE TABLE ctas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Create Table As Select (CTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
+  test("RTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Replace Table As Select (RTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
   }
 
   test("create table - basic") {

@@ -94,11 +94,21 @@ package object util extends Logging {
     case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
     case Literal(null, dataType) => PrettyAttribute("NULL", dataType)
     case e: GetStructField =>
-      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
-      PrettyAttribute(
-        usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
-        e.dataType
-      )
+      e.child.dataType match {
+        case st: StructType =>
+          val name = e.name.getOrElse(st(e.ordinal).name)
+          PrettyAttribute(
+            usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+            st(e.ordinal).dataType
+          )
+        case _ =>
+          // Child type was changed by a plan transformation.
+          val name = e.name.getOrElse(s"_${e.ordinal}")
+          PrettyAttribute(
+            usePrettyExpression(e.child, shouldTrimTempResolvedColumn).sql + "." + name,
+            e.child.dataType
+          )
+      }
     case e: GetArrayStructFields =>
       PrettyAttribute(
         s"${usePrettyExpression(e.child, shouldTrimTempResolvedColumn)}.${e.field.name}",
@@ -116,7 +126,7 @@ package object util extends Logging {
         ),
         dataType = r.dataType
       )
-    case c: Cast if c.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
+    case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
   }
@@ -177,10 +187,10 @@ package object util extends Logging {
   val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
   /**
-   * If set, this metadata column can only be accessed under [[AggregateExpression]]. This is
-   * important when resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]].
-   * In this case we can only reference attributes from grouping expressions, or attributes marked
-   * as "__aggregated_access_only" under [[AggregateExpression]].
+   * If set, this column can only be accessed under [[AggregateExpression]]. This is important when
+   * resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]]. In this case we can
+   * only reference attributes from grouping expressions, or attributes marked as
+   * "__aggregated_access_only" under [[AggregateExpression]].
    */
   val AGGREGATED_ACCESS_ONLY = "__aggregated_access_only"
 
@@ -192,8 +202,7 @@ package object util extends Logging {
       attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(QUALIFIED_ACCESS_ONLY)
 
-    def aggregatedAccessOnly: Boolean = attr.isMetadataCol &&
-      attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
+    def aggregatedAccessOnly: Boolean = attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(AGGREGATED_ACCESS_ONLY)
 
     def markAsQualifiedAccessOnly(): Attribute = attr.withMetadata(
@@ -207,7 +216,6 @@ package object util extends Logging {
     def markAsAggregatedAccessOnly(): Attribute = attr.withMetadata(
       new MetadataBuilder()
         .withMetadata(attr.metadata)
-        .putString(METADATA_COL_ATTR_KEY, attr.name)
         .putBoolean(AGGREGATED_ACCESS_ONLY, true)
         .build()
     )

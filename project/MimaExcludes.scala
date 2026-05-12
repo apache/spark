@@ -33,14 +33,52 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  // Exclude rules for 5.0.x from 4.2.0 (add 5.0-specific filters below as needed).
+  lazy val v50excludes: Seq[Problem => Boolean] = v42excludes
+
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
+    // [SQL] SafeJsonSerializer.safeMapToJValue: second parameter widened from Function1 to
+    // Function2 so the key is passed to the value serializer (progress.scala). Binary-incompatible
+    // vs spark-sql-api 4.0.0; not part of the public supported API (private[streaming] package).
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.streaming.SafeJsonSerializer.safeMapToJValue"),
+    // Add DEBUG format to ErrorMessageFormat enum
+    ProblemFilters.exclude[Problem]("org.apache.spark.ErrorMessageFormat*"),
+    // [SPARK-47086][BUILD][CORE][WEBUI] Upgrade Jetty to 12.1.4
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.ProxyRedirectHandler$ResponseWrapper"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.sendRedirect"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this"),
+    // [SPARK-55228][SQL] Implement Dataset.zipWithIndex in Scala API
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.zipWithIndex"),
+    // [SPARK-55949][SQL] Add DataFrame API for CDC queries
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.changes"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.changes"),
+    // [SPARK-55793][CORE] Add multiple log directories support to SHS
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
+    // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
+    // [SPARK-56700][SS] Make DataStreamReader.name public
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
   lazy val v41excludes = defaultExcludes ++ Seq(
     // [SPARK-51261][ML][CONNECT] Introduce model size estimation to control ml cache
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.getSizeInBytes"),
+
+    // CharType and VarcharType signature change (added collation parameter)
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.andThen"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.compose"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.CharType.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.CharType$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.andThen"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.compose"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.VarcharType.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.VarcharType$"),
 
     // [SPARK-52221][SQL] Refactor SqlScriptingLocalVariableManager into more generic context manager
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.scripting.SqlScriptingExecution.withLocalVariableManager"),
@@ -114,6 +152,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("5.0") => v50excludes
     case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes
     case _ => Seq()

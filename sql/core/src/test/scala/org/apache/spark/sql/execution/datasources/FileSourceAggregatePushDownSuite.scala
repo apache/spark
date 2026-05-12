@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -34,8 +34,7 @@ import org.apache.spark.tags.SlowSQLTest
  * A test suite that tests aggregate push down for Parquet and ORC.
  */
 trait FileSourceAggregatePushDownSuite
-  extends QueryTest
-  with FileBasedDataSourceTest
+  extends FileBasedDataSourceTest
   with SharedSparkSession
   with ExplainSuiteHelper {
 

@@ -3339,7 +3339,7 @@
         "description": "A duplicate schema name in a special register was detected.",
         "origin": "DB2",
         "standard": "N",
-        "usedBy": ["DB2"]
+        "usedBy": ["DB2", "Spark"]
     },
     "42734": {
         "description": "A duplicate parameter-name, SQL variable name, label, or condition-name was detected.",
@@ -7523,6 +7523,18 @@
         "origin": "PostgreSQL",
         "standard": "N",
         "usedBy": ["PostgreSQL", "Redshift"]
+    },
+    "XXKCM": {
+        "description": "Connect Client - Unexpected missing SQL state",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "XXSC0": {
+        "description": "Connect Server - Illegal State",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
     },
     "XXKD0": {
         "description": "Analysis - Bad plan",

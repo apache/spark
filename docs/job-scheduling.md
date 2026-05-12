@@ -99,7 +99,7 @@ All other relevant configurations are optional and under the `spark.dynamicAlloc
 
 ### Caveats
 
-- In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
+- In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation is enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
 - In [K8s mode](running-on-kubernetes.html), we can not use this feature by setting `spark.shuffle.service.enabled` to `true` due to Spark on K8s doesn't yet support the external shuffle service.
 
 ### Resource Allocation Policy

@@ -114,6 +114,7 @@ class StatefulProcessorHandleImpl(
     timeMode: TimeMode,
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
+    prevBatchTimestampMs: Option[Long] = None,
     metrics: Map[String, SQLMetric] = Map.empty)
   extends StatefulProcessorHandleImplBase(timeMode, keyEncoder) with Logging {
   import StatefulProcessorHandleState._
@@ -171,13 +172,19 @@ class StatefulProcessorHandleImpl(
 
   /**
    * Function to retrieve all expired registered timers for all grouping keys
-   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds, this function
-   *                          will return all timers that have timestamp less than passed threshold
+   * @param expiryTimestampMs Threshold for expired timestamp in milliseconds (inclusive),
+   *                          this function will return all timers that have timestamp
+   *                          less than or equal to the passed threshold.
+   * @param prevExpiryTimestampMs If provided, the lower bound (exclusive) of the scan range.
+   *                              Timers at or below this timestamp are assumed to have been
+   *                              already processed in the previous batch and will be skipped.
    * @return - iterator of registered timers for all grouping keys
    */
-  def getExpiredTimers(expiryTimestampMs: Long): Iterator[(Any, Long)] = {
+  def getExpiredTimers(
+      expiryTimestampMs: Long,
+      prevExpiryTimestampMs: Option[Long] = None): Iterator[(Any, Long)] = {
     verifyTimerOperations("get_expired_timers")
-    timerState.getExpiredTimers(expiryTimestampMs)
+    timerState.getExpiredTimers(expiryTimestampMs, prevExpiryTimestampMs)
   }
 
   /**
@@ -237,7 +244,8 @@ class StatefulProcessorHandleImpl(
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
       val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get,
+        prevBatchTimestampMs, metrics)
       ttlStates.add(valueStateWithTTL)
       TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
       valueStateWithTTL
@@ -286,7 +294,8 @@ class StatefulProcessorHandleImpl(
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
       val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get,
+        prevBatchTimestampMs, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numListStateWithTTLVars")
       ttlStates.add(listStateWithTTL)
       listStateWithTTL
@@ -324,7 +333,8 @@ class StatefulProcessorHandleImpl(
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
       val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
-        valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+        valEncoder, ttlConfig, batchTimestampMs.get,
+        prevBatchTimestampMs, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numMapStateWithTTLVars")
       ttlStates.add(mapStateWithTTL)
       mapStateWithTTL

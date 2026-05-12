@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExplicitlyUnsupportedResolverFeature,
   Resolver
@@ -25,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSparkSession {
+class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()
@@ -45,27 +44,31 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSpa
     }
   }
 
-  private def checkResolution(sqlText: String, shouldPass: Boolean = false): Unit = {
+  private def checkResolution(
+      sqlText: String,
+      shouldPass: Boolean = false,
+      expectedMessage: Option[String] = None): Unit = {
     val unresolvedPlan = spark.sessionState.sqlParser.parsePlan(sqlText)
-    checkResolution(unresolvedPlan, shouldPass)
+    checkPlanResolution(unresolvedPlan, shouldPass, expectedMessage)
   }
 
-  private def checkResolution(plan: LogicalPlan, shouldPass: Boolean): Unit = {
-    def noopWrapper(body: => Unit) = body
-
-    val wrapper = if (shouldPass) {
-      noopWrapper _
-    } else {
-      intercept[ExplicitlyUnsupportedResolverFeature] _
-    }
-
+  private def checkPlanResolution(
+      plan: LogicalPlan,
+      shouldPass: Boolean,
+      expectedMessage: Option[String]): Unit = {
     val resolver = new Resolver(
       spark.sessionState.catalogManager,
       extensions = spark.sessionState.analyzer.singlePassResolverExtensions,
       metadataResolverExtensions = spark.sessionState.analyzer.singlePassMetadataResolverExtensions
     )
-    wrapper {
+
+    if (shouldPass) {
       resolver.lookupMetadataAndResolve(plan)
+    } else {
+      val exception = intercept[ExplicitlyUnsupportedResolverFeature] {
+        resolver.lookupMetadataAndResolve(plan)
+      }
+      assert(exception.getMessage.contains(expectedMessage.get))
     }
   }
 }

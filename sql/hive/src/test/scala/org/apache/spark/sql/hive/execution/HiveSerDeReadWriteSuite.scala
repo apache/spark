@@ -30,11 +30,10 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET, USE_DELEGATE_FOR_SYMLINK_TEXT_INPUT_FORMAT}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf.{ORC_IMPLEMENTATION}
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
 @SlowHiveTest
-class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class HiveSerDeReadWriteSuite extends QueryTest with TestHiveSingleton {
 
   private var originalConvertMetastoreParquet = CONVERT_METASTORE_PARQUET.defaultValueString
   private var originalConvertMetastoreORC = CONVERT_METASTORE_ORC.defaultValueString

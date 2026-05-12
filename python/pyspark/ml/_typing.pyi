@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any, Dict, List, TypeVar, Tuple, Union
+from typing import Any, Dict, List, TYPE_CHECKING, TypeVar, Tuple, Union
 from typing_extensions import Literal
 
 from numpy import ndarray
@@ -24,9 +24,11 @@ from py4j.java_gateway import JavaObject
 
 import pyspark.ml.base
 import pyspark.ml.param
-import pyspark.ml.util
 from pyspark.ml.linalg import Vector
 import pyspark.ml.wrapper
+
+if TYPE_CHECKING:
+    from scipy.sparse import spmatrix, sparray
 
 ParamMap = Dict[pyspark.ml.param.Param, Any]
 PipelineStage = Union[pyspark.ml.base.Estimator, pyspark.ml.base.Transformer]
@@ -81,4 +83,4 @@ RankingEvaluatorMetricType = Union[
     Literal["recallAtK"],
 ]
 
-VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]
+VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...], "spmatrix", "sparray", range]

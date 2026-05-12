@@ -21,11 +21,13 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LocalRelation, LogicalPlan, UnionLoop, UnionLoopRef, View}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType, StructField, StructType}
 
 class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
@@ -117,6 +119,176 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
   }
 
+  test("Normalize ordering in a project list of an inner Project under Project and Filter") {
+    val baselinePlan =
+      LocalRelation($"col1".int, $"col2".string)
+        .select($"col1", $"col2")
+        .where($"col1" === 1)
+        .select($"col1")
+    val testPlan =
+      LocalRelation($"col1".int, $"col2".string)
+        .select($"col2", $"col1")
+        .where($"col1" === 1)
+        .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("SubqueryAlias resets normalizeProjectList flag for inner Project") {
+    // Project under SubqueryAlias should NOT be normalized even when there is a Project above the
+    // SubqueryAlias. The SubqueryAlias boundary preserves the schema, so column order matters.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("t")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("t")
+      .select($"col1")
+
+    // The inner Project has different column order, and SubqueryAlias resets the flag,
+    // so normalization should NOT make them equal.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("SubqueryAlias resets normalizeProjectList flag for inner Aggregate") {
+    // Aggregate under SubqueryAlias should NOT have its list normalized.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col1", $"col2")
+      .subquery("t")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .groupBy($"col1", $"col2")($"col2", $"col1")
+      .subquery("t")
+      .select($"col1")
+
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Nested SubqueryAlias resets flag even under multiple Projects") {
+    // Project -> Project -> SubqueryAlias -> Project: the innermost Project should NOT
+    // be normalized because SubqueryAlias resets the flag.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("t")
+      .select($"col1", $"col2")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("t")
+      .select($"col1", $"col2")
+      .select($"col1")
+
+    // The inner Project (below SubqueryAlias) differs in order and should NOT be normalized.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Project above SubqueryAlias IS normalized when under another Project") {
+    // Project -> Project -> SubqueryAlias -> relation
+    // The middle Project (between outer Project and SubqueryAlias) should still be normalized
+    // because it's under a Project, and SubqueryAlias only resets the flag for its children.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .subquery("t")
+      .select($"col1", $"col2")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .subquery("t")
+      .select($"col2", $"col1")
+      .select($"col1")
+
+    assert(baselinePlan != testPlan)
+    assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("SubqueryAlias resets flag but Aggregate above SubqueryAlias still normalizes with Filter") {
+    // Aggregate -> Filter -> SubqueryAlias -> Project: the Project under SubqueryAlias
+    // should NOT be normalized, but the structure above SubqueryAlias works normally.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("t")
+      .where($"col1" === 1)
+      .groupBy($"col1")($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("t")
+      .where($"col1" === 1)
+      .groupBy($"col1")($"col1")
+
+    // Inner Project under SubqueryAlias is NOT normalized, so plans differ.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Double SubqueryAlias both reset the flag independently") {
+    // Project -> SubqueryAlias -> Project -> SubqueryAlias -> Project
+    // Both inner Projects should NOT be normalized.
+    val baselinePlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col1", $"col2")
+      .subquery("inner")
+      .select($"col1", $"col2")
+      .subquery("outer")
+      .select($"col1")
+    val testPlan = LocalRelation($"col1".int, $"col2".string)
+      .select($"col2", $"col1")
+      .subquery("inner")
+      .select($"col2", $"col1")
+      .subquery("outer")
+      .select($"col1")
+
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("View resets normalizeProjectList flag for inner Project") {
+    val viewDesc = CatalogTable(
+      identifier = TableIdentifier("test_view"),
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = StructType(Seq(StructField("col1", IntegerType), StructField("col2", StringType)))
+    )
+    val baselinePlan = View(
+      desc = viewDesc,
+      isTempView = true,
+      child = LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2")
+    ).select($"col1")
+    val testPlan = View(
+      desc = viewDesc,
+      isTempView = true,
+      child = LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1")
+    ).select($"col1")
+
+    // View is a schema boundary, so the inner Project should NOT be normalized.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("CTERelationDef resets normalizeProjectList flag for inner Project") {
+    val baselinePlan = CTERelationDef(
+      child = LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2"),
+      id = 1L
+    ).select($"col1")
+    val testPlan = CTERelationDef(
+      child = LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1"),
+      id = 1L
+    ).select($"col1")
+
+    // CTERelationDef is a schema boundary, so the inner Project should NOT be normalized.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
+  test("Non-unary nodes reset normalizeProjectList flag") {
+    // Project -> Union -> [Project, Project]: the inner Projects under Union should NOT
+    // be normalized because Union matches columns by position.
+    val left1 = LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2")
+    val right1 = LocalRelation($"col1".int, $"col2".string).select($"col1", $"col2")
+    val baselinePlan = left1.union(right1).select($"col1")
+
+    val left2 = LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1")
+    val right2 = LocalRelation($"col1".int, $"col2".string).select($"col2", $"col1")
+    val testPlan = left2.union(right2).select($"col1")
+
+    // Inner Projects under Union have different column order and should NOT be normalized.
+    assert(NormalizePlan(baselinePlan) != NormalizePlan(testPlan))
+  }
+
   test("Normalize InheritAnalysisRules expressions") {
     val castWithoutTimezone =
       Cast(child = Literal(1), dataType = BooleanType, ansiEnabled = conf.ansiEnabled)
@@ -192,6 +364,106 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize UnionLoopRef IDs") {
+    val col1 = $"col1".int
+    val col2 = col1.newInstance()
+
+    // Create two UnionLoopRefs with different loopIds
+    val baselineLoopRef = UnionLoopRef(
+      loopId = 100L,
+      output = Seq(col2),
+      accumulated = false
+    )
+
+    val testLoopRef = UnionLoopRef(
+      loopId = 200L,
+      output = Seq(col2),
+      accumulated = false
+    )
+
+    // Before normalization, plans are different
+    assert(baselineLoopRef != testLoopRef)
+
+    // After normalization, they should be equal (loopIds normalized)
+    assert(NormalizePlan(baselineLoopRef) == NormalizePlan(testLoopRef))
+  }
+
+  test("Normalize UnionLoop IDs and outputAttrIds and UnionLoopRefIds") {
+    val col1 = $"col1".int
+    val col2 = col1.newInstance()
+    val anchor = LocalRelation(col1)
+
+    // Create two UnionLoops with different IDs and different outputAttrIds
+    val unionLoop1 = UnionLoop(
+      id = 100L,
+      anchor = anchor,
+      recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
+      outputAttrIds = Seq(ExprId(1), ExprId(2))
+    )
+
+    val unionLoop2 = UnionLoop(
+      id = 200L,
+      anchor = anchor,
+      recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
+      outputAttrIds = Seq(ExprId(1), ExprId(2))
+    )
+
+    // Before normalization, plans are different
+    assert(unionLoop1 != unionLoop2)
+
+    // After normalization, they should be equal (IDs normalized, outputAttrIds zeroed)
+    assert(NormalizePlan(unionLoop1) == NormalizePlan(unionLoop2))
+  }
+
+  test("Normalize rCTEs") {
+    val col1 = $"col1".int
+    val col2 = $"col2".int
+    val anchor = LocalRelation(col1)
+
+    // Create two full recursive CTEs - CTERelationDef with a UnionLoop and UnionLoopRef with the
+    // same id
+    val recursiveCTE1 = CTERelationDef(
+      child = UnionLoop(
+        id = 100L,
+        anchor = anchor,
+        recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
+        outputAttrIds = Seq(ExprId(1), ExprId(2))
+      ),
+      id = 100L
+    )
+
+    val recursiveCTE2 = CTERelationDef(
+      child = UnionLoop(
+        id = 200L,
+        anchor = anchor,
+        recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
+        outputAttrIds = Seq(ExprId(1), ExprId(2))
+      ),
+      id = 200L
+    )
+
+    val normalizedRecursiveCTE = CTERelationDef(
+      child = UnionLoop(
+        id = 0L,
+        anchor = LocalRelation(col1.withExprId(ExprId(0))),
+        recursion = UnionLoopRef(
+          loopId = 0L,
+          output = Seq(col2.withExprId(ExprId(0))),
+          accumulated = false
+        ),
+        outputAttrIds = Seq(ExprId(0), ExprId(0))
+      ),
+      id = 0L
+    )
+
+    // Before normalization, plans are different
+    assert(recursiveCTE1 != recursiveCTE2)
+
+    // After normalization, they should be equal to the normalized plan
+    assert(NormalizePlan(recursiveCTE1) == normalizedRecursiveCTE)
+    assert(NormalizePlan(recursiveCTE2) == normalizedRecursiveCTE)
   }
 
   private def setTimezoneForAllExpression(plan: LogicalPlan): LogicalPlan = {

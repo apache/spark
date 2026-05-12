@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.should.Matchers
 
 import org.apache.spark.SparkFunSuite
@@ -26,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Tests various cases of partition size, compression.
  */
-class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
+class XmlPartitioningSuite extends SparkFunSuite with Matchers {
   protected val legacyParserEnabled: Boolean = false
 
   protected def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {

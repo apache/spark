@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeographyDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
@@ -127,6 +127,16 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
       condition = "ST_INVALID_SRID_VALUE",
       parameters = Map("srid" -> "0")
     )
+  }
+
+  test("createDataFrame and round-trip with Geography SRIDs") {
+    Seq(4267, 4269).foreach { srid =>
+      val geog = Geography.fromWKB(point1, srid)
+      val schema = StructType(Seq(StructField("g", GeographyType(srid), nullable = false)))
+      checkAnswer(
+        spark.createDataFrame(sparkContext.parallelize(Seq(Row(geog))), schema),
+        Seq(Row(geog)))
+    }
   }
 
   test("createDataFrame APIs with Geography.fromWKB") {

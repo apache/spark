@@ -222,14 +222,7 @@ class LevelDBTypeInfo {
     private final Index parent;
 
     private Index(KVIndex self, KVTypeInfo.Accessor accessor, Index parent) {
-      byte[] name = self.value().getBytes(UTF_8);
-      if (parent != null) {
-        byte[] child = new byte[name.length + 1];
-        child[0] = SECONDARY_IDX_PREFIX;
-        System.arraycopy(name, 0, child, 1, name.length);
-      }
-
-      this.name = name;
+      this.name = self.value().getBytes(UTF_8);
       this.isNatural = self.value().equals(KVIndex.NATURAL_INDEX_NAME);
       this.copy = isNatural || self.copy();
       this.accessor = accessor;

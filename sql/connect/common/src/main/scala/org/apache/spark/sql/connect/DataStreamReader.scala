@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.connect.proto.Read.DataSource
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.errors.DataTypeErrors
@@ -76,6 +76,14 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
+  @Experimental
+  override def name(sourceName: String): this.type = {
+    validateSourceName(sourceName)
+    sourceBuilder.setSourceName(sourceName)
+    this
+  }
+
+  /** @inheritdoc */
   def load(): DataFrame = {
     sparkSession.newDataFrame { relationBuilder =>
       relationBuilder.getReadBuilder
@@ -99,6 +107,18 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
         .setIsStreaming(true)
         .getNamedTableBuilder
         .setUnparsedIdentifier(tableName)
+        .putAllOptions(sourceBuilder.getOptionsMap)
+    }
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      builder.getRelationChangesBuilder
+        .setUnparsedIdentifier(tableName)
+        .setIsStreaming(true)
         .putAllOptions(sourceBuilder.getOptionsMap)
     }
   }

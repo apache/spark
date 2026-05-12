@@ -21,6 +21,7 @@ Implementation of spark-pipelines CLI.
 Example usage:
     $ bin/spark-pipelines run --spec /path/to/pipeline.yaml
 """
+
 from contextlib import contextmanager
 import argparse
 import glob
@@ -164,7 +165,7 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
         "libraries",
     }
     REQUIRED_FIELDS = ["name", "storage"]
-    for key in spec_data.keys():
+    for key in spec_data:
         if key not in ALLOWED_FIELDS:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}
@@ -249,9 +250,9 @@ def register_definitions(
                         module_spec = importlib.util.spec_from_file_location(file.stem, str(file))
                         assert module_spec is not None, f"Could not find module spec for {file}"
                         module = importlib.util.module_from_spec(module_spec)
-                        assert (
-                            module_spec.loader is not None
-                        ), f"Module spec has no loader for {file}"
+                        assert module_spec.loader is not None, (
+                            f"Module spec has no loader for {file}"
+                        )
                         with add_pipeline_analysis_context(
                             spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
                         ):

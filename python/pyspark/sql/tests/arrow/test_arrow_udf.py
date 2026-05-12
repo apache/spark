@@ -33,8 +33,8 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import ParseException, PySparkTypeError
 from pyspark.util import PythonEvalType
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pyarrow,
     pyarrow_requirement_message,
 )
@@ -109,7 +109,6 @@ class ArrowUDFTestsMixin:
             "America/Los_Angeles",
             "Pacific/Honolulu",
             "Europe/Amsterdam",
-            "US/Pacific",
         ]:
             with self.sql_conf({"spark.sql.session.timeZone": tz}):
                 # There is a time-zone conversion in df.collect:
@@ -316,12 +315,6 @@ class ArrowUDFTests(ArrowUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

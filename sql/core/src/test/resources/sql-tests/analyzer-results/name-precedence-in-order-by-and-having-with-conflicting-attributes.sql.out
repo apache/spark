@@ -666,10 +666,10 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DROP VIEW v2
 -- !query analysis
-DropTempViewCommand v2
+DropTempViewCommand v2, false
 
 
 -- !query
 DROP VIEW v1
 -- !query analysis
-DropTempViewCommand v1
+DropTempViewCommand v1, false

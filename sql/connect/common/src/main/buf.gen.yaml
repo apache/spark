@@ -16,18 +16,18 @@
 #
 version: v1
 plugins:
-  - plugin: buf.build/protocolbuffers/cpp:v33.0
+  - plugin: buf.build/protocolbuffers/cpp:v33.5
     out: gen/proto/cpp
-  - plugin: buf.build/protocolbuffers/csharp:v33.0
+  - plugin: buf.build/protocolbuffers/csharp:v33.5
     out: gen/proto/csharp
-  - plugin: buf.build/protocolbuffers/java:v33.0
+  - plugin: buf.build/protocolbuffers/java:v33.5
     out: gen/proto/java
   - plugin: buf.build/grpc/ruby:v1.76.0
     out: gen/proto/ruby
-  - plugin: buf.build/protocolbuffers/ruby:v33.0
+  - plugin: buf.build/protocolbuffers/ruby:v33.5
     out: gen/proto/ruby
    # Building the Python build and building the mypy interfaces.
-  - plugin: buf.build/protocolbuffers/python:v33.0
+  - plugin: buf.build/protocolbuffers/python:v33.5
     out: gen/proto/python
   - plugin: buf.build/grpc/python:v1.76.0
     out: gen/proto/python

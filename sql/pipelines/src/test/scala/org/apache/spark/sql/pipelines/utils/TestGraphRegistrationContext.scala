@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.utils
 
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
@@ -28,13 +29,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A test class to simplify the creation of pipelines and datasets for unit testing.
  */
 class TestGraphRegistrationContext(
-    val spark: SparkSession,
+    val _spark: SparkSession,
     val sqlConf: Map[String, String] = Map.empty)
     extends GraphRegistrationContext(
       defaultCatalog = TestGraphRegistrationContext.DEFAULT_CATALOG,
       defaultDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE,
       defaultSqlConf = sqlConf
     ) {
+
+  /** Re-expose as implicit so nested anonymous classes can use it without shadowing issues */
+  implicit def spark: SparkSession = _spark
+  implicit def sqlContext: SQLContext = _spark.sqlContext
 
   // scalastyle:off
   // Disable scalastyle to ignore argument count.
@@ -145,7 +150,7 @@ class TestGraphRegistrationContext(
     val qualifiedIdentifier = GraphIdentifierManager
           .parseAndQualifyTableIdentifier(
             rawTableIdentifier = GraphIdentifierManager
-              .parseTableIdentifier(name, spark),
+              .parseTableIdentifier(name, _spark),
             currentCatalog = catalog.orElse(Some(defaultCatalog)),
             currentDatabase = database.orElse(Some(defaultDatabase)))
           .identifier
@@ -304,9 +309,9 @@ class TestGraphRegistrationContext(
       catalog: Option[String] = None,
       database: Option[String] = None
   ): Unit = {
-    val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark)
+    val rawFlowIdentifier = GraphIdentifierManager.parseTableIdentifier(name, _spark)
     val rawDestinationIdentifier =
-      GraphIdentifierManager.parseTableIdentifier(destinationName, spark)
+      GraphIdentifierManager.parseTableIdentifier(destinationName, _spark)
 
     val flowWritesToView = getViews
         .filter(_.isInstanceOf[TemporaryView])

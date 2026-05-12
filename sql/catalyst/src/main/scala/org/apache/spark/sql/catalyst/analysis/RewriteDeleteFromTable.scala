@@ -86,9 +86,10 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, remainingRowsPlan)
+    val query = addOperationColumn(COPY_OPERATION, remainingRowsPlan)
     val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
-    ReplaceData(writeRelation, cond, query, relation, projections, Some(cond))
+    val groupFilterCond = if (groupFilterEnabled) Some(cond) else None
+    ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
 
   // build a rewrite plan for sources that support row deltas

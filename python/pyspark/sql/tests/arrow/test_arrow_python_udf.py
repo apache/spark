@@ -19,6 +19,7 @@ from decimal import Decimal
 import unittest
 
 from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
 from pyspark.sql.functions import udf, col
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
@@ -33,15 +34,18 @@ from pyspark.sql.types import (
     StructType,
     VarcharType,
 )
-from pyspark.testing.sqlutils import (
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
-    ReusedSQLTestCase,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import PythonEvalType
+
+if have_pandas:
+    import pandas as pd
 
 
 @unittest.skipIf(
@@ -190,8 +194,12 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "int")("value").alias("res")).collect()
 
-        with self.assertRaises(PythonException):
-            df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+        # Skip on pandas 3+ legacy conversion: pandas 3's StringDtype implements
+        # __arrow_array__, which lets pyarrow coerce integer-like strings to
+        # decimal. Older pandas (object dtype) raised ArrowTypeError here.
+        if LooseVersion(pd.__version__) < "3.0.0":
+            with self.assertRaises(PythonException):
+                df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
@@ -299,8 +307,11 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 
     def test_udf_with_udt(self):
         for fallback in [False, True]:
-            with self.subTest(fallback=fallback), self.sql_conf(
-                {"spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT": fallback}
+            with (
+                self.subTest(fallback=fallback),
+                self.sql_conf(
+                    {"spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT": fallback}
+                ),
             ):
                 super().test_udf_with_udt()
 
@@ -362,12 +373,10 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         def create_struct_with_interval(interval_val, name_val):
             return Row(interval_field=interval_val, name=name_val)
 
-        df = self.spark.sql(
-            """
+        df = self.spark.sql("""
             SELECT INTERVAL '15:30:45.678' HOUR TO SECOND as interval_val,
                    'test_name' as name_val
-        """
-        ).select(create_struct_with_interval("interval_val", "name_val").alias("result"))
+        """).select(create_struct_with_interval("interval_val", "name_val").alias("result"))
 
         self.assertEqual(df.schema.fields[0].dataType, struct_type)
         self.assertEqual(df.schema.fields[0].dataType.fields[0].dataType, DayTimeIntervalType(1, 3))
@@ -535,12 +544,6 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_python_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

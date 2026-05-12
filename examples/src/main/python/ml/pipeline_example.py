@@ -65,7 +65,7 @@ if __name__ == "__main__":
         rid, text, prob, prediction = row
         print(
             "(%d, %s) --> prob=%s, prediction=%f" % (
-                rid, text, str(prob), prediction   # type: ignore
+                rid, text, str(prob), prediction
             )
         )
     # $example off$

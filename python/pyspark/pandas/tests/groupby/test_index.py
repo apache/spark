@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import pandas as pd
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -116,6 +116,36 @@ class GroupbyIndexMixin:
             psdf.groupby(("x", "a")).idxmax(skipna=False).sort_index(),
         )
 
+        pdf = pd.DataFrame(
+            {"a": [1, 1, 2, 2], "b": [1, 2, 3, 4], "c": [4, 3, 2, 1]},
+            index=["r0", "r1", "r2", "r3"],
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
+            psdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
+            psdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
+        )
+
+        pdf = pd.DataFrame(
+            {"a": [1, 1, 2, 2], "b": [1, 2, 3, 4], "c": [4, 3, 2, 1]},
+            index=pd.Index(
+                pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04"])
+            ),
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
+            psdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
+            psdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
+        )
+
     def test_idxmin(self):
         pdf = pd.DataFrame(
             {"a": [1, 1, 2, 2, 3] * 3, "b": [1, 2, 3, 4, 5] * 3, "c": [5, 4, 3, 2, 1] * 3}
@@ -163,6 +193,91 @@ class GroupbyIndexMixin:
             psdf.groupby(("x", "a")).idxmin(skipna=False).sort_index(),
         )
 
+        pdf = pd.DataFrame(
+            {"a": [1, 1, 2, 2], "b": [1, 2, 3, 4], "c": [4, 3, 2, 1]},
+            index=["r0", "r1", "r2", "r3"],
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
+            psdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
+            psdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
+        )
+
+        pdf = pd.DataFrame(
+            {"a": [1, 1, 2, 2], "b": [1, 2, 3, 4], "c": [4, 3, 2, 1]},
+            index=pd.Index(
+                pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04"])
+            ),
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
+            psdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
+        )
+        self.assert_eq(
+            pdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
+            psdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
+        )
+
+    def test_idxmax_idxmin_skipna_false_with_na(self):
+        dfs = [
+            pd.DataFrame({"a": [1, 1, 2, 2], "b": [1, None, 3, 4], "c": [4, 3, 2, 1]}),
+            pd.DataFrame(
+                {"a": [1, 1, 2, 2], "b": [1, None, 3, 4], "c": [4, 3, 2, 1]},
+                index=["r0", "r1", "r2", "r3"],
+            ),
+            pd.DataFrame(
+                {"a": [1, 1, 2, 2], "b": [1, None, 3, 4], "c": [4, 3, 2, 1]},
+                index=pd.Index(
+                    pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04"])
+                ),
+            ),
+        ]
+
+        for i, pdf in enumerate(dfs):
+            with self.subTest(i=i):
+                psdf = ps.from_pandas(pdf)
+                if LooseVersion(pd.__version__) < "3.0.0":
+                    # pandas-on-Spark preserves the legacy idxmax/idxmin result for skipna=False.
+                    self.assert_eq(
+                        pdf.groupby(["a"]).idxmax().sort_index(),
+                        psdf.groupby(["a"]).idxmax(skipna=False).sort_index(),
+                    )
+                    self.assert_eq(
+                        pdf.groupby(["a"]).idxmin().sort_index(),
+                        psdf.groupby(["a"]).idxmin(skipna=False).sort_index(),
+                    )
+                    self.assert_eq(
+                        pdf.groupby(["a"])["b"].idxmax().sort_index(),
+                        psdf.groupby(["a"])["b"].idxmax(skipna=False).sort_index(),
+                    )
+                    self.assert_eq(
+                        pdf.groupby(["a"])["b"].idxmin().sort_index(),
+                        psdf.groupby(["a"])["b"].idxmin(skipna=False).sort_index(),
+                    )
+                else:
+                    # pandas 3 raises for skipna=False when NA values are present.
+                    with self.assertRaisesRegex(
+                        Exception, "idxmax with skipna=False encountered an NA value"
+                    ):
+                        psdf.groupby(["a"]).idxmax(skipna=False).to_pandas()
+                    with self.assertRaisesRegex(
+                        Exception, "idxmin with skipna=False encountered an NA value"
+                    ):
+                        psdf.groupby(["a"]).idxmin(skipna=False).to_pandas()
+                    with self.assertRaisesRegex(
+                        Exception, "idxmax with skipna=False encountered an NA value"
+                    ):
+                        psdf.groupby(["a"])["b"].idxmax(skipna=False).to_pandas()
+                    with self.assertRaisesRegex(
+                        Exception, "idxmin with skipna=False encountered an NA value"
+                    ):
+                        psdf.groupby(["a"])["b"].idxmin(skipna=False).to_pandas()
+
 
 class GroupbyIndexTests(
     GroupbyIndexMixin,
@@ -173,12 +288,6 @@ class GroupbyIndexTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.groupby.test_index import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

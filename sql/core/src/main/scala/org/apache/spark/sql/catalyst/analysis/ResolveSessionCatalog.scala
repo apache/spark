@@ -22,12 +22,13 @@ import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, HiveTableRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Attribute}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -35,8 +36,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1,
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
-import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.SparkStringUtils
 
 /**
@@ -46,13 +46,14 @@ import org.apache.spark.util.SparkStringUtils
  * again, which may lead to inconsistent behavior if the current database is changed in the middle.
  */
 class ResolveSessionCatalog(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with LookupCatalog {
+  extends Rule[LogicalPlan] with LookupCatalog with AliasHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
+    case a @ AddColumns(ResolvedV1TableIdentifier(ident), cols)
+        if a.resolved && cols.forall(_.isDefaultValueTypeCoerced) =>
       cols.foreach { c =>
         if (c.name.length > 1) {
           throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -62,13 +63,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError()
         }
       }
-      AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
+      // For V1 ALTER TABLE ADD COLUMNS command, the default value expression is hidden in the
+      // StructField metadata, and won't be constant folded by the optimizer. Here we
+      // manually constant fold it, as exist default needs to be a constant.
+      val newCols = cols.map { col =>
+        val builder = new MetadataBuilder
+        col.comment.foreach(builder.putString("comment", _))
+        col.default.foreach { defaultValue =>
+          addDefaultValueMetadata(builder, defaultValue, col.colName, col.dataType,
+            "ALTER TABLE ADD COLUMNS")
+        }
+        StructField(col.name.head, col.dataType, nullable = true, builder.build())
+      }
+      AlterTableAddColumnsCommand(ident, newCols)
 
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
-    case AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
-        if supportsV1Command(catalog) =>
+    case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
+        if supportsV1Command(catalog) && a.resolved && specs.forall(_.isDefaultValueTypeCoerced) =>
       if (specs.size > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN in bulk")
@@ -88,7 +101,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
-      s.newComment.map(c => builder.putString("comment", c))
+      s.newComment.foreach(c => builder.putString("comment", c))
       val colName = s.column.name.head
       val dataType = s.newDataType.getOrElse {
         table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
@@ -102,9 +115,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
               toSQLId(s.column.name), table.schema.fieldNames)
           }
       }
-      // Add the current default column value string (if any) to the column metadata.
-      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
-        c.originalSQL) }
+      // For V1 ALTER TABLE ALTER COLUMN command, we only set the CURRENT_DEFAULT metadata.
+      // The EXISTS_DEFAULT should be preserved from the original column, as it represents
+      // the default value that was in effect when the column was added (used for backfilling).
+      s.newDefaultExpression.foreach { defaultValue =>
+        // Validate the default value expression
+        constantFoldDefaultValue(defaultValue, colName, dataType, "ALTER TABLE ALTER COLUMN")
+        builder.putExpression(
+          DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+          Some(defaultValue.child))
+      }
       if (s.dropDefault) {
         // for legacy reasons, "" means clearing default value
         builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "")
@@ -176,14 +196,37 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
-      DescribeTableCommand(ident, partitionSpec, isExtended, output)
+        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
+        isExtended,
+        output) =>
+      DescribeTableCommand(resolvedChild, ident, Map.empty, isExtended, output)
 
-    case DescribeColumn(
-        ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
-      // For views, the column will not be resolved by `ResolveReferences` because
-      // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident, column.nameParts, isExtended, output)
+    case DescribeTablePartition(
+        resolvedChild @ ResolvedV1TableOrViewIdentifier(ident),
+        UnresolvedPartitionSpec(spec, _),
+        isExtended,
+        output) =>
+      DescribeTableCommand(resolvedChild, ident, spec, isExtended, output)
+
+    // `DESCRIBE TABLE <view> PARTITION (...)` against a non-session v2 view: the v1 rewrite
+    // above is gated on `ResolvedV1TableOrViewIdentifier` (session-only), so non-session v2
+    // views fall through. Reject early with the same `FORBIDDEN_OPERATION` v1 raises at
+    // runtime in `DescribeTableCommand.describeDetailedPartitionInfo`. Without this rewrite,
+    // CheckAnalysis surfaces a generic "Found the unresolved operator" INTERNAL_ERROR
+    // because `UnresolvedPartitionSpec` is never resolved on the v2 view path.
+    case DescribeTablePartition(rpv: ResolvedPersistentView, _, _, _) =>
+      val quoted = (rpv.catalog.name() +: rpv.identifier.asMultipartIdentifier)
+        .map(quoteIfNeeded).mkString(".")
+      throw QueryCompilationErrors.descPartitionNotAllowedOnView(quoted)
+
+    case DescribeColumn(ResolvedViewIdentifier(ident), column, isExtended, output) =>
+      // `ResolvedPersistentView` exposes the view's schema as its `output`, so `ResolveReferences`
+      // typically resolves the column to an `Attribute` here. We also accept the legacy
+      // `UnresolvedAttribute` form (e.g. the parser referenced a non-existent column whose
+      // resolution was skipped) so the rewrite stays robust across analyzer ordering changes.
+      // The unwrap logic is shared with the non-session v2 view path in `DataSourceV2Strategy`.
+      val nameParts = DescribeColumn.extractColumnNameParts(column)
+      DescribeColumnCommand(ident, nameParts, isExtended, output)
 
     case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
@@ -201,7 +244,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ CreateTable(ResolvedV1Identifier(ident), _, _, tableSpec: TableSpec, _)
-        if c.resolved =>
+        if c.resolved && c.columns.forall(_.isDefaultValueTypeCoerced) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
@@ -210,7 +253,21 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.unsupportedTableOperationError(
             ident, "CONSTRAINT")
         }
-        constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
+        // For V1 CREATE TABLE command, the default value expression is hidden in the
+        // StructField metadata, and won't be constant folded by the optimizer. Here we
+        // manually constant fold it, as exist default needs to be a constant.
+        val fields = c.columns.map { col =>
+          col.defaultValue.map { defaultValue =>
+            val existsDefaultSQL = constantFoldDefaultValue(
+              defaultValue, col.name, col.dataType, "CREATE TABLE")
+            // toV1Column already sets CURRENT_DEFAULT, so just update EXISTS_DEFAULT
+            val field = col.toV1Column
+            val newMetadata = new MetadataBuilder().withMetadata(field.metadata)
+              .putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL).build()
+            field.copy(metadata = newMetadata)
+          }.getOrElse(col.toV1Column)
+        }
+        constructV1TableCmd(None, c.tableSpec, ident, StructType(fields), c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         c
@@ -259,6 +316,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
+    // For CREATE TABLE LIKE, use the v1 command if both the target and source are in the session
+    // catalog (or a V1-compatible catalog extension). If source is in a different catalog, fall
+    // through to the V2 execution path (CreateTableLikeExec via DataSourceV2Strategy).
+    case CreateTableLike(
+        ResolvedV1Identifier(targetIdent),
+        ResolvedV1TableOrViewIdentifier(sourceIdent),
+        location, provider, serdeInfo, properties, ifNotExists) =>
+      val fileFormat = buildStorageFormatFromSerdeInfo(location, serdeInfo)
+      CreateTableLikeCommand(
+        targetIdent, sourceIdent, fileFormat, provider, properties, ifNotExists)
+
     case DropTable(ResolvedV1Identifier(ident), ifExists, purge) if conf.useV1Command =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
@@ -266,14 +334,24 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropTable(ResolvedIdentifier(FakeSystemCatalog, ident), _, _) =>
       DropTempViewCommand(ident)
 
-    case DropView(ResolvedIdentifierInSessionCatalog(ident), ifExists) =>
+    // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
+    case DropView(ResolvedTempView(ident, _), ifExists) =>
+      DropTempViewCommand(ident, ifExists)
+
+    case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    case DropView(r @ ResolvedIdentifier(catalog, ident), _) =>
+    // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
+    // `ViewCatalog.dropView` (this also covers METRIC_VIEW since metric views are persisted
+    // through the same ViewCatalog interface). Other non-session catalogs get
+    // `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from `CheckViewReferences` for
+    // CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
+    case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
+        if !catalog.isInstanceOf[ViewCatalog] =>
       if (catalog == FakeSystemCatalog) {
-        DropTempViewCommand(ident)
+        DropTempViewCommand(ident, ifExists)
       } else {
-        throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+        throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
       }
 
     case c @ CreateNamespace(DatabaseNameInSessionCatalog(name), _, _) if conf.useV1Command =>
@@ -382,7 +460,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
+    case ShowColumns(resolvedChild @ ResolvedViewIdentifier(ident), ns, output) =>
+      val resolver = conf.resolver
+      val db = ns match {
+        case Some(nsSeq) if ident.database.exists(!resolver(_, nsSeq.head)) =>
+          throw QueryCompilationErrors.showColumnsWithConflictNamespacesError(
+            Seq(nsSeq.head), Seq(ident.database.get))
+        case _ => ns.map(_.head)
+      }
+      // Use unqualified table name when namespace comes from FROM clause so analyzer output
+      // matches expected format (e.g. "SHOW COLUMNS IN showcolumn4 FROM global_temp").
+      val tableNameForCommand =
+        if (db.isDefined && ident.database == db) TableIdentifier(ident.table, None) else ident
+      ShowColumnsCommand(resolvedChild, db, tableNameForCommand, output)
+
+    case ShowColumns(
+        resolvedChild @ ResolvedV1TableIdentifier(ident), ns, output) =>
       val v1TableName = ident
       val resolver = conf.resolver
       val db = ns match {
@@ -391,7 +484,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             Seq(db.head), Seq(v1TableName.database.get))
         case _ => ns.map(_.head)
       }
-      ShowColumnsCommand(db, v1TableName, output)
+      ShowColumnsCommand(resolvedChild, db, v1TableName, output)
 
     // V2 catalog doesn't support RECOVER PARTITIONS yet, we must use v1 command here.
     case RecoverPartitions(ResolvedV1TableIdentifierInSessionCatalog(ident)) =>
@@ -444,14 +537,33 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         location) =>
       AlterTableSetLocationCommand(ident, Some(partitionSpec), location)
 
-    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query) =>
-      AlterViewAsCommand(ident, originalText, query)
+    // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
+    // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
+    // from HandleSpecialCommand after this rewrite.
+    case alterViewAs @ AlterViewAs(
+        ResolvedViewIdentifier(ident), originalText, query, _, _) =>
+      // For session-catalog persistent views, pick up the analysis-time collation off the
+      // resolved `ViewInfo` -- `ApplyDefaultCollation` rewrites that property to fill the
+      // namespace default when the existing view had none, and `alterPermanentView` wants
+      // the post-rewrite value so the persisted `CatalogTable.collation` matches the
+      // collated literal types in the analyzed plan. Temp views don't carry a `ViewInfo`,
+      // so they pass through without a collation override.
+      val collation = alterViewAs.child match {
+        case rpv: ResolvedPersistentView =>
+          Option(rpv.info.properties.get(TableCatalog.PROP_COLLATION))
+        case _ => None
+      }
+      AlterViewAsCommand(ident, originalText, query, collation = collation)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
 
-    case CreateView(ResolvedIdentifierInSessionCatalog(ident), userSpecifiedColumns, comment,
-        collation, properties, originalText, child, allowExisting, replace, viewSchemaMode) =>
+    // The final `_, _` are CreateView.isAnalyzed and referredTempFunctions. We drop both:
+    // CreateViewCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
+    // from HandleSpecialCommand after this rewrite.
+    case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
+        collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
+        _, _) =>
       CreateViewCommand(
         name = ident,
         userSpecifiedColumns = userSpecifiedColumns,
@@ -459,16 +571,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         collation = collation,
         properties = properties,
         originalText = originalText,
-        plan = child,
+        plan = query,
         allowExisting = allowExisting,
         replace = replace,
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
-
-    case ShowViews(ns: ResolvedNamespace, pattern, output) =>
+    // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
+    // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog
+    // catalogs hit the MISSING_CATALOG_ABILITY.VIEWS rejection.
+    case ShowViews(ns: ResolvedNamespace, pattern, output)
+        if !ns.catalog.isInstanceOf[ViewCatalog] =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
@@ -483,8 +596,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
-    case DescribeFunction(ResolvedNonPersistentFunc(_, V1Function(info)), extended) =>
-      DescribeFunctionCommand(info, extended)
+    case DescribeFunction(ResolvedNonPersistentFunc(_, v1Func: V1Function), extended) =>
+      DescribeFunctionCommand(v1Func.info, extended)
 
     case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
       if (isSessionCatalog(catalog)) {
@@ -497,26 +610,51 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ResolvedDatabaseInSessionCatalog(db), userScope, systemScope, pattern, output) =>
       ShowFunctionsCommand(db, pattern, userScope, systemScope, output)
 
-    case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
+    case d @ DropFunction(ResolvedIdentifier(FakeSystemCatalog, ident), _) =>
+      // Builtin or temp function - throw appropriate error
+      assert(ident.namespace().length == 1)
+      val namespace = ident.namespace().head
+      if (namespace == CatalogManager.BUILTIN_NAMESPACE) {
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(ident.name())
+      } else {
+        assert(namespace == CatalogManager.SESSION_NAMESPACE)
+        // Temp function - user should use DROP TEMPORARY FUNCTION
+        throw QueryCompilationErrors.expectPersistentFuncError(
+          ident.name(),
+          "DROP FUNCTION",
+          Some("Please use DROP TEMPORARY FUNCTION to drop a temporary function."),
+          d)
+      }
+
+    case DropFunction(ResolvedIdentifier(catalog, ident), ifExists) =>
       if (isSessionCatalog(catalog)) {
-        val funcIdentifier = catalogManager.v1SessionCatalog.qualifyIdentifier(
-          identifier.asFunctionIdentifier)
-        DropFunctionCommand(funcIdentifier, ifExists, false)
+        val funcIdentifier = ident.asFunctionIdentifier.copy(catalog = Some(catalog.name))
+        DropFunctionCommand(funcIdentifier, ifExists, isTemp = false)
       } else {
         throw QueryCompilationErrors.missingCatalogDropFunctionAbilityError(catalog)
       }
 
-    case RefreshFunction(ResolvedPersistentFunc(catalog, identifier, _)) =>
+    case RefreshFunction(r @ ResolvedIdentifier(FakeSystemCatalog, ident)) =>
+      // Builtin or temp function - throw appropriate error
+      assert(ident.namespace().length == 1)
+      val namespace = ident.namespace().head
+      if (namespace == CatalogManager.BUILTIN_NAMESPACE) {
+        throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(ident.name(), r)
+      } else {
+        assert(namespace == CatalogManager.SESSION_NAMESPACE)
+        throw QueryCompilationErrors.cannotRefreshTempFuncError(ident.name(), r)
+      }
+
+    case RefreshFunction(ResolvedIdentifier(catalog, ident)) =>
       if (isSessionCatalog(catalog)) {
-        val funcIdentifier = catalogManager.v1SessionCatalog.qualifyIdentifier(
-          identifier.asFunctionIdentifier)
-        RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
+        val funcIdentifier = ident.asFunctionIdentifier.copy(catalog = Some(catalog.name))
+        RefreshFunctionCommand(funcIdentifier)
       } else {
         throw QueryCompilationErrors.missingCatalogRefreshFunctionAbilityError(catalog)
       }
 
     case CreateFunction(
-        ResolvedIdentifierInSessionCatalog(ident), className, resources, ifExists, replace) =>
+        CreateFunctionInSessionCatalog(ident), className, resources, ifExists, replace) =>
       CreateFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         className,
@@ -529,7 +667,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
 
     case c @ CreateUserDefinedFunction(
-        ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
+        CreateFunctionInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _, _) =>
       CreateUserDefinedFunctionCommand(
         FunctionIdentifier(ident.table, ident.database, ident.catalog),
         c.inputParamText,
@@ -537,6 +675,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.exprText,
         c.queryText,
         c.comment,
+        c.collation,
         c.isDeterministic,
         c.containsSQL,
         c.language,
@@ -546,7 +685,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.replace)
 
     case CreateUserDefinedFunction(
-        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _) =>
+        ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _, _) =>
       throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
   }
 
@@ -564,6 +703,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       tableSpec.comment, tableSpec.collation, storageFormat, tableSpec.external)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
     CreateTableV1(tableDesc, mode, query)
+  }
+
+  private def buildStorageFormatFromSerdeInfo(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo]): CatalogStorageFormat = {
+    HiveSerDe.buildStorageFormat(
+      location,
+      maybeSerdeInfo,
+      si => QueryCompilationErrors.invalidFileFormatForStoredAsError(si))
   }
 
   private def getStorageFormatAndProvider(
@@ -664,13 +812,23 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   }
 
   object ResolvedViewIdentifier {
+    // Only matches session-catalog persistent views. Non-session-catalog persistent views
+    // (produced for `MetadataTable`) fall through and are picked up by dedicated v2 strategy
+    // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
+    // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
+    // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`
+    // directly.
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-      case ResolvedPersistentView(catalog, ident, _) =>
-        assert(isSessionCatalog(catalog))
-        assert(ident.namespace().length == 1)
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+      case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
-      case ResolvedTempView(ident, _) => Some(ident.asTableIdentifier)
+      case ResolvedTempView(ident, _) =>
+        // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
+        // and DROP VIEW find the view. Local temp views are keyed by table name only.
+        // system.session.viewName -> use database "session" so SessionCatalog resolves
+        // it as a temp view.
+        val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
+        Some(TableIdentifier(ident.name(), db))
 
       case _ => None
     }
@@ -703,40 +861,84 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedV1Identifier {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-        if (ident.namespace().length != 1) {
-          throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
-        }
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
       case _ => None
     }
   }
 
-  // Use this object to help match commands that do not have a v2 implementation.
-  object ResolvedIdentifierInSessionCatalog{
+  private object CreateViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
+  private object DropViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("DROP", "VIEW")
+  private object CreateFunctionInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "FUNCTION")
+
+  /**
+   * Extractor for resolved identifiers in the session catalog.
+   * Rejects multi-part namespaces and builtin namespace targets with appropriate errors.
+   *
+   * @param statement the SQL statement (e.g. "CREATE", "DROP") for error messages
+   * @param objectType the object type (e.g. "FUNCTION", "VIEW") for error messages
+   */
+  class ResolvedIdentifierInSessionCatalog(statement: String, objectType: String) {
     def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
       case ResolvedIdentifier(catalog, ident) if isSessionCatalog(catalog) =>
         if (ident.namespace().length != 1) {
+          if (ident.namespace().length >= 1 &&
+              ident.namespace().last.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)) {
+            throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
+              statement, objectType, ident.name())
+          }
+          // Pass full identifier (namespace + name) so error shows e.g. "`a`.`b`.`c`"
           throw QueryCompilationErrors
-            .requiresSinglePartNamespaceError(ident.namespace().toImmutableArraySeq)
+            .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
         }
-        Some(TableIdentifier(ident.name, Some(ident.namespace.head), Some(catalog.name)))
+        Some(TableIdentifier(ident.name(), Some(ident.namespace().head), Some(catalog.name)))
       case _ => None
     }
-  }
-
-  private def convertToStructField(col: QualifiedColType): StructField = {
-    val builder = new MetadataBuilder
-    col.comment.foreach(builder.putString("comment", _))
-    col.default.map {
-      value: DefaultValueExpression => builder.putString(
-        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value.originalSQL)
-    }
-    StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 
   private def isV2Provider(provider: String): Boolean = {
     DataSourceV2Utils.getTableProvider(provider, conf).isDefined
+  }
+
+  /**
+   * Validates and constant-folds a column default value expression for V1 tables.
+   * Populates both CURRENT_DEFAULT and EXISTS_DEFAULT in the metadata builder.
+   */
+  private def addDefaultValueMetadata(
+      builder: MetadataBuilder,
+      defaultValue: DefaultValueExpression,
+      colName: String,
+      colType: DataType,
+      statementType: String): Unit = {
+    val existsDefaultSQL = constantFoldDefaultValue(defaultValue, colName, colType, statementType)
+    builder.putExpression(
+      DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+      Some(defaultValue.child))
+    builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
+  }
+
+  /**
+   * Validates and constant-folds a column default value expression for V1 tables.
+   * Returns the SQL string of the constant-folded expression for EXISTS_DEFAULT metadata.
+   */
+  private def constantFoldDefaultValue(
+      defaultValue: DefaultValueExpression,
+      colName: String,
+      colType: DataType,
+      statementType: String): String = {
+    validateDefaultValueExpr(defaultValue, statementType, colName, Some(colType))
+    val fakePlan = Project(Seq(Alias(defaultValue.child, colName)()), OneRowRelation())
+    val optimizedPlan = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(fakePlan))
+    val constantFolded = optimizedPlan.collectFirst {
+      case Project(Seq(expr), OneRowRelation()) => trimAliases(expr)
+    }.get
+    if (!constantFolded.foldable) {
+      throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName,
+        defaultValue.originalSQL)
+    }
+    constantFolded.sql
   }
 
   private object ResolvedV1Database {
@@ -781,4 +983,5 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       SQLConf.get.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) == "builtin" ||
         catalog.isInstanceOf[CatalogExtension])
   }
+
 }

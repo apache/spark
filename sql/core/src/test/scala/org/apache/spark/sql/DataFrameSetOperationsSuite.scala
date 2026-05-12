@@ -34,8 +34,7 @@ import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
-class DataFrameSetOperationsSuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   test("except") {

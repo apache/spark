@@ -34,6 +34,10 @@ class DateType private () extends DatetimeType {
    */
   override def defaultSize: Int = 4
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[DateType]
+
+  override def hashCode(): Int = classOf[DateType].getSimpleName.hashCode
+
   private[spark] override def asNullable: DateType = this
 }
 

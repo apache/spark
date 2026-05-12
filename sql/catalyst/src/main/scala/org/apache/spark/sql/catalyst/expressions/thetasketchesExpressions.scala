@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Integ
       > SELECT _FUNC_(theta_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 case class ThetaSketchEstimate(child: Expression)
     extends UnaryExpression
@@ -71,7 +71,7 @@ case class ThetaSketchEstimate(child: Expression)
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
        6
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaUnion(first: Expression, second: Expression, third: Expression)
@@ -130,7 +130,7 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
        2
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaDifference(first: Expression, second: Expression)
@@ -178,7 +178,7 @@ case class ThetaDifference(first: Expression, second: Expression)
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
        2
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaIntersection(first: Expression, second: Expression)

@@ -16,12 +16,10 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.function.UnaryOperator
-
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
-import org.apache.hadoop.util.StringUtils
+import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -32,6 +30,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.EXIT_EXCEPTION_ANNOTATION
 import org.apache.spark.deploy.k8s.Fabric8Aliases.PODS
+import org.apache.spark.util.Utils
 
 class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
   with MockitoSugar with BeforeAndAfterEach {
@@ -75,15 +74,10 @@ class SparkKubernetesDiagnosticsSetterSuite extends SparkFunSuite
 
     setter.setDiagnostics(diagnostics, conf)
 
-    val captor: ArgumentCaptor[UnaryOperator[Pod]] =
-      ArgumentCaptor.forClass(classOf[UnaryOperator[Pod]])
-    verify(driverPodOperations).edit(captor.capture())
+    val podCaptor: ArgumentCaptor[Pod] = ArgumentCaptor.forClass(classOf[Pod])
+    verify(driverPodOperations).patch(any(classOf[PatchContext]), podCaptor.capture())
 
-    val fn = captor.getValue
-    val initialPod = SparkPod.initialPod().pod
-    val editedPod = fn.apply(initialPod)
-
-    assert(editedPod.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
-      == StringUtils.stringifyException(diagnostics))
+    assert(podCaptor.getValue.getMetadata.getAnnotations.get(EXIT_EXCEPTION_ANNOTATION)
+      == Utils.stringifyException(diagnostics))
   }
 }

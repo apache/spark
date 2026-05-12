@@ -22,6 +22,16 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.2 to 4.3
+
+- Since Spark 4.3, the configuration key `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled` has been renamed to `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` to reflect that it now applies to storage-partitioned joins, aggregates, and windows. The old key continues to work as an alias.
+
+## Upgrading from Spark SQL 4.1 to 4.2
+
+- Since Spark 4.2, Spark enables order-independent checksums for shuffle outputs by default to detect data inconsistencies during indeterminate shuffle stage retries. If a checksum mismatch is detected, Spark rolls back and re-executes all succeeding stages that depend on the shuffle output. If rolling back is not possible for some succeeding stages, the job will fail. To restore the previous behavior, set `spark.sql.shuffle.orderIndependentChecksum.enabled` and `spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch` to `false`.
+- Since Spark 4.2, support for Derby JDBC datasource is deprecated.
+- Since Spark 4.2, a new default method `mergeWith` has been added to the `CustomTaskMetric` interface. The default implementation sums the two metric values, which is correct for count-type metrics. Data source connector implementations that report non-additive metrics (e.g., maximum, average, compression ratio, or gauge values) must override `mergeWith` to provide correct merge semantics.
+
 ## Upgrading from Spark SQL 4.0 to 4.1
 
 - Since Spark 4.1, the Parquet reader no longer assumes all struct values to be null, if all the requested fields are missing in the parquet file. The new default behavior is to read an additional struct field that is present in the file to determine nullness. To restore the previous behavior, set `spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing` to `true`.

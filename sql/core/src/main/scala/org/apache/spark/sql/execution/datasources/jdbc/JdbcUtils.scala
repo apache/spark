@@ -51,8 +51,8 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDiale
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{NextIterator, TaskInterruptListener}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.NextIterator
 
 /**
  * Util functions for JDBC tables.
@@ -156,8 +156,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
-      case CharType(n) => Option(JdbcType(s"CHAR($n)", java.sql.Types.CHAR))
-      case VarcharType(n) => Option(JdbcType(s"VARCHAR($n)", java.sql.Types.VARCHAR))
+      case c: CharType => Option(JdbcType(s"CHAR(${c.length})", java.sql.Types.CHAR))
+      case v: VarcharType => Option(JdbcType(s"VARCHAR(${v.length})", java.sql.Types.VARCHAR))
       case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       // This is a common case of timestamp without time zone. Most of the databases either only
       // support TIMESTAMP type or use TIMESTAMP as an alias for TIMESTAMP WITHOUT TIME ZONE.
@@ -798,6 +798,26 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
     val conn = dialect.createConnectionFactory(options)(-1)
+
+    // Close JDBC connection so blocked native reads (e.g. executeBatch) fail instead of
+    // ignoring Thread.interrupt(). Listener registered after opening the connection; we don't need
+    // to synchronize or use atomic references.
+    // Interrupt during connection setup can miss the listener; finally still closes the
+    // connection. After registration, closing connection makes later JDBC calls throw
+    // SQLException and the task unwinds.
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskInterruptListener(new TaskInterruptListener {
+        override def onTaskInterrupted(context: TaskContext, reason: String): Unit = {
+          try {
+            conn.close()
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Exception closing JDBC connection on task interrupt", e)
+          }
+        }
+      })
+    }
+
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -813,12 +833,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // Finally update to actually requested level if possible
             finalIsolationLevel = isolationLevel
           } else {
-            logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)} " +
+            logWarning(log"Requested isolation level " +
+              log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))} " +
               log"is not supported; falling back to default isolation level " +
-              log"${MDC(DEFAULT_ISOLATION_LEVEL, defaultIsolation)}")
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelString(defaultIsolation))}")
           }
         } else {
-          logWarning(log"Requested isolation level ${MDC(ISOLATION_LEVEL, isolationLevel)}, " +
+          logWarning(log"Requested isolation level " +
+            log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))}, " +
             log"but transactions are unsupported")
         }
       } catch {
@@ -857,6 +879,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
           rowCount += 1
           totalRowCount += 1
           if (rowCount % batchSize == 0) {
+            // Hot spot for native blocking reads; TaskInterruptListener (registered after
+            // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
+            // methods on a closed Connection throw SQLException (expected for major drivers).
+            // Mid-batch kill may drop the in-flight batch; still better than hanging forever.
             stmt.executeBatch()
             rowCount = 0
           }
@@ -897,7 +923,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
         if (supportsTransactions) {
-          conn.rollback()
+          // The connection may already be closed by the task interrupt listener; rollback
+          // is best-effort in that case.
+          try {
+            if (!conn.isClosed) {
+              conn.rollback()
+            }
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Exception rolling back transaction on task failure", e)
+          }
         } else {
           outMetrics.setRecordsWritten(totalRowCount)
         }
@@ -912,6 +947,20 @@ object JdbcUtils extends Logging with SQLConfHelper {
           case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
         }
       }
+    }
+  }
+
+  /**
+   * Convert the value of isolation level to string.
+   */
+  private def isolationLevelString(isolationLevel: Int): String = {
+    isolationLevel match {
+      case Connection.TRANSACTION_NONE => "NONE"
+      case Connection.TRANSACTION_READ_UNCOMMITTED => "READ_UNCOMMITTED"
+      case Connection.TRANSACTION_READ_COMMITTED => "READ_COMMITTED"
+      case Connection.TRANSACTION_REPEATABLE_READ => "REPEATABLE_READ"
+      case Connection.TRANSACTION_SERIALIZABLE => "SERIALIZABLE"
+      case value => value.toString
     }
   }
 

@@ -395,7 +395,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -918,7 +918,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -958,7 +958,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -998,7 +998,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_multiply' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "long overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",

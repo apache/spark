@@ -69,14 +69,36 @@ case class UnresolvedView(
     suggestAlternative: Boolean = false) extends UnresolvedLeafNode
 
 /**
+ * Controls which search path is shown in `TABLE_OR_VIEW_NOT_FOUND` for
+ * [[UnresolvedTableOrView]] (see [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]).
+ */
+sealed trait UnresolvedTableOrViewSearchPathMode
+
+object UnresolvedTableOrViewSearchPathMode {
+  /** DDL on catalog objects: `system.session` and current catalog namespace only. */
+  case object Ddl extends UnresolvedTableOrViewSearchPathMode
+  /**
+   * Like `SELECT` / DML: full `sqlResolutionPathEntries` order; fully qualified
+   * `system.session.*` names still use the session-only path in errors.
+   */
+  case object QueryLike extends UnresolvedTableOrViewSearchPathMode
+}
+
+/**
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]], [[ResolvedPersistentView]] or [[ResolvedTempView]] during
  * analysis.
+ *
+ * @param tableNotFoundSearchPathMode how to format `searchPath` in `TABLE_OR_VIEW_NOT_FOUND`;
+ *                                    set explicitly at parse / construction time (not inferred
+ *                                    from [[commandName]]).
  */
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTempView: Boolean) extends UnresolvedLeafNode
+    allowTempView: Boolean,
+    tableNotFoundSearchPathMode: UnresolvedTableOrViewSearchPathMode =
+      UnresolvedTableOrViewSearchPathMode.Ddl) extends UnresolvedLeafNode
 
 sealed trait PartitionSpec extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw SparkException.internalError(
@@ -123,8 +145,6 @@ case class UnresolvedFieldPosition(position: ColumnPosition) extends FieldPositi
 case class UnresolvedFunctionName(
     multipartIdentifier: Seq[String],
     commandName: String,
-    requirePersistent: Boolean,
-    funcTypeMismatchHint: Option[String],
     possibleQualifiedName: Option[Seq[String]] = None) extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
@@ -207,15 +227,37 @@ case class ResolvedProcedure(
 }
 
 /**
- * A plan containing resolved persistent views.
+ * A plan containing a resolved persistent view.
+ *
+ * `info` is the typed v2 [[org.apache.spark.sql.connector.catalog.ViewInfo]] payload for the
+ * view. Session-catalog (v1) views are surfaced through the same channel via
+ * [[org.apache.spark.sql.connector.catalog.V1ViewInfo]], which extends `ViewInfo` and wraps
+ * the original [[CatalogTable]] -- mirroring the way
+ * [[org.apache.spark.sql.connector.catalog.V1Table]] exposes a v1 `CatalogTable` through the
+ * v2 [[org.apache.spark.sql.connector.catalog.Table]] surface for `ResolvedTable`. v1-only
+ * paths (e.g. `DescribeTableCommand`, `ShowCreateTableCommand`) recover the original
+ * `CatalogTable` by pattern-matching `info` against `V1ViewInfo`.
  */
-// TODO: create a generic representation for views, after we add view support to v2 catalog. For now
-//       we only hold the view schema.
 case class ResolvedPersistentView(
     catalog: CatalogPlugin,
     identifier: Identifier,
-    metadata: CatalogTable) extends LeafNodeWithoutStats {
-  override def output: Seq[Attribute] = Nil
+    info: org.apache.spark.sql.connector.catalog.ViewInfo)
+  extends LeafNodeWithoutStats {
+  // Surface the view's schema as `output` so `ResolveReferences` can resolve column references
+  // against it (e.g. `DescribeColumn(ResolvedPersistentView, UnresolvedAttribute, ...)`). The
+  // schema is otherwise unused -- consumers read `info` directly and don't iterate `output`.
+  // SELECT on a view goes through view-text expansion and never produces this node, so giving
+  // it output does not affect query resolution.
+  override lazy val output: Seq[Attribute] =
+    toAttributes(CharVarcharUtils.replaceCharVarcharWithStringInSchema(info.schema))
+
+  // Render `info` in plan-tree output as the qualified view name. The default case-class
+  // `toString` would format `info` via `Object.toString`, which produces `V1ViewInfo@<hash>`
+  // for the v1 leg and a similarly opaque hash for the v2 leg -- non-deterministic and useless
+  // in EXPLAIN / golden file output. Replace it with the multi-part `catalog.namespace.name`
+  // form so EXPLAIN, plan-tree dumps, and `SQLQueryTestSuite` golden files remain stable.
+  override protected def stringArgs: Iterator[Any] =
+    Iterator(catalog, identifier, (catalog.name +: identifier.namespace :+ identifier.name).quoted)
 }
 
 /**
@@ -253,7 +295,9 @@ case class ResolvedNonPersistentFunc(
 case class ResolvedIdentifier(
     catalog: CatalogPlugin,
     identifier: Identifier,
-    override val output: Seq[Attribute] = Nil) extends LeafNodeWithoutStats
+    override val output: Seq[Attribute] = Nil) extends LeafNodeWithoutStats {
+  def name: String = (catalog.name +: identifier.namespace :+ identifier.name).quoted
+}
 
 object ResolvedIdentifier {
   def unapply(ri: ResolvedIdentifier): Option[(CatalogPlugin, Identifier)] = {
