@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-FROM python:3.10-slim
+FROM python:3.10-slim-bookworm
 # install the notebook package
 RUN  pip install --no-cache notebook jupyterlab
 
