@@ -95,8 +95,8 @@ Spark SQL and DataFrames support the following data types:
 
 * Spatial types
   Spatial objects as defined in the [OGC Simple Feature Access](https://portal.ogc.org/files/?artifact_id=25355) specification.
-  - `GeometryType`: Represents GEOMETRY values, spatial objects in a Cartesian coordinate system. The type must be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. In SQL, `GEOMETRY` columns must always be declared with an explicit SRID or `ANY`.
-  - `GeographyType`: Represents GEOGRAPHY values, spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type must be fixed to a single geographic SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. In SQL, `GEOGRAPHY` columns must always be declared with an explicit SRID or `ANY`.
+  - `GeometryType`: Represents GEOMETRY values, spatial objects in a Cartesian coordinate system. The type can be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. In SQL, `GEOMETRY` columns must always be declared with an explicit SRID or `ANY`.
+  - `GeographyType`: Represents GEOGRAPHY values, spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type can be fixed to a single geographic SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. In SQL, `GEOGRAPHY` columns must always be declared with an explicit SRID or `ANY`.
   For more details and built-in functions, see [Geospatial (Geometry/Geography) types](sql-ref-geospatial-types.html).
 
 * Complex types
