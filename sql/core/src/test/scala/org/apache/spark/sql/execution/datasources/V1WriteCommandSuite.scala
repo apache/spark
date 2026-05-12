@@ -126,7 +126,7 @@ trait V1WriteCommandSuiteBase extends QueryTest with AdaptiveSparkPlanHelper {
 }
 
 @SlowSQLTest
-class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1WriteCommandSuiteBase {
+class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBase {
 
   import testImplicits._
 

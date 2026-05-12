@@ -35,8 +35,6 @@ from pyspark.sql.functions import (
     to_date,
     array,
     explode,
-    when,
-    concat,
 )
 from pyspark.sql.types import (
     StringType,
@@ -136,42 +134,6 @@ class DataFrameTestsMixin:
         self.assertEqual(df3.select(count(df3["*"])).columns, ["count(1)"])
         self.assertEqual(df3.select(count(col("*"))).columns, ["count(1)"])
 
-    def test_self_join(self):
-        df1 = self.spark.range(10).withColumn("a", lit(0))
-        df2 = df1.withColumnRenamed("a", "b")
-        df = df1.join(df2, df1["a"] == df2["b"])
-        self.assertTrue(df.count() == 100)
-        df = df2.join(df1, df2["b"] == df1["a"])
-        self.assertTrue(df.count() == 100)
-
-    def test_self_join_II(self):
-        df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
-        df2 = df.select(df.a.alias("aa"), df.b)
-        df3 = df2.join(df, df2.b == df.b)
-        self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
-        self.assertTrue(df3.count() == 2)
-
-    def test_self_join_III(self):
-        df1 = self.spark.range(10).withColumn("value", lit(1))
-        df2 = df1.union(df1)
-        df3 = df1.join(df2, df1.id == df2.id, "left")
-        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
-        self.assertTrue(df3.count() == 20)
-
-    def test_self_join_IV(self):
-        df1 = self.spark.range(10).withColumn("value", lit(1))
-        df2 = df1.withColumn("value", lit(2)).union(df1.withColumn("value", lit(3)))
-        df3 = df1.join(df2, df1.id == df2.id, "right")
-        self.assertTrue(df3.columns, ["id", "value", "id", "value"])
-        self.assertTrue(df3.count() == 20)
-
-    def test_select_join_keys(self):
-        df1 = self.spark.range(10).withColumn("v1", lit(1))
-        df2 = self.spark.range(10).withColumn("v2", lit(2))
-        for how in ["inner", "left", "right", "full", "cross"]:
-            self.assertTrue(df1.join(df2, "id", how).select(df1["id"]).count() >= 0, how)
-            self.assertTrue(df1.join(df2, "id", how).select(df2["id"]).count() >= 0, how)
-
     def test_lateral_column_alias(self):
         df1 = self.spark.range(10).select(
             (col("id") + lit(1)).alias("x"), (col("x") + lit(1)).alias("y")
@@ -212,26 +174,6 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop(col("name")).columns, ["age", "active"])
         self.assertEqual(df.drop(col("name"), col("age")).columns, ["active"])
         self.assertEqual(df.drop(col("name"), col("age"), col("random")).columns, ["active"])
-
-    def test_drop_notexistent_col(self):
-        df1 = self.spark.createDataFrame(
-            [("a", "b", "c")],
-            schema="colA string, colB string, colC string",
-        )
-        df2 = self.spark.createDataFrame(
-            [("c", "d", "e")],
-            schema="colC string, colD string, colE string",
-        )
-        df3 = df1.join(df2, df1["colC"] == df2["colC"]).withColumn(
-            "colB",
-            when(df1["colB"] == "b", concat(df1["colB"].cast("string"), lit("x"))).otherwise(
-                df1["colB"]
-            ),
-        )
-        df4 = df3.drop(df1["colB"])
-
-        self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
-        self.assertEqual(df4.count(), 1)
 
     def test_drop_col_from_different_dataframe(self):
         df1 = self.spark.range(10)

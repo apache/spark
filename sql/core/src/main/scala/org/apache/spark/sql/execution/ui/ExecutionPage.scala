@@ -168,6 +168,18 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
               <input type="checkbox" id="detailed-labels-checkbox"></input>
               <span>Show metrics in graph nodes (detailed mode)</span>
             </div>
+            <div id="plan-viz-zoom-toolbar" class="plan-viz-zoom-toolbar">
+              <div class="btn-group btn-group-sm" role="group" aria-label="Zoom controls">
+                <button id="plan-viz-zoom-out" type="button"
+                        class="btn btn-light border" title="Zoom out (-)">&#x2212;</button>
+                <button id="plan-viz-zoom-reset" type="button"
+                        class="btn btn-light border" title="Reset zoom to fit (0)">
+                  <span id="plan-viz-zoom-level">100%</span>
+                </button>
+                <button id="plan-viz-zoom-in" type="button"
+                        class="btn btn-light border" title="Zoom in (+)">&#x2b;</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="plan-viz-details-col" class="col-4 d-none">

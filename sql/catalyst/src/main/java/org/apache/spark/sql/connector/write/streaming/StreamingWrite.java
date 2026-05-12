@@ -80,6 +80,12 @@ public interface StreamingWrite {
    * The execution engine may call {@code commit} multiple times for the same epoch in some
    * circumstances. To support exactly-once data semantics, implementations must ensure that
    * multiple commits for the same epoch are idempotent.
+   * <p>
+   * Note: this method signals that all data for this write operation has been successfully written.
+   * It is NOT a transactional commit. When this write is part of a
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction}, the transaction is
+   * committed separately via
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction#commit()}.
    */
   void commit(long epochId, WriterCommitMessage[] messages);
 

@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util;
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -37,6 +38,8 @@ class STUtilsSuite {
 
   private final byte[] testWkb = new byte[] {0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, (byte)0xF0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
+
+  private final UTF8String ENDIANNESS_NDR = UTF8String.fromString("NDR");
 
   // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final int testGeographySrid = 4326;
@@ -111,7 +114,7 @@ class STUtilsSuite {
   @Test
   void testStAsBinaryGeography() {
     GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    byte[] geographyWkb = STUtils.stAsBinary(geographyVal);
+    byte[] geographyWkb = STUtils.stAsBinary(geographyVal, ENDIANNESS_NDR);
     assertNotNull(geographyWkb);
     assertArrayEquals(testWkb, geographyWkb);
   }
@@ -119,7 +122,7 @@ class STUtilsSuite {
   @Test
   void testStAsBinaryGeometry() {
     GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-    byte[] geometryWkb = STUtils.stAsBinary(geometryVal);
+    byte[] geometryWkb = STUtils.stAsBinary(geometryVal, ENDIANNESS_NDR);
     assertNotNull(geometryWkb);
     assertArrayEquals(testWkb, geometryWkb);
   }

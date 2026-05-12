@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -81,7 +80,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     java.util.EnumSet.of(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA)
 }
 
-class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
+class FileDataSourceV2FallBackSuite extends SharedSparkSession {
 
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyWriteOnlyFileSourceV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName

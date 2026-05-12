@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
@@ -38,7 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
+class BinaryFileFormatSuite extends SharedSparkSession {
   import BinaryFileFormat._
 
   private var testDir: String = _

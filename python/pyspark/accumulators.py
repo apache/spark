@@ -60,6 +60,7 @@ def _deserialize_accumulator(
 
 class SpecialAccumulatorIds:
     SQL_UDF_PROFIER = -1
+    SQL_UDF_PROFIER_V2 = -2
 
 
 class Accumulator(Generic[T]):
@@ -298,7 +299,8 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
             num_updates = read_int(self.rfile)
             for _ in range(num_updates):
                 aid, update = pickleSer._read_with_length(self.rfile)
-                _accumulatorRegistry[aid] += update
+                if aid in _accumulatorRegistry:
+                    _accumulatorRegistry[aid] += update
             # Write a byte in acknowledgement
             self.wfile.write(struct.pack("!b", 1))
             return False

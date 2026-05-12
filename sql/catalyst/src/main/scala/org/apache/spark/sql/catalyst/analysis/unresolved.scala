@@ -1116,9 +1116,14 @@ case class UnresolvedOrdinal(ordinal: Int)
  * @param ordinal ordinal starts from 1, instead of 0
  */
 case class UnresolvedPipeAggregateOrdinal(ordinal: Int)
-  extends LeafExpression with Unevaluable with NonSQLExpression {
-  override def dataType: DataType = throw new UnresolvedException("dataType")
+  extends LeafExpression with NamedExpression with Unevaluable with NonSQLExpression {
+  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def name: String = throw new UnresolvedException("name")
+  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
 }
 

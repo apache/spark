@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.13</artifactId>
-  <version>4.2.0-SNAPSHOT</version>
+  <version>5.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -175,9 +175,9 @@
     <scala.version>2.13.18</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.9</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.10</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
-    <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.21.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -187,9 +187,9 @@
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
-    <commons-codec.version>1.21.0</commons-codec.version>
+    <commons-codec.version>1.22.0</commons-codec.version>
     <commons-compress.version>1.28.0</commons-compress.version>
-    <commons-io.version>2.21.0</commons-io.version>
+    <commons-io.version>2.22.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -215,9 +215,13 @@
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
     <tink.version>1.20.0</tink.version>
+    <!--
+      TODO: Once upgrade datasketches to a version that supports Java 25,
+            SPARK-53327 workaround should be reverted.
+     -->
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.12.Final</netty.version>
-    <netty-tcnative.version>2.0.75.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -309,7 +313,7 @@
     <mima.version>1.1.4</mima.version>
 
     <!-- Version used in Profiler -->
-    <ap-loader.version>4.3-12</ap-loader.version>
+    <ap-loader.version>4.3-13</ap-loader.version>
 
     <CodeCacheSize>128m</CodeCacheSize>
     <!-- Needed for consistent times -->
@@ -341,16 +345,16 @@
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
-    <postgresql.version>42.7.10</postgresql.version>
+    <postgresql.version>42.7.11</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
     <databricks.jdbc.version>3.3.1</databricks.jdbc.version>
-    <snowflake.jdbc.version>4.0.2</snowflake.jdbc.version>
+    <snowflake.jdbc.version>4.1.0</snowflake.jdbc.version>
     <terajdbc.version>20.00.00.39</terajdbc.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
-    <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
+    <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
   </properties>
   <repositories>
     <repository>
@@ -3235,6 +3239,11 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
       </plugin>
+      <!-- Scalastyle is intentionally NOT bound to a phase here; activate the
+           `scalastyle` profile (or run `mvn scalastyle:check` explicitly) to
+           run it. Default Maven builds skip scalastyle so that a single
+           violation does not cascade into every Maven-invoked CI job; the
+           dedicated lint job is the single source of truth for style. -->
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
@@ -3251,13 +3260,6 @@
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
-        <executions>
-          <execution>
-            <goals>
-              <goal>check</goal>
-            </goals>
-          </execution>
-        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -3394,6 +3396,32 @@
   </build>
 
   <profiles>
+
+    <!--
+      Opt-in profile that binds scalastyle:check to the `verify` phase. Used
+      by the dedicated lint job; default Maven builds intentionally skip
+      scalastyle to avoid cascading a style violation into every Maven CI job.
+    -->
+    <profile>
+      <id>scalastyle</id>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.scalastyle</groupId>
+              <artifactId>scalastyle-maven-plugin</artifactId>
+              <executions>
+                <execution>
+                  <goals>
+                    <goal>check</goal>
+                  </goals>
+                </execution>
+              </executions>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+    </profile>
 
     <!--
       This profile is enabled automatically by the sbt build. It changes the scope for shaded

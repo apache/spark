@@ -301,6 +301,28 @@ trait QueryTestBase
   }
 
   /**
+   * Temporarily sets SparkContext configuration values for testing.
+   * This is for configs that must be set on the SparkContext (not
+   * SQLConf), such as testing flags.
+   */
+  protected def withSparkContextConf[T](
+      pairs: (String, String)*)(f: => T): T = {
+    val sc = spark.sparkContext
+    val oldValues = pairs.map { case (k, _) =>
+      k -> sc.conf.getOption(k)
+    }
+    try {
+      pairs.foreach { case (k, v) => sc.conf.set(k, v) }
+      f
+    } finally {
+      oldValues.foreach {
+        case (k, Some(v)) => sc.conf.set(k, v)
+        case (k, None) => sc.conf.remove(k)
+      }
+    }
+  }
+
+  /**
    * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
    */
   protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
@@ -624,6 +646,62 @@ trait QueryTestBase
     }
   }
 
+  // Whether to materialize all test data before the first test is run
+  private var loadTestDataBeforeTests = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (loadTestDataBeforeTests) {
+      loadTestData()
+    }
+  }
+
+  /**
+   * Materialize the test data immediately after the `SQLContext` is set up.
+   * This is necessary if the data is accessed by name but not through direct reference.
+   */
+  protected def setupTestData(): Unit = {
+    loadTestDataBeforeTests = true
+  }
+
+  /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files.toImmutableArraySeq) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
+    }
+  }
+
+  protected def getCurrentClassCallSitePattern: String = {
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
+    val cs = stack(idx + 1)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+  }
+
+  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
+    val cs = stack(idx + 1)
+    Pattern.quote(
+      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
+  }
+
 }
 
 /**
@@ -636,16 +714,7 @@ trait QueryTestBase
  * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
-trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
-  // Whether to materialize all test data before the first test is run
-  private var loadTestDataBeforeTests = false
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    if (loadTestDataBeforeTests) {
-      loadTestData()
-    }
-  }
+trait QueryTest extends SparkFunSuite with QueryTestBase {
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
@@ -670,14 +739,6 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
         }
       }
     }
-  }
-
-  /**
-   * Materialize the test data immediately after the `SQLContext` is set up.
-   * This is necessary if the data is accessed by name but not through direct reference.
-   */
-  protected def setupTestData(): Unit = {
-    loadTestDataBeforeTests = true
   }
 
   /**
@@ -759,44 +820,6 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
       Files.copy(inputStream, tmpFile.toPath)
       f(tmpFile)
     }
-  }
-
-  /**
-   * Waits for all tasks on all executors to be finished.
-   */
-  protected def waitForTasksToFinish(): Unit = {
-    eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker
-        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
-    }
-  }
-
-  /**
-   * Creates the specified number of temporary directories, which is then passed to `f` and will be
-   * deleted after `f` returns.
-   */
-  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
-    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files.toImmutableArraySeq) finally {
-      // wait for all tasks to finish before deleting files
-      waitForTasksToFinish()
-      files.foreach(Utils.deleteRecursively)
-    }
-  }
-
-  protected def getCurrentClassCallSitePattern: String = {
-    val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
-    val cs = stack(idx + 1)
-    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
-  }
-
-  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
-    val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
-    val cs = stack(idx + 1)
-    Pattern.quote(
-      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
   }
 }
 
@@ -1050,14 +1073,13 @@ object QueryTest extends Assertions {
       }
     }
 
-    val classicSession = spark.asInstanceOf[classic.SparkSession]
-    classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
-    classicSession.listenerManager.register(listener)
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
     try {
       thunk
-      classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
     } finally {
-      classicSession.listenerManager.unregister(listener)
+      spark.listenerManager.unregister(listener)
     }
 
     capturedQueryExecutions
@@ -1189,7 +1211,7 @@ object QueryTest extends Assertions {
 
 }
 
-class QueryTestSuite extends QueryTest with test.SharedSparkSession {
+class QueryTestSuite extends test.SharedSparkSession {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)

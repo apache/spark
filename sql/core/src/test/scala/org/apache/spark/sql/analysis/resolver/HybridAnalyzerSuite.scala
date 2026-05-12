@@ -20,7 +20,7 @@ package org.apache.spark.sql.analysis.resolver
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{
   AnalysisContext,
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 /**
  * Base trait for HybridAnalyzer test suites containing common test utilities and helper classes.
  */
-trait HybridAnalyzerSuiteBase extends QueryTest with SharedSparkSession {
+trait HybridAnalyzerSuiteBase extends SharedSparkSession {
   protected val col1Integer = AttributeReference("col1", IntegerType)()
   protected val col2Integer = AttributeReference("col2", IntegerType)()
   protected val col2IntegerWithMetadata = AttributeReference(

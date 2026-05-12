@@ -111,6 +111,77 @@ class GroupbyDescribeMixin:
             quantile_pdf.rename(columns="{:.0%}".format, level=2),
         )
 
+    def _check_series_groupby_describe(self, pdf, groupby_col, value_col):
+        """Helper to check SeriesGroupBy.describe against pandas."""
+        psdf = ps.from_pandas(pdf)
+
+        describe_pdf = pdf.groupby(groupby_col)[value_col].describe().sort_index()
+        describe_psdf = psdf.groupby(groupby_col)[value_col].describe().sort_index()
+
+        non_percentile_stats = ["count", "mean", "std", "min", "max"]
+        formatted_percentiles = ["25%", "50%", "75%"]
+        percentiles = [0.25, 0.5, 0.75]
+
+        # 1. Check non-percentile stats.
+        self.assert_eq(
+            describe_psdf[non_percentile_stats],
+            describe_pdf[non_percentile_stats],
+            check_exact=False,
+        )
+
+        # 2. Check percentile stats (approximate percentiles use nearest interpolation).
+        quantile_pdf = (
+            pdf.groupby(groupby_col)[value_col]
+            .quantile(percentiles, interpolation="nearest")
+            .unstack(level=1)
+            .astype(float)
+        )
+        quantile_pdf.columns = ["{:.0%}".format(p) for p in percentiles]
+        self.assert_eq(
+            describe_psdf[formatted_percentiles],
+            quantile_pdf,
+        )
+
+    def test_series_groupby_describe(self):
+        # Basic numeric case
+        self._check_series_groupby_describe(
+            pd.DataFrame({"a": [1, 1, 3], "b": [4, 5, 6]}), "a", "b"
+        )
+
+        # Floats and negatives with larger groups
+        self._check_series_groupby_describe(
+            pd.DataFrame({"a": [1, 1, 1, 2, 2, 2], "b": [-1.5, 2.0, 3.5, 10.0, 20.0, 30.0]}),
+            "a",
+            "b",
+        )
+
+        # Same-value groups: std should be 0.0, not NaN
+        pdf = pd.DataFrame({"a": [1, 1, 2], "b": [5, 5, 10]})
+        psdf = ps.from_pandas(pdf)
+        describe_psdf = psdf.groupby("a")["b"].describe().sort_index()
+        describe_pdf = pdf.groupby("a")["b"].describe().sort_index()
+        # Group a=1 has two identical values, so std must be 0.0
+        self.assertEqual(describe_psdf.loc[1, "std"], 0.0)
+        self.assert_eq(
+            describe_psdf[["count", "mean", "std", "min", "max"]],
+            describe_pdf[["count", "mean", "std", "min", "max"]],
+            check_exact=False,
+        )
+
+        # String group key with numeric values -- check both non-percentile and percentile stats
+        self._check_series_groupby_describe(
+            pd.DataFrame({"a": ["x", "x", "y"], "b": [4, 5, 6]}), "a", "b"
+        )
+
+        # String type series should raise NotImplementedError with a descriptive message
+        pdf = pd.DataFrame({"a": ["x", "x", "y"], "b": ["d", "e", "f"]})
+        psdf = ps.from_pandas(pdf)
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "doesn't support for string type",
+            lambda: psdf.groupby("a")["b"].describe(),
+        )
+
 
 class GroupbyDescribeTests(
     GroupbyDescribeMixin,

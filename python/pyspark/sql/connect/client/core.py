@@ -1561,7 +1561,7 @@ class SparkConnectClient(object):
                         if observed_metrics.name == "__python_accumulator__":
                             for metric in observed_metrics.metrics:
                                 aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
-                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
+                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER_V2:
                                     self._profiler_collector._update(update)
                         elif observed_metrics.name in observations:
                             observation_result = observations[observed_metrics.name]._result

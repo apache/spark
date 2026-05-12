@@ -147,7 +147,7 @@ class DataFrame:
     ) -> "DataFrame":
         from pyspark.sql.classic.dataframe import DataFrame
 
-        return DataFrame.__new__(DataFrame, jdf, sql_ctx)
+        return DataFrame(jdf, sql_ctx)
 
     @property
     def sparkSession(self) -> "SparkSession":
@@ -2094,7 +2094,12 @@ class DataFrame:
         ...
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame": ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> "DataFrame": ...
+
+    @overload
+    def sample(self, withReplacement: float, fraction: Optional[int] = ..., /) -> "DataFrame": ...
 
     @overload
     def sample(
@@ -2104,7 +2109,7 @@ class DataFrame:
         seed: Optional[int] = ...,
     ) -> "DataFrame": ...
 
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
@@ -5221,6 +5226,7 @@ class DataFrame:
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> "DataFrame": ...
 
@@ -5232,7 +5238,7 @@ class DataFrame:
         subset: Optional[List[str]] = ...,
     ) -> "DataFrame": ...
 
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def replace(
         self,
         to_replace: Union[

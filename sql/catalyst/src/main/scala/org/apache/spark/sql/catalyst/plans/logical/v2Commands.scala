@@ -157,7 +157,7 @@ case class AppendData(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
@@ -205,7 +205,7 @@ case class OverwriteByExpression(
     isByName: Boolean,
     withSchemaEvolution: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override lazy val resolved: Boolean = {
@@ -265,7 +265,7 @@ case class OverwritePartitionsDynamic(
     writeOptions: Map[String, String],
     isByName: Boolean,
     withSchemaEvolution: Boolean,
-    write: Option[Write] = None) extends V2WriteCommand {
+    write: Option[Write] = None) extends V2WriteCommand with TransactionalWrite {
   override val writePrivileges: Set[TableWritePrivilege] =
     Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
@@ -425,6 +425,7 @@ case class ReplaceData(
  * @param query a query with a delta of records that should written
  * @param originalTable a plan for the original table for which the row-level command was triggered
  * @param projections projections for row ID, row, metadata attributes
+ * @param groupFilterCondition a condition that can be used to filter groups at runtime
  * @param write a logical write, if already constructed
  */
 case class WriteDelta(
@@ -433,6 +434,7 @@ case class WriteDelta(
     query: LogicalPlan,
     originalTable: NamedRelation,
     projections: WriteDeltaProjections,
+    groupFilterCondition: Option[Expression] = None,
     write: Option[DeltaWrite] = None) extends RowLevelWrite {
 
   override val isByName: Boolean = false
@@ -521,8 +523,10 @@ case class WriteDelta(
 trait V2CreateTableAsSelectPlan
   extends V2CreateTablePlan
     with AnalysisOnlyCommand
-    with CTEInChildren {
+    with CTEInChildren
+    with TransactionalWrite {
   def query: LogicalPlan
+  override def table: LogicalPlan = name
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
     withNameAndQuery(newName = name, newQuery = WithCTE(query, cteDefs))
@@ -910,7 +914,6 @@ case class SetNamespaceLocation(
  */
 case class DescribeRelation(
     relation: LogicalPlan,
-    partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
@@ -920,6 +923,19 @@ case class DescribeRelation(
 
 object DescribeRelation {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+/**
+ * The logical plan of the DESCRIBE relation_name PARTITION command.
+ */
+case class DescribeTablePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec,
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs)
+  extends V2PartitionCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): DescribeTablePartition =
+    copy(table = newChild)
 }
 
 /**
@@ -937,6 +953,36 @@ case class DescribeColumn(
 
 object DescribeColumn {
   def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+
+  /**
+   * Extract the column nameParts from the (possibly resolved) column expression on a
+   * `DescribeColumn` command. Used by both the v1 rewrite in `ResolveSessionCatalog` and the
+   * v2 strategy case in `DataSourceV2Strategy` -- centralizing the unwrap means the two paths
+   * cannot drift.
+   *
+   * `ResolveReferences` typically resolves the column against the relation's `output`, so we
+   * see an `Attribute` here. The legacy `UnresolvedAttribute` form is also accepted (e.g. when
+   * the column name doesn't exist in the relation and resolution is skipped). `Alias`
+   * indicates a nested-column reference (`a.b`) which `ResolveReferences` rewrites to
+   * `Alias(GetStructField(...), b)` -- nested columns are unsupported on this command.
+   */
+  def extractColumnNameParts(column: org.apache.spark.sql.catalyst.expressions.Expression)
+      : Seq[String] = {
+    import org.apache.spark.SparkException
+    import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+    import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+    import org.apache.spark.sql.catalyst.util.toPrettySQL
+    import org.apache.spark.sql.errors.QueryCompilationErrors
+    column match {
+      case u: UnresolvedAttribute => u.nameParts
+      case a: Attribute => a.qualifier :+ a.name
+      case Alias(child, _) =>
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "DESC TABLE COLUMN", toPrettySQL(child))
+      case _ =>
+        throw SparkException.internalError(s"[BUG] unexpected column expression: $column")
+    }
+  }
 }
 
 /**
@@ -944,7 +990,8 @@ object DescribeColumn {
  */
 case class DeleteFromTable(
     table: LogicalPlan,
-    condition: Expression) extends UnaryCommand with SupportsSubquery {
+    condition: Expression)
+  extends UnaryCommand with TransactionalWrite with SupportsSubquery {
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
@@ -966,7 +1013,8 @@ case class DeleteFromTableWithFilters(
 case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
-    condition: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+    condition: Option[Expression])
+  extends UnaryCommand with TransactionalWrite with SupportsSubquery {
 
   lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
 
@@ -999,8 +1047,12 @@ case class MergeIntoTable(
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction],
     withSchemaEvolution: Boolean)
-    extends BinaryCommand with WriteWithSchemaEvolution with SupportsSubquery {
+    extends BinaryCommand
+    with WriteWithSchemaEvolution
+    with SupportsSubquery
+    with TransactionalWrite {
 
+  // Implements WriteWithSchemaEvolution.table and TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1261,6 +1313,22 @@ case class Assignment(key: Expression, value: Expression) extends Expression
 }
 
 /**
+ * Marker trait for write operations that participate in a DSv2 transaction.
+ *
+ * Implementations are expected to target a DSv2 catalog backed by a
+ * [[org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin]].
+ */
+trait TransactionalWrite extends LogicalPlan {
+  def table: LogicalPlan
+}
+
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait StreamingV2WriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
+}
+
+/**
  * The logical plan of the DROP TABLE command.
  *
  * If the `PURGE` option is set, the table catalog must remove table data by skipping the trash
@@ -1351,8 +1419,12 @@ case class ShowTablePartition(
 /**
  * The logical plan of the SHOW VIEWS command.
  *
- * Notes: v2 catalogs do not support views API yet, the command will fallback to
- * v1 ShowViewsCommand during ResolveSessionCatalog.
+ * Session-catalog targets fall back to v1 `ShowViewsCommand` via `ResolveSessionCatalog`.
+ * v2 [[org.apache.spark.sql.connector.catalog.ViewCatalog]] catalogs are handled in
+ * `DataSourceV2Strategy` (enumerates via
+ * [[org.apache.spark.sql.connector.catalog.ViewCatalog#listViews]]). Non-ViewCatalog v2
+ * catalogs are rejected up front in `ResolveSessionCatalog` with
+ * `MISSING_CATALOG_ABILITY.VIEWS`.
  */
 case class ShowViews(
     namespace: LogicalPlan,
@@ -1702,19 +1774,42 @@ case class RepairTable(
 
 /**
  * The logical plan of the ALTER VIEW ... AS command.
+ *
+ * Extends [[AnalysisOnlyCommand]] so [[Analyzer.HandleSpecialCommand]] captures
+ * `referredTempFunctions` from [[AnalysisContext]]; this list is needed by
+ * [[CheckViewReferences]] and by the v2 execs when the target is a non-session catalog.
+ * Session-catalog targets are still rewritten to [[AlterViewAsCommand]] by
+ * `ResolveSessionCatalog` and the captured value is dropped there (the v1 command re-captures).
  */
 case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
-    query: LogicalPlan) extends BinaryCommand with CTEInChildren {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
+    query: LogicalPlan,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
+    isAnalyzed = true,
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(child = newLeft, query = newRight)
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newChild, newQuery) =>
+        copy(child = newChild, query = newQuery)
+      case others =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 
@@ -1731,6 +1826,11 @@ case class AlterViewSchemaBinding(
 
 /**
  * The logical plan of the CREATE VIEW ... command.
+ *
+ * Extends [[AnalysisOnlyCommand]] so that [[Analyzer.HandleSpecialCommand]] captures
+ * `referredTempFunctions` from the [[AnalysisContext]] after the child query is analyzed;
+ * this list is needed for `verifyTemporaryObjectsNotExists`-style checks on downstream
+ * execution paths.
  */
 case class CreateView(
     child: LogicalPlan,
@@ -1742,15 +1842,32 @@ case class CreateView(
     query: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewSchemaMode: ViewSchemaMode) extends BinaryCommand with CTEInChildren {
-  override def left: LogicalPlan = child
-  override def right: LogicalPlan = query
+    viewSchemaMode: ViewSchemaMode,
+    isAnalyzed: Boolean = false,
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends Command with AnalysisOnlyCommand with CTEInChildren {
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
+
+  override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
+    isAnalyzed = true,
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(child = newLeft, query = newRight)
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newChild, newQuery) =>
+        copy(child = newChild, query = newQuery)
+      case others =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3218",
+          messageParameters = Map("others" -> others.toString()))
+    }
+  }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    withNewChildren(Seq(child, WithCTE(query, cteDefs)))
+    copy(query = WithCTE(query, cteDefs))
   }
 }
 

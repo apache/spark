@@ -444,263 +444,310 @@ trait GetArrayItemUtil {
 
 /**
  * Common trait for [[GetMapValue]] and [[ElementAt]].
+ *
+ * The lookup strategy is chosen once per expression instance via [[executor]]:
+ *   - [[PrebuiltHashExecutor]] when the map child is foldable, its key type supports
+ *     hashing, and its size meets [[SQLConf.MAP_LOOKUP_HASH_THRESHOLD]]. The hash index
+ *     is built once from the constant map and reused for every row.
+ *   - [[LinearExecutor]] otherwise (non-foldable maps, unsupported key types, or maps
+ *     below the threshold). Hash lookup is not used here because its per-row build cost
+ *     is higher than a linear scan when the index cannot be reused across rows.
+ *
+ * Each strategy owns both its interpreted eval and its codegen, grouped together, and
+ * [[getValueEval]] / [[doGetValueGenCode]] are thin delegators.
  */
 trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
-  @transient private var lastMap: MapData = _
-  @transient private var lastIndex: java.util.HashMap[Any, Int] = _
-
-  /**
-   * The threshold to determine whether to use hash lookup for map lookup expressions.
-   * If the map size is small, the cost of building hash map exceeds the cost of a linear scan.
-   * This is configured by `spark.sql.optimizer.mapLookupHashThreshold`.
-   */
   @transient private lazy val hashLookupThreshold =
     SQLConf.get.getConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD)
 
-  private def getOrBuildIndex(map: MapData, keyType: DataType): java.util.HashMap[Any, Int] = {
-    if (lastMap ne map) {
-      val keys = map.keyArray()
-      val len = keys.numElements()
-      val hm = new java.util.HashMap[Any, Int]((len * 1.5).toInt)
-      var i = 0
-      while (i < len) {
-        val k = keys.get(i, keyType)
-        hm.putIfAbsent(k, i)
-        i += 1
+  @transient private lazy val executor: MapLookupExecutor = chooseExecutor()
+
+  /**
+   * True iff this expression was resolved onto the hash lookup path at construction time.
+   * Visible for testing so suites can assert strategy choice without matching on
+   * path-dependent inner types.
+   */
+  private[expressions] def usesFoldableHashLookup: Boolean =
+    executor.isInstanceOf[PrebuiltHashExecutor]
+
+  /**
+   * Chooses an executor once per expression instance. The hash path is taken only for foldable
+   * map inputs whose key type passes [[TypeUtils.typeWithProperEquals]] -- the same predicate
+   * SPARK-55959's interpreted path already used for its hash fallback, so the interpreted and
+   * codegen paths stay in sync. (SPARK-55959 also carried a codegen-only `supportsHashLookup`
+   * whitelist which was a subset of this predicate; this refactor unifies both paths on one
+   * predicate.)
+   *
+   * Concretely: non-binary-equality [[StringType]] and [[BinaryType]] keys fall through to
+   * linear scan. [[VariantType]] keys are structurally unreachable here (rejected earlier by
+   * [[TypeUtils.checkForMapKeyType]]). [[GeographyType]] / [[GeometryType]] are `AtomicType`s
+   * with identity-inherited equals; if either becomes a valid map key in the future, proper
+   * hash/equals must be defined for them -- a pre-existing constraint that already applies
+   * to the interpretive hash path.
+   */
+  private def chooseExecutor(): MapLookupExecutor = left.dataType match {
+    case MapType(keyType, _, _)
+        if left.foldable && TypeUtils.typeWithProperEquals(keyType) =>
+      left.eval(null) match {
+        case map: MapData if map.numElements() >= hashLookupThreshold =>
+          val index = buildHashIndex(map, keyType)
+          val (buckets, hashMask) = buildHashBuckets(map, keyType)
+          new PrebuiltHashExecutor(
+            index, buckets, hashMask, map.keyArray(), map.valueArray())
+        case _ => LinearExecutor
       }
-      lastIndex = hm
-      lastMap = map
+    case _ => LinearExecutor
+  }
+
+  private def buildHashIndex(map: MapData, keyType: DataType): java.util.HashMap[Any, Int] = {
+    val keys = map.keyArray()
+    val len = keys.numElements()
+    val hm = new java.util.HashMap[Any, Int]((len * 1.5).toInt)
+    var i = 0
+    while (i < len) {
+      // putIfAbsent preserves first-match semantics for maps with duplicate keys (allowed at
+      // the physical level by [[ArrayBasedMapData]]), matching the linear scan path.
+      hm.putIfAbsent(keys.get(i, keyType), i)
+      i += 1
     }
-    lastIndex
+    hm
+  }
+
+  /**
+   * Builds a power-of-two open-addressed bucket table mapping `hash(key) & hashMask` to the
+   * key's index in `map.keyArray()`. Used by the codegen hash path so primitive-keyed lookups
+   * avoid autoboxing. The hash function must match [[GetMapValueUtil.genHash]] for the same
+   * `keyType`.
+   */
+  private def buildHashBuckets(map: MapData, keyType: DataType): (Array[Int], Int) = {
+    val keys = map.keyArray()
+    val len = keys.numElements()
+    // Power-of-two capacity, load factor < 0.5, min 4. Clamped to 2^30 so (cap - 1) fits in int.
+    val target = math.min(math.max(len.toLong * 2L - 1L, 1L), (1L << 30) - 1L).toInt
+    val cap = math.max(java.lang.Integer.highestOneBit(target) << 1, 4)
+    val buckets = new Array[Int](cap)
+    java.util.Arrays.fill(buckets, -1)
+    val mask = cap - 1
+    var i = 0
+    while (i < len) {
+      var h = hashKeyOnDriver(keys.get(i, keyType), keyType) & mask
+      // Open addressing with linear probing; duplicates take the next free slot so that the
+      // lookup (which stops at the first match) returns the first-inserted index -- matches
+      // [[buildHashIndex]] / [[ArrayBasedMapData]] first-wins semantics.
+      while (buckets(h) != -1) h = (h + 1) & mask
+      buckets(h) = i
+      i += 1
+    }
+    (buckets, mask)
+  }
+
+  /** Scala-side hash for a Spark value; mirrors [[GetMapValueUtil.genHash]] per keyType. */
+  private def hashKeyOnDriver(v: Any, keyType: DataType): Int = keyType match {
+    case BooleanType => if (v.asInstanceOf[Boolean]) 1 else 0
+    case ByteType => v.asInstanceOf[Byte].toInt
+    case ShortType => v.asInstanceOf[Short].toInt
+    case IntegerType | DateType | _: YearMonthIntervalType => v.asInstanceOf[Int]
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+      val l = v.asInstanceOf[Long]
+      (l ^ (l >>> 32)).toInt
+    case FloatType => java.lang.Float.floatToIntBits(v.asInstanceOf[Float])
+    case DoubleType =>
+      val l = java.lang.Double.doubleToLongBits(v.asInstanceOf[Double])
+      (l ^ (l >>> 32)).toInt
+    case _ => v.hashCode()
+  }
+
+  /** Java-side hash expression over the primitive/object `v`. Mirrors [[hashKeyOnDriver]]. */
+  private def genHash(v: String, keyType: DataType): String = keyType match {
+    case BooleanType => s"($v ? 1 : 0)"
+    case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType => s"$v"
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+      s"(int)($v ^ ($v >>> 32))"
+    case FloatType => s"Float.floatToIntBits($v)"
+    case DoubleType =>
+      s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32))"
+    case _ => s"$v.hashCode()"
   }
 
   def getValueEval(
       value: Any,
       ordinal: Any,
       keyType: DataType,
-      ordering: Ordering[Any]): Any = {
-    val map = value.asInstanceOf[MapData]
-    val length = map.numElements()
-
-    if (length < hashLookupThreshold || !TypeUtils.typeWithProperEquals(keyType)) {
-      getValueEvalLinear(map, ordinal, keyType, ordering)
-    } else {
-      val idx = getOrBuildIndex(map, keyType).getOrDefault(ordinal, -1)
-      if (idx == -1 || map.valueArray().isNullAt(idx)) {
-        null
-      } else {
-        map.valueArray().get(idx, dataType)
-      }
-    }
-  }
-
-  private def getValueEvalLinear(
-      map: MapData,
-      ordinal: Any,
-      keyType: DataType,
-      ordering: Ordering[Any]): Any = {
-    val length = map.numElements()
-    val keys = map.keyArray()
-    val values = map.valueArray()
-
-    var i = 0
-    var found = false
-    while (i < length && !found) {
-      if (ordering.equiv(keys.get(i, keyType), ordinal)) {
-        found = true
-      } else {
-        i += 1
-      }
-    }
-
-    if (!found || values.isNullAt(i)) {
-      null
-    } else {
-      values.get(i, dataType)
-    }
-  }
+      ordering: Ordering[Any]): Any =
+    executor.eval(value.asInstanceOf[MapData], ordinal, keyType, ordering)
 
   def doGetValueGenCode(
       ctx: CodegenContext,
       ev: ExprCode,
-      mapType: MapType): ExprCode = {
-    val keyType = mapType.keyType
-    if (supportsHashLookup(keyType)) {
-      doGetValueGenCodeWithHashOpt(ctx, ev, mapType)
-    } else {
-      doGetValueGenCodeLinear(ctx, ev, mapType)
-    }
+      mapType: MapType): ExprCode =
+    executor.genCode(ctx, ev, mapType)
+
+  /**
+   * Execution strategy for a map key lookup. Inner to the trait so each concrete strategy
+   * has closure access to `dataType` and `nullSafeCodeGen` on the enclosing expression.
+   *
+   * The `eval` signature is shaped by [[LinearExecutor]]'s needs; hash-based strategies may
+   * ignore `keyType` / `ordering` (their lookup uses pre-built state that does not depend
+   * on the runtime `map`, `keyType`, or `ordering`).
+   */
+  protected sealed trait MapLookupExecutor extends Serializable {
+    def eval(map: MapData, ordinal: Any, keyType: DataType, ordering: Ordering[Any]): Any
+    def genCode(ctx: CodegenContext, ev: ExprCode, mapType: MapType): ExprCode
   }
 
-  private def supportsHashLookup(keyType: DataType): Boolean = keyType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | DateType | TimestampType |
-         TimestampNTZType | _: YearMonthIntervalType |
-         _: DayTimeIntervalType | _: DecimalType | _: TimeType => true
-    case st: StringType if st.supportsBinaryEquality => true
-    case _ => false
-  }
+  /** Linear scan over the map's key array. Stateless; no pre-computation. */
+  protected object LinearExecutor extends MapLookupExecutor {
+    override def eval(
+        map: MapData,
+        ordinal: Any,
+        keyType: DataType,
+        ordering: Ordering[Any]): Any = {
+      val length = map.numElements()
+      val keys = map.keyArray()
+      val values = map.valueArray()
 
-  private def doGetValueGenCodeLinear(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      mapType: MapType): ExprCode = {
-    val index = ctx.freshName("index")
-    val length = ctx.freshName("length")
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
-    val keyType = mapType.keyType
+      var i = 0
+      var found = false
+      while (i < length && !found) {
+        if (ordering.equiv(keys.get(i, keyType), ordinal)) {
+          found = true
+        } else {
+          i += 1
+        }
+      }
 
-    val keyJavaType = CodeGenerator.javaType(keyType)
-    val loopKey = ctx.freshName("loopKey")
-    val i = ctx.freshName("i")
-
-    val nullValueCheck = if (mapType.valueContainsNull) {
-      s"""
-         |else if ($values.isNullAt($index)) {
-         |  ${ev.isNull} = true;
-         |}
-       """.stripMargin
-    } else {
-      ""
+      if (!found || values.isNullAt(i)) null else values.get(i, dataType)
     }
 
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"""
-         |final int $length = $eval1.numElements();
-         |final ArrayData $keys = $eval1.keyArray();
-         |final ArrayData $values = $eval1.valueArray();
-         |int $index = -1;
-         |
-         |for (int $i = 0; $i < $length; $i++) {
-         |  $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
-         |  if (${ctx.genEqual(keyType, loopKey, eval2)}) {
-         |    $index = $i;
-         |    break;
-         |  }
-         |}
-         |
-         |if ($index < 0) {
-         |  ${ev.isNull} = true;
-         |} $nullValueCheck else {
-         |  ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
-         |}
-       """.stripMargin
-    })
+    override def genCode(
+        ctx: CodegenContext,
+        ev: ExprCode,
+        mapType: MapType): ExprCode = {
+      val index = ctx.freshName("index")
+      val length = ctx.freshName("length")
+      val keys = ctx.freshName("keys")
+      val values = ctx.freshName("values")
+      val keyType = mapType.keyType
+
+      val keyJavaType = CodeGenerator.javaType(keyType)
+      val loopKey = ctx.freshName("loopKey")
+      val i = ctx.freshName("i")
+
+      val nullValueCheck = if (mapType.valueContainsNull) {
+        s"""
+           |else if ($values.isNullAt($index)) {
+           |  ${ev.isNull} = true;
+           |}
+         """.stripMargin
+      } else {
+        ""
+      }
+
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+           |final int $length = $eval1.numElements();
+           |final ArrayData $keys = $eval1.keyArray();
+           |final ArrayData $values = $eval1.valueArray();
+           |int $index = -1;
+           |
+           |for (int $i = 0; $i < $length; $i++) {
+           |  $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
+           |  if (${ctx.genEqual(keyType, loopKey, eval2)}) {
+           |    $index = $i;
+           |    break;
+           |  }
+           |}
+           |
+           |if ($index < 0) {
+           |  ${ev.isNull} = true;
+           |} $nullValueCheck else {
+           |  ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
+           |}
+         """.stripMargin
+      })
+    }
   }
 
   /**
-   * Generates code for map lookups.
-   * If the map size is small (less than HASH_LOOKUP_THRESHOLD), it uses a linear scan.
-   * If the map size is large, it builds a hash index for O(1) lookup.
+   * Hash-based lookup for foldable (constant) maps. All state is evaluated on the driver at
+   * construction time and reused for every row:
+   *   - `index`: generic `HashMap[Any, Int]` used by the interpreted path; avoids duplicating
+   *     the hash/equal logic on the Scala side for non-primitive keys.
+   *   - `buckets` / `hashMask`: power-of-two open-addressed `int[]` table used by codegen so
+   *     primitive-keyed lookups can use inline hash / primitive `==` compare without
+   *     autoboxing. Populated by [[GetMapValueUtil.buildHashBuckets]] using a Scala hash that
+   *     mirrors [[GetMapValueUtil.genHash]].
+   *   - `keys` / `values`: the constant map's key and value arrays, embedded in the generated
+   *     class via [[CodegenContext.addReferenceObj]].
    */
-  private def doGetValueGenCodeWithHashOpt(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      mapType: MapType): ExprCode = {
-    val index = ctx.freshName("index")
-    val length = ctx.freshName("length")
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
-    val keyType = mapType.keyType
+  protected final class PrebuiltHashExecutor(
+      index: java.util.HashMap[Any, Int],
+      buckets: Array[Int],
+      hashMask: Int,
+      keys: ArrayData,
+      values: ArrayData) extends MapLookupExecutor {
 
-    val nullValueCheck = if (mapType.valueContainsNull) {
-      s"""
-         |else if ($values.isNullAt($index)) {
-         |  ${ev.isNull} = true;
-         |}
-       """.stripMargin
-    } else {
-      ""
+    // The runtime `map`, `keyType`, and `ordering` are ignored: the map is known to be the
+    // same constant on every row (the hash path is only chosen when `left.foldable`), and the
+    // pre-built `index` and `values` captured at construction time are what we consult.
+    override def eval(
+        map: MapData,
+        ordinal: Any,
+        keyType: DataType,
+        ordering: Ordering[Any]): Any = {
+      val idx = index.getOrDefault(ordinal, -1)
+      if (idx == -1 || values.isNullAt(idx)) null else values.get(idx, dataType)
     }
 
-    val keyJavaType = CodeGenerator.javaType(keyType)
-    val lastKeyArray = ctx.addMutableState("ArrayData", "lastKeyArray", v => s"$v = null;")
-    val hashBuckets = ctx.addMutableState("int[]", "hashBuckets", v => s"$v = null;")
-    val hashMask = ctx.addMutableState("int", "hashMask", v => s"$v = 0;")
-
-    def genHash(v: String): String = keyType match {
-      case BooleanType => s"($v ? 1 : 0)"
-      case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType => s"$v"
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
-        s"(int)($v ^ ($v >>> 32))"
-      case FloatType => s"Float.floatToIntBits($v)"
-      case DoubleType =>
-        s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32))"
-      case _ => s"$v.hashCode()"
-    }
-
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val i = ctx.freshName("i")
+    override def genCode(
+        ctx: CodegenContext,
+        ev: ExprCode,
+        mapType: MapType): ExprCode = {
+      val keyType = mapType.keyType
+      val bucketsRef = ctx.addReferenceObj("mapLookupBuckets", buckets, "int[]")
+      val keysRef = ctx.addReferenceObj("mapLookupKeys", keys, "ArrayData")
+      val valuesRef = ctx.addReferenceObj("mapLookupValues", values, "ArrayData")
+      val keyJavaType = CodeGenerator.javaType(keyType)
       val h = ctx.freshName("h")
-      val cap = ctx.freshName("cap")
       val idx = ctx.freshName("idx")
       val candidate = ctx.freshName("candidate")
-      val loopKey = ctx.freshName("loopKey")
+      val resultIdx = ctx.freshName("resultIdx")
 
-      val buildIndex =
+      nullSafeCodeGen(ctx, ev, (_, eval2) => {
+        val assignValue = if (mapType.valueContainsNull) {
+          s"""
+             |if ($valuesRef.isNullAt($resultIdx)) {
+             |  ${ev.isNull} = true;
+             |} else {
+             |  ${ev.value} = ${CodeGenerator.getValue(valuesRef, dataType, resultIdx)};
+             |}
+           """.stripMargin
+        } else {
+          s"${ev.value} = ${CodeGenerator.getValue(valuesRef, dataType, resultIdx)};"
+        }
+        // Inline open-addressing probe. Hash must match what `buildHashBuckets` used on the
+        // driver; `hashMask` is a power-of-two minus one, embedded as a literal.
         s"""
-           |int $cap = Math.max(Integer.highestOneBit(Math.max($length * 2 - 1, 1)) << 1, 4);
-           |if ($hashBuckets == null || $hashBuckets.length < $cap) {
-           |  $hashBuckets = new int[$cap];
-           |}
-           |java.util.Arrays.fill($hashBuckets, 0, $cap, -1);
-           |$hashMask = $cap - 1;
-           |for (int $i = 0; $i < $length; $i++) {
-           |  $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
-           |  int $h = (${genHash(loopKey)}) & $hashMask;
-           |  while ($hashBuckets[$h] != -1) {
-           |    $h = ($h + 1) & $hashMask;
-           |  }
-           |  $hashBuckets[$h] = $i;
-           |}
-           |$lastKeyArray = $keys;
-         """.stripMargin
-
-      val lookup =
-        s"""
-           |int $h = (${genHash(eval2)}) & $hashMask;
-           |$index = -1;
-           |while ($hashBuckets[$h] != -1) {
-           |  int $idx = $hashBuckets[$h];
-           |  $keyJavaType $candidate = ${CodeGenerator.getValue(keys, keyType, idx)};
+           |int $h = (${genHash(eval2, keyType)}) & $hashMask;
+           |int $resultIdx = -1;
+           |while ($bucketsRef[$h] != -1) {
+           |  int $idx = $bucketsRef[$h];
+           |  $keyJavaType $candidate = ${CodeGenerator.getValue(keysRef, keyType, idx)};
            |  if (${ctx.genEqual(keyType, candidate, eval2)}) {
-           |    $index = $idx;
+           |    $resultIdx = $idx;
            |    break;
            |  }
            |  $h = ($h + 1) & $hashMask;
            |}
+           |if ($resultIdx < 0) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  $assignValue
+           |}
          """.stripMargin
-
-      s"""
-        final int $length = $eval1.numElements();
-        final ArrayData $keys = $eval1.keyArray();
-        final ArrayData $values = $eval1.valueArray();
-        int $index = -1;
-
-        if ($length >= $hashLookupThreshold) {
-          if ($keys != $lastKeyArray) {
-            $buildIndex
-          }
-          $lookup
-        } else {
-          for (int $i = 0; $i < $length; $i++) {
-            $keyJavaType $loopKey = ${CodeGenerator.getValue(keys, keyType, i)};
-            if (${ctx.genEqual(keyType, loopKey, eval2)}) {
-              $index = $i;
-              break;
-            }
-          }
-        }
-
-        if ($index < 0) {
-          ${ev.isNull} = true;
-        } $nullValueCheck else {
-          ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
-        }
-      """
-    })
+      })
+    }
   }
 }
 

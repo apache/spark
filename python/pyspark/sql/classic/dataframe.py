@@ -104,12 +104,12 @@ if TYPE_CHECKING:
 class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def __new__(
         cls,
-        jdf: "JavaObject",
-        sql_ctx: Union["SQLContext", "SparkSession"],
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__(jdf, sql_ctx)  # type: ignore[misc]
-        return self
+        # ParentDataFrame by default calls DataFrame.__new__ for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid infinite recursion.
+        return object.__new__(cls)
 
     def __init__(
         self,
@@ -646,7 +646,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame: ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> ParentDataFrame: ...
+
+    @overload
+    def sample(
+        self, withReplacement: float, fraction: Optional[int] = ..., /
+    ) -> ParentDataFrame: ...
 
     @overload
     def sample(
@@ -656,7 +663,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         seed: Optional[int] = ...,
     ) -> ParentDataFrame: ...
 
-    def sample(  # type: ignore[misc]
+    def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
         fraction: Optional[Union[int, float]] = None,
@@ -1413,6 +1420,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
@@ -1424,7 +1432,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
-    def replace(  # type: ignore[misc]
+    def replace(
         self,
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]

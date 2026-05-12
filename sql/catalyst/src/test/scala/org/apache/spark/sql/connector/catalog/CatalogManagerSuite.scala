@@ -127,6 +127,29 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
+
+  test("deserializePathEntries parses valid payloads") {
+    val stored =
+      """[["spark_catalog","default"],["system","builtin"],["spark_catalog","db1","ns1"]]"""
+    assert(CatalogManager.deserializePathEntries(stored).contains(Seq(
+      Seq("spark_catalog", "default"),
+      Seq("system", "builtin"),
+      Seq("spark_catalog", "db1", "ns1"))))
+    assert(CatalogManager.deserializePathEntries("[]").contains(Seq.empty))
+  }
+
+  test("deserializePathEntries returns None for malformed payloads") {
+    val malformedPayloads = Seq(
+      "",
+      "not_json",
+      "{}",
+      """["spark_catalog"]""",
+      """[["spark_catalog"], 1]""",
+      """[[1]]""")
+    malformedPayloads.foreach { payload =>
+      assert(CatalogManager.deserializePathEntries(payload).isEmpty, s"payload=$payload")
+    }
+  }
 }
 
 class DummyCatalog extends CatalogPlugin {

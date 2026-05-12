@@ -56,6 +56,25 @@ public interface VectorizedValuesReader {
       String timeZone);
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
+
+  /**
+   * Reads {@code total} INT32 values, sign-extends each to a long, and writes them into
+   * {@code c} starting at {@code c[rowId]}. Used by type-converting updaters that read
+   * parquet INT32 columns into Spark {@code LongType} (or wider decimal) targets.
+   *
+   * <p>The default implementation falls back to a per-row read+widen+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readInteger()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, readInteger());
+    }
+  }
+
   void readBinary(int total, WritableColumnVector c, int rowId);
   void readGeometry(int total, WritableColumnVector c, int rowId);
   void readGeography(int total, WritableColumnVector c, int rowId);

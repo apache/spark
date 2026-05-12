@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.HasMetadata
 
-import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 
 /**
  * :: DeveloperApi ::
@@ -30,7 +30,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
  * Spec for driver pod and resources, used for K8s operations internally
  * and Spark K8s operator.
  */
-@Unstable
+@Stable
 @DeveloperApi
 @Since("3.3.0")
 case class KubernetesDriverSpec(
@@ -42,10 +42,21 @@ case class KubernetesDriverSpec(
   /** Get system properties as a Java-friendly map. */
   @Since("4.2.0")
   def getSystemPropertiesAsJavaMap: JMap[String, String] = systemProperties.asJava
+
+  /** Get driver pre Kubernetes resources as a Java-friendly list. */
+  @Since("4.2.0")
+  def getDriverPreKubernetesResourcesAsJavaList: JList[HasMetadata] =
+    driverPreKubernetesResources.asJava
+
+  /** Get driver Kubernetes resources as a Java-friendly list. */
+  @Since("4.2.0")
+  def getDriverKubernetesResourcesAsJavaList: JList[HasMetadata] =
+    driverKubernetesResources.asJava
 }
 
-@Unstable
+@Stable
 @DeveloperApi
+@Since("4.2.0")
 object KubernetesDriverSpec {
   @Since("4.2.0")
   def create(

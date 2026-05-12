@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
@@ -45,7 +45,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
+class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
   import testImplicits._
 
   val tempDir = Utils.createTempDir()

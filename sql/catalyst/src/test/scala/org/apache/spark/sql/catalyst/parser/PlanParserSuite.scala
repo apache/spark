@@ -376,9 +376,9 @@ class PlanParserSuite extends AnalysisTest {
     val limitWindowClauses = Seq(
       ("", (p: LogicalPlan) => p),
       (" limit 10", (p: LogicalPlan) => p.limit(10)),
-      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p, forPipeSQL = false)),
+      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p)),
       (" window w1 as () limit 10", (p: LogicalPlan) =>
-        WithWindowDefinition(ws, p, forPipeSQL = false).limit(10))
+        WithWindowDefinition(ws, p).limit(10))
     )
 
     val orderSortDistrClusterClauses = Seq(
@@ -529,7 +529,7 @@ class PlanParserSuite extends AnalysisTest {
          |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
-      WithWindowDefinition(ws1, plan, forPipeSQL = false))
+      WithWindowDefinition(ws1, plan))
   }
 
   test("lateral view") {
@@ -826,6 +826,145 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
+  test("nearest-by join") {
+    assertEqual(
+      "select * from t join u approx nearest 5 by similarity t.a + u.a",
+      NearestByJoin(
+        table("t"),
+        table("u"),
+        Inner,
+        approx = true,
+        numResults = 5,
+        rankingExpression = $"t.a" + $"u.a",
+        direction = NearestBySimilarity).select(star()))
+
+    assertEqual(
+      "select * from t inner join u exact nearest 3 by distance t.a - u.a",
+      NearestByJoin(
+        table("t"),
+        table("u"),
+        Inner,
+        approx = false,
+        numResults = 3,
+        rankingExpression = $"t.a" - $"u.a",
+        direction = NearestByDistance).select(star()))
+
+    assertEqual(
+      "select * from t left outer join u approx nearest by similarity t.a + u.a",
+      NearestByJoin(
+        table("t"),
+        table("u"),
+        LeftOuter,
+        approx = true,
+        numResults = 1,
+        rankingExpression = $"t.a" + $"u.a",
+        direction = NearestBySimilarity).select(star()))
+
+    // Unsupported join type.
+    val sqlRightOuter =
+      "select * from t right outer join u approx nearest 1 by similarity t.a"
+    checkError(
+      exception = parseException(sqlRightOuter),
+      condition = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "RIGHT OUTER",
+        "supported" -> "'INNER', 'LEFT OUTER'"),
+      context = ExpectedContext(
+        fragment = "right outer join u approx nearest 1 by similarity t.a",
+        start = 16,
+        stop = 68))
+
+    val sqlFullOuter =
+      "select * from t full outer join u approx nearest 1 by similarity t.a"
+    checkError(
+      exception = parseException(sqlFullOuter),
+      condition = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "FULL OUTER",
+        "supported" -> "'INNER', 'LEFT OUTER'"),
+      context = ExpectedContext(
+        fragment = "full outer join u approx nearest 1 by similarity t.a",
+        start = 16,
+        stop = 67))
+
+    val sqlCross =
+      "select * from t cross join u approx nearest 1 by similarity t.a"
+    checkError(
+      exception = parseException(sqlCross),
+      condition = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      parameters = Map(
+        "joinType" -> "CROSS",
+        "supported" -> "'INNER', 'LEFT OUTER'"),
+      context = ExpectedContext(
+        fragment = "cross join u approx nearest 1 by similarity t.a",
+        start = 16,
+        stop = 62))
+
+    // LATERAL + NEAREST BY not allowed.
+    val sqlLateral =
+      "select * from t join lateral (select * from u) uu approx nearest 1 by similarity 1"
+    checkError(
+      exception = parseException(sqlLateral),
+      condition = "UNSUPPORTED_FEATURE.LATERAL_JOIN_NEAREST_BY",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "join lateral (select * from u) uu approx nearest 1 by similarity 1",
+        start = 16,
+        stop = 81))
+
+    // num_results out of range.
+    val sqlTooSmall =
+      "select * from t join u approx nearest 0 by similarity t.a"
+    checkError(
+      exception = parseException(sqlTooSmall),
+      condition = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      parameters = Map("numResults" -> "0", "min" -> "1", "max" -> "100000"),
+      context = ExpectedContext(
+        fragment = "join u approx nearest 0 by similarity t.a",
+        start = 16,
+        stop = 56))
+
+    val sqlTooLarge =
+      "select * from t join u approx nearest 100001 by distance t.a"
+    checkError(
+      exception = parseException(sqlTooLarge),
+      condition = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      parameters = Map("numResults" -> "100001", "min" -> "1", "max" -> "100000"),
+      context = ExpectedContext(
+        fragment = "join u approx nearest 100001 by distance t.a",
+        start = 16,
+        stop = 59))
+
+    // Literal that overflows Long (>19 digits) should surface as the standard out-of-range
+    // error, not an unwrapped NumberFormatException.
+    val sqlOverflow =
+      "select * from t join u approx nearest 99999999999999999999 by distance t.a"
+    checkError(
+      exception = parseException(sqlOverflow),
+      condition = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      parameters = Map(
+        "numResults" -> "99999999999999999999",
+        "min" -> "1",
+        "max" -> "100000"),
+      context = ExpectedContext(
+        fragment = "join u approx nearest 99999999999999999999 by distance t.a",
+        start = 16,
+        stop = 73))
+  }
+
+  test("nearest-by keywords are non-reserved (usable as identifiers)") {
+    // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
+    // non-reserved so they can continue to be used as column or table identifiers.
+    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
+      // As a column identifier in the SELECT list.
+      parsePlan(s"select $kw from t")
+      // As a table identifier in the FROM clause.
+      parsePlan(s"select * from $kw")
+    }
+    // All five together in a single SELECT list.
+    parsePlan("select approx, distance, exact, nearest, similarity from t")
+  }
+
   test("sampled relations") {
     val sql = "select * from t"
     assertEqual(s"$sql tablesample(100 rows)",
@@ -883,6 +1022,207 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment4,
         start = 25,
         stop = 65))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM and BERNOULLI - basic parsing") {
+    val sql = "select * from t"
+    // SYSTEM produces SampleMethod.System
+    assertEqual(
+      s"$sql tablesample system (43 percent) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    // BERNOULLI produces SampleMethod.Bernoulli
+    assertEqual(
+      s"$sql tablesample bernoulli (43 percent) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.Bernoulli).select(star()))
+    // No qualifier defaults to Bernoulli (backward compat)
+    assertEqual(
+      s"$sql tablesample(43 percent) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x")).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - case insensitivity") {
+    val sql = "select * from t"
+    // Keywords are case-insensitive
+    assertEqual(
+      s"$sql TABLESAMPLE SYSTEM (43 PERCENT) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    assertEqual(
+      s"$sql TabLeSaMpLe SyStEm (43 PeRcEnT) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    assertEqual(
+      s"$sql TABLESAMPLE BERNOULLI (43 PERCENT) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.Bernoulli).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - boundary fractions") {
+    val sql = "select * from t"
+    // 0 PERCENT
+    assertEqual(
+      s"$sql tablesample system (0 percent) as x",
+      Sample(0, 0d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    // 100 PERCENT
+    assertEqual(
+      s"$sql tablesample system (100 percent) as x",
+      Sample(0, 1d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    // Fractional percent
+    assertEqual(
+      s"$sql tablesample system (0.1 percent) as x",
+      Sample(0, 0.001d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - unsupported sample methods") {
+    val sql = "select * from t"
+    // SYSTEM + ROWS -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (100 rows)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "ROWS"),
+      context = ExpectedContext(
+        fragment = "tablesample system (100 rows)",
+        start = 16,
+        stop = 44))
+    // SYSTEM + BYTES -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (300M)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BYTES"),
+      context = ExpectedContext(
+        fragment = "tablesample system (300M)",
+        start = 16,
+        stop = 40))
+    // SYSTEM + BUCKET -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (bucket 4 out of 10)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET"),
+      context = ExpectedContext(
+        fragment = "tablesample system (bucket 4 out of 10)",
+        start = 16,
+        stop = 54))
+    // SYSTEM + BUCKET ON colname -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (bucket 4 out of 10 on x)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET"),
+      context = ExpectedContext(
+        fragment = "tablesample system (bucket 4 out of 10 on x)",
+        start = 16,
+        stop = 59))
+    // SYSTEM + BUCKET ON function -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (bucket 3 out of 32 on rand())"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET"),
+      context = ExpectedContext(
+        fragment = "tablesample system (bucket 3 out of 32 on rand())",
+        start = 16,
+        stop = 64))
+  }
+
+  test("SPARK-55978: TABLESAMPLE BERNOULLI - REPEATABLE is supported") {
+    assertEqual(
+      "select * from t tablesample bernoulli (43 percent) repeatable (123) as x",
+      Sample(0, .43d, withReplacement = false, 123L,
+        table("t").as("x"), SampleMethod.Bernoulli).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - REPEATABLE not supported") {
+    val sql = "select * from t"
+    checkError(
+      exception = parseException(s"$sql tablesample system (43 percent) repeatable (123)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_REPEATABLE",
+      sqlState = "0A000",
+      context = ExpectedContext(
+        fragment = "tablesample system (43 percent) repeatable (123)",
+        start = 16,
+        stop = 63))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - fraction out of range") {
+    val sql = "select * from t"
+    // > 100 PERCENT
+    checkError(
+      exception = parseException(s"$sql tablesample system (150 percent) as x"),
+      condition = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Sampling fraction (1.5) must be on interval [0, 1]"),
+      context = ExpectedContext(
+        fragment = "tablesample system (150 percent)",
+        start = 16,
+        stop = 47))
+    // Negative PERCENT
+    checkError(
+      exception = parseException(s"$sql tablesample system (-10 percent) as x"),
+      condition = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Sampling fraction (-0.1) must be on interval [0, 1]"),
+      context = ExpectedContext(
+        fragment = "tablesample system (-10 percent)",
+        start = 16,
+        stop = 47))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM and BERNOULLI as identifiers") {
+    // SYSTEM usable as column name (nonReserved)
+    assertEqual("SELECT system FROM t",
+      table("t").select($"system"))
+    // BERNOULLI usable as column name
+    assertEqual("SELECT bernoulli FROM t",
+      table("t").select($"bernoulli"))
+    // Usable as table alias
+    assertEqual("SELECT * FROM t system",
+      table("t").as("system").select(star()))
+    assertEqual("SELECT * FROM t bernoulli",
+      table("t").as("bernoulli").select(star()))
+    // SYSTEM as table name with default (Bernoulli) TABLESAMPLE
+    assertEqual("SELECT * FROM system TABLESAMPLE(10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("x")).select(star()))
+    // SYSTEM as table name with TABLESAMPLE SYSTEM qualifier
+    assertEqual("SELECT * FROM system TABLESAMPLE SYSTEM (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("x"), SampleMethod.System).select(star()))
+    // SYSTEM as both table name and alias with TABLESAMPLE
+    assertEqual("SELECT * FROM system TABLESAMPLE(10 PERCENT) system",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("system")).select(star()))
+    // BERNOULLI as table name with TABLESAMPLE BERNOULLI qualifier
+    assertEqual("SELECT * FROM bernoulli TABLESAMPLE BERNOULLI (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("bernoulli").as("x"), SampleMethod.Bernoulli).select(star()))
+    // SYSTEM as table name with TABLESAMPLE BERNOULLI (cross-keyword)
+    assertEqual("SELECT * FROM system TABLESAMPLE BERNOULLI (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("x"), SampleMethod.Bernoulli).select(star()))
+    // BERNOULLI as both table name and alias with TABLESAMPLE
+    assertEqual("SELECT * FROM bernoulli TABLESAMPLE(10 PERCENT) bernoulli",
+      Sample(0, .1d, withReplacement = false, None,
+        table("bernoulli").as("bernoulli")).select(star()))
+    // Schema-qualified SYSTEM table name with TABLESAMPLE SYSTEM
+    assertEqual("SELECT * FROM mydb.system TABLESAMPLE SYSTEM (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("mydb", "system").as("x"), SampleMethod.System).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - subquery and join contexts") {
+    // SYSTEM sample in subquery
+    assertEqual(
+      "SELECT * FROM (SELECT * FROM t TABLESAMPLE SYSTEM (50 PERCENT)) sub",
+      Sample(0, .5d, withReplacement = false, None,
+        table("t"), SampleMethod.System)
+        .select(star()).as("sub").select(star()))
   }
 
   test("sub-query") {

@@ -46,8 +46,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
 @SlowSQLTest
-class DataFrameAggregateSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameAggregateSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
