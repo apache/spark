@@ -16,6 +16,8 @@
 #
 import gc
 import os
+import subprocess
+import sys
 import time
 import unittest
 from unittest.mock import patch
@@ -88,6 +90,28 @@ class UtilTests(PySparkTestCase):
             self.assertEqual(origin, _find_spark_home())
         finally:
             os.environ["SPARK_HOME"] = origin
+
+    @unittest.skipIf(sys.platform == "win32", "find-spark-home is a bash script")
+    def test_find_spark_home_script_sourceable(self):
+        # SPARK-54434: bin/find-spark-home is documented to be sourced.
+        # When `SPARK_HOME` is already set, the script short-circuits.
+        # The short-circuit must use `return 0` rather than `exit 0`, otherwise
+        # sourcing the script terminates the caller's shell session.
+        script_path = os.path.join(os.environ["SPARK_HOME"], "bin", "find-spark-home")
+        # Source the script twice and print a marker afterwards. If the script
+        # calls `exit 0` while sourced, the outer shell terminates and the
+        # marker is never emitted.
+        cmd = (
+            f"export SPARK_HOME=/some/value && "
+            f"source {script_path} && "
+            f"source {script_path} && "
+            f"echo SOURCED_OK"
+        )
+        completed = subprocess.run(
+            ["bash", "-c", cmd], capture_output=True, text=True, check=False
+        )
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        self.assertIn("SOURCED_OK", completed.stdout)
 
     def test_timeout_decorator(self):
         @timeout(1)
