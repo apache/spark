@@ -149,8 +149,8 @@ class CatalogManager(
 
   /**
    * Cache for [[confDefaultPathEntries]]: stores the expanded [[SessionPathEntry]] list keyed
-   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and
-   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] value (the only conf that affects the
+   * on the trimmed [[SQLConf#DEFAULT_PATH]] string and
+   * [[SQLConf#SESSION_FUNCTION_RESOLUTION_ORDER]] value (the only conf that affects the
    * expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
    * `CurrentSchemaEntry` markers are preserved unresolved so the cache stays valid across
    * `USE SCHEMA`.
@@ -160,20 +160,20 @@ class CatalogManager(
 
   /**
    * Returns the effective session path entries: the explicit `SET PATH` value if stored,
-   * else the parsed [[SQLConf.DEFAULT_PATH]] conf if non-empty (mirroring how
-   * [[currentCatalog]] falls back to [[SQLConf.DEFAULT_CATALOG]]). Returns `None` when
-   * [[SQLConf.PATH_ENABLED]] is false or both sources are empty.
+   * else the parsed [[SQLConf#DEFAULT_PATH]] conf if non-empty (mirroring how
+   * [[currentCatalog]] falls back to [[SQLConf#DEFAULT_CATALOG]]). Returns `None` when
+   * [[SQLConf#PATH_ENABLED]] is false or both sources are empty.
    */
   def sessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized {
     if (!conf.pathEnabled) None
     else _sessionPath.orElse(confDefaultPathEntries)
   }
 
-  /** Raw `_sessionPath` (post-`SET PATH`), without the [[SQLConf.DEFAULT_PATH]] fallback. */
+  /** Raw `_sessionPath` (post-`SET PATH`), without the [[SQLConf#DEFAULT_PATH]] fallback. */
   def storedSessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized { _sessionPath }
 
   /**
-   * Parsed and expanded [[SQLConf.DEFAULT_PATH]] value, or `None` when the conf is empty.
+   * Parsed and expanded [[SQLConf#DEFAULT_PATH]] value, or `None` when the conf is empty.
    * Reuses the SET PATH grammar via [[CatalystSqlParser.parsePathElements]]. An inner
    * `DEFAULT_PATH` token resolves to the spark-builtin default ordering (cycle break).
    *
@@ -217,7 +217,7 @@ class CatalogManager(
   /**
    * String form of the current resolution path for CURRENT_PATH().
    * When PATH is enabled and a session path is in effect (stored or via
-   * [[SQLConf.DEFAULT_PATH]]), formats the resolved entries. Otherwise falls back to the legacy
+   * [[SQLConf#DEFAULT_PATH]]), formats the resolved entries. Otherwise falls back to the legacy
    * resolutionSearchPath.
    */
   def currentPathString: String = synchronized {
@@ -235,8 +235,8 @@ class CatalogManager(
 
   /**
    * Ordered catalog/schema path entries for resolving unqualified SQL object names.
-   * When PATH is off or unset, applies [[SQLConf.defaultPathOrder]] (legacy).
-   * When PATH is in effect (stored or via the [[SQLConf.DEFAULT_PATH]] conf), uses the
+   * When PATH is off or unset, applies [[SQLConf#defaultPathOrder]] (legacy).
+   * When PATH is in effect (stored or via the [[SQLConf#DEFAULT_PATH]] conf), uses the
    * resolved entries.
    */
   def sqlResolutionPathEntries(
@@ -265,7 +265,7 @@ class CatalogManager(
 
   /**
    * True if `system.session` is on the SQL path. Only literal path entries can match: the
-   * [[CurrentSchemaEntry]] marker expands to `currentCatalog.name() +: currentNamespace`, and
+   * [[CatalogManager#CurrentSchemaEntry]] marker expands to `currentCatalog.name() +: currentNamespace`, and
    * `system` is not a registered catalog (it is a synthetic namespace served via
    * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,
    * not loadable via [[catalog]]), so `currentCatalog.name()` cannot be `"system"`. If that
@@ -395,7 +395,7 @@ private[sql] object CatalogManager extends Logging {
   /**
    * True if the multipart name uses the session temp view namespace: two-part `session.view`
    * or three-part `system.session.view`. The two-part form can also denote a persistent relation
-   * in schema `session`; resolution order is controlled by [[SQLConf.prioritizeSystemCatalog]].
+   * in schema `session`; resolution order is controlled by [[SQLConf#prioritizeSystemCatalog]].
    */
   def isSessionQualifiedViewName(nameParts: Seq[String]): Boolean = {
     (nameParts.length == 2 && nameParts.head.equalsIgnoreCase(SESSION_NAMESPACE)) ||
