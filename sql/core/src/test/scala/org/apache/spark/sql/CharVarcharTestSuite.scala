@@ -87,6 +87,39 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-56819: trim trailing spaces from char columns on read") {
+    withSQLConf(SQLConf.CHAR_TRIM_TRAILING_SPACES_ON_READ.key -> "true") {
+      withTable("t") {
+        sql(
+          s"""
+             |CREATE TABLE t (
+             |  c CHAR(4),
+             |  v VARCHAR(4),
+             |  s STRING,
+             |  st STRUCT<c: CHAR(4), v: VARCHAR(4)>
+             |) USING $format
+             |""".stripMargin)
+        sql(
+          """
+            |INSERT INTO t VALUES (
+            |  '12',
+            |  '12 ',
+            |  '12 ',
+            |  named_struct('c', '12', 'v', '12 ')
+            |)
+            |""".stripMargin)
+
+        checkAnswer(
+          sql("SELECT c, v, s, st FROM t"),
+          Row("12", "12 ", "12 ", Row("12", "12 ")))
+        checkAnswer(
+          sql("SELECT length(c), length(v), length(s), length(st.c), length(st.v) FROM t"),
+          Row(2, 3, 3, 2, 3))
+        checkAnswer(sql("SELECT c = '12', c = '12 ' FROM t"), Row(true, false))
+      }
+    }
+  }
+
   test("preserve char/varchar type info") {
     Seq(CharType(5), VarcharType(5)).foreach { typ =>
       for {
