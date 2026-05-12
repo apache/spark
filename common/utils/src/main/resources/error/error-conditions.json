@@ -82,6 +82,19 @@
     ],
     "sqlState" : "XX000"
   },
+  "AUTOCDC_INVALID_COLUMN_SELECTION" : {
+    "message" : [
+      "Invalid column selection."
+    ],
+    "subClass" : {
+      "COLUMNS_NOT_FOUND" : {
+        "message" : [
+          "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>."
+        ]
+      }
+    },
+    "sqlState" : "42703"
+  },
   "APPEND_ONCE_FROM_BATCH_QUERY" : {
     "message" : [
       "Creating a streaming table from a batch query prevents incremental loading of new data from source. Offending table: '<table>'.",
@@ -3373,19 +3386,6 @@
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
     ],
     "sqlState" : "42000"
-  },
-  "AUTOCDC_INVALID_COLUMN_SELECTION" : {
-    "message" : [
-      "Invalid column selection."
-    ],
-    "subClass" : {
-      "COLUMNS_NOT_FOUND" : {
-        "message" : [
-          "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>."
-        ]
-      }
-    },
-    "sqlState" : "42703"
   },
   "INVALID_CONF_VALUE" : {
     "message" : [

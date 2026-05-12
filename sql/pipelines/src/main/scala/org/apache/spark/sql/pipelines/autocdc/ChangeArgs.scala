@@ -33,16 +33,16 @@ object ColumnSelection {
   def applyToSchema(schema: StructType, columnSelection: Option[ColumnSelection]): StructType =
     columnSelection match {
       case None =>
-        // A none column selection is interpreted as a no-op (select all columns existing in the schema).
+        // A none column selection is interpreted as a no-op.
         schema
       case Some(IncludeColumns(includeColumns)) =>
         validateColumnsExistInSchema(columns = includeColumns, schema = schema)
-        
+
         val includeColumnSet = includeColumns.toSet
         StructType(schema.fields.filter(f => includeColumnSet.contains(f.name)))
       case Some(ExcludeColumns(excludeColumns)) =>
         validateColumnsExistInSchema(columns = excludeColumns, schema = schema)
-        
+
         val excludeColumnSet = excludeColumns.toSet
         StructType(schema.fields.filterNot(f => excludeColumnSet.contains(f.name)))
     }
