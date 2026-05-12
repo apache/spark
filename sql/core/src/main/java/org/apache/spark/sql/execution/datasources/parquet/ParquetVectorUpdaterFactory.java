@@ -949,9 +949,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putDouble(offset + i, valuesReader.readFloat());
-      }
+      valuesReader.readFloatsAsDoubles(total, values, offset);
     }
 
     @Override

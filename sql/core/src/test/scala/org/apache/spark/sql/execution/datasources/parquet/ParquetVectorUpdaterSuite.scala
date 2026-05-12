@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
  * whose `readValues` is a bulk delegation to `VectorizedValuesReader`:
  *   - `IntegerToLongUpdater` (INT32 -> Long, plus long-decimal dispatch)
  *   - `IntegerToDoubleUpdater` (INT32 -> Double)
+ *   - `FloatToDoubleUpdater` (FLOAT -> Double)
  *
  * Covers boundary batch lengths, sign-extension on negative INT32 values, the singular
  * `readValue` path, and the factory's long-decimal dispatch
@@ -68,6 +69,13 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     val buf = ByteBuffer.allocate(values.length * 4).order(ByteOrder.LITTLE_ENDIAN)
     var i = 0
     while (i < values.length) { buf.putInt(values(i)); i += 1 }
+    buf.array()
+  }
+
+  private def plainFloatBytes(values: Array[Float]): Array[Byte] = {
+    val buf = ByteBuffer.allocate(values.length * 4).order(ByteOrder.LITTLE_ENDIAN)
+    var i = 0
+    while (i < values.length) { buf.putFloat(values(i)); i += 1 }
     buf.array()
   }
 
@@ -211,4 +219,95 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     assert(actual === input.map(_.toDouble))
   }
 
+  // ---- FloatToDoubleUpdater: same bulk-path shape, source is FLOAT, target is DoubleType ----
+
+  // FLOAT column descriptor with no logical-type annotation.
+  private val floatDescriptor: ColumnDescriptor = {
+    val pt = Types.primitive(PrimitiveTypeName.FLOAT, Repetition.OPTIONAL).named("col")
+    new ColumnDescriptor(Array("col"), pt, 0, 1)
+  }
+
+  // Reads `values.length` FLOATs through `FloatToDoubleUpdater.readValues` and returns the
+  // resulting double column.
+  private def readViaFloatToDoubleUpdater(values: Array[Float]): Array[Double] = {
+    val fac = newFactory(floatDescriptor)
+    val updater = fac.getUpdater(floatDescriptor, DataTypes.DoubleType)
+    val out = new OnHeapColumnVector(values.length.max(1), DataTypes.DoubleType)
+    val reader = newPlainReader(plainFloatBytes(values), values.length)
+    updater.readValues(values.length, 0, out, reader)
+    val result = new Array[Double](values.length)
+    var i = 0
+    while (i < values.length) { result(i) = out.getDouble(i); i += 1 }
+    result
+  }
+
+  // Sample mixes finite, signed-zero, NaN, and infinity to catch sign and special-value bugs.
+  private def floatSampleValues(n: Int): Array[Float] = {
+    val out = new Array[Float](n)
+    var i = 0
+    while (i < n) {
+      out(i) = i % 7 match {
+        case 0 => Float.MinValue
+        case 1 => -1.5f
+        case 2 => -0.0f
+        case 3 => 0.0f
+        case 4 => Float.MaxValue
+        case 5 => Float.NaN
+        case _ => i * 0.125f - 3.25f
+      }
+      i += 1
+    }
+    out
+  }
+
+  // Java's float-to-double widening is exact for finite/infinite values and produces
+  // some double NaN for a NaN input (the payload may be canonicalized). Use
+  // `java.lang.Double.compare` to give NaN well-defined equality and to distinguish
+  // -0.0 from +0.0.
+  private def assertDoublesEqual(actual: Array[Double], expected: Array[Double]): Unit = {
+    assert(actual.length === expected.length)
+    var i = 0
+    while (i < actual.length) {
+      assert(java.lang.Double.compare(actual(i), expected(i)) === 0,
+        s"mismatch at $i: actual=${actual(i)} expected=${expected(i)}")
+      i += 1
+    }
+  }
+
+  for (n <- Seq(0, 1, 7, 8, 9, 17, 1024, 4097)) {
+    test(s"FloatToDoubleUpdater produces correct widened output (total=$n)") {
+      val input = floatSampleValues(n)
+      assertDoublesEqual(readViaFloatToDoubleUpdater(input), input.map(_.toDouble))
+    }
+  }
+
+  test("FloatToDoubleUpdater: readValue widens a single FLOAT -> Double") {
+    // Same rationale as the IntegerToLongUpdater readValue test: the def-level-decoder's
+    // run-of-1 path calls `readFloat()` directly rather than the bulk method.
+    val input = Array(0.0f, 1.5f, -1.5f, Float.MinValue, Float.MaxValue, Float.NaN)
+    val fac = newFactory(floatDescriptor)
+    val updater = fac.getUpdater(floatDescriptor, DataTypes.DoubleType)
+    val out = new OnHeapColumnVector(input.length, DataTypes.DoubleType)
+    val reader = newPlainReader(plainFloatBytes(input), input.length)
+    var i = 0
+    while (i < input.length) {
+      updater.readValue(i, out, reader)
+      i += 1
+    }
+    val actual = (0 until input.length).map(out.getDouble).toArray
+    assertDoublesEqual(actual, input.map(_.toDouble))
+  }
+
+  test("FloatToDoubleUpdater: special values (signed zeros, NaN, +/-Infinity) widen exactly") {
+    // -0.0f widens to -0.0d (distinct from +0.0d), and Float.NaN widens to a double NaN.
+    val input = Array(-0.0f, 0.0f, Float.NegativeInfinity, Float.PositiveInfinity, Float.NaN)
+    val actual = readViaFloatToDoubleUpdater(input)
+    val expected = input.map(_.toDouble)
+    assertDoublesEqual(actual, expected)
+    // Spot-check signed-zero preservation directly (===-based comparison would conflate).
+    assert(java.lang.Double.doubleToRawLongBits(actual(0)) ===
+      java.lang.Double.doubleToRawLongBits(-0.0d))
+    assert(java.lang.Double.doubleToRawLongBits(actual(1)) ===
+      java.lang.Double.doubleToRawLongBits(0.0d))
+  }
 }
