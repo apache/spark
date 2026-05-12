@@ -1723,6 +1723,10 @@ private[spark] class DAGScheduler(
           val mapId = injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
           mapOutputTracker.updateMapOutput(
             shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId)
+          // Bump the epoch so any executor that already fetched this shuffle's statuses
+          // re-fetches them; updateMapOutput on its own only invalidates the driver-side
+          // serialized cache.
+          mapOutputTracker.incrementEpoch()
           logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId after " +
             s"$newCount downstream consumer successes")
         }
@@ -1751,6 +1755,10 @@ private[spark] class DAGScheduler(
         val mapId = injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
         mapOutputTracker.updateMapOutput(
           shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId)
+        // Bump the epoch so any executor that already fetched this shuffle's statuses
+        // re-fetches them; updateMapOutput on its own only invalidates the driver-side
+        // serialized cache.
+        mapOutputTracker.incrementEpoch()
         logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId before result-stage " +
           s"submission")
       }
@@ -2414,7 +2422,7 @@ private[spark] class DAGScheduler(
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
         }
 
-        if (Utils.isTesting) {
+        if (Utils.isTesting && !ignoreOldTaskAttempts) {
           maybeApplyDelayedCorruptionForTest(stage)
         }
 
@@ -2494,9 +2502,8 @@ private[spark] class DAGScheduler(
                     shouldCorruptShuffleOutputForTest(shuffleStage.shuffleDep.shuffleId, task)) {
                   corruptShuffleOutputForTest(shuffleStage.shuffleDep.shuffleId, status)
                 }
-                val realChecksumMismatched = mapOutputTracker.registerMapOutput(
-                  shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
-                val isChecksumMismatched = realChecksumMismatched ||
+                val isChecksumMismatched = mapOutputTracker.registerMapOutput(
+                    shuffleStage.shuffleDep.shuffleId, smt.partitionId, status) ||
                   (Utils.isTesting &&
                     isForcedChecksumMismatchForTest(shuffleStage.shuffleDep.shuffleId, task))
                 if (isChecksumMismatched) {
