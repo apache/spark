@@ -138,8 +138,23 @@ trait FileScan extends Scan
       "Location" -> locationDesc)
   }
 
+  /**
+   * Returns the partitions produced from the compile-time `partitionFilters`.
+   *
+   * Subclasses that need to customize how `FilePartition`s are produced should override
+   * `partitionsImpl` instead. Overriding only `partitions` is supported for backward
+   * compatibility but will be bypassed on the runtime-filter path
+   * (`planInputPartitionsWithRuntimeFilters`), so the override would not be applied when
+   * DPP or scalar-subquery runtime filters are present.
+   */
   protected def partitions: Seq[FilePartition] = partitionsImpl(partitionFilters)
 
+  /**
+   * Builds `FilePartition`s using all partition filters that must apply (compile-time
+   * `partitionFilters` plus any runtime filters). Subclasses should override this method
+   * so the customization is applied on both the compile-time path (`planInputPartitions`)
+   * and the runtime-filter path (`planInputPartitionsWithRuntimeFilters`).
+   */
   protected def partitionsImpl(allPartitionFilters: Seq[Expression]): Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(allPartitionFilters, dataFilters)
     val maxSplitBytes = FilePartition.maxSplitBytes(sparkSession, selectedPartitions)
@@ -193,6 +208,10 @@ trait FileScan extends Scan
    * Called by `BatchScanExec.filteredPartitions` with DPP and scalar-subquery filters that
    * must apply on top of the scan's compile-time `partitionFilters`. Returns the same
    * partitions as `planInputPartitions()` when `extraFilters` is empty.
+   *
+   * When `extraFilters` is non-empty, this method routes through `partitionsImpl` directly,
+   * so subclasses that need custom partition planning under runtime filtering must override
+   * `partitionsImpl` (overriding `partitions` is not sufficient on this path).
    */
   def planInputPartitionsWithRuntimeFilters(
       extraFilters: Seq[Expression]): Array[InputPartition] = {
