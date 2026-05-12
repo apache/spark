@@ -174,7 +174,9 @@ class CatalogManager(
 
   /**
    * Parsed and expanded [[SQLConf#DEFAULT_PATH]] value, or `None` when the conf is empty.
-   * Reuses the SET PATH grammar via [[CatalystSqlParser.parsePathElements]]. An inner
+   * Reuses the SET PATH grammar via
+   * [[org.apache.spark.sql.catalyst.parser.AbstractSqlParser#parsePathElements]] (via
+   * [[org.apache.spark.sql.catalyst.parser.CatalystSqlParser]]). An inner
    * `DEFAULT_PATH` token resolves to the spark-builtin default ordering (cycle break).
    *
    * Unlike `SET PATH`, this does NOT run a duplicate check: lookup uses first-match
@@ -265,7 +267,7 @@ class CatalogManager(
 
   /**
    * True if `system.session` is on the SQL path. Only literal path entries can match: the
-   * [[CatalogManager#CurrentSchemaEntry]] marker expands to
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]] marker expands to
    * `currentCatalog.name() +: currentNamespace`, and
    * `system` is not a registered catalog (it is a synthetic namespace served via
    * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,

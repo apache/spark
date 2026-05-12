@@ -32,7 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
  * keyword (DEFAULT_PATH, SYSTEM_PATH, PATH, CURRENT_SCHEMA / CURRENT_DATABASE) or a
  * fully qualified schema reference (`catalog.namespace...` with at least 2 parts).
  *
- * The same grammar is reused to parse the [[SQLConf#DEFAULT_PATH]] conf value, so this
+ * The same grammar is reused to parse the
+ * [[org.apache.spark.sql.internal.SQLConf#DEFAULT_PATH()]] conf value, so this
  * AST node lives in catalyst beside [[CatalogManager]] rather than in the runtime
  * [[org.apache.spark.sql.execution.command.SetPathCommand]].
  */
@@ -44,7 +45,8 @@ private[sql] object PathElement {
   case object PathRef extends PathElement
 
   /**
-   * Current database/schema (SQL aliases). Stored as the [[CatalogManager#CurrentSchemaEntry]]
+   * Current database/schema (SQL aliases). Stored as the
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]]
    * marker so resolution candidates expand against the live `USE SCHEMA`.
    */
   case object CurrentSchema extends PathElement
@@ -55,13 +57,15 @@ private[sql] object PathElement {
   /**
    * Expand a parsed [[PathElement]] list into concrete [[SessionPathEntry]] entries
    * suitable for storing in [[CatalogManager._sessionPath]] or returning from
-   * [[CatalogManager.sessionPathEntries]].
+   * [[CatalogManager#sessionPathEntries]].
    *
    * @param isConfDefaultExpansion when true, an inner [[DefaultPath]] token resolves
    *                               to the spark-builtin default ordering (cycle break)
-   *                               rather than reading [[SQLConf#DEFAULT_PATH]] again.
+   *                               rather than reading
+   *                               [[org.apache.spark.sql.internal.SQLConf#DEFAULT_PATH()]] again.
    *                               Set to true when this method is invoked while
-   *                               parsing [[SQLConf#DEFAULT_PATH]] itself.
+   *                               parsing [[org.apache.spark.sql.internal.SQLConf#DEFAULT_PATH()]]
+   *                               itself.
    */
   def expand(
       elements: Seq[PathElement],
@@ -105,14 +109,17 @@ private[sql] object PathElement {
   /**
    * Reject *static* duplicates in a SET PATH entry list: identical
    * [[CatalogManager#LiteralPathEntry]] parts and repeated
-   * [[CatalogManager#CurrentSchemaEntry]] markers (the `current_schema` / `current_database`
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]] markers
+   * (the `current_schema` / `current_database`
    * cross-alias case). Used for the interactive `SET PATH` form to surface user typos at
    * statement time.
    *
    * Deliberately does NOT compare a [[CatalogManager#LiteralPathEntry]] against a
-   * [[CatalogManager#CurrentSchemaEntry]]: such a "duplicate" depends on the live `USE SCHEMA`
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]]: such a
+   * "duplicate" depends on the live `USE SCHEMA`
    * and is harmless at lookup (first-match resolution skips the dead literal).
-   * [[SQLConf#DEFAULT_PATH]] expansion skips this check entirely so transient `USE`-induced
+   * [[org.apache.spark.sql.internal.SQLConf#DEFAULT_PATH()]] expansion skips this check
+   * entirely so transient `USE`-induced
    * collisions don't wedge unqualified resolution.
    */
   def validateNoStaticDuplicates(
