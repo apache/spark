@@ -214,7 +214,8 @@ class VariantInRelation {
   // fields, which also changes the struct type containing it, and it is difficult to reconstruct
   // the original struct value. This is not a big loss, because we need the full variant anyway.
   def collectRequestedFields(expr: Expression): Unit = expr match {
-    case v@VariantGet(StructPathToVariant(fields), path, _, _, _) if path.foldable =>
+    case v@VariantGet(StructPathToVariant(fields), path, _, _, _)
+        if path.foldable && path.eval() != null =>
       addField(fields, RequestedVariantField(v))
     case c@Cast(StructPathToVariant(fields), _, _, _) => addField(fields, RequestedVariantField(c))
     case IsNotNull(StructPath(_, _)) | IsNull(StructPath(_, _)) =>
@@ -245,7 +246,8 @@ class VariantInRelation {
 
     // Rewrite patterns should be consistent with visit patterns in `collectRequestedFields`.
     expr.transformDown {
-      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _) if path.foldable =>
+      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _)
+          if path.foldable && path.eval() != null =>
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
         GetStructField(rewriteAttribute(v), fields(RequestedVariantField(g)))

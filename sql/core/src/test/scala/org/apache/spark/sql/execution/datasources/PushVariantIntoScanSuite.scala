@@ -219,6 +219,42 @@ abstract class PushVariantIntoScanV1SuiteBase extends PushVariantIntoScanSuiteBa
       }
     }
   }
+
+  test(s"SPARK-56826: no pushdown for VariantGet with null-evaluating path " +
+      s"when NullPropagation is excluded ($readerName)") {
+    val nullPropagation = "org.apache.spark.sql.catalyst.optimizer.NullPropagation"
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> nullPropagation) {
+      withTable("T") {
+        sql("create table T (v variant) using PARQUET")
+        sql("select variant_get(v, cast(null as string), 'int') as a from T")
+          .queryExecution.optimizedPlan match {
+          case Project(_, l: LogicalRelation) =>
+            val v = l.output(0)
+            assert(v.dataType == StructType(Array(field(0, VariantType, "$",
+              timeZone = "UTC"))))
+          case other => fail(s"Expected LogicalRelation, got ${other.getClass.getName}")
+        }
+      }
+    }
+  }
+
+  test(s"SPARK-56826: pushdown still works for VariantGet with literal path " +
+      s"when NullPropagation is excluded ($readerName)") {
+    val nullPropagation = "org.apache.spark.sql.catalyst.optimizer.NullPropagation"
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> nullPropagation) {
+      withTable("T") {
+        sql("create table T (v variant) using PARQUET")
+        sql("select variant_get(v, '$.a', 'int') as a from T")
+          .queryExecution.optimizedPlan match {
+          case Project(projectList, l: LogicalRelation) =>
+            val v = l.output(0)
+            checkAlias(projectList(0), "a", GetStructField(v, 0))
+            assert(v.dataType == StructType(Array(field(0, IntegerType, "$.a"))))
+          case other => fail(s"Expected LogicalRelation, got ${other.getClass.getName}")
+        }
+      }
+    }
+  }
 }
 
 // V1 DataSource tests - Row-based reader
