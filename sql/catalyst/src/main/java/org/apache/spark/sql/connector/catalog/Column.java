@@ -123,6 +123,33 @@ public interface Column {
   }
 
   /**
+   * Serializes this column to a canonical JSON form. The JSON shape is the Spark
+   * {@code StructField} JSON: {@code {"name", "type", "nullable", "metadata"}} -- wire-
+   * format compatible with what Databricks Runtime emits via {@code StructField.toJson}.
+   * The {@link #comment()} (if present) is folded into the {@code metadata} object under
+   * the {@code "comment"} key, matching the Spark {@code StructField} convention.
+   * Inverse of {@link #fromJson(String)}.
+   *
+   * @since 4.2.0
+   */
+  default String toJson() {
+    return CatalogV2Util.columnToJson(this);
+  }
+
+  /**
+   * Parses a JSON string produced by {@link #toJson()} back into a Column. The JSON must
+   * encode a single field with {@code name}, {@code type}, {@code nullable}, and
+   * {@code metadata} keys. The {@code "comment"} key (if present in the metadata object)
+   * is lifted out and exposed via the returned column's {@link #comment()} accessor;
+   * it does NOT remain in {@link #metadataInJSON()}.
+   *
+   * @since 4.2.0
+   */
+  static Column fromJson(String json) {
+    return CatalogV2Util.columnFromJson(json);
+  }
+
+  /**
    * Returns the name of this table column.
    */
   String name();

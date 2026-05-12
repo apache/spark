@@ -60,7 +60,18 @@ object MimaExcludes {
     // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-56700][SS] Make DataStreamReader.name public
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
+
+    // [SPARK-XXXXX][SQL] Public Column.toJson / Column.fromJson on the V2 catalog interface
+    // The new `Column.toJson` / `Column.fromJson` are backed by `private[sql]` helpers on
+    // `StructField`'s companion object (`json` / `prettyJson` / `fromJson`). Adding a
+    // `fromJson(String)` static factory to `StructField`'s companion causes scalac to drop
+    // the auto-generated `tupled` / `curried` (Function22 helpers from the case class
+    // apply) and the `AbstractFunction4` parent. None of these are documented public API;
+    // the removals are safe.
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.StructField.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.StructField.curried"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.types.StructField$")
   )
 
   // Exclude rules for 4.1.x from 4.0.0

@@ -656,6 +656,18 @@ private[sql] object CatalogV2Util {
     f
   }
 
+  /**
+   * Backs the public [[Column#toJson]] / [[Column#fromJson]] APIs. The wire JSON is the
+   * Spark `StructField` JSON shape (`{"name", "type", "nullable", "metadata"}`), with the
+   * comment folded into `metadata` under the `"comment"` key. We compose with the existing
+   * `v2ColumnToStructField` / `structFieldToV2Column` helpers so the conversion rules
+   * (comment-vs-metadata, default-value / generation-expression / identity-spec metadata
+   * keys) stay defined in exactly one place.
+   */
+  def columnToJson(col: Column): String = v2ColumnToStructField(col).json
+
+  def columnFromJson(json: String): Column = structFieldToV2Column(StructField.fromJson(json))
+
   // For built-in file sources, we encode the default value in StructField metadata. An analyzer
   // rule will check the special metadata and change the DML input plan to fill the default value.
   private def encodeDefaultValue(defaultValue: ColumnDefaultValue, f: StructField): StructField = {
