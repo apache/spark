@@ -1345,4 +1345,11 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
     )
   }
+
+  test("SPARK-56729: ReplaceData and WriteDelta allow non-deterministic expressions") {
+    assert(classOf[SupportsNonDeterministicExpression].isAssignableFrom(classOf[ReplaceData]),
+      "ReplaceData should implement SupportsNonDeterministicExpression")
+    assert(classOf[SupportsNonDeterministicExpression].isAssignableFrom(classOf[WriteDelta]),
+      "WriteDelta should implement SupportsNonDeterministicExpression")
+  }
 }
