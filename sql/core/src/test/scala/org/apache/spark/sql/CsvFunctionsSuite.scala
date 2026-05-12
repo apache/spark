@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types._
 
-class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
+class CsvFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("from_csv with empty options") {

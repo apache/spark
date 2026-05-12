@@ -27,7 +27,7 @@ import java.nio.file.Files
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.util.zip.GZIPOutputStream
+import java.util.zip.{GZIPOutputStream, ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable.ListBuffer
 import scala.util.{Random, Try}
@@ -1861,6 +1861,25 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
     // No suppressed exception - the wrapper is used internally only
     assert(e.getSuppressed.length == 0)
+  }
+
+  test("unzipFilesFromInputStream") {
+    withTempDir { dir =>
+      val baos = new ByteArrayOutputStream()
+      val zout = new ZipOutputStream(baos)
+      Seq("file1.txt" -> "hello", "file2.txt" -> "world").foreach { case (name, content) =>
+        zout.putNextEntry(new ZipEntry(name))
+        zout.write(content.getBytes(UTF_8))
+        zout.closeEntry()
+      }
+      zout.close()
+
+      val extracted = Utils.unzipFilesFromInputStream(
+        new ByteArrayInputStream(baos.toByteArray), dir)
+      assert(extracted.map(_.getName).toSet === Set("file1.txt", "file2.txt"))
+      assert(new String(Files.readAllBytes(new File(dir, "file1.txt").toPath), UTF_8) === "hello")
+      assert(new String(Files.readAllBytes(new File(dir, "file2.txt").toPath), UTF_8) === "world")
+    }
   }
 }
 

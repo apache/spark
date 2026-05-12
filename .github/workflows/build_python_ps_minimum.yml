@@ -21,7 +21,7 @@ name: "Build / Python-only (master, Minimum dependencies of Pandas API on Spark)
 
 on:
   schedule:
-    - cron: '0 10 * * *'
+    - cron: '0 10 */2 * *'
   workflow_dispatch:
 
 jobs:

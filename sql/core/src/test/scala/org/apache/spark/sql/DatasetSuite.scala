@@ -71,8 +71,7 @@ object TestForTypeAlias {
   def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
-class DatasetSuite extends QueryTest
-  with SharedSparkSession
+class DatasetSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -3074,8 +3073,7 @@ object CustomPathEncoder {
   )
 }
 
-class DatasetLargeResultCollectingSuite extends QueryTest
-  with SharedSparkSession {
+class DatasetLargeResultCollectingSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
   // SPARK-41193: Ignore this suite because it cannot run successfully with Spark

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -27,7 +27,7 @@ import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 @SlowSQLTest
-class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
+class ExpressionInfoSuite extends SharedSparkSession {
 
   test("Replace _FUNC_ in ExpressionInfo") {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))

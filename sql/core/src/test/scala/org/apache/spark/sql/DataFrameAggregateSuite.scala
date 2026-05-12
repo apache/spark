@@ -46,8 +46,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
 @SlowSQLTest
-class DataFrameAggregateSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameAggregateSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -789,6 +788,19 @@ class DataFrameAggregateSuite extends QueryTest
       Seq(Row(Seq(1, 2))))
     checkAnswer(df.select(collect_set("a") cast ArrayType(FloatType, false)),
       Seq(Row(Seq(1.0, 2.0))))
+  }
+
+  test("SPARK-56155: collect functions sql() display RESPECT NULLS") {
+    val df = Seq((1, Some(2)), (1, None), (1, Some(4))).toDF("a", "b")
+    val collect_list_result = df.selectExpr("collect_list(b) RESPECT NULLS")
+    val collect_list_result2 = df.selectExpr("collect_list(b)")
+    assert(collect_list_result.columns.head == "collect_list(b) RESPECT NULLS")
+    assert(collect_list_result2.columns.head == "collect_list(b)")
+
+    val collect_set_result = df.selectExpr("collect_set(b) RESPECT NULLS")
+    val collect_set_result2 = df.selectExpr("collect_set(b)")
+    assert(collect_set_result.columns.head == "collect_set(b) RESPECT NULLS")
+    assert(collect_set_result2.columns.head == "collect_set(b)")
   }
 
   test("SPARK-14664: Decimal sum/avg over window should work.") {

@@ -33,7 +33,8 @@ import org.apache.spark.sql.types.IntegerType
  */
 class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
   with ColumnResolutionHelper {
-  private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+  private val variableResolution =
+    new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
   /**
    * Checks for duplicate variable names and throws an exception if found.
@@ -61,7 +62,11 @@ class ResolveSetVariable(val catalogManager: CatalogManager) extends Rule[Logica
             nameParts = u.nameParts
           ) match {
             case Some(variable) => variable.copy(canFold = false)
-            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+            case _ =>
+              throw unresolvedVariableError(
+                u.nameParts,
+                variableResolution.searchPathEntriesForError,
+                u.origin)
           }
 
         case other => throw SparkException.internalError(

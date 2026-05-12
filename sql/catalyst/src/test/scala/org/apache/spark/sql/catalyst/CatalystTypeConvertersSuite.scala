@@ -459,12 +459,14 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   private val pointWkb: Array[Byte] = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
 
+  private val NDR: UTF8String = UTF8String.fromString("NDR")
+
   test("converting Geometry to GeometryType via convertToCatalyst") {
     val geom = Geometry.fromWKB(pointWkb, 0)
     val result = CatalystTypeConverters.convertToCatalyst(geom)
     assert(result.isInstanceOf[GeometryVal])
     val resultVal = result.asInstanceOf[GeometryVal]
-    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal, NDR), pointWkb))
     assert(STUtils.stSrid(resultVal) === 0)
   }
 
@@ -473,7 +475,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val result = CatalystTypeConverters.convertToCatalyst(geom)
     assert(result.isInstanceOf[GeometryVal])
     val resultVal = result.asInstanceOf[GeometryVal]
-    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal, NDR), pointWkb))
     assert(STUtils.stSrid(resultVal) === 4326)
   }
 
@@ -482,7 +484,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val result = CatalystTypeConverters.convertToCatalyst(geog)
     assert(result.isInstanceOf[GeographyVal])
     val resultVal = result.asInstanceOf[GeographyVal]
-    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal, NDR), pointWkb))
     assert(STUtils.stSrid(resultVal) === 4326)
   }
 
@@ -508,7 +510,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val result = converter(geom)
     assert(result.isInstanceOf[GeometryVal])
     val resultVal = result.asInstanceOf[GeometryVal]
-    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal, NDR), pointWkb))
     assert(STUtils.stSrid(resultVal) === 0)
   }
 
@@ -519,7 +521,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val result = converter(geog)
     assert(result.isInstanceOf[GeographyVal])
     val resultVal = result.asInstanceOf[GeographyVal]
-    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal), pointWkb))
+    assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal, NDR), pointWkb))
     assert(STUtils.stSrid(resultVal) === 4326)
   }
 
@@ -581,7 +583,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val element = array.get(0, GeometryType("ANY"))
     assert(element.isInstanceOf[GeometryVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+      STUtils.stAsBinary(element.asInstanceOf[GeometryVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geometry nested in Array") {
@@ -593,7 +595,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val element = array.get(0, GeometryType("ANY"))
     assert(element.isInstanceOf[GeometryVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+      STUtils.stAsBinary(element.asInstanceOf[GeometryVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geometry nested in Map") {
@@ -604,7 +606,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val value = mapData.valueArray.get(0, GeometryType("ANY"))
     assert(value.isInstanceOf[GeometryVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(value.asInstanceOf[GeometryVal]), pointWkb))
+      STUtils.stAsBinary(value.asInstanceOf[GeometryVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geometry nested in Row") {
@@ -614,7 +616,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val element = result.asInstanceOf[InternalRow].get(0, GeometryType("ANY"))
     assert(element.isInstanceOf[GeometryVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeometryVal]), pointWkb))
+      STUtils.stAsBinary(element.asInstanceOf[GeometryVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Seq") {
@@ -626,7 +628,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val element = array.get(0, GeographyType("ANY"))
     assert(element.isInstanceOf[GeographyVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
+      STUtils.stAsBinary(element.asInstanceOf[GeographyVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Array") {
@@ -638,7 +640,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val element = array.get(0, GeographyType("ANY"))
     assert(element.isInstanceOf[GeographyVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
+      STUtils.stAsBinary(element.asInstanceOf[GeographyVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Map") {
@@ -649,7 +651,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val value = mapData.valueArray.get(0, GeographyType("ANY"))
     assert(value.isInstanceOf[GeographyVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(value.asInstanceOf[GeographyVal]), pointWkb))
+      STUtils.stAsBinary(value.asInstanceOf[GeographyVal], NDR), pointWkb))
   }
 
   test("convertToCatalyst with Geography nested in Row") {
@@ -659,6 +661,6 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val element = result.asInstanceOf[InternalRow].get(0, GeographyType("ANY"))
     assert(element.isInstanceOf[GeographyVal])
     assert(java.util.Arrays.equals(
-      STUtils.stAsBinary(element.asInstanceOf[GeographyVal]), pointWkb))
+      STUtils.stAsBinary(element.asInstanceOf[GeographyVal], NDR), pointWkb))
   }
 }

@@ -19,28 +19,27 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SQLExecution}
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SafeForKWayMerge}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-trait DataSourceV2ScanExecBase extends LeafExecNode {
+trait DataSourceV2ScanExecBase
+  extends LeafExecNode
+  with SafeForKWayMerge
+  with SupportsCustomDriverMetrics {
 
-  lazy val customMetrics = scan.supportedCustomMetrics().map { customMetric =>
-    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
-  }.toMap
+  override lazy val customMetrics: Map[String, SQLMetric] =
+    createCustomMetrics(scan.supportedCustomMetrics())
 
-  override lazy val metrics = {
-    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")) ++
-      customMetrics
-  }
+  override protected lazy val sparkMetrics: Map[String, SQLMetric] =
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   def scan: Scan
 
@@ -104,11 +103,21 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   }
 
   /**
-   * Returns the output ordering from the data source if available, otherwise falls back
-   * to the default (no ordering). This allows data sources to report their natural ordering
-   * through `SupportsReportOrdering`.
+   * Returns the output ordering for this scan. When the source reports ordering via
+   * `SupportsReportOrdering`, that ordering is returned as-is. Otherwise, when the output
+   * partitioning is a `KeyedPartitioning` and
+   * `spark.sql.sources.v2.bucketing.partitionKeyOrdering.enabled` is on, each partition
+   * contains rows where the key expressions evaluate to a single constant value, so the data
+   * is trivially sorted by those expressions within the partition.
    */
-  override def outputOrdering: Seq[SortOrder] = ordering.getOrElse(super.outputOrdering)
+  override def outputOrdering: Seq[SortOrder] = {
+    (ordering, outputPartitioning) match {
+      case (Some(o), _) => o
+      case (_, k: KeyedPartitioning) if conf.v2BucketingPartitionKeyOrderingEnabled =>
+        k.expressions.map(SortOrder(_, Ascending))
+      case _ => Seq.empty
+    }
+  }
 
   override def supportsColumnar: Boolean = {
     scan.columnarSupportMode() match {
@@ -133,18 +142,6 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       numOutputRows += 1
       r
     }
-  }
-
-  protected def postDriverMetrics(): Unit = {
-    val driveSQLMetrics = scan.reportDriverMetrics().map(customTaskMetric => {
-      val metric = metrics(customTaskMetric.name())
-      metric.set(customTaskMetric.value())
-      metric
-    })
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      driveSQLMetrics.toImmutableArraySeq)
   }
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {

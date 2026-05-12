@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -38,5 +39,15 @@ class InlineCTESuite extends PlanTest {
       WithCTE(cteRef.except(cteRef, isAll = true), Seq(cteDef))
     ).analyze
     comparePlans(Optimize.execute(plan), plan)
+  }
+
+  test("SPARK-52818: ReplaceCTERefWithRepartition asserts on orphaned CTERelationRef") {
+    val cteDef = CTERelationDef(OneRowRelation().select(rand(0).as("a")))
+    val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
+    // A CTERelationRef without an enclosing WithCTE should produce a clear error.
+    val e = intercept[SparkException] {
+      ReplaceCTERefWithRepartition(cteRef.select($"a"))
+    }
+    assert(e.getMessage.contains("No CTERelationDef found"))
   }
 }

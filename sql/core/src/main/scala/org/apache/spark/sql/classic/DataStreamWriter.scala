@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql.{streaming, Dataset => DS, ForeachWriter}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -190,7 +190,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
     val tableInstance = catalog.asTableCatalog.loadTable(identifier)
 
     def writeToV1Table(table: CatalogTable): StreamingQuery = {
-      if (table.tableType == CatalogTableType.VIEW) {
+      if (table.isViewLike) {
         throw QueryCompilationErrors.streamingIntoViewNotSupportedError(tableName)
       }
       require(table.provider.isDefined)

@@ -22,7 +22,7 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkNumberFormatException}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
 
   before {
     spark.conf.set(s"spark.sql.catalog.cat", classOf[InMemoryCatalog].getName)
@@ -219,6 +219,18 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       sql("USE ns")
       val df = sql("CALL sum(1, 2)")
       checkAnswer(df, Row(3) :: Nil)
+    }
+  }
+
+  test("PATH enabled: unqualified CALL skips missing candidate and keeps searching") {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      try {
+        catalog("cat2").createProcedure(Identifier.of(Array("ns_hit"), "sum"), UnboundLongSum)
+        sql("SET PATH = cat.ns_miss, cat2.ns_hit")
+        checkAnswer(sql("CALL sum(1, 2)"), Row(3L) :: Nil)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
     }
   }
 

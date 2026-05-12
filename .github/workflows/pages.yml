@@ -66,7 +66,7 @@ jobs:
             'pandas-stubs==1.2.0.53' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
             'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
       - name: Install Ruby for documentation generation
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@4dc28cf14d77b0afa6832d9765ac422dbf0dfedd # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true

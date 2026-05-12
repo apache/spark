@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, SQLFunction}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -117,14 +117,25 @@ case class DescribeFunctionCommand(
       Row(s"Function: $name") :: Row(s"Usage: ${info.getUsage}") :: Nil
     }
 
+    val sqlPathRows =
+      if (isExtended &&
+        sparkSession.sessionState.conf.pathEnabled &&
+        SQLFunction.isSQLFunction(info.getClassName)) {
+        DescribeFunctionCommandUtils
+          .storedResolutionPathString(sparkSession, identifier, info)
+          .map(s => Seq(Row(s"SQL Path: $s")))
+          .getOrElse(Nil)
+      } else {
+        Nil
+      }
+
     if (isExtended) {
-      result :+ Row(s"Extended Usage:${info.getExtended}")
+      (result ++ sqlPathRows) :+ Row(s"Extended Usage:${info.getExtended}")
     } else {
       result
     }
   }
 }
-
 
 /**
  * The DDL command that drops a function.
@@ -156,9 +167,13 @@ case class DropFunctionCommand(
         identifier.funcName
       }
 
-      // Check if temp function exists first - if it does, allow dropping it even if a builtin
-      // with the same name exists (shadowing case)
-      if (!catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
+      // Keep DROP TEMPORARY FUNCTION semantics consistent for unqualified names:
+      // - builtin name, no temp present, no IF EXISTS => FORBIDDEN_OPERATION
+      // - IF EXISTS => no-op
+      // Qualified temp namespaces (session / system.session) always target temp functions.
+      if (identifier.database.isEmpty &&
+          !ifExists &&
+          !catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
           catalog.isBuiltinFunction(funcName)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }

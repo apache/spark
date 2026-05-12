@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.PartitionColumnReference;
+import org.apache.spark.sql.connector.expressions.PartitionFieldReference;
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
@@ -54,8 +54,8 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * {@link #pushedPredicates()} can return predicates from all of them.
    * <p>
    * For each {@link PartitionPredicate}, the implementation can use
-   * {@link PartitionPredicate#references()} (each {@link PartitionColumnReference} has
-   * {@link PartitionColumnReference#ordinal()}) to decide whether to return it for post-scan
+   * {@link PartitionPredicate#references()} (each {@link PartitionFieldReference} has
+   * {@link PartitionFieldReference#ordinal()}) to decide whether to return it for post-scan
    * filtering. For example, data sources with
    * partition spec evolution may return predicates that reference later-added partition
    * transforms (incompletely partitioned data) so Spark evaluates them after the scan, while

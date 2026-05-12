@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.internal.{LogKeys}
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.{GroupBasedRowLevelOperation, PhysicalOperation}
@@ -27,8 +27,8 @@ import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Filter}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.connector.PartitionPredicateField
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
 
 /**
  * A rule that builds scans for group-based row-level operations.
@@ -48,10 +48,10 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
 
       val table = relation.table.asRowLevelOperationTable
       val scanBuilder = table.newScanBuilder(relation.options)
-      val partitionSchema = PushDownUtils.getPartitionPredicateSchema(relation)
+      val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(relation)
 
       val (pushedFilters, evaluatedFilters, postScanFilters) =
-        pushFilters(cond, relation.output, scanBuilder, partitionSchema)
+        pushFilters(cond, relation.output, scanBuilder, partitionPredicateFields)
 
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
@@ -100,13 +100,13 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
       cond: Expression,
       tableAttrs: Seq[AttributeReference],
       scanBuilder: ScanBuilder,
-      partitionSchema: Option[StructType])
+      partitionPredicateFields: Option[Seq[PartitionPredicateField]])
   : (Either[Seq[Filter], Seq[V2Filter]], Seq[Expression], Seq[Expression]) = {
 
     val (filtersWithSubquery, filtersWithoutSubquery) = findTableFilters(cond, tableAttrs)
 
     val (pushedFilters, postScanFiltersWithoutSubquery) =
-      PushDownUtils.pushFilters(scanBuilder, filtersWithoutSubquery, partitionSchema)
+      PushDownUtils.pushFilters(scanBuilder, filtersWithoutSubquery, partitionPredicateFields)
 
     val postScanFilterSetWithoutSubquery = ExpressionSet(postScanFiltersWithoutSubquery)
     val evaluatedFilters = filtersWithoutSubquery.filterNot { filter =>

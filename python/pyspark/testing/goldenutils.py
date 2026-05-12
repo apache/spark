@@ -345,10 +345,37 @@ class GoldenFileTestMixin:
 
         if have_pandas and isinstance(value, pd.DataFrame):
             return cls.repr_pandas_value(value, max_len)
+        if have_pandas and isinstance(value, pd.Series):
+            return cls.repr_pandas_series_value(value, max_len)
         if have_numpy and isinstance(value, np.ndarray):
             return cls.repr_numpy_value(value, max_len)
 
         return cls.repr_python_value(value, max_len)
+
+    @classmethod
+    def repr_pandas_series_value(cls, value: Any, max_len: int = 32) -> str:
+        """
+        Format a pandas Series for golden file.
+
+        Uses tolist() for stable Python-native representation that does not
+        depend on numpy's string formatting, which can vary across versions.
+
+        Parameters
+        ----------
+        value : pd.Series
+            The pandas Series to represent.
+        max_len : int, default 32
+            Maximum length for the value string portion.  0 means no limit.
+
+        Returns
+        -------
+        str
+            "python_list_repr@Series[dtype]"
+        """
+        v_str = str(value.tolist()).replace("\n", " ")
+        if max_len > 0:
+            v_str = v_str[:max_len]
+        return f"{v_str}@Series[{str(value.dtype)}]"
 
     @staticmethod
     def clean_result(result: str) -> str:

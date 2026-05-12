@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.BucketTransform
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
@@ -98,7 +98,8 @@ case class ShowCreateTableExec(
       val transforms = new ArrayBuffer[String]
       var bucketSpec = Option.empty[BucketSpec]
       table.partitioning.map {
-        case BucketTransform(numBuckets, col, sortCol) =>
+        case BucketTransform(numBuckets, col, sortCol) if table.isInstanceOf[V1Table] =>
+          require(bucketSpec.isEmpty, "V1Table can not define multiple bucket transforms")
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {

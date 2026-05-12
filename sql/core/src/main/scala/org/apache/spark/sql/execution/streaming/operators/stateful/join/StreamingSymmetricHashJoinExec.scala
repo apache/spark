@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -35,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Streamin
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
@@ -142,7 +144,9 @@ case class StreamingSymmetricHashJoinExec(
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
     stateFormatVersion: Int,
     left: SparkPlan,
-    right: SparkPlan) extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
+    right: SparkPlan,
+    outputMode: Option[OutputMode])
+    extends BinaryExecNode with StateStoreWriter with SchemaValidationUtils {
 
   def this(
       leftKeys: Seq[Expression],
@@ -157,7 +161,8 @@ case class StreamingSymmetricHashJoinExec(
       leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
       stateInfo = None,
       eventTimeWatermarkForLateEvents = None, eventTimeWatermarkForEviction = None,
-      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right)
+      stateWatermarkPredicates = JoinStateWatermarkPredicates(), stateFormatVersion, left, right,
+      None)
   }
 
   if (stateFormatVersion < 2 && joinType != Inner) {
@@ -183,6 +188,13 @@ case class StreamingSymmetricHashJoinExec(
     joinType == Inner || joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter ||
     joinType == LeftSemi,
     errorMessageForJoinType)
+
+  outputMode.foreach { mode =>
+    if (mode == InternalOutputModes.Update) {
+      require(joinType == Inner || joinType == LeftSemi,
+        s"Update output mode is not supported for stream-stream $joinType join")
+    }
+  }
 
   // The assertion against join keys is same as hash join for batch query.
   require(leftKeys.length == rightKeys.length &&
@@ -663,7 +675,7 @@ case class StreamingSymmetricHashJoinExec(
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
-      case Some(JoinStateKeyWatermarkPredicate(expr, _)) =>
+      case Some(JoinStateKeyWatermarkPredicate(expr, _, _)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
         Predicate.create(expr, Seq.empty).eval _
@@ -672,7 +684,7 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
-      case Some(JoinStateValueWatermarkPredicate(expr, _)) =>
+      case Some(JoinStateValueWatermarkPredicate(expr, _, _)) =>
         Predicate.create(expr, inputAttributes).eval _
       case _ =>
         Predicate.create(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
@@ -759,6 +771,21 @@ case class StreamingSymmetricHashJoinExec(
         case _ => (_: InternalRow) => Iterator.empty
       }
 
+      // For V4, skip updating the matched flag on the non-outer side to avoid unnecessary
+      // state store writes. The matched flag is only needed on the outer side (for evicting
+      // unmatched rows) and on the left side of left semi (for matched-rows removal).
+      // For older versions, we do not apply the optimization as it is a behavioral change,
+      // although the optimization is valid for all versions.
+      val needToUpdateMatchedOnOtherSide = joinType match {
+        case Inner => false
+        case LeftOuter => joinSide == RightSide
+        case RightOuter => joinSide == LeftSide
+        case FullOuter => true
+        case LeftSemi => joinSide == RightSide
+        case _ => true
+      }
+      val skipUpdatingMatchedFlag = stateFormatVersion == 4 && !needToUpdateMatchedOnOtherSide
+
       val generateOutputIter: (InternalRow, Iterator[JoinedRow]) => Iterator[InternalRow] =
         joinSide match {
           case LeftSide if joinType == LeftSemi =>
@@ -804,7 +831,8 @@ case class StreamingSymmetricHashJoinExec(
               key,
               thatRow => generateJoinedRow(thisRow, thatRow),
               postJoinFilter,
-              timestampRange = computeTimestampRange(thisRow))
+              timestampRange = computeTimestampRange(thisRow),
+              skipUpdatingMatchedFlag)
           }
           val outputIter = generateOutputIter(thisRow, joinedRowIter)
           new AddingProcessedRowToStateCompletionIterator(key, thisRow, outputIter)
@@ -877,21 +905,25 @@ case class StreamingSymmetricHashJoinExec(
      */
     def removeOldState(): Long = {
       stateWatermarkPredicate match {
-        case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark)) =>
+        case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
               s.evictByKeyCondition(stateKeyWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
+              s.evictByTimestamp(
+                watermarkMsToStateTimestamp(stateWatermark),
+                prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
-        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark)) =>
+        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
               s.evictByValueCondition(stateValueWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
+              s.evictByTimestamp(
+                watermarkMsToStateTimestamp(stateWatermark),
+                prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
         case _ => 0L
       }
@@ -909,21 +941,25 @@ case class StreamingSymmetricHashJoinExec(
      */
     def removeAndReturnOldState(): Iterator[KeyToValuePair] = {
       stateWatermarkPredicate match {
-        case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark)) =>
+        case Some(JoinStateKeyWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
               s.evictAndReturnByKeyCondition(stateKeyWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictAndReturnByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
+              s.evictAndReturnByTimestamp(
+                watermarkMsToStateTimestamp(stateWatermark),
+                prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
-        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark)) =>
+        case Some(JoinStateValueWatermarkPredicate(_, stateWatermark, prevStateWatermark)) =>
           joinStateManager match {
             case s: SupportsEvictByCondition =>
               s.evictAndReturnByValueCondition(stateValueWatermarkPredicateFunc)
 
             case s: SupportsEvictByTimestamp =>
-              s.evictAndReturnByTimestamp(watermarkMsToStateTimestamp(stateWatermark))
+              s.evictAndReturnByTimestamp(
+                watermarkMsToStateTimestamp(stateWatermark),
+                prevStateWatermark.map(watermarkMsToStateTimestamp))
           }
         case _ => Iterator.empty
       }

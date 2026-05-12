@@ -162,6 +162,12 @@ case class CollectList(
     s"$prettyName($child)$ignoreNullsStr"
   }
 
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    val nullsStr = if (ignoreNulls) "" else " RESPECT NULLS"
+    s"$prettyName($distinct${child.sql})$nullsStr"
+  }
+
   override protected def withNewChildInternal(newChild: Expression): CollectList =
     copy(child = newChild)
 }
@@ -266,6 +272,12 @@ case class CollectSet(
   override def toString: String = {
     val ignoreNullsStr = if (ignoreNulls) "" else " respect nulls"
     s"$prettyName($child)$ignoreNullsStr"
+  }
+
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    val nullsStr = if (ignoreNulls) "" else " RESPECT NULLS"
+    s"$prettyName($distinct${child.sql})$nullsStr"
   }
 
   override protected def withNewChildInternal(newChild: Expression): CollectSet =

@@ -51,5 +51,5 @@ case class AvroTable(
 
   override def supportsDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 
-  override def formatName: String = "AVRO"
+  override def formatName: String = "Avro"
 }

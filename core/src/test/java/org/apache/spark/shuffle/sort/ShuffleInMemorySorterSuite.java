@@ -121,6 +121,15 @@ public class ShuffleInMemorySorterSuite {
   }
 
   @Test
+  public void testGetMemoryUsageAfterFree() {
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
+      consumer, 100, shouldUseRadixSort());
+    Assertions.assertTrue(sorter.getMemoryUsage() > 0);
+    sorter.free();
+    Assertions.assertEquals(0, sorter.getMemoryUsage());
+  }
+
+  @Test
   public void testSortingManyNumbers() {
     ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, shouldUseRadixSort());
     int[] numbersToSort = new int[128000];

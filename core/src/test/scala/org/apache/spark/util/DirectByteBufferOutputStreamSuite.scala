@@ -38,4 +38,22 @@ class DirectByteBufferOutputStreamSuite extends SparkFunSuite {
     // val arr = new Array[Byte](size)
     // b.get(arr)
   }
+
+  // write() checks capacity before reading from the source array, so we can use
+  // a small array with a large len to trigger the overflow without allocating 2GB.
+  test("write(Array[Byte]) throws instead of SIGSEGV when position + len overflows Int") {
+    val o = new DirectByteBufferOutputStream(16)
+    o.write(new Array[Byte](16), 0, 16)
+
+    // position(16) + Int.MaxValue overflows Int; should throw, not SIGSEGV in buffer.put()
+    val ex = intercept[SparkException] {
+      o.write(new Array[Byte](1), 0, Int.MaxValue)
+    }
+    assert(ex.getMessage.contains("cannot grow beyond 2GB limit"))
+    o.close()
+  }
+
+  // write(Int) has the same Long promotion fix but can only overflow when
+  // position == Int.MaxValue, which requires a 2GB buffer. Both write paths
+  // share the same ensureCapacity(Long) check covered by the test above.
 }

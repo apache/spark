@@ -142,14 +142,13 @@ class ApplyInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.Table, but is tuple",
+                r"pyarrow\.Table.*\btuple\b",
             ):
                 df.groupby("id").applyInArrow(stats, schema="id long, m double").collect()
 
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.RecordBatch, but is "
-                + "tuple",
+                r"iterator of pyarrow\.RecordBatch.*iterator of tuple",
             ):
                 df.groupby("id").applyInArrow(stats_iter, schema="id long, m double").collect()
 
@@ -171,7 +170,8 @@ class ApplyInArrowTestsMixin:
                     for func_variation in function_variations(lambda table: table):
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             df.groupby("id").applyInArrow(func_variation, schema=schema).collect()
 
@@ -196,7 +196,8 @@ class ApplyInArrowTestsMixin:
                         for func_variation in function_variations(lambda table: table):
                             with self.assertRaisesRegex(
                                 PythonException,
-                                f"Columns do not match in their data type: {expected}",
+                                "Column types of the returned data do not match specified schema. "
+                                f"Mismatch: {expected}",
                             ):
                                 df.groupby("id").applyInArrow(
                                     func_variation, schema=schema
@@ -219,7 +220,7 @@ class ApplyInArrowTestsMixin:
             for func_variation in function_variations(stats):
                 with self.assertRaisesRegex(
                     PythonException,
-                    "Column names of the returned pyarrow.Table do not match specified schema. "
+                    "Column names of the returned data do not match specified schema. "
                     "Missing: m. Unexpected: v, v2.",
                 ):
                     # stats returns three columns while here we set schema with two columns
@@ -260,8 +261,7 @@ class ApplyInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m.",
+                "Column names of the returned data do not match specified schema. Missing: m.",
             ):
                 # stats returns one column for even keys while here we set schema with two columns
                 df.groupby("id").applyInArrow(odd_means, schema="id long, m double").collect()

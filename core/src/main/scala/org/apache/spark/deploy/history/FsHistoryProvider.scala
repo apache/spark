@@ -109,6 +109,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val logDirs = conf.get(History.HISTORY_LOG_DIR)
     .split(",").map(_.trim).filter(_.nonEmpty).toSeq
 
+  private val scanDisabledPathPatterns = conf.get(History.SCAN_DISABLED_PATH_PATTERNS)
+    .map(_.r)
+
+  /** Check if scanning is disabled for a directory by matching its path against patterns. */
+  private def isScanDisabled(dir: String): Boolean = {
+    if (scanDisabledPathPatterns.isEmpty) return false
+    val qualifiedPath = {
+      val path = new Path(dir)
+      val dirFs = logDirFs(dir)
+      path.makeQualified(dirFs.getUri, dirFs.getWorkingDirectory).toString
+    }
+    scanDisabledPathPatterns.exists(_.pattern.matcher(qualifiedPath).matches())
+  }
+
   private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
   private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
   private val historyUiAdminAclsGroups = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
@@ -404,7 +418,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       load(appId)
      } catch {
       case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        loadFromFallbackLocation(appId, attemptId, logPath)
+        loadFromFallbackLocation(appId, attemptId, logPath) match {
+          case Some(wrapper) => wrapper
+          case None => return None
+        }
       case _: NoSuchElementException =>
         return None
     }
@@ -426,13 +443,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           createInMemoryStore(attempt)
       }
     } catch {
-      case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
-        if (app.attempts.head.info.appSparkVersion == "unknown") {
-          listing.synchronized {
-            listing.delete(classOf[ApplicationInfoWrapper], appId)
-          }
-        }
-        return None
       case _: FileNotFoundException =>
         return None
     }
@@ -453,18 +463,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
-    : ApplicationInfoWrapper = {
-    val date = new Date(0)
-    val lastUpdate = new Date()
-    val (logSourceName, logSourceFullPath) = getLogDirInfo(logPath)
-    val info = ApplicationAttemptInfo(
-      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown",
-      Some(logSourceName), Some(logSourceFullPath))
-    addListing(new ApplicationInfoWrapper(
-      ApplicationInfo(appId, appId, None, None, None, None, List.empty),
-      List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None,
-        logSourceName, logSourceFullPath))))
-    load(appId)
+    : Option[ApplicationInfoWrapper] = {
+    // Call mergeApplicationListing to populate accurate metadata immediately.
+    // logSourceFullPath is empty because on-demand loading has no prior knowledge of the
+    // source directory; resolveLogPath will scan all directories to find the log.
+    val (dirFs, fullPath) = resolveLogPath(logPath, "")
+    try {
+      EventLogFileReader(dirFs, dirFs.getFileStatus(fullPath)).foreach { reader =>
+        mergeApplicationListing(reader, clock.getTimeMillis(), enableOptimizations = true)
+      }
+      Some(load(appId))
+    } catch {
+      case _: FileNotFoundException | _: NoSuchElementException =>
+        None
+    }
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {
@@ -561,10 +573,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private[history] def checkForLogs(): Unit = {
     val newLastScanTime = clock.getTimeMillis()
     val allNotStale = mutable.HashSet[String]()
+    val skippedDirs = mutable.ArrayBuffer[String]()
 
     logDirs.foreach { dir =>
       try {
-        checkForLogsInDir(dir, newLastScanTime, allNotStale)
+        if (isScanDisabled(dir)) {
+          logDebug(log"Skipping scan for directory ${MDC(HISTORY_DIR, dir)}" +
+            log" (scan disabled for this directory)")
+          skippedDirs += dir
+        } else {
+          checkForLogsInDir(dir, newLastScanTime, allNotStale)
+        }
       } catch {
         case e: IOException =>
           logError(log"Error checking for logs in directory ${MDC(HISTORY_DIR, dir)}", e)
@@ -574,6 +593,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Delete all information about applications whose log files disappeared from storage.
     // This is done after scanning ALL directories to avoid incorrectly marking entries from
     // other directories as stale.
+    // Entries from scan-disabled directories are excluded from stale detection because
+    // they are never scanned and their lastProcessed time is never updated.
     val stale = listing.synchronized {
       KVUtils.viewToSeq(listing.view(classOf[LogInfo])
         .index("lastProcessed")
@@ -581,6 +602,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
     stale.filterNot(isProcessing)
       .filterNot(info => allNotStale.contains(info.logPath))
+      .filterNot(info => skippedDirs.exists(dir =>
+        logDirForPath(new Path(info.logPath)) == dir))
       .foreach { log =>
         log.appId.foreach { appId =>
           cleanAppData(appId, log.attemptId, log.logPath)

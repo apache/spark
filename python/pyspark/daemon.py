@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import uuid
-import numbers
 import os
 import signal
 import select
@@ -28,21 +27,23 @@ import faulthandler
 from errno import EINTR, EAGAIN
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
+from types import FrameType
+from typing import Any, Optional
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.util import enable_faulthandler
 from pyspark.errors import PySparkRuntimeError
 
 
-def compute_real_exit_code(exit_code):
-    # SystemExit's code can be integer or string, but os._exit only accepts integers
-    if isinstance(exit_code, numbers.Integral):
+def compute_real_exit_code(exit_code: Any) -> int:
+    # SystemExit's code can be anything, but os._exit only accepts integer
+    if isinstance(exit_code, int):
         return exit_code
     else:
         return 1
 
 
-def worker(sock, authenticated):
+def worker(sock: socket.socket, authenticated: bool) -> int:
     """
     Called by a worker process after the fork().
     """
@@ -109,7 +110,7 @@ def worker(sock, authenticated):
     return exit_code
 
 
-def manager():
+def manager() -> None:
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
@@ -146,7 +147,7 @@ def manager():
         write_int(listen_port, stdout_bin)
     stdout_bin.flush()
 
-    def shutdown(code):
+    def shutdown(code: int) -> None:
         if socket_path is not None and os.path.exists(socket_path):
             os.remove(socket_path)
         signal.signal(SIGTERM, SIG_DFL)
@@ -154,7 +155,7 @@ def manager():
         os.kill(0, SIGHUP)
         sys.exit(code)
 
-    def handle_sigterm(*args):
+    def handle_sigterm(signal_number: int, frame: Optional[FrameType]) -> None:
         shutdown(1)
 
     signal.signal(SIGTERM, handle_sigterm)  # Gracefully exit on SIGTERM

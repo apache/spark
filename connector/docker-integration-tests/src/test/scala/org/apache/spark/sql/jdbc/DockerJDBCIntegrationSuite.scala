@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.net.ServerSocket
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -37,7 +36,6 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
 import org.apache.spark.util.Utils.timeStringAsSeconds
@@ -101,7 +99,7 @@ abstract class DatabaseOnDocker {
 }
 
 abstract class DockerJDBCIntegrationSuite
-  extends QueryTest with SharedSparkSession with Eventually with DockerIntegrationFunSuite {
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -120,18 +118,12 @@ abstract class DockerJDBCIntegrationSuite
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
-  protected lazy val externalPort: Int = {
-    val sock = new ServerSocket(0)
-    val port = sock.getLocalPort
-    sock.close()
-    port
-  }
+  protected var externalPort: Int = -1
   private var container: CreateContainerResponse = _
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
-    super.beforeAll()
     try {
       val config = DefaultDockerClientConfig.createDefaultConfigBuilder.build
       val httpClient = new ZerodepDockerHttpClient.Builder()
@@ -181,7 +173,7 @@ abstract class DockerJDBCIntegrationSuite
         .newHostConfig()
         .withNetworkMode("bridge")
         .withPrivileged(db.privileged)
-        .withPortBindings(PortBinding.parse(s"$externalPort:${db.jdbcPort}"))
+        .withPortBindings(PortBinding.parse(s"0:${db.jdbcPort}"))
 
       if (db.usesIpc) {
         hostConfig.withIpcMode("host")
@@ -209,6 +201,12 @@ abstract class DockerJDBCIntegrationSuite
         val response = docker.inspectContainerCmd(container.getId).exec()
         assert(response.getState.getRunning)
       }
+      // Resolve the actual port assigned by Docker to avoid TOCTOU race conditions
+      externalPort = docker.inspectContainerCmd(container.getId).exec()
+        .getNetworkSettings.getPorts.getBindings
+        .get(ExposedPort.tcp(db.jdbcPort)).head.getHostPortSpec.toInt
+      // Initialize SparkSession after port is known so sparkConf can read the correct url
+      super.beforeAll()
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       sleepBeforeTesting()
       var conn: Connection = null

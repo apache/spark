@@ -18,7 +18,7 @@ from enum import Enum
 import json
 import os
 import socket
-from typing import Any, Dict, List, Union, Optional, Tuple, Iterator
+from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -516,14 +516,11 @@ class StatefulProcessorApiClient:
                 else:
                     return v
 
-            converted = [normalize_value(v) for v in data]
+            converted = tuple(normalize_value(v) for v in data)
         else:
-            converted = list(data)
+            converted = data
 
-        field_names = [f.name for f in schema.fields]
-        row_value = Row(**dict(zip(field_names, converted)))
-
-        return self.pickleSer.dumps(schema.toInternal(row_value))
+        return self.pickleSer.dumps(schema.toInternal(converted))
 
     def _deserialize_from_bytes(self, value: bytes) -> Any:
         return self.pickleSer.loads(value)
@@ -537,11 +534,11 @@ class StatefulProcessorApiClient:
             pd.DataFrame(state, columns=column_names), schema
         )
         batch = pa.RecordBatch.from_pandas(pandas_df)
-        self.serializer.dump_stream(iter([batch]), self.sockfile)
+        self.serializer.dump_stream([batch], cast(IO[bytes], self.sockfile))
         self.sockfile.flush()
 
     def _read_arrow_state(self) -> Any:
-        return self.serializer.load_stream(self.sockfile)
+        return self.serializer.load_stream(cast(IO[bytes], self.sockfile))
 
     def _send_list_state(self, schema: StructType, state: List[Tuple]) -> None:
         for value in state:

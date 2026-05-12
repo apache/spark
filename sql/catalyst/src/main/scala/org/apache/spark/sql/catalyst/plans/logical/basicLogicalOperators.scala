@@ -941,8 +941,7 @@ object View {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan,
-    forPipeSQL: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
@@ -1912,6 +1911,40 @@ object SubqueryAlias {
   }
 }
 
+sealed trait SampleMethod extends Serializable
+object SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row independently selected. No I/O savings. */
+  case object Bernoulli extends SampleMethod
+  /** System-level sampling (SYSTEM). Entire partitions/splits included or skipped. */
+  case object System extends SampleMethod
+}
+
+object Sample {
+  /**
+   * Convenience constructor that wraps a concrete seed in [[Some]].
+   * Use the case-class constructor directly with [[None]] when no seed
+   * was specified and a random seed should be generated at execution time.
+   */
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child)
+  }
+
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan,
+      sampleMethod: SampleMethod): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child, sampleMethod)
+  }
+}
+
 /**
  * Sample the dataset.
  *
@@ -1919,15 +1952,19 @@ object SubqueryAlias {
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
- * @param seed the random seed
+ * @param seed the random seed. `Some(seed)` when the user explicitly specified a seed
+ *             (SQL `REPEATABLE` clause or programmatic API), `None` when no seed was
+ *             specified and a random seed should be generated at execution time.
  * @param child the LogicalPlan
+ * @param sampleMethod the sampling method (Bernoulli or System)
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
-    child: LogicalPlan) extends UnaryNode {
+    seed: Option[Long],
+    child: LogicalPlan,
+    sampleMethod: SampleMethod = SampleMethod.Bernoulli) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon
   val fraction = upperBound - lowerBound

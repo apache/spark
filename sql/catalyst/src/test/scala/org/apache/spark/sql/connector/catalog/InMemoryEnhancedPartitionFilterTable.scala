@@ -76,11 +76,11 @@ class InMemoryEnhancedPartitionFilterTable(
     override def supportsIterativePushdown(): Boolean = true
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-      val partNames = InMemoryEnhancedPartitionFilterTable.this.partCols.flatMap(_.toSeq).toSet
+      val partPaths = InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.mkString(".")).toSet
       def referencesOnlyPartitionCols(p: Predicate): Boolean =
-        p.references().forall(ref => partNames.contains(ref.fieldNames().mkString(".")))
+        p.references().forall(ref => partPaths.contains(ref.fieldNames().mkString(".")))
       def referencesOnlyDataCols(p: Predicate): Boolean =
-        p.references().forall(ref => !partNames.contains(ref.fieldNames().mkString(".")))
+        p.references().forall(ref => !partPaths.contains(ref.fieldNames().mkString(".")))
 
       val returned = ArrayBuffer.empty[Predicate]
 
@@ -120,10 +120,11 @@ class InMemoryEnhancedPartitionFilterTable(
       val partNames =
         InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.toSeq.quoted)
           .toImmutableArraySeq
-      val partNamesSet = InMemoryEnhancedPartitionFilterTable.this.partCols.flatMap(_.toSeq).toSet
+      val partPathSet =
+        InMemoryEnhancedPartitionFilterTable.this.partCols.map(_.mkString(".")).toSet
       // Only partition predicates can be used for partition key filtering (filtersToKeys).
       val firstPassPartitionPredicates = firstPassPushedPredicates.filter { p =>
-        p.references().forall(ref => partNamesSet.contains(ref.fieldNames().mkString(".")))
+        p.references().forall(ref => partPathSet.contains(ref.fieldNames().mkString(".")))
       }
       val allKeys = allPartitions.map(_.asInstanceOf[BufferedRows].key)
       val matchingKeys = InMemoryTableWithV2Filter.filtersToKeys(

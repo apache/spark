@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal.connector
 
+import java.util.Objects
+
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, IdentityColumnSpec}
 import org.apache.spark.sql.types.DataType
 
@@ -29,4 +31,37 @@ case class ColumnImpl(
     defaultValue: ColumnDefaultValue,
     generationExpression: String,
     identityColumnSpec: IdentityColumnSpec,
-    metadataInJSON: String) extends Column
+    metadataInJSON: String,
+    override val id: String = null) extends Column {
+
+  // [[id]] is excluded from [[equals]] and [[hashCode]] because IDs only live on [[Column]],
+  // not on [[StructField]] metadata. Any code path that round-trips through [[StructType]]
+  // (e.g. [[CatalogV2Util.v2ColumnsToStructType]] followed by [[structTypeToV2Columns]])
+  // drops the ID, producing a [[Column]] with id=null for the same logical column. Including
+  // [[id]] in equality would cause spurious mismatches across these round-trips.
+  // Column ID validation is performed separately by [[V2TableUtil.validateColumnIds]].
+  override def equals(other: Any): Boolean = other match {
+    case that: ColumnImpl =>
+      name == that.name &&
+        dataType == that.dataType &&
+        nullable == that.nullable &&
+        comment == that.comment &&
+        defaultValue == that.defaultValue &&
+        generationExpression == that.generationExpression &&
+        identityColumnSpec == that.identityColumnSpec &&
+        metadataInJSON == that.metadataInJSON
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hash(
+      name,
+      dataType,
+      Boolean.box(nullable),
+      comment,
+      defaultValue,
+      generationExpression,
+      identityColumnSpec,
+      metadataInJSON)
+  }
+}

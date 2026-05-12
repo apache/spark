@@ -258,39 +258,6 @@ object DataTypeUtils {
   }
 
   /**
-   * Extracts all struct field paths from a nested StructType.
-   */
-  def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
-  Seq[Seq[String]] = {
-    schema.flatMap { field =>
-      val fieldPath = basePath :+ field.name
-      field.dataType match {
-        case struct: StructType =>
-          fieldPath +: extractAllFieldPaths(struct, fieldPath)
-        case _ =>
-          Seq(fieldPath)
-      }
-    }
-  }
-
-  /**
-   * Extracts only leaf-level field paths from a nested StructType.
-   * Unlike extractAllFieldPaths, this method does not include intermediate struct paths.
-   */
-  def extractLeafFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
-  Seq[Seq[String]] = {
-    schema.flatMap { field =>
-      val fieldPath = basePath :+ field.name
-      field.dataType match {
-        case struct: StructType =>
-          extractLeafFieldPaths(struct, fieldPath)
-        case _ =>
-          Seq(fieldPath)
-      }
-    }
-  }
-
-  /**
    * Returns true if the two StringTypes have the same base type, i.e., both are [[CharType]],
    * both are [[VarcharType]], or both are plain [[StringType]].
    */
@@ -331,6 +298,17 @@ object DataTypeUtils {
       case charType: CharType => charType.collation.isEmpty
       case varcharType: VarcharType => varcharType.collation.isEmpty
       case st: StringType => st.eq(StringType)
+      case _ => false
+    }
+  }
+
+  /**
+   * Returns true if the given data type contains any STRING/CHAR/VARCHAR with explicit collation
+   * (including explicit `UTF8_BINARY`), recursively checking nested types.
+   */
+  def hasNonDefaultStringCharOrVarcharType(dataType: DataType): Boolean = {
+    dataType.existsRecursively {
+      case st: StringType => !isDefaultStringCharOrVarcharType(st)
       case _ => false
     }
   }
