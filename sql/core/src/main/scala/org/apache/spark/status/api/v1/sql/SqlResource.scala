@@ -76,7 +76,7 @@ private[v1] class SqlResource extends BaseAppResource {
    * Accepts DataTables server-side parameters (start, length, order, search)
    * and returns paginated results with recordsTotal/recordsFiltered counts.
    *
-   * When `groupSubExecution=true` (default = `spark.ui.sql.groupSubExecutionEnabled`),
+   * When `groupSubExecution=true` (default = `spark.ui.groupSQLSubExecutionEnabled`),
    * pagination is over root executions only and each row carries its sub-executions
    * inline as `subExecutions: [...]`. Sub-executions whose root is missing from the
    * filtered set (orphans) are surfaced as roots so they don't disappear.
@@ -103,9 +103,11 @@ private[v1] class SqlResource extends BaseAppResource {
         .filter(_.nonEmpty)
       val needsFilter = searchValue.isDefined || statusFilter.isDefined
 
-      // Always load all execs once. The KVStore-level pagination optimization
-      // referenced in earlier comments is no longer effective once grouping is
-      // enabled because we need the full set to identify roots and orphans.
+      // Always load all execs once. We need the full set to (a) identify orphan
+      // sub-executions whose root is filtered out and (b) count root rows for
+      // `recordsTotal`. `sqlStore.executionsList()` is already a full
+      // materialization, so there is no separate "KVStore-pagination" path being
+      // disabled here.
       val allExecs = sqlStore.executionsList()
 
       val filteredExecs = if (needsFilter) {
@@ -125,15 +127,8 @@ private[v1] class SqlResource extends BaseAppResource {
         allExecs
       }
 
-      // Split filteredExecs into root rows and a sub-execution map. A root row is
-      // either an execution whose id equals its rootExecutionId, or an orphan sub
-      // whose root parent is absent from the filtered set.
       val (rootRows, subsByRoot) = if (groupSubExec) {
-        val filteredIds = filteredExecs.iterator.map(_.executionId).toSet
-        val (roots, subs) = filteredExecs.partition { e =>
-          e.executionId == e.rootExecutionId || !filteredIds.contains(e.rootExecutionId)
-        }
-        (roots, subs.groupBy(_.rootExecutionId))
+        SqlResource.partitionRoots(filteredExecs)
       } else {
         (filteredExecs, Map.empty[Long, Seq[SQLExecutionUIData]])
       }
@@ -170,11 +165,8 @@ private[v1] class SqlResource extends BaseAppResource {
       // "Showing X to Y of Z entries" matching the rows the user actually sees.
       val recordsTotal = if (groupSubExec) {
         if (needsFilter) {
-          // Re-derive root rows from the unfiltered set
-          val allIds = allExecs.iterator.map(_.executionId).toSet
-          allExecs.count { e =>
-            e.executionId == e.rootExecutionId || !allIds.contains(e.rootExecutionId)
-          }
+          // Re-derive root rows from the unfiltered set using the same predicate
+          SqlResource.partitionRoots(allExecs)._1.size
         } else {
           rootRows.size
         }
@@ -319,4 +311,23 @@ private[v1] class SqlResource extends BaseAppResource {
     }
   }
 
+}
+
+private[v1] object SqlResource {
+
+  /**
+   * Split a set of executions into root rows and a sub-execution map. A root row is
+   * either an execution whose id equals its rootExecutionId, or an orphan sub whose
+   * root parent is absent from the input set. Called on the filtered set (for paging)
+   * and on the full set (for `recordsTotal`), so the predicate lives in one place
+   * rather than being inlined twice.
+   */
+  def partitionRoots(execs: Seq[SQLExecutionUIData])
+      : (Seq[SQLExecutionUIData], Map[Long, Seq[SQLExecutionUIData]]) = {
+    val ids = execs.iterator.map(_.executionId).toSet
+    val (roots, subs) = execs.partition { e =>
+      e.executionId == e.rootExecutionId || !ids.contains(e.rootExecutionId)
+    }
+    (roots, subs.groupBy(_.rootExecutionId))
+  }
 }

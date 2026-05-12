@@ -153,7 +153,8 @@ $(document).ready(function () {
         orderable: false,
         render: function (data, type) {
           if (type !== "display" || !data) return data || "";
-          return '<span title="' + data + '">' + data.substring(0, 8) + '...</span>';
+          var safe = escapeHtml(data);
+          return '<span title="' + safe + '">' + escapeHtml(data.substring(0, 8)) + '...</span>';
         }
       },
       {
@@ -217,7 +218,9 @@ $(document).ready(function () {
           if (type !== "display") return "";
           var subs = row.subExecutions || [];
           if (subs.length === 0) return "";
-          return '<a href="#" class="toggle-sub-exec">' +
+          var childId = "sub-exec-" + row.id;
+          return '<a href="#" class="toggle-sub-exec" role="button" ' +
+            'aria-expanded="false" aria-controls="' + childId + '">' +
             '+' + subs.length + ' sub</a>';
         }
       });
@@ -262,24 +265,28 @@ $(document).ready(function () {
         if (dtRow.child.isShown()) {
           dtRow.child.hide();
           tr.removeClass("shown");
-          $(this).text("+" + subs.length + " sub");
+          $(this).text("+" + subs.length + " sub").attr("aria-expanded", "false");
         } else {
           var basePath = uiRoot + appBasePath;
-          var html = '<table class="table table-sm table-bordered mb-0 sub-exec-table">';
+          var childId = "sub-exec-" + (rowData && rowData.id);
+          var html = '<table id="' + childId +
+            '" class="table table-sm table-bordered mb-0 sub-exec-table">';
           html += '<thead><tr><th>ID</th><th>Status</th><th>Description</th>' +
             '<th>Duration</th><th>Succeeded Jobs</th></tr></thead><tbody>';
           subs.forEach(function (child) {
             html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' +
               child.id + '">' + child.id + '</a></td>';
             html += '<td>' + statusBadge(child.status) + '</td>';
-            html += '<td>' + escapeHtml(child.description || "") + '</td>';
+            html += '<td>' + descriptionHtml({
+              id: child.id, description: child.description || ""
+            }) + '</td>';
             html += '<td>' + formatDurationSql(child.duration) + '</td>';
             html += '<td>' + jobIdLinks(child.jobIds || []) + '</td></tr>';
           });
           html += '</tbody></table>';
           dtRow.child(html).show();
           tr.addClass("shown");
-          $(this).text("\u2212" + subs.length + " sub");
+          $(this).text("\u2212" + subs.length + " sub").attr("aria-expanded", "true");
         }
       });
     }
