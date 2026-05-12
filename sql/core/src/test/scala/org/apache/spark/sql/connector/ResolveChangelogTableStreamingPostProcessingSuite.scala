@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.Inline
 import org.apache.spark.sql.catalyst.plans.logical.{
@@ -46,9 +44,7 @@ import org.apache.spark.sql.types.LongType
  *     -> [Project (update relabel)]
  *     -> Project (drop helper columns)
  */
-class ResolveChangelogTableStreamingPostProcessingSuite
-    extends SharedSparkSession
-    with BeforeAndAfterEach {
+class ResolveChangelogTableStreamingPostProcessingSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_streaming_pp"
   private val testTableName = "events"

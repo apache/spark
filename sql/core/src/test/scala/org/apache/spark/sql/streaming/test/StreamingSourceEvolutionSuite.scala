@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterEach, Tag}
+import org.scalatest.Tag
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  * Test suite for streaming source naming and validation.
  * Tests cover the naming API, validation rules, and resolution pipeline.
  */
-class StreamingSourceEvolutionSuite extends StreamTest with BeforeAndAfterEach {
+class StreamingSourceEvolutionSuite extends StreamTest {
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
