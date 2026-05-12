@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
@@ -31,7 +31,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * metadata-only tables and Spark reads / writes them via the V1 data-source path.
  * View-related paths live in [[DataSourceV2MetadataViewSuite]].
  */
-class DataSourceV2MetadataTableSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2MetadataTableSuite extends SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf

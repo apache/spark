@@ -22,7 +22,7 @@ import java.util.Collections
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
@@ -48,8 +48,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * correctly transforms the plan and produces the expected output.
  */
 class ResolveChangelogTablePostProcessingSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with BeforeAndAfterEach {
 
   private val catalogName = "cdc_test_catalog"

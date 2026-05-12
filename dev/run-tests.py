@@ -28,7 +28,6 @@ from contextlib import contextmanager
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
 from sparktestsupport.utils import (
-    check_upgraded_pom_dependencies,
     determine_dangling_python_tests,
     determine_modules_for_files,
     determine_modules_to_test,
@@ -560,18 +559,10 @@ def main():
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_ref=os.environ["APACHE_SPARK_REF"]
                 )
-                if "pom.xml" in changed_files:
-                    check_upgraded_pom_dependencies(
-                        os.environ["GITHUB_SHA"], target_ref=os.environ["APACHE_SPARK_REF"]
-                    )
             elif is_github_prev_sha:
                 changed_files = identify_changed_files_from_git_commits(
                     os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
                 )
-                if "pom.xml" in changed_files:
-                    check_upgraded_pom_dependencies(
-                        os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
-                    )
 
             dangling_python_tests = determine_dangling_python_tests(changed_files)
             if dangling_python_tests:

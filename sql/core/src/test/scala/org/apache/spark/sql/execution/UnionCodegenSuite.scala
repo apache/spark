@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
  * Tests for `UnionExec` whole-stage codegen fusion: plan-shape assertions,
  * correctness, type widening, metrics, and fallbacks.
  */
-class UnionCodegenSuite extends QueryTest with SharedSparkSession {
+class UnionCodegenSuite extends SharedSparkSession {
 
   // Union codegen fusion is off by default; turn it on for this suite.
   override protected def sparkConf: SparkConf =

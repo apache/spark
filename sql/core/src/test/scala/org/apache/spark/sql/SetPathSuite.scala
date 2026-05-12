@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -212,7 +211,7 @@ class SetPathSuite extends SharedSparkSession {
         },
         condition = "DUPLICATE_SQL_PATH_ENTRY",
         sqlState = Some("42732"),
-        parameters = Map("pathEntry" -> "current_schema"))
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
     }
   }
 
@@ -232,17 +231,16 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("PATH enabled: literal + CURRENT_SCHEMA collision is tolerated (USE-state dependent)") {
-    // SET PATH only rejects static duplicates (literal-vs-literal, current_schema repeated).
-    // A literal that happens to match the live current_schema is not flagged: a later
-    // `USE SCHEMA` may make them diverge, and at lookup the first match wins anyway.
-    // `system.builtin` is included so `current_path()` itself remains resolvable.
+  test("PATH enabled: duplicate after expanding CURRENT_SCHEMA") {
     withPathEnabled {
       sql("USE spark_catalog.default")
-      sql("SET PATH = spark_catalog.default, current_schema, system.builtin")
-      val entries = pathEntries(currentPath())
-      assert(entries === Seq("spark_catalog.default", "spark_catalog.default", "system.builtin"),
-        s"Expected literal + resolved CURRENT_SCHEMA preserved; got: $entries")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = spark_catalog.default, current_schema")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
     }
   }
 
@@ -255,7 +253,7 @@ class SetPathSuite extends SharedSparkSession {
         },
         condition = "DUPLICATE_SQL_PATH_ENTRY",
         sqlState = Some("42732"),
-        parameters = Map("pathEntry" -> "current_schema"))
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
     }
   }
 
@@ -567,262 +565,6 @@ class SetPathSuite extends SharedSparkSession {
       } finally {
         sql("DROP TABLE IF EXISTS path_miss.hidden")
         sql("DROP SCHEMA IF EXISTS path_miss")
-      }
-    }
-  }
-
-  // --- spark.sql.defaultPath (SQLConf.DEFAULT_PATH) ---
-  // The conf carries the SET PATH grammar; sessionPathEntries falls back to it lazily
-  // when no `SET PATH` has been issued, mirroring how `currentCatalog` falls back to
-  // [[SQLConf.DEFAULT_CATALOG]].
-
-  test("DEFAULT_PATH conf: lazy fallback when no SET PATH issued") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "spark_catalog.default, system.builtin") {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      catalogManager.clearSessionPath()
-      try {
-        val entries = pathEntries(currentPath())
-        assert(entries == Seq("spark_catalog.default", "system.builtin"),
-          s"Expected DEFAULT_PATH conf to drive current_path(); got: $entries")
-        assert(catalogManager.storedSessionPathEntries.isEmpty,
-          "DEFAULT_PATH lookup must not write to the in-memory stored session path")
-      } finally {
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
-      }
-    }
-  }
-
-  test("DEFAULT_PATH conf: explicit SET PATH overrides the conf") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "system.builtin, system.session") {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      try {
-        sql("SET PATH = system.session, system.builtin")
-        val entries = pathEntries(currentPath())
-        assert(entries == Seq("system.session", "system.builtin"),
-          s"Expected SET PATH to win over DEFAULT_PATH conf; got: $entries")
-      } finally {
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
-      }
-    }
-  }
-
-  test("DEFAULT_PATH conf: SET PATH = DEFAULT_PATH expands to the conf value") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "system.session, system.builtin, current_schema") {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      try {
-        sql("SET PATH = DEFAULT_PATH")
-        val entries = pathEntries(currentPath())
-        assert(entries.head.contains("system.session"),
-          s"DEFAULT_PATH expansion should follow conf order (session first); got: $entries")
-        assert(catalogManager.storedSessionPathEntries.isDefined,
-          "After SET PATH the in-memory stored session path should be populated")
-      } finally {
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
-      }
-    }
-  }
-
-  test("DEFAULT_PATH conf: cycle break -- inner DEFAULT_PATH falls back to builtin order") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "DEFAULT_PATH",
-        // Pin order conf to "first" so the spark-builtin default ordering is observable.
-        SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "first") {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      catalogManager.clearSessionPath()
-      try {
-        val entries = pathEntries(currentPath())
-        assert(entries.head.contains("system.session"),
-          s"Inner DEFAULT_PATH should resolve to builtin order seeded by the order conf " +
-            s"('first' -> session leading); got: $entries")
-      } finally {
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
-      }
-    }
-  }
-
-  test("DEFAULT_PATH conf: invalid value rejected on SET spark.sql.defaultPath") {
-    withPathEnabled {
-      val e = intercept[SparkIllegalArgumentException] {
-        sql("SET spark.sql.defaultPath = this is not a path")
-      }
-      assert(e.getCondition.startsWith("INVALID_CONF_VALUE"), e.getMessage)
-    }
-  }
-
-  test("DEFAULT_PATH conf: PATH keyword is rejected on SET spark.sql.defaultPath") {
-    withPathEnabled {
-      val e = intercept[SparkIllegalArgumentException] {
-        sql("SET spark.sql.defaultPath = PATH, system.builtin")
-      }
-      assert(e.getCondition.startsWith("INVALID_CONF_VALUE"), e.getMessage)
-    }
-  }
-
-  test("DEFAULT_PATH conf: PATH disabled returns no fallback") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "false",
-        SQLConf.DEFAULT_PATH.key -> "system.session, system.builtin") {
-      val catalogManager = spark.sessionState.catalogManager
-      assert(catalogManager.sessionPathEntries.isEmpty,
-        "DEFAULT_PATH conf must not take effect when PATH is disabled")
-    }
-  }
-
-  // --- Path-driven security check (built on the lazy DEFAULT_PATH fallback) ---
-  // The "block temp function shadowing builtin" check is now driven by the live PATH, so
-  // changes via SET PATH or DEFAULT_PATH take effect even when the legacy order conf is
-  // left at its default.
-
-  test("path-driven security check: SET PATH putting session before builtin blocks temp " +
-      "function with a builtin name") {
-    withPathEnabled {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      try {
-        // Default `sessionFunctionResolutionOrder` is "second" (builtin first), but SET PATH
-        // overrides that to put session first. The security check must reflect the live path.
-        sql("SET PATH = system.session, system.builtin")
-        val e = intercept[AnalysisException] {
-          sql("CREATE TEMPORARY FUNCTION count() RETURNS INT RETURN 1")
-        }
-        assert(e.getCondition == "ROUTINE_ALREADY_EXISTS", e.getMessage)
-      } finally {
-        sql("DROP TEMPORARY FUNCTION IF EXISTS session.count")
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
-      }
-    }
-  }
-
-  test("path-driven security check: DEFAULT_PATH conf putting session before builtin " +
-      "blocks temp function with a builtin name (no SET PATH issued)") {
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "system.session, system.builtin") {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      catalogManager.clearSessionPath()
-      try {
-        // Order conf is left at its default ("second"). The path-driven gate must read
-        // DEFAULT_PATH and fire the security check for unqualified temp/builtin collisions.
-        val e = intercept[AnalysisException] {
-          sql("CREATE TEMPORARY FUNCTION count() RETURNS INT RETURN 1")
-        }
-        assert(e.getCondition == "ROUTINE_ALREADY_EXISTS", e.getMessage)
-      } finally {
-        sql("DROP TEMPORARY FUNCTION IF EXISTS session.count")
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
-      }
-    }
-  }
-
-  test("PATH enabled: SET PATH with only user schemas does not implicitly resolve builtins") {
-    withPathEnabled {
-      sql("CREATE SCHEMA IF NOT EXISTS only_user_on_path")
-      try {
-        sql("SET PATH = spark_catalog.only_user_on_path")
-        val e = intercept[AnalysisException] {
-          sql("SELECT abs(-1)").collect()
-        }
-        assert(e.getCondition == "UNRESOLVED_ROUTINE", e.getMessage)
-      } finally {
-        sql("DROP SCHEMA IF EXISTS only_user_on_path")
-      }
-    }
-  }
-
-  test("single-pass: count(*) rewrite respects PATH temp-before-builtin gate") {
-    withSQLConf(
-      SQLConf.PATH_ENABLED.key -> "true",
-      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      sql("SET PATH = system.builtin, system.session")
-      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x")
-      try {
-        sql("SET PATH = system.session, system.builtin")
-        checkAnswer(
-          sql("SELECT count(*) FROM VALUES (CAST(NULL AS INT)) AS t(c)"),
-          Row(null))
-      } finally {
-        sql("DROP TEMPORARY FUNCTION IF EXISTS session.count")
-      }
-    }
-  }
-
-  test("PATH enabled: explicit SET PATH with system.session AFTER a user catalog still " +
-      "reaches temp functions") {
-    // Explicit paths are honored as written: placing `system.session` after a user catalog
-    // is the user's authorization for unqualified temp functions to resolve. Contrast with
-    // the implicit (no SET PATH, no DEFAULT_PATH) form, which preserves the security property
-    // of the seeded default path.
-    withPathEnabled {
-      sql("CREATE SCHEMA IF NOT EXISTS path_interleaved_user")
-      try {
-        sql("CREATE TEMPORARY FUNCTION path_interleaved_temp() RETURNS INT RETURN 7")
-        try {
-          sql("SET PATH = system.builtin, spark_catalog.path_interleaved_user, system.session")
-          checkAnswer(sql("SELECT path_interleaved_temp()"), Row(7))
-        } finally {
-          sql("DROP TEMPORARY FUNCTION IF EXISTS path_interleaved_temp")
-        }
-      } finally {
-        sql("DROP SCHEMA IF EXISTS path_interleaved_user")
-      }
-    }
-  }
-
-  test("PATH enabled: SET PATH with user schema before system.builtin still resolves builtins") {
-    // Exercises systemFunctionKindsFromPath with a user-catalog entry preceding
-    // system.builtin: the helper flat-scans the path, so Builtin still appears
-    // in the kinds list and unqualified `abs` resolves.
-    withPathEnabled {
-      sql("CREATE SCHEMA IF NOT EXISTS path_user_before_builtin")
-      try {
-        sql("SET PATH = spark_catalog.path_user_before_builtin, system.builtin")
-        // `abs` is a builtin; if Builtin did not appear in the kinds list,
-        // unqualified `abs(-1)` would fail with UNRESOLVED_ROUTINE.
-        checkAnswer(sql("SELECT abs(-1)"), Row(1))
-      } finally {
-        sql("DROP SCHEMA IF EXISTS path_user_before_builtin")
-      }
-    }
-  }
-
-  test("DEFAULT_PATH conf: duplicate entries are tolerated (first-match resolution)") {
-    // Lookup uses first-match resolution, so redundant entries on DEFAULT_PATH are dead code
-    // rather than an error. (Contrast with SET PATH, which still rejects static duplicates as
-    // a user-input typo guard.) This avoids a UX cliff where a USE SCHEMA could later wedge
-    // every unqualified function lookup with DUPLICATE_SQL_PATH_ENTRY.
-    withSQLConf(
-        SQLConf.PATH_ENABLED.key -> "true",
-        SQLConf.DEFAULT_PATH.key -> "system.builtin, system.builtin") {
-      val catalogManager = spark.sessionState.catalogManager
-      val priorSessionPath = catalogManager.storedSessionPathEntries
-      catalogManager.clearSessionPath()
-      try {
-        val entries = pathEntries(currentPath())
-        assert(entries == Seq("system.builtin", "system.builtin"),
-          s"DEFAULT_PATH duplicates should pass through to current_path(); got: $entries")
-        // Sanity: unqualified resolution still works (the second `system.builtin` is dead).
-        checkAnswer(sql("SELECT abs(-1)"), Row(1))
-      } finally {
-        catalogManager.clearSessionPath()
-        priorSessionPath.foreach(catalogManager.setSessionPath)
       }
     }
   }

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
 import org.apache.spark.sql.catalyst.plans.logical.{CompoundPlanStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.connector.catalog.PathElement
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -108,18 +107,6 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     val ctx = parser.singleRoutineParamList()
     withErrorHandling(ctx, Some(sqlText)) {
       astBuilder.visitSingleRoutineParamList(ctx)
-    }
-  }
-
-  /**
-   * Parse the right-hand side of `SET PATH = ...` (a comma-separated list of path elements).
-   * Used by [[org.apache.spark.sql.connector.catalog.CatalogManager]] to honor the
-   * [[SQLConf.DEFAULT_PATH]] conf without re-implementing the SET PATH grammar.
-   */
-  private[sql] def parsePathElements(sqlText: String): Seq[PathElement] = parse(sqlText) { parser =>
-    val ctx = parser.singlePathElementList()
-    withErrorHandling(ctx, Some(sqlText)) {
-      astBuilder.visitSinglePathElementList(ctx)
     }
   }
 

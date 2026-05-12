@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util.concurrent.atomic.AtomicReference
-
 import scala.collection.mutable
 import scala.util.Try
 
@@ -26,7 +24,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -54,12 +51,6 @@ class CatalogManager(
 
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
   val tempVariableManager: TempVariableManager = new TempVariableManager
-
-  // Wire `SessionCatalog`'s fast-path kinds to the live SQL PATH. The kinds list itself is
-  // pure data conversion (system entries from the path, in path order); the *decision* to use
-  // path-order kinds for unqualified lookups lives at the Strategy layer (see callers of
-  // [[CatalogManager.systemFunctionKindsFromPath]]).
-  v1SessionCatalog.bindCatalogManagerForSessionFunctionKinds(this)
 
   def catalog(name: String): CatalogPlugin = synchronized {
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
@@ -147,60 +138,8 @@ class CatalogManager(
 
   private var _sessionPath: Option[Seq[SessionPathEntry]] = None
 
-  /**
-   * Cache for [[confDefaultPathEntries]]: stores the expanded [[SessionPathEntry]] list keyed
-   * on the trimmed [[SQLConf.DEFAULT_PATH]] string and
-   * [[SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER]] value (the only conf that affects the
-   * expansion of `DEFAULT_PATH` / `SYSTEM_PATH` tokens).
-   * `CurrentSchemaEntry` markers are preserved unresolved so the cache stays valid across
-   * `USE SCHEMA`.
-   */
-  private val confDefaultPathCache =
-    new AtomicReference[Option[(String, String, Seq[SessionPathEntry])]](None)
-
-  /**
-   * Returns the effective session path entries: the explicit `SET PATH` value if stored,
-   * else the parsed [[SQLConf.DEFAULT_PATH]] conf if non-empty (mirroring how
-   * [[currentCatalog]] falls back to [[SQLConf.DEFAULT_CATALOG]]). Returns `None` when
-   * [[SQLConf.PATH_ENABLED]] is false or both sources are empty.
-   */
-  def sessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized {
-    if (!conf.pathEnabled) None
-    else _sessionPath.orElse(confDefaultPathEntries)
-  }
-
-  /** Raw `_sessionPath` (post-`SET PATH`), without the [[SQLConf.DEFAULT_PATH]] fallback. */
-  def storedSessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized { _sessionPath }
-
-  /**
-   * Parsed and expanded [[SQLConf.DEFAULT_PATH]] value, or `None` when the conf is empty.
-   * Reuses the SET PATH grammar via [[CatalystSqlParser.parsePathElements]]. An inner
-   * `DEFAULT_PATH` token resolves to the spark-builtin default ordering (cycle break).
-   *
-   * Unlike `SET PATH`, this does NOT run a duplicate check: lookup uses first-match
-   * resolution, so any redundant entry (including ones that only collide after a later
-   * `USE SCHEMA`) is dead code rather than an error. Cached so the hot path is a single
-   * atomic load on conf-stable sessions.
-   */
-  def confDefaultPathEntries: Option[Seq[SessionPathEntry]] = {
-    val confValue = conf.defaultPath
-    if (confValue == null || confValue.trim.isEmpty) {
-      confDefaultPathCache.set(None)
-      None
-    } else {
-      val trimmed = confValue.trim
-      val sessionOrder = conf.sessionFunctionResolutionOrder
-      val expanded = confDefaultPathCache.get() match {
-        case Some((k, ord, cached)) if k == trimmed && ord == sessionOrder => cached
-        case _ =>
-          val elements = CatalystSqlParser.parsePathElements(trimmed)
-          val computed = PathElement.expand(elements, conf, this, isConfDefaultExpansion = true)
-          confDefaultPathCache.set(Some((trimmed, sessionOrder, computed)))
-          computed
-      }
-      if (expanded.isEmpty) None else Some(expanded)
-    }
-  }
+  /** Returns the raw stored session path entries, or None if no path is set. */
+  def sessionPathEntries: Option[Seq[SessionPathEntry]] = synchronized { _sessionPath }
 
   def setSessionPath(entries: Seq[SessionPathEntry]): Unit = synchronized {
     _sessionPath = Some(entries)
@@ -211,18 +150,18 @@ class CatalogManager(
   }
 
   private[sql] def copySessionPathFrom(other: CatalogManager): Unit = synchronized {
-    _sessionPath = other.storedSessionPathEntries
+    _sessionPath = other.sessionPathEntries
   }
 
   /**
    * String form of the current resolution path for CURRENT_PATH().
-   * When PATH is enabled and a session path is in effect (stored or via
-   * [[SQLConf.DEFAULT_PATH]]), formats the resolved entries. Otherwise falls back to the legacy
-   * resolutionSearchPath.
+   * When PATH is enabled and a session path is stored, formats the effective path entries
+   * with markers expanded. Otherwise falls back to the legacy resolutionSearchPath.
    */
   def currentPathString: String = synchronized {
     import CatalogV2Implicits._
-    sessionPathEntries match {
+    val stored = if (conf.pathEnabled) _sessionPath else None
+    stored match {
       case Some(entries) =>
         val resolved = CatalogManager.resolvePathEntries(
           entries, currentCatalog.name(), currentNamespace.toSeq)
@@ -236,8 +175,7 @@ class CatalogManager(
   /**
    * Ordered catalog/schema path entries for resolving unqualified SQL object names.
    * When PATH is off or unset, applies [[SQLConf.defaultPathOrder]] (legacy).
-   * When PATH is in effect (stored or via the [[SQLConf.DEFAULT_PATH]] conf), uses the
-   * resolved entries.
+   * When PATH is explicitly set, uses the resolved stored path entries.
    */
   def sqlResolutionPathEntries(
       pathDefaultCatalog: String,
@@ -247,7 +185,8 @@ class CatalogManager(
     val defaultEntry =
       if (pathDefaultNamespace.isEmpty) Seq(pathDefaultCatalog)
       else pathDefaultCatalog +: pathDefaultNamespace
-    sessionPathEntries match {
+    val stored = if (conf.pathEnabled) _sessionPath else None
+    stored match {
       case Some(entries) =>
         CatalogManager.resolvePathEntries(entries, expandCatalog, expandNamespace)
       case None =>
@@ -270,11 +209,11 @@ class CatalogManager(
    * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,
    * not loadable via [[catalog]]), so `currentCatalog.name()` cannot be `"system"`. If that
    * invariant ever changes, this short-circuit must be revisited.
-   * Inspecting effective entries directly avoids loading the configured default catalog.
+   * Inspecting stored entries directly avoids loading the configured default catalog.
    */
   def isSystemSessionOnPath: Boolean = synchronized {
     if (!conf.pathEnabled) return true
-    sessionPathEntries match {
+    _sessionPath match {
       case None => true
       case Some(entries) => entries.exists {
         case CatalogManager.LiteralPathEntry(parts) =>
@@ -350,7 +289,6 @@ class CatalogManager(
     _currentNamespace = None
     _currentCatalogName = None
     _sessionPath = None
-    confDefaultPathCache.set(None)
     v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 }
@@ -402,30 +340,9 @@ private[sql] object CatalogManager extends Logging {
       isFullyQualifiedSystemSessionViewName(nameParts)
   }
 
-  /** True if a SQL path entry is the well-known `system.session` entry (case-insensitive). */
+  /** True if a SQL path entry is the well-known `system.session` entry. */
   def isSystemSessionPathEntry(parts: Seq[String]): Boolean =
-    parts.length == 2 &&
-      parts.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
-      parts(1).equalsIgnoreCase(SESSION_NAMESPACE)
-
-  /** True if a SQL path entry is the well-known `system.builtin` entry (case-insensitive). */
-  def isSystemBuiltinPathEntry(parts: Seq[String]): Boolean =
-    parts.length == 2 &&
-      parts.head.equalsIgnoreCase(SYSTEM_CATALOG_NAME) &&
-      parts(1).equalsIgnoreCase(BUILTIN_NAMESPACE)
-
-  /**
-   * Extract `system.builtin` / `system.session` entries from a resolved PATH, mapped to
-   * [[SessionCatalog.SessionFunctionKind]] in path order. Pure data conversion -- callers
-   * decide whether and how to use this list.
-   */
-  def systemFunctionKindsFromPath(
-      path: Seq[Seq[String]]): Seq[SessionCatalog.SessionFunctionKind] =
-    path.flatMap { e =>
-      if (isSystemBuiltinPathEntry(e)) Some(SessionCatalog.Builtin)
-      else if (isSystemSessionPathEntry(e)) Some(SessionCatalog.Temp)
-      else None
-    }
+    parts == Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE)
 
   /**
    * A single entry in the session SQL path: either a literal schema

@@ -137,15 +137,6 @@ class Resolver(
   private val planRewriter = new PlanRewriter(planRewriteRules, extendedRewriteRules)
 
   /**
-   * Runs session post-resolution rules (see [[extendedRewriteRules]]) on a subtree. Used for
-   * operators such as [[DeserializeToObject]] whose deserializer is resolved by the same rules as
-   * the end-of-resolution [[PlanRewriter]] batch, but which must be applied before single-pass
-   * validation asserts the operator is fully resolved.
-   */
-  private def applyExtendedRewriteRulesLocally(plan: LogicalPlan): LogicalPlan =
-    extendedRewriteRules.foldLeft(plan) { case (p, rule) => rule(p) }
-
-  /**
    * [[relationMetadataProvider]] is used to resolve metadata for relations. It's initialized with
    * the default implementation [[MetadataResolver]] here and is called in
    * [[lookupMetadataAndResolve]] on the unresolved logical plan to visit it (both operators and
@@ -334,9 +325,6 @@ class Resolver(
             resolveRepartition(repartition)
           case sample: Sample =>
             resolveSample(sample)
-          case deserializeToObject: DeserializeToObject =>
-            applyExtendedRewriteRulesLocally(
-              deserializeToObject.copy(child = resolve(deserializeToObject.child)))
           case _ =>
             tryDelegateResolutionToExtension(unresolvedPlan).getOrElse {
               handleUnmatchedOperator(unresolvedPlan)

@@ -15,26 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.sql.catalyst.analysis.resolver.{
-  LogicalPlanResolver,
-  ResolverExtension
-}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.annotation.Evolving;
 
 /**
- * [[ResolverExtension]] so the single-pass analyzer accepts [[LeafRunnableCommand]] plans.
- * These commands have no logical-plan children ([[RunnableCommand]] reports an empty child
- * list); nested SQL or expressions are parsed and analyzed inside [[RunnableCommand.run]].
+ * The sampling method for TABLESAMPLE.
+ *
+ * @since 4.2.0
  */
-private[sql] class LeafRunnableCommandResolver extends ResolverExtension {
-  override def resolveOperator(
-      operator: LogicalPlan,
-      resolver: LogicalPlanResolver): Option[LogicalPlan] = operator match {
-    case cmd: LeafRunnableCommand =>
-      Some(cmd)
-    case _ =>
-      None
-  }
+@Evolving
+public enum SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row is independently selected. */
+  BERNOULLI,
+  /** Block-level sampling (SYSTEM). Entire partitions/splits are included or skipped. */
+  SYSTEM
 }

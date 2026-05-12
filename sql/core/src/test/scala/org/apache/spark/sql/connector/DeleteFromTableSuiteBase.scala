@@ -959,6 +959,29 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(2, 200, "software")))
   }
 
+  test("delete with NOT IN over empty subquery") {
+    withTempView("empty_subq") {
+      createAndInitTable("pk INT NOT NULL, id INT NOT NULL, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hr" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq.empty[Int].toDF("v").createOrReplaceTempView("empty_subq")
+
+      sql(
+        s"""DELETE FROM $tableNameAsString
+           |WHERE id NOT IN (SELECT v FROM empty_subq)
+           |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+      // The filter gets replaced by an EmptyRelation in the ReplaceData executed plan, which hides
+      // the executed BatchScan and prevents computing numDeletedRows using numOutputRows of the
+      // scan node.
+      checkDeleteMetrics(numDeletedRows = if (deltaDelete) 3 else -1, numCopiedRows = 0)
+    }
+  }
+
   private def executeDeleteWithFilters(query: String): Unit = {
     val executedPlan = executeAndKeepPlan {
       sql(query)

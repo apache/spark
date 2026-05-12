@@ -1976,15 +1976,14 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * When the effective SQL PATH puts `system.session` before `system.builtin`, temp
-     * functions shadow builtins, so an unqualified name that matches a temp function
-     * should NOT be treated as builtin.
+     * In legacy mode (sessionOrder="first"), temp functions shadow builtins, so an
+     * unqualified name that matches a temp function should NOT be treated as builtin.
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
       if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
         return false
       }
-      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
+      if (nameParts.size == 1 && conf.sessionFunctionResolutionOrder == "first") {
         val v1Catalog = catalogManager.v1SessionCatalog
         !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
       } else {

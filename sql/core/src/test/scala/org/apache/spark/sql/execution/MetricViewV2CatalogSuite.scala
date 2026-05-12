@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ViewAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, MetadataTable, Table, TableCatalog, TableDependency, TableSummary, TableViewCatalog, ViewInfo}
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.Metadata
  * minimal [[TableViewCatalog]] so the same instance can also host the source table referenced by
  * the metric view's YAML.
  */
-class MetricViewV2CatalogSuite extends QueryTest with SharedSparkSession {
+class MetricViewV2CatalogSuite extends SharedSparkSession {
 
   import testImplicits._
 

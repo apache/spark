@@ -1,6 +1,6 @@
 == Physical Plan ==
 TakeOrderedAndProject (45)
-+- Union (44)
++- * Union (44)
    :- * HashAggregate (23)
    :  +- * HashAggregate (22)
    :     +- * HashAggregate (21)
@@ -141,21 +141,21 @@ Results [6]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, sum#15, co
 Input [6]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, sum#15, count#16]
 Arguments: hashpartitioning(i_product_name#11, i_brand#8, i_class#9, i_category#10, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
-(21) HashAggregate [codegen id : 5]
+(21) HashAggregate [codegen id : 25]
 Input [6]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, sum#15, count#16]
 Keys [4]: [i_product_name#11, i_brand#8, i_class#9, i_category#10]
 Functions [1]: [avg(inv_quantity_on_hand#3)]
 Aggregate Attributes [1]: [avg(inv_quantity_on_hand#3)#17]
 Results [5]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, avg(inv_quantity_on_hand#3)#17 AS qoh#18]
 
-(22) HashAggregate [codegen id : 5]
+(22) HashAggregate [codegen id : 25]
 Input [5]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, qoh#18]
 Keys [4]: [i_product_name#11, i_brand#8, i_class#9, i_category#10]
 Functions [1]: [partial_avg(qoh#18)]
 Aggregate Attributes [2]: [sum#19, count#20]
 Results [6]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, sum#21, count#22]
 
-(23) HashAggregate [codegen id : 5]
+(23) HashAggregate [codegen id : 25]
 Input [6]: [i_product_name#11, i_brand#8, i_class#9, i_category#10, sum#21, count#22]
 Keys [4]: [i_product_name#11, i_brand#8, i_class#9, i_category#10]
 Functions [1]: [avg(qoh#18)]
@@ -165,14 +165,14 @@ Results [5]: [i_product_name#11 AS i_product_name#24, i_brand#8 AS i_brand#25, i
 (24) ReusedExchange [Reuses operator id: 20]
 Output [6]: [i_product_name#29, i_brand#30, i_class#31, i_category#32, sum#33, count#34]
 
-(25) HashAggregate [codegen id : 10]
+(25) HashAggregate [codegen id : 9]
 Input [6]: [i_product_name#29, i_brand#30, i_class#31, i_category#32, sum#33, count#34]
 Keys [4]: [i_product_name#29, i_brand#30, i_class#31, i_category#32]
 Functions [1]: [avg(inv_quantity_on_hand#35)]
 Aggregate Attributes [1]: [avg(inv_quantity_on_hand#35)#17]
 Results [4]: [i_product_name#29, i_brand#30, i_class#31, avg(inv_quantity_on_hand#35)#17 AS qoh#36]
 
-(26) HashAggregate [codegen id : 10]
+(26) HashAggregate [codegen id : 9]
 Input [4]: [i_product_name#29, i_brand#30, i_class#31, qoh#36]
 Keys [3]: [i_product_name#29, i_brand#30, i_class#31]
 Functions [1]: [partial_avg(qoh#36)]
@@ -183,7 +183,7 @@ Results [5]: [i_product_name#29, i_brand#30, i_class#31, sum#39, count#40]
 Input [5]: [i_product_name#29, i_brand#30, i_class#31, sum#39, count#40]
 Arguments: hashpartitioning(i_product_name#29, i_brand#30, i_class#31, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
-(28) HashAggregate [codegen id : 11]
+(28) HashAggregate
 Input [5]: [i_product_name#29, i_brand#30, i_class#31, sum#39, count#40]
 Keys [3]: [i_product_name#29, i_brand#30, i_class#31]
 Functions [1]: [avg(qoh#36)]
@@ -193,14 +193,14 @@ Results [5]: [i_product_name#29, i_brand#30, i_class#31, null AS i_category#42, 
 (29) ReusedExchange [Reuses operator id: 20]
 Output [6]: [i_product_name#44, i_brand#45, i_class#46, i_category#47, sum#48, count#49]
 
-(30) HashAggregate [codegen id : 16]
+(30) HashAggregate [codegen id : 14]
 Input [6]: [i_product_name#44, i_brand#45, i_class#46, i_category#47, sum#48, count#49]
 Keys [4]: [i_product_name#44, i_brand#45, i_class#46, i_category#47]
 Functions [1]: [avg(inv_quantity_on_hand#50)]
 Aggregate Attributes [1]: [avg(inv_quantity_on_hand#50)#17]
 Results [3]: [i_product_name#44, i_brand#45, avg(inv_quantity_on_hand#50)#17 AS qoh#51]
 
-(31) HashAggregate [codegen id : 16]
+(31) HashAggregate [codegen id : 14]
 Input [3]: [i_product_name#44, i_brand#45, qoh#51]
 Keys [2]: [i_product_name#44, i_brand#45]
 Functions [1]: [partial_avg(qoh#51)]
@@ -211,7 +211,7 @@ Results [4]: [i_product_name#44, i_brand#45, sum#54, count#55]
 Input [4]: [i_product_name#44, i_brand#45, sum#54, count#55]
 Arguments: hashpartitioning(i_product_name#44, i_brand#45, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
-(33) HashAggregate [codegen id : 17]
+(33) HashAggregate
 Input [4]: [i_product_name#44, i_brand#45, sum#54, count#55]
 Keys [2]: [i_product_name#44, i_brand#45]
 Functions [1]: [avg(qoh#51)]
@@ -221,14 +221,14 @@ Results [5]: [i_product_name#44, i_brand#45, null AS i_class#57, null AS i_categ
 (34) ReusedExchange [Reuses operator id: 20]
 Output [6]: [i_product_name#60, i_brand#61, i_class#62, i_category#63, sum#64, count#65]
 
-(35) HashAggregate [codegen id : 22]
+(35) HashAggregate [codegen id : 19]
 Input [6]: [i_product_name#60, i_brand#61, i_class#62, i_category#63, sum#64, count#65]
 Keys [4]: [i_product_name#60, i_brand#61, i_class#62, i_category#63]
 Functions [1]: [avg(inv_quantity_on_hand#66)]
 Aggregate Attributes [1]: [avg(inv_quantity_on_hand#66)#17]
 Results [2]: [i_product_name#60, avg(inv_quantity_on_hand#66)#17 AS qoh#67]
 
-(36) HashAggregate [codegen id : 22]
+(36) HashAggregate [codegen id : 19]
 Input [2]: [i_product_name#60, qoh#67]
 Keys [1]: [i_product_name#60]
 Functions [1]: [partial_avg(qoh#67)]
@@ -239,7 +239,7 @@ Results [3]: [i_product_name#60, sum#70, count#71]
 Input [3]: [i_product_name#60, sum#70, count#71]
 Arguments: hashpartitioning(i_product_name#60, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
-(38) HashAggregate [codegen id : 23]
+(38) HashAggregate
 Input [3]: [i_product_name#60, sum#70, count#71]
 Keys [1]: [i_product_name#60]
 Functions [1]: [avg(qoh#67)]
@@ -249,14 +249,14 @@ Results [5]: [i_product_name#60, null AS i_brand#73, null AS i_class#74, null AS
 (39) ReusedExchange [Reuses operator id: 20]
 Output [6]: [i_product_name#77, i_brand#78, i_class#79, i_category#80, sum#81, count#82]
 
-(40) HashAggregate [codegen id : 28]
+(40) HashAggregate [codegen id : 24]
 Input [6]: [i_product_name#77, i_brand#78, i_class#79, i_category#80, sum#81, count#82]
 Keys [4]: [i_product_name#77, i_brand#78, i_class#79, i_category#80]
 Functions [1]: [avg(inv_quantity_on_hand#83)]
 Aggregate Attributes [1]: [avg(inv_quantity_on_hand#83)#17]
 Results [1]: [avg(inv_quantity_on_hand#83)#17 AS qoh#84]
 
-(41) HashAggregate [codegen id : 28]
+(41) HashAggregate [codegen id : 24]
 Input [1]: [qoh#84]
 Keys: []
 Functions [1]: [partial_avg(qoh#84)]
@@ -267,14 +267,14 @@ Results [2]: [sum#87, count#88]
 Input [2]: [sum#87, count#88]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=7]
 
-(43) HashAggregate [codegen id : 29]
+(43) HashAggregate
 Input [2]: [sum#87, count#88]
 Keys: []
 Functions [1]: [avg(qoh#84)]
 Aggregate Attributes [1]: [avg(qoh#84)#89]
 Results [5]: [null AS i_product_name#90, null AS i_brand#91, null AS i_class#92, null AS i_category#93, avg(qoh#84)#89 AS qoh#94]
 
-(44) Union
+(44) Union [codegen id : 25]
 
 (45) TakeOrderedAndProject
 Input [5]: [i_product_name#24, i_brand#25, i_class#26, i_category#27, qoh#28]

@@ -8095,6 +8095,26 @@
           "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
+      "TABLESAMPLE_SYSTEM" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM is only supported by data sources that implement block-level sampling."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_NO_SCAN" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM requires a direct reference to a data source table that supports block-level sampling. It cannot be applied to subqueries, views, or tables with intervening operations."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_REPEATABLE" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support the REPEATABLE clause. Use TABLESAMPLE BERNOULLI for repeatable sampling with a seed."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_SAMPLE_METHOD" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support <sampleMethod> sampling. Only PERCENT sampling is supported."
+        ]
+      },
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."

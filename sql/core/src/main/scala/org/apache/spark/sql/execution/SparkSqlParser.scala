@@ -359,7 +359,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
-    SetPathCommand(ctx.pathElement().asScala.map(visitPathElement).toSeq)
+    val elements = ctx.pathElement().asScala.map { pe =>
+      if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
+      else if (pe.SYSTEM_PATH() != null) PathElement.SystemPath
+      else if (pe.PATH() != null) PathElement.PathRef
+      else if (pe.CURRENT_DATABASE() != null) PathElement.CurrentDatabase
+      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
+      else PathElement.SchemaInPath(visitMultipartIdentifier(pe.multipartIdentifier()))
+    }.toSeq
+    SetPathCommand(elements)
   }
 
   /**

@@ -12,8 +12,6 @@ Before the first code edit or running test in a session, ensure a clean working 
    - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
    - **Running tests**: use `<upstream>/master`.
 
-5. **Commits:** Before committing or pushing changes that touch Scala (or when unsure), run `./dev/lint-scala` from the repo root and fix all failures. Do not consider a change merge-ready until lint passes; CI runs the same checks.
-
 ## Development Notes
 
 SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read the class documentation before running or updating these tests. DO NOT edit the generated golden files (`.sql.out`) directly. Always regenerate them when needed, and carefully review the diff to make sure it's expected.

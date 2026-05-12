@@ -107,9 +107,6 @@ class ResolutionValidator {
         validateRepartitionByExpression(repartitionByExpression)
       case sample: Sample =>
         validateSample(sample)
-      case deserializeToObject: DeserializeToObject =>
-        validate(deserializeToObject.child)
-        handleOperatorOutput(deserializeToObject)
       case generate: Generate =>
         validateGenerate(generate)
       case expand: Expand =>
@@ -121,9 +118,6 @@ class ResolutionValidator {
         validateRelation(multiInstanceRelation)
       case supervisingCommand: SupervisingCommand =>
         validateSupervisingCommand(supervisingCommand)
-      case cmd: Command if cmd.children.isEmpty =>
-        // Session side-effect commands (e.g. SET PATH) are leaves with no query subtree.
-        ()
     }
 
     operator match {

@@ -20,12 +20,10 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionResolution,
   UnresolvedFunction,
-  UnresolvedSeed,
-  UnresolvedStar
+  UnresolvedSeed
 }
 import org.apache.spark.sql.catalyst.expressions.{
   BinaryArithmetic,
@@ -33,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   ExpressionWithRandomSeed,
   InheritAnalysisRules,
-  Literal,
   ResolvedCollation,
   TryEval,
   UnresolvedCollation,
@@ -63,7 +60,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  */
 class FunctionResolver(
     expressionResolver: ExpressionResolver,
-    protected val functionResolution: FunctionResolution,
+    functionResolution: FunctionResolution,
     aggregateExpressionResolver: AggregateExpressionResolver,
     binaryArithmeticResolver: BinaryArithmeticResolver)
     extends TreeNodeResolver[UnresolvedFunction, Expression]
@@ -120,10 +117,9 @@ class FunctionResolver(
    *  - Apply timezone, if the resulting expression is [[TimeZoneAwareExpression]].
    */
   override def resolve(unresolvedFunction: UnresolvedFunction): Expression = {
-    val effectiveUnresolved = restoreCountStarAfterParserForTempShadow(unresolvedFunction)
     val expressionInfo = functionResolution.lookupBuiltinOrTempFunction(
-      nameParts = effectiveUnresolved.nameParts,
-      unresolvedFunc = Some(effectiveUnresolved)
+      nameParts = unresolvedFunction.nameParts,
+      unresolvedFunc = Some(unresolvedFunction)
     )
     val expressionResolutionContext = expressionResolutionContextStack.peek()
 
@@ -137,7 +133,7 @@ class FunctionResolver(
 
     val functionWithResolvedChildren =
       withResolvedChildren(
-        unresolvedExpression = effectiveUnresolved,
+        unresolvedExpression = unresolvedFunction,
         resolveChild = expressionResolver.resolve _
       ).asInstanceOf[UnresolvedFunction]
 
@@ -146,33 +142,6 @@ class FunctionResolver(
       handlePartiallyResolvedFunction _
     ) {
       functionResolution.resolveFunction(functionWithResolvedChildren)
-    }
-  }
-
-  /**
-   * SQL parsing turns `COUNT(*)` into `COUNT(1)` before analysis ([[AstBuilder]]). When PATH
-   * orders session before builtin and a temporary `count` shadows the builtin, that rewrite must
-   * be undone so arguments expand from the child operator output (aligning with fixed-point
-   * [[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveReferences]] / `matchesFunctionName`).
-   */
-  private def restoreCountStarAfterParserForTempShadow(
-      unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
-    if (unresolvedFunction.nameParts.length != 1 ||
-      unresolvedFunction.isDistinct ||
-      !unresolvedFunction.nameParts.head.equalsIgnoreCase("count")) {
-      return unresolvedFunction
-    }
-    unresolvedFunction.arguments match {
-      case Seq(lit: Literal)
-          if lit.value != null &&
-            lit.value == 1 &&
-            functionResolution.isSessionBeforeBuiltinInPath &&
-            functionResolution.catalogManager.v1SessionCatalog.isTemporaryFunction(
-              FunctionIdentifier(unresolvedFunction.nameParts.head)) =>
-        val expanded = expressionResolver.expandStarExpressions(Seq(UnresolvedStar(None)))
-        unresolvedFunction.copy(arguments = expanded)
-      case _ =>
-        unresolvedFunction
     }
   }
 
