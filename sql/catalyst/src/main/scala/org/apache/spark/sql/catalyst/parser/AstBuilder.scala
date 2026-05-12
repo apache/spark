@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -706,6 +706,26 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitSingleMultipartIdentifier(
       ctx: SingleMultipartIdentifierContext): Seq[String] = withOrigin(ctx) {
     visitMultipartIdentifier(ctx.multipartIdentifier)
+  }
+
+  override def visitSinglePathElementList(
+      ctx: SinglePathElementListContext): Seq[PathElement] = withOrigin(ctx) {
+    ctx.pathElement().asScala.map(visitPathElement).toSeq
+  }
+
+  override def visitPathElement(ctx: PathElementContext): PathElement = withOrigin(ctx) {
+    if (ctx.DEFAULT_PATH() != null) PathElement.DefaultPath
+    else if (ctx.SYSTEM_PATH() != null) PathElement.SystemPath
+    else if (ctx.PATH() != null) PathElement.PathRef
+    else if (ctx.CURRENT_DATABASE() != null || ctx.CURRENT_SCHEMA() != null) {
+      PathElement.CurrentSchema
+    } else {
+      val parts = visitMultipartIdentifier(ctx.multipartIdentifier())
+      if (parts.length < 2) {
+        throw QueryCompilationErrors.invalidSqlPathSchemaReferenceError(parts.mkString("."))
+      }
+      PathElement.SchemaInPath(parts)
+    }
   }
 
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
