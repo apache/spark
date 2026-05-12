@@ -50,8 +50,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 abstract class CSVSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with TestCsvData
   with CommonFileDataSourceSuite {
 
@@ -3820,6 +3819,18 @@ abstract class CSVSuite
         checkErrorMatchPVals(ex, "FAILED_READ_FILE.NO_HINT",
           Map("path" -> ".*corrupted.*\\.csv\\.zst"))
       }
+    }
+  }
+
+  test("SPARK-55866: CSV option value exceeds one character") {
+    Seq("quote", "escape", "comment", "charToEscapeQuoteEscaping").foreach { paramName =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.read.option(paramName, "<<").csv(testFile(carsFile))
+        },
+        condition = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
+        parameters = Map("paramName" -> paramName, "actualValue" -> "<<")
+      )
     }
   }
 }

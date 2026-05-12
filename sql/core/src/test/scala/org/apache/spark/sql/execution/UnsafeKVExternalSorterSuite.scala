@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.map.BytesToBytesMap
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
  */
-class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSparkSession {
+class UnsafeKVExternalSorterSuite extends SharedSparkSession {
   private val keyTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
   private val valueTypes = Seq(IntegerType, FloatType, DoubleType, StringType)
 

@@ -27,6 +27,7 @@ public interface TableSummary {
     String EXTERNAL_TABLE_TYPE = "EXTERNAL";
     String VIEW_TABLE_TYPE = "VIEW";
     String FOREIGN_TABLE_TYPE = "FOREIGN";
+    String METRIC_VIEW_TABLE_TYPE = "METRIC_VIEW";
 
     Identifier identifier();
     String tableType();

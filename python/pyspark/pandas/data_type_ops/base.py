@@ -51,6 +51,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
     handle_dtype_as_extension_dtype,
+    is_str_dtype,
     spark_type_to_pandas_dtype,
 )
 
@@ -193,7 +194,7 @@ def _as_string_type(
     representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
-    if handle_dtype_as_extension_dtype(dtype):
+    if handle_dtype_as_extension_dtype(dtype) or is_str_dtype(dtype):
         scol = index_ops.spark.column.cast(spark_type)
     else:
         casted = index_ops.spark.column.cast(spark_type)

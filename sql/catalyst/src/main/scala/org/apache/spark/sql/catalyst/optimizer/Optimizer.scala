@@ -238,6 +238,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder),
+    // Must run after "Early Filter and Projection Push-Down" because it relies on
+    // accurate stats (e.g., DSv2 relations only report stats after V2ScanRelationPushDown).
+    // Runs after Join Reorder so that cost-based join reordering can optimize the full join graph
+    // before this rule breaks it into per-Union-branch joins.
+    Batch("Push Down Join Through Union", Once,
+      PushDownJoinThroughUnion(conf)),
     Batch("Eliminate Sorts", Once,
       EliminateSorts,
       RemoveRedundantSorts),
@@ -246,7 +252,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // This batch must run after "Decimal Optimizations", as that one may change the
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
-      RewriteDistinctAggregates),
+      RewriteDistinctAggregates,
+      OptimizeExpand),
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
@@ -332,6 +339,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceCurrentLike(catalogManager),
       SpecialDatetimeValues,
       RewriteAsOfJoin,
+      RewriteNearestByJoin,
       EvalInlineTables,
       ReplaceTranspose,
       RewriteCollationJoin
@@ -1288,7 +1296,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         limit.copy(child = p2.copy(projectList = newProjectList))
       case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
-      case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _), _)) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
       case o => o
     }
@@ -2537,10 +2545,10 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan =
     if (conf.crossJoinEnabled) {
       plan
-    } else plan.transformWithPruning(_.containsAnyPattern(INNER_LIKE_JOIN, OUTER_JOIN))  {
+    } else plan.transformWithPruning(_.containsAnyPattern(INNER_LIKE_JOIN, OUTER_JOIN)) {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)
-        if isCartesianProduct(j) =>
-          throw QueryCompilationErrors.joinConditionMissingOrTrivialError(j, left, right)
+          if isCartesianProduct(j) =>
+        throw QueryCompilationErrors.joinConditionMissingOrTrivialError(j, left, right)
     }
 }
 

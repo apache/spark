@@ -49,14 +49,14 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_int(self):
         lr = LogisticRegression(maxIter=5.0)
         self.assertEqual(lr.getMaxIter(), 5)
-        self.assertTrue(type(lr.getMaxIter()) == int)
+        self.assertTrue(isinstance(lr.getMaxIter(), int))
         self.assertRaises(TypeError, lambda: LogisticRegression(maxIter="notAnInt"))
         self.assertRaises(TypeError, lambda: LogisticRegression(maxIter=5.1))
 
     def test_float(self):
         lr = LogisticRegression(tol=1)
         self.assertEqual(lr.getTol(), 1.0)
-        self.assertTrue(type(lr.getTol()) == float)
+        self.assertTrue(isinstance(lr.getTol(), float))
         self.assertRaises(TypeError, lambda: LogisticRegression(tol="notAFloat"))
 
     def test_vector(self):
@@ -78,7 +78,7 @@ class ParamTypeConversionTests(PySparkTestCase):
             tuple(lst),
         ]:
             converted = TypeConverters.toList(lst_like)
-            self.assertEqual(type(converted), list)
+            self.assertIsInstance(converted, list)
             self.assertListEqual(converted, lst)
 
     def test_list_int(self):
@@ -93,21 +93,21 @@ class ParamTypeConversionTests(PySparkTestCase):
         ]:
             vs = VectorSlicer(indices=indices)
             self.assertListEqual(vs.getIndices(), [1, 2])
-            self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
+            self.assertTrue(all([isinstance(v, int) for v in vs.getIndices()]))
         self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
 
     def test_list_float(self):
         b = Bucketizer(splits=[1, 4])
         self.assertEqual(b.getSplits(), [1.0, 4.0])
-        self.assertTrue(all([type(v) == float for v in b.getSplits()]))
+        self.assertTrue(all([isinstance(v, float) for v in b.getSplits()]))
         self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", 1.0]))
 
     def test_list_list_float(self):
         b = Bucketizer(splitsArray=[[-0.1, 0.5, 3], [-5, 1.5]])
         self.assertEqual(b.getSplitsArray(), [[-0.1, 0.5, 3.0], [-5.0, 1.5]])
-        self.assertTrue(all([type(v) == list for v in b.getSplitsArray()]))
-        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[0]]))
-        self.assertTrue(all([type(v) == float for v in b.getSplitsArray()[1]]))
+        self.assertTrue(all([isinstance(v, list) for v in b.getSplitsArray()]))
+        self.assertTrue(all([isinstance(v, float) for v in b.getSplitsArray()[0]]))
+        self.assertTrue(all([isinstance(v, float) for v in b.getSplitsArray()[1]]))
         self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=["a", 1.0]))
         self.assertRaises(TypeError, lambda: Bucketizer(splitsArray=[[-5, 1.5], ["a", 1.0]]))
 

@@ -2966,13 +2966,13 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  test("View commands are not supported in v2 catalogs that don't implement ViewCatalog") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = analysisException(sqlStatement)
       checkError(
         e,
-        condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+        condition = "MISSING_CATALOG_ABILITY.VIEWS",
+        parameters = Map("plugin" -> "testcat"))
     }
 
     validateViewCommand("DROP VIEW testcat.v")
@@ -3221,6 +3221,37 @@ class DataSourceV2SQLSuiteV1Filter
 
     assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
       Row("testcat"), Row("testcat2")))
+  }
+
+  test("SPARK-49543: ShowCollations") {
+    val schema = new StructType()
+      .add("NAME", StringType, nullable = false)
+      .add("LANGUAGE", StringType, nullable = true)
+      .add("COUNTRY", StringType, nullable = true)
+      .add("ACCENT_SENSITIVITY", StringType, nullable = false)
+      .add("CASE_SENSITIVITY", StringType, nullable = false)
+      .add("PAD_ATTRIBUTE", StringType, nullable = false)
+      .add("ICU_VERSION", StringType, nullable = true)
+
+    val df = sql("SHOW COLLATIONS")
+    assert(df.schema === schema)
+
+    val allCollations = df.collect()
+    assert(allCollations.exists(_.getString(0) == "UTF8_BINARY"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE_CI"))
+
+    val utf8Row = allCollations.find(_.getString(0) == "UTF8_BINARY").get
+    assert(utf8Row.getString(3) == "ACCENT_SENSITIVE")
+    assert(utf8Row.getString(4) == "CASE_SENSITIVE")
+
+    val likeResult = sql("SHOW COLLATIONS LIKE 'UNICODE*'").collect()
+    assert(likeResult.nonEmpty)
+    assert(likeResult.forall(_.getString(0).startsWith("UNICODE")))
+
+    val exactResult = sql("SHOW COLLATIONS LIKE 'UTF8_BINARY'").collect()
+    assert(exactResult.length == 1)
+    assert(exactResult.head.getString(0) == "UTF8_BINARY")
   }
 
   test("CREATE INDEX should fail") {
@@ -3881,8 +3912,8 @@ class DataSourceV2SQLSuiteV1Filter
         QueryTest.checkAnswer(
           descriptionDf.filter(
             "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
-              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
-              "'Type', '_partition', ''))"),
+              "'index', 'Location', 'Name', 'Namespace', 'Owner', 'Provider', 'Table', " +
+              "'Table Properties', 'Type', '_partition', ''))"),
           Seq(
             Row("# Detailed Table Information", "", ""),
             Row("# Column Default Values", "", ""),
@@ -4271,6 +4302,28 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-56587: Show table names for V2 write nodes in UI") {
+    val t1 = s"testcat.ns1.ns2.table_name"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df1 = sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+      val executed1 = df1.queryExecution.executedPlan
+      assert(executed1.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+
+      val df2 = sql(s"INSERT OVERWRITE $t1 VALUES (2, 'b')")
+      val executed2 = df2.queryExecution.executedPlan
+      assert(executed2.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -4284,7 +4337,44 @@ class DataSourceV2SQLSuiteV1Filter
 }
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
+  import org.apache.spark.sql.catalyst.expressions.DynamicPruning
+  import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
+
+  test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
+
+      // Verify query correctness
+      checkAnswer(df, Row(3, 3))
+
+      // Verify runtime filters contain the scalar subquery filter
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.nonEmpty,
+        "Expected runtimeFilters to contain scalar subquery filter")
+      assert(!batchScan.runtimeFilters.exists(
+        _.isInstanceOf[DynamicPruning]),
+        "Expected non-DPP runtime filter (scalar subquery)")
+
+      // Verify partition pruning: only 1 of 10 partitions should remain
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 1,
+        s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {

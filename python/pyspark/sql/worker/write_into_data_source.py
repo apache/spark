@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import inspect
-from typing import IO, Iterable, Iterator
+from typing import IO, Iterator, Union
 
 from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
@@ -147,8 +147,9 @@ def _main(infile: IO, outfile: IO) -> None:
         binary_as_bytes = read_bool(infile)
 
         # Instantiate a data source.
-        data_source = data_source_cls(options=options)  # type: ignore
+        data_source = data_source_cls(options=options)
 
+        writer: Union[DataSourceStreamWriter, DataSourceWriter]
         if is_streaming:
             # Instantiate the streaming data source writer.
             writer = data_source.streamWriter(schema, overwrite)
@@ -164,8 +165,7 @@ def _main(infile: IO, outfile: IO) -> None:
                 )
         else:
             # Instantiate the data source writer.
-
-            writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
+            writer = data_source.writer(schema, overwrite)
             if not isinstance(writer, DataSourceWriter):
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
@@ -179,28 +179,25 @@ def _main(infile: IO, outfile: IO) -> None:
     import pyarrow as pa
 
     converters = [
-        ArrowTableToRowsConversion._create_converter(
-            f.dataType, none_on_identity=False, binary_as_bytes=binary_as_bytes
-        )
+        ArrowTableToRowsConversion._create_converter(f.dataType, binary_as_bytes=binary_as_bytes)
         for f in schema.fields
     ]
     fields = schema.fieldNames()
 
-    def data_source_write_func(iterator: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+    def data_source_write_func(iterator: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         def batch_to_rows() -> Iterator[Row]:
             for batch in iterator:
                 columns = [column.to_pylist() for column in batch.columns]
                 for row in range(0, batch.num_rows):
                     values = [
-                        converters[col](columns[col][row])  # type: ignore[misc]
-                        for col in range(batch.num_columns)
+                        converters[col](columns[col][row]) for col in range(batch.num_columns)
                     ]
                     yield _create_row(fields=fields, values=values)
 
         if isinstance(writer, DataSourceArrowWriter):
             res = writer.write(iterator)
         elif isinstance(writer, DataSourceStreamArrowWriter):
-            res = writer.write(iterator)  # type: ignore[arg-type]
+            res = writer.write(iterator)
         else:
             res = writer.write(batch_to_rows())
 

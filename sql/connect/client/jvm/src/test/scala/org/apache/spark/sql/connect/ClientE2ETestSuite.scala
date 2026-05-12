@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 import java.time.{DateTimeException, LocalTime}
-import java.util.Properties
+import java.util.{Properties, TimeZone}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.{PlanCompressionOptions, RetryPolicy, SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils.{createSparkSession, port}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
@@ -53,7 +53,6 @@ class ClientE2ETestSuite
     extends QueryTest
     with ConnectFunSuite
     with RemoteSparkSession
-    with SQLHelper
     with PrivateMethodTester {
 
   test("throw SparkException with null filename in stack trace elements") {
@@ -970,7 +969,7 @@ class ClientE2ETestSuite
       // df1("i") is not ambiguous, but it's not valid in the projected df.
       df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
     }
-    assert(e1.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+    assert(e1.getMessage.contains("CANNOT_RESOLVE_DATAFRAME_COLUMN"))
 
     checkSameResult(
       Seq(Row(1, "a")),
@@ -1087,6 +1086,19 @@ class ClientE2ETestSuite
 
     assert(spark.conf.contains(entryWithDefault.key))
     assert(!spark.conf.contains("nope"))
+  }
+
+  test("RuntimeConfig.get multiple keys") {
+    assert(spark.conf.getConfigMap().isEmpty)
+    val result = spark.conf.getConfigMap(
+      "spark.sql.ansi.enabled",
+      "spark.sql.session.timeZone",
+      "spark.sql.binaryOutputStyle")
+    val expected = Map(
+      "spark.sql.ansi.enabled" -> spark.conf.get("spark.sql.ansi.enabled"),
+      "spark.sql.session.timeZone" -> TimeZone.getDefault.getID,
+      "spark.sql.binaryOutputStyle" -> "")
+    assert(result == expected)
   }
 
   test("SparkVersion") {

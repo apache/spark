@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   ExplicitlyUnsupportedResolverFeature,
   Resolver
@@ -25,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExplicitlyUnsupportedResolverFeatureSuite extends QueryTest with SharedSparkSession {
+class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
   test("Unsupported table types") {
     withTable("csv_table") {
       spark.sql("CREATE TABLE csv_table (col1 INT) USING CSV;").collect()

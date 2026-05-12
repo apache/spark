@@ -17,10 +17,11 @@
 
 package org.apache.spark.util
 
-import java.io.File
+import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.nio.file.Files
 import java.util.Arrays
+import java.util.jar.{JarEntry, JarFile, JarOutputStream}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.jdk.CollectionConverters._
@@ -97,6 +98,154 @@ private[spark] trait SparkTestUtils {
          |}
         """.stripMargin)
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
+  }
+
+  /**
+   * Compile Java source code and package the resulting class files into a JAR.
+   * Supports classes with package declarations - the JAR will contain the proper
+   * directory structure (e.g., org/apache/spark/Foo.class).
+   *
+   * @param sources map of fully-qualified class name to Java source code
+   * @param jarFile the JAR file to create
+   * @param classpathUrls additional classpath URLs needed for compilation
+   * @return URL of the created JAR file
+   */
+  def createJarWithJavaSources(
+      sources: Map[String, String],
+      jarFile: File,
+      classpathUrls: Seq[URL] = Seq.empty): URL = {
+    val compiler = ToolProvider.getSystemJavaCompiler
+    val classDir = Files.createTempDirectory("spark-test-classes").toFile
+
+    val sourceFiles = sources.map { case (name, code) =>
+      new JavaSourceFromString(name, code)
+    }.toList
+
+    val options = Seq("-d", classDir.getAbsolutePath) ++ (
+      if (classpathUrls.nonEmpty) {
+        Seq("-classpath", classpathUrls.map(_.getFile).mkString(File.pathSeparator))
+      } else Seq.empty
+    )
+
+    val success = compiler.getTask(
+      null, null, null, options.asJava, null,
+      java.util.Arrays.asList(sourceFiles: _*)).call()
+    assert(success, s"Compilation failed for: ${sources.keys.mkString(", ")}")
+
+    // Collect all .class files under classDir
+    val classFiles = listFilesRecursively(classDir).filter(_.getName.endsWith(".class"))
+
+    val jarStream = new JarOutputStream(new FileOutputStream(jarFile))
+    try {
+      for (classFile <- classFiles) {
+        val entryName = classDir.toPath.relativize(classFile.toPath).toString.replace('\\', '/')
+        jarStream.putNextEntry(new JarEntry(entryName))
+        val in = new FileInputStream(classFile)
+        try { in.transferTo(jarStream) } finally { in.close() }
+      }
+    } finally {
+      jarStream.close()
+    }
+
+    SparkFileUtils.deleteRecursively(classDir)
+    jarFile.toURI.toURL
+  }
+
+  /**
+   * Compile Scala source files and package the resulting class files
+   * into a JAR.
+   *
+   * @param sourceFiles Scala source files to compile
+   * @param jarFile the JAR file to create
+   * @param classpathUrls additional classpath URLs needed for compilation
+   * @param excludeClassPrefixes class name prefixes to exclude from the
+   *   JAR (e.g., Seq("A") excludes A.class, A$.class)
+   */
+  def createJarWithScalaSources(
+      sourceFiles: Seq[File],
+      jarFile: File,
+      classpathUrls: Seq[URL] = Seq.empty,
+      excludeClassPrefixes: Seq[String] = Seq.empty): URL = {
+    val classDir = Files.createTempDirectory("spark-test-scala-classes").toFile
+    val compilerClass = SparkClassUtils.classForName[AnyRef]("scala.tools.nsc.Main")
+    val processMethod = compilerClass.getMethod("process", classOf[Array[String]])
+
+    // When the classpath is supplied via a "pathing JAR" (a single JAR whose manifest
+    // Class-Path attribute points to the real dependencies), `scala.tools.nsc.Main` does
+    // not resolve the manifest entries and ends up unable to see scala-library.jar,
+    // failing with "object scala in compiler mirror not found". Pathing JARs are used
+    // on Windows to work around CMD's command-line length limit and by some build/CI
+    // tools. Expand any such JARs before invoking scalac so the classpath is complete.
+    val expandedClasspath = classpathUrls.flatMap(expandManifestClasspath)
+    val cpStr = expandedClasspath.map(_.getFile).mkString(File.pathSeparator)
+    val args = Array("-classpath", cpStr, "-d", classDir.getAbsolutePath) ++
+      sourceFiles.map(_.getAbsolutePath)
+
+    val success = processMethod.invoke(null, args).asInstanceOf[Boolean]
+    assert(success, s"Scala compilation failed for: ${sourceFiles.map(_.getName).mkString(", ")}")
+
+    try {
+      val classFiles = listFilesRecursively(classDir).filter { f =>
+        f.getName.endsWith(".class") && !excludeClassPrefixes.exists(p =>
+          f.getName == s"$p.class" || f.getName.startsWith(s"$p$$"))
+      }
+
+      jarFile.getParentFile.mkdirs()
+      val jarStream = new JarOutputStream(new FileOutputStream(jarFile))
+      try {
+        for (classFile <- classFiles) {
+          val entryName = classDir.toPath.relativize(classFile.toPath).toString.replace('\\', '/')
+          jarStream.putNextEntry(new JarEntry(entryName))
+          val in = new FileInputStream(classFile)
+          try { in.transferTo(jarStream) } finally { in.close() }
+        }
+      } finally {
+        jarStream.close()
+      }
+    } finally {
+      SparkFileUtils.deleteRecursively(classDir)
+    }
+
+    jarFile.toURI.toURL
+  }
+
+  /**
+   * If `url` points to a "pathing JAR" (a JAR whose manifest declares a `Class-Path`
+   * attribute), return the URLs referenced by that attribute (resolved relative to
+   * the JAR's parent directory) followed by the original URL. Otherwise return the
+   * original URL unchanged.
+   */
+  private[spark] def expandManifestClasspath(url: URL): Seq[URL] = {
+    val file = new File(url.getFile)
+    if (!file.exists() || !file.getName.endsWith(".jar")) return Seq(url)
+    try {
+      val jarFile = new JarFile(file)
+      try {
+        val cpAttr = Option(jarFile.getManifest)
+          .flatMap(m => Option(m.getMainAttributes.getValue("Class-Path")))
+        cpAttr match {
+          case Some(cp) =>
+            val parentUri = file.getParentFile.toURI
+            val expanded = cp.split(" ").filter(_.nonEmpty).flatMap { e =>
+              try Some(new File(parentUri.resolve(e)).toURI.toURL)
+              catch { case _: Exception => None }
+            }
+            expanded.toSeq :+ url
+          case None => Seq(url)
+        }
+      } finally jarFile.close()
+    } catch { case _: Exception => Seq(url) }
+  }
+
+  private def listFilesRecursively(dir: File): Seq[File] = {
+    val children = dir.listFiles()
+    if (children == null) {
+      Seq.empty
+    } else {
+      children.flatMap { f =>
+        if (f.isDirectory) { listFilesRecursively(f) } else { Seq(f) }
+      }.toSeq
+    }
   }
 
 }

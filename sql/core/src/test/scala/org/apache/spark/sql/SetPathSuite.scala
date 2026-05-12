@@ -1,0 +1,571 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql
+
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+
+/**
+ * Tests for SET PATH command and session path management.
+ * Covers the feature flag, SET PATH syntax, CURRENT_PATH() reflecting stored path,
+ * DEFAULT_PATH, SYSTEM_PATH, CURRENT_SCHEMA/CURRENT_DATABASE expansion,
+ * PATH (append), duplicate detection, and error conditions.
+ *
+ * Resolution-level tests (tables/functions resolving via stored frozen path)
+ * are covered in SQLViewSuite and SQLFunctionSuite (SPARK-56639).
+ */
+class SetPathSuite extends SharedSparkSession {
+
+  private def withPathEnabled(f: => Unit): Unit = {
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true")(f)
+  }
+
+  private def currentPath(): String =
+    sql("SELECT current_path()").collect().head.getString(0)
+
+  private def pathEntries(pathStr: String): Seq[String] =
+    pathStr.split(",").map(_.trim).toSeq
+
+  test("PATH disabled: CURRENT_PATH() returns default path") {
+    val entries = pathEntries(currentPath())
+    assert(entries.contains("spark_catalog.default"),
+      s"Expected default path to contain spark_catalog.default, got: $entries")
+    assert(entries.exists(_.contains("builtin")),
+      s"Expected default path to contain builtin, got: $entries")
+  }
+
+  test("PATH disabled: SET PATH is rejected") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET PATH = spark_catalog.other")
+      },
+      condition = "UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED",
+      sqlState = "0A000",
+      parameters = Map("config" -> SQLConf.PATH_ENABLED.key))
+  }
+
+  test("PATH enabled but no SET PATH: falls back to legacy resolutionSearchPath") {
+    withPathEnabled {
+      val entries = pathEntries(currentPath())
+      assert(entries.exists(_.contains("builtin")),
+        s"Enabled-but-unset should fall back to legacy path with builtin, got: $entries")
+      assert(entries.exists(_.contains("default")),
+        s"Enabled-but-unset should include current schema, got: $entries")
+    }
+  }
+
+  test("PATH enabled: DEFAULT_PATH + explicit builtin raises duplicate") {
+    withPathEnabled {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = DEFAULT_PATH, system.builtin")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "system.builtin"))
+    }
+  }
+
+  test("PATH enabled: SET PATH and CURRENT_PATH()") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("spark_catalog.default", "system.builtin"),
+        s"Expected exact path entries, got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = DEFAULT_PATH restores default") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default")
+      sql("SET PATH = DEFAULT_PATH")
+      val entries = pathEntries(currentPath())
+      assert(entries.contains("spark_catalog.default"),
+        s"After SET PATH = DEFAULT_PATH expected current schema in path, got: $entries")
+      assert(entries.contains("system.builtin"),
+        s"After SET PATH = DEFAULT_PATH expected system.builtin, got: $entries")
+      assert(entries.contains("system.session"),
+        s"After SET PATH = DEFAULT_PATH expected system.session, got: $entries")
+      assert(entries.length === 3,
+        s"DEFAULT_PATH should expand to 3 entries, got: $entries")
+    }
+  }
+
+  test("PATH enabled: DEFAULT_PATH composes with other path elements") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_extra_test")
+      try {
+        sql("SET PATH = DEFAULT_PATH, spark_catalog.path_extra_test")
+        val entries = pathEntries(currentPath())
+        assert(entries.contains("system.builtin"),
+          s"DEFAULT_PATH should include system.builtin; got: $entries")
+        assert(entries.contains("system.session"),
+          s"DEFAULT_PATH should include system.session; got: $entries")
+        assert(entries.last === "spark_catalog.path_extra_test",
+          s"Extra schema should be appended after DEFAULT_PATH; got: $entries")
+        assert(entries.length === 4,
+          s"DEFAULT_PATH + 1 extra should be 4 entries, got: $entries")
+      } finally {
+        sql("DROP SCHEMA IF EXISTS path_extra_test")
+      }
+    }
+  }
+
+  test("PATH enabled: DEFAULT_PATH, DEFAULT_PATH raises duplicate error") {
+    withPathEnabled {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = DEFAULT_PATH, DEFAULT_PATH")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "system.builtin"))
+    }
+  }
+
+  test("programmatic SET of spark.sql.session.path has no effect on CURRENT_PATH()") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      spark.conf.set("spark.sql.session.path", "garbage")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("spark_catalog.default", "system.builtin"),
+        s"Programmatic SET should not affect path; got: $entries")
+      spark.conf.unset("spark.sql.session.path")
+    }
+  }
+
+  test("PATH enabled: cloned session inherits parent path") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      val cloned = spark.cloneSession()
+      val clonedPath = cloned.sql("SELECT current_path()").collect().head.getString(0)
+      val entries = pathEntries(clonedPath)
+      assert(entries === Seq("spark_catalog.default", "system.builtin"),
+        s"Cloned session should inherit parent path; got: $entries")
+    }
+  }
+
+  test("PATH enabled: duplicate path entry raises error") {
+    withPathEnabled {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = spark_catalog.default, spark_catalog.default")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: SET PATH = PATH, schema appends to path") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_append_test")
+      try {
+        sql("SET PATH = spark_catalog.default, system.builtin")
+        sql("SET PATH = PATH, spark_catalog.path_append_test")
+        val entries = pathEntries(currentPath())
+        assert(entries === Seq("spark_catalog.default", "system.builtin",
+          "spark_catalog.path_append_test"),
+          s"PATH, schema should append; got: $entries")
+      } finally {
+        sql("DROP SCHEMA IF EXISTS path_append_test")
+      }
+    }
+  }
+
+  test("PATH enabled: SET PATH = CURRENT_SCHEMA / CURRENT_DATABASE") {
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      sql("SET PATH = current_schema, system.builtin")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("spark_catalog.default", "system.builtin"),
+        s"current_schema should expand to current schema, got: $entries")
+      sql("SET PATH = current_database, system.builtin")
+      val entries2 = pathEntries(currentPath())
+      assert(entries2 === Seq("spark_catalog.default", "system.builtin"),
+        s"current_database should expand to current schema, got: $entries2")
+    }
+  }
+
+  test("PATH enabled: cross-alias duplicate detection (current_database, current_schema)") {
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = current_database, current_schema")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: virtual CURRENT_SCHEMA expands to USE schema") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_virt_schema")
+      try {
+        sql("USE spark_catalog.path_virt_schema")
+        sql("SET PATH = current_schema, system.builtin")
+        val entries = pathEntries(currentPath())
+        assert(entries === Seq("spark_catalog.path_virt_schema", "system.builtin"),
+          s"CURRENT_SCHEMA in PATH should reflect USE; got: $entries")
+      } finally {
+        sql("USE spark_catalog.default")
+        sql("DROP SCHEMA IF EXISTS path_virt_schema")
+      }
+    }
+  }
+
+  test("PATH enabled: duplicate after expanding CURRENT_SCHEMA") {
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = spark_catalog.default, current_schema")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: duplicate when CURRENT_SCHEMA repeated") {
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = current_schema, current_schema")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: duplicate when SYSTEM_PATH listed twice") {
+    withPathEnabled {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = SYSTEM_PATH, SYSTEM_PATH")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "system.builtin"))
+    }
+  }
+
+  test("PATH enabled: SET PATH = SYSTEM_PATH includes system.builtin and system.session") {
+    withPathEnabled {
+      sql("SET PATH = SYSTEM_PATH")
+      val entries = pathEntries(currentPath())
+      assert(entries.contains("system.builtin"),
+        s"SYSTEM_PATH should include system.builtin; got: $entries")
+      assert(entries.contains("system.session"),
+        s"SYSTEM_PATH should include system.session; got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = PATH on unset session includes defaults") {
+    withPathEnabled {
+      sql("SET PATH = PATH, spark_catalog.extra")
+      val entries = pathEntries(currentPath())
+      assert(entries.exists(_.contains("builtin")),
+        s"PATH on unset session should include builtin defaults; got: $entries")
+      assert(entries.contains("spark_catalog.extra"),
+        s"PATH on unset session should include appended schema; got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = PATH, schema after DEFAULT_PATH (empty session path)") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_from_empty")
+      try {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("SET PATH = PATH, spark_catalog.path_from_empty")
+        val entries = pathEntries(currentPath())
+        assert(entries.contains("spark_catalog.path_from_empty"),
+          s"PATH after cleared path should append schema; got: $entries")
+      } finally {
+        sql("DROP SCHEMA IF EXISTS path_from_empty")
+      }
+    }
+  }
+
+  test("PATH enabled: unqualified (1-part) schema reference is rejected") {
+    withPathEnabled {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = myschema")
+        },
+        condition = "INVALID_SQL_PATH_SCHEMA_REFERENCE",
+        parameters = Map(
+          "qualifiedName" -> "myschema"))
+    }
+  }
+
+  test("PATH enabled: multi-level namespace (3+ parts) is accepted") {
+    withPathEnabled {
+      // SET PATH should accept multi-level namespaces without error.
+      // We verify the path is stored correctly via the CatalogManager API
+      // rather than currentPath(), which would fail because spark_catalog
+      // only supports single-part namespaces.
+      sql("SET PATH = spark_catalog.ns1.ns2, spark_catalog.default")
+      val stored = spark.sessionState.catalogManager.sessionPathEntries
+      assert(stored.isDefined, "Session path should be stored")
+      assert(stored.get.length == 2, s"Should have 2 entries, got: ${stored.get}")
+    }
+  }
+
+  test("PATH enabled: backtick-quoted identifiers with dots round-trip correctly") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.`sch.b`, system.builtin")
+      val entries = pathEntries(currentPath())
+      assert(entries.head === "spark_catalog.`sch.b`",
+        s"Backtick-quoted identifiers should round-trip; got: $entries")
+    }
+  }
+
+  test("PATH enabled: stored path preserves typed case") {
+    withPathEnabled {
+      sql("SET PATH = Spark_Catalog.Default, System.Builtin")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("Spark_Catalog.Default", "System.Builtin"),
+        s"Stored path should preserve case; got: $entries")
+    }
+  }
+
+  test("PATH enabled: case-insensitive duplicate detection") {
+    withPathEnabled {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET PATH = spark_catalog.DEFAULT, spark_catalog.default")
+        },
+        condition = "DUPLICATE_SQL_PATH_ENTRY",
+        sqlState = Some("42732"),
+        parameters = Map("pathEntry" -> "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: case-sensitive mode does not treat differently cased entries as duplicates") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.CASE_SENSITIVE.key -> "true") {
+      sql("SET PATH = spark_catalog.DEFAULT, spark_catalog.default")
+      val stored = spark.sessionState.catalogManager.sessionPathEntries.get
+      val rendered = stored.map(_.resolve("ignored", Nil).mkString("."))
+      assert(rendered === Seq("spark_catalog.DEFAULT", "spark_catalog.default"))
+    }
+  }
+
+  test("PATH enabled: unqualified SET VAR follows PATH; DDL on variables ignores PATH") {
+    withPathEnabled {
+      sql("DECLARE VARIABLE system.session.path_var_gate = 7")
+      try {
+        sql("SET PATH = spark_catalog.default")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("SET VAR path_var_gate = 8")
+          },
+          condition = "UNRESOLVED_VARIABLE",
+          sqlState = "42883",
+          parameters = Map(
+            "variableName" -> "`path_var_gate`",
+            "searchPath" -> "[`spark_catalog`.`default`]"),
+          context = ExpectedContext("path_var_gate", 8, 20))
+
+        sql("SET VAR system.session.path_var_gate = 9")
+        checkAnswer(sql("SELECT system.session.path_var_gate"), Row(9))
+
+        sql("DROP TEMPORARY VARIABLE path_var_gate")
+
+        sql("DECLARE VARIABLE system.session.path_var_gate = 7")
+        sql("SET PATH = spark_catalog.default, system.session")
+        sql("SET VAR path_var_gate = 11")
+        checkAnswer(sql("SELECT path_var_gate"), Row(11))
+        sql("DROP TEMPORARY VARIABLE path_var_gate")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.path_var_gate")
+      }
+    }
+  }
+
+  test("PATH enabled: unqualified FETCH ... INTO follows PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true") {
+      sql("DECLARE OR REPLACE VARIABLE path_fetch_target INT")
+      try {
+        // Sanity: FETCH INTO works under the default path (system.session is on it).
+        val ok = sql(
+          """
+            |BEGIN
+            |  DECLARE cur CURSOR FOR SELECT 42 AS val;
+            |  OPEN cur;
+            |  FETCH cur INTO path_fetch_target;
+            |  CLOSE cur;
+            |END;
+            |""".stripMargin)
+        checkAnswer(ok, Seq.empty[Row])
+        checkAnswer(sql("SELECT path_fetch_target"), Row(42))
+
+        // Set PATH to exclude system.session: unqualified FETCH INTO target now fails
+        // with the actual SQL path rendered as a bracketed list.
+        sql("SET PATH = spark_catalog.default")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              """
+                |BEGIN
+                |  DECLARE cur CURSOR FOR SELECT 99 AS val;
+                |  OPEN cur;
+                |  FETCH cur INTO path_fetch_target;
+                |  CLOSE cur;
+                |END;
+                |""".stripMargin)
+          },
+          condition = "UNRESOLVED_VARIABLE",
+          sqlState = "42883",
+          parameters = Map(
+            "variableName" -> "`path_fetch_target`",
+            "searchPath" -> "[`spark_catalog`.`default`]"),
+          context = ExpectedContext("path_fetch_target", -1, -1))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY VARIABLE IF EXISTS path_fetch_target")
+      }
+    }
+  }
+
+  test("PATH enabled: DECLARE / SET VAR / DROP cycle under non-default PATH") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_var_cycle")
+      try {
+        sql("SET PATH = spark_catalog.path_var_cycle, system.session")
+        sql("DECLARE OR REPLACE VARIABLE cycle_var = 1")
+        sql("SET VAR system.session.cycle_var = 2")
+        sql("SET VAR cycle_var = 3")
+        checkAnswer(sql("SELECT cycle_var"), Row(3))
+        sql("DROP TEMPORARY VARIABLE cycle_var")
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS system.session.cycle_var")
+        sql("DROP SCHEMA IF EXISTS path_var_cycle")
+      }
+    }
+  }
+
+  test("PATH enabled: current_path does not accept arguments") {
+    withPathEnabled {
+      // Ensure built-in function lookup succeeds so this assertion targets arg-count semantics.
+      sql("SET PATH = DEFAULT_PATH")
+      val e = intercept[AnalysisException] {
+        sql("SELECT current_path(1)")
+      }
+      assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION", e.getMessage)
+    }
+  }
+
+  test("PATH enabled: DEFAULT_PATH respects sessionFunctionResolutionOrder = first") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "first") {
+      sql("SET PATH = DEFAULT_PATH")
+      val entries = pathEntries(currentPath())
+      assert(entries.head.contains("session"),
+        s"With 'first' order, session should come first; got: $entries")
+    }
+  }
+
+  test("PATH enabled: DEFAULT_PATH respects sessionFunctionResolutionOrder = last") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "last") {
+      sql("SET PATH = DEFAULT_PATH")
+      val entries = pathEntries(currentPath())
+      assert(entries.last.contains("session"),
+        s"With 'last' order, session should come last; got: $entries")
+    }
+  }
+
+  // TODO: cloneSession() constructs a new CatalogManager per forked session and
+  // explicitly copies only the stored session path via copySessionPathFrom.
+  // Other CatalogManager state propagation (current catalog/namespace, registered
+  // catalogs) on clone is currently incidental -- audit and pin down the intended
+  // semantics in a follow-up.
+
+  // --- Resolution tests: verify SET PATH affects actual table/function lookup ---
+
+  test("PATH enabled: table resolves from first matching path entry") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_res_a")
+      sql("CREATE SCHEMA IF NOT EXISTS path_res_b")
+      sql("CREATE TABLE path_res_a.tbl (x INT) USING parquet")
+      sql("CREATE TABLE path_res_b.tbl (x INT) USING parquet")
+      sql("INSERT INTO path_res_a.tbl VALUES (1)")
+      sql("INSERT INTO path_res_b.tbl VALUES (2)")
+      try {
+        sql("SET PATH = spark_catalog.path_res_a, spark_catalog.path_res_b, system.builtin")
+        checkAnswer(sql("SELECT x FROM tbl"), Row(1))
+        sql("SET PATH = spark_catalog.path_res_b, spark_catalog.path_res_a, system.builtin")
+        checkAnswer(sql("SELECT x FROM tbl"), Row(2))
+      } finally {
+        sql("DROP TABLE IF EXISTS path_res_a.tbl")
+        sql("DROP TABLE IF EXISTS path_res_b.tbl")
+        sql("DROP SCHEMA IF EXISTS path_res_a")
+        sql("DROP SCHEMA IF EXISTS path_res_b")
+      }
+    }
+  }
+
+  test("PATH enabled: function resolves from first matching path entry") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_fn_a")
+      sql("CREATE SCHEMA IF NOT EXISTS path_fn_b")
+      sql("CREATE FUNCTION path_fn_a.pick() RETURNS INT RETURN 1")
+      sql("CREATE FUNCTION path_fn_b.pick() RETURNS INT RETURN 2")
+      try {
+        sql("SET PATH = spark_catalog.path_fn_a, spark_catalog.path_fn_b, system.builtin")
+        checkAnswer(sql("SELECT pick()"), Row(1))
+        sql("SET PATH = spark_catalog.path_fn_b, spark_catalog.path_fn_a, system.builtin")
+        checkAnswer(sql("SELECT pick()"), Row(2))
+      } finally {
+        sql("DROP FUNCTION IF EXISTS path_fn_a.pick")
+        sql("DROP FUNCTION IF EXISTS path_fn_b.pick")
+        sql("DROP SCHEMA IF EXISTS path_fn_a")
+        sql("DROP SCHEMA IF EXISTS path_fn_b")
+      }
+    }
+  }
+
+  test("PATH enabled: unqualified table fails when schema not in path") {
+    withPathEnabled {
+      sql("CREATE SCHEMA IF NOT EXISTS path_miss")
+      sql("CREATE TABLE path_miss.hidden (x INT) USING parquet")
+      try {
+        sql("SET PATH = spark_catalog.default, system.builtin")
+        val err = intercept[AnalysisException] {
+          sql("SELECT * FROM hidden")
+        }
+        assert(err.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND"),
+          s"Expected TABLE_OR_VIEW_NOT_FOUND, got: ${err.getMessage}")
+      } finally {
+        sql("DROP TABLE IF EXISTS path_miss.hidden")
+        sql("DROP SCHEMA IF EXISTS path_miss")
+      }
+    }
+  }
+}

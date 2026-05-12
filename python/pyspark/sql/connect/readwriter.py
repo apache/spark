@@ -18,7 +18,16 @@ from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Callable
 from typing import TYPE_CHECKING
 
-from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
+from pyspark.sql.connect.plan import (
+    Read,
+    RelationChanges,
+    DataSource,
+    LogicalPlan,
+    WriteOperation,
+    WriteOperationV2,
+    Parse,
+)
+import pyspark.sql.connect.proto as proto
 from pyspark.sql.types import StructType
 from pyspark.sql.utils import to_str
 from pyspark.sql.readwriter import (
@@ -26,7 +35,12 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import (
+    AnalysisException,
+    PySparkAttributeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.connect.functions import builtin as F
 
 if TYPE_CHECKING:
@@ -79,9 +93,10 @@ class DataFrameReader(OptionUtils):
             self._schema = schema
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "str or struct type",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -139,9 +154,20 @@ class DataFrameReader(OptionUtils):
 
     table.__doc__ = PySparkDataFrameReader.table.__doc__
 
+    def changes(self, tableName: str) -> "DataFrame":
+        if self._schema:
+            raise AnalysisException(
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
+                messageParameters={"operation": "changes"},
+            )
+        return self._df(RelationChanges(tableName, self._options))
+
+    changes.__doc__ = PySparkDataFrameReader.changes.__doc__
+
     def json(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -196,7 +222,32 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        return self.load(path=path, format="json", schema=schema)
+        if isinstance(path, list):
+            return self.load(path=path, format="json", schema=schema)
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_JSON,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "path",
+                "expected_type": "str, list, or DataFrame",
+                "arg_type": type(path).__name__,
+            },
+        )
 
     json.__doc__ = PySparkDataFrameReader.json.__doc__
 
@@ -249,7 +300,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -320,13 +371,29 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_CSV,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
         return self.load(path=path, format="csv", schema=schema)
 
     csv.__doc__ = PySparkDataFrameReader.csv.__doc__
 
     def xml(
         self,
-        path: PathOrPaths,
+        path: Union[PathOrPaths, "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -370,7 +437,32 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        return self.load(path=path, format="xml", schema=schema)
+        if isinstance(path, list):
+            return self.load(path=path, format="xml", schema=schema)
+
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            # Schema must be set explicitly here because the DataFrame path
+            # bypasses load(), which normally calls self.schema(schema).
+            if schema is not None:
+                self.schema(schema)
+            return self._df(
+                Parse(
+                    child=path._plan,
+                    format=proto.Parse.ParseFormat.PARSE_FORMAT_XML,
+                    schema=self._schema,
+                    options=self._options,
+                )
+            )
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "path",
+                "expected_type": "str, list, or DataFrame",
+                "arg_type": type(path).__name__,
+            },
+        )
 
     xml.__doc__ = PySparkDataFrameReader.xml.__doc__
 
@@ -547,19 +639,21 @@ class DataFrameWriter(OptionUtils):
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
-            raise PySparkValueError(
-                errorClass="CANNOT_SET_TOGETHER",
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
-                    "arg_list": f"`col` of type {type(col).__name__} and `cols`",
+                    "expected_type": "int",
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
                 },
             )
 
         if isinstance(col, (list, tuple)):
             if cols:
                 raise PySparkValueError(
-                    errorClass="NOT_INT",
+                    errorClass="CANNOT_SET_TOGETHER",
                     messageParameters={
-                        "arg_list": "numBuckets",
+                        "arg_list": f"`col` of type {type(col).__name__} and `cols`",
                     },
                 )
 
@@ -568,17 +662,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -612,17 +708,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )

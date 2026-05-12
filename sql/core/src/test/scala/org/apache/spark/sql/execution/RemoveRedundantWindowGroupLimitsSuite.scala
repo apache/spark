@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class RemoveRedundantWindowGroupLimitsSuiteBase
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
 
   private def checkNumWindowGroupLimits(df: DataFrame, count: Int): Unit = {

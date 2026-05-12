@@ -8332,8 +8332,12 @@ def when(condition: Column, value: Any) -> Column:
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN",
-            messageParameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column",
+                "arg_name": "condition",
+                "arg_type": type(condition).__name__,
+            },
         )
     value = _enum_to_value(value)
     v = value._jc if isinstance(value, Column) else _enum_to_value(value)
@@ -13122,6 +13126,67 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 
 @_try_remote_functions
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    """
+    Aligns a timestamp to the start of a fixed-size interval bucket.
+
+    Returns the start of the bucket that ``ts`` falls into, where buckets are defined by
+    the given ``bucket_size`` interval aligned to optional ``origin``. For ``TIMESTAMP_NTZ``,
+    bucketing is performed in UTC. For ``TIMESTAMP``, year-month interval buckets and
+    calendar-day components of day-time interval buckets align to the session time zone.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    bucket_size : :class:`~pyspark.sql.Column`
+        A day-time or year-month interval defining the bucket size. Must be positive
+        and foldable.
+    ts : :class:`~pyspark.sql.Column` or column name
+        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+    origin : :class:`~pyspark.sql.Column`, optional
+        Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
+        ``ts`` and must be foldable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The start of the bucket containing ``ts``, as the same type as ``ts``.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2024, 1, 1, 11, 27, 0),)], ['ts'])
+    >>> df.select(
+    ...     sf.time_bucket(sf.expr("INTERVAL '15' MINUTE"), 'ts').alias("bucket")
+    ... ).collect()
+    [Row(bucket=datetime.datetime(2024, 1, 1, 11, 15))]
+
+    Shift the grid with an explicit origin: buckets run at :05, :20, :35, :50:
+
+    >>> df.select(
+    ...     sf.time_bucket(
+    ...         sf.expr("INTERVAL '15' MINUTE"),
+    ...         'ts',
+    ...         sf.expr("TIMESTAMP '1970-01-01 00:05:00'")
+    ...     ).alias("bucket")
+    ... ).collect()
+    [Row(bucket=datetime.datetime(2024, 1, 1, 11, 20))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -13209,8 +13274,12 @@ def window(
     def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
         if not field or type(field) is not str:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": fieldName,
+                    "expected_type": "str",
+                    "arg_type": type(field).__name__,
+                },
             )
 
     windowDuration = _enum_to_value(windowDuration)
@@ -13354,8 +13423,12 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     def check_field(field: Union[Column, str], fieldName: str) -> None:
         if field is None or not isinstance(field, (str, Column)):
             raise PySparkTypeError(
-                errorClass="NOT_COLUMN_OR_STR",
-                messageParameters={"arg_name": fieldName, "arg_type": type(field).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "Column or str",
+                    "arg_name": fieldName,
+                    "arg_type": type(field).__name__,
+                },
             )
 
     time_col = _to_java_column(timeColumn)
@@ -13602,6 +13675,31 @@ def current_catalog() -> Column:
     +-----------------+
     """
     return _invoke_function("current_catalog")
+
+
+@_try_remote_functions
+def current_path() -> Column:
+    """Returns the current SQL path as a comma-separated list of qualified schema names.
+
+    .. versionadded:: 4.2.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_schema`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_path()).show() # doctest: +SKIP
+    +----------------------------------------------------+
+    |                                      current_path()|
+    +----------------------------------------------------+
+    |system.builtin,system.session,spark_catalog.default |
+    +----------------------------------------------------+
+    """
+    return _invoke_function("current_path")
 
 
 @_try_remote_functions
@@ -14099,8 +14197,12 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
         return _invoke_function_over_columns("assert_true", col)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "errMsg",
+                "arg_type": type(errMsg).__name__,
+            },
         )
     return _invoke_function_over_columns("assert_true", col, lit(errMsg))
 
@@ -14140,8 +14242,12 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     errMsg = _enum_to_value(errMsg)
     if not isinstance(errMsg, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "errMsg", "arg_type": type(errMsg).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "errMsg",
+                "arg_type": type(errMsg).__name__,
+            },
         )
     return _invoke_function_over_columns("raise_error", lit(errMsg))
 
@@ -15057,14 +15163,22 @@ def overlay(
     pos = _enum_to_value(pos)
     if not isinstance(pos, (int, str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "pos", "arg_type": type(pos).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "pos",
+                "arg_type": type(pos).__name__,
+            },
         )
     len = _enum_to_value(len)
     if len is not None and not isinstance(len, (int, str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "len", "arg_type": type(len).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "len",
+                "arg_type": type(len).__name__,
+            },
         )
 
     if isinstance(pos, int):
@@ -21111,6 +21225,35 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    """
+    Check if a variant value is valid. Returns true if the variant is valid, false if it is
+    malformed, and NULL if the input is NULL.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean column indicating whether the variant value is valid
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(is_valid_variant(parse_json(df.json)).alias("r")).collect()
+    [Row(r=True)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("is_valid_variant", _to_java_column(v))
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
@@ -21426,8 +21569,12 @@ def schema_of_json(json: Union[Column, str], options: Optional[Mapping[str, str]
     json = _enum_to_value(json)
     if not isinstance(json, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "json", "arg_type": type(json).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "json",
+                "arg_type": type(json).__name__,
+            },
         )
 
     return _invoke_function("schema_of_json", _to_java_column(lit(json)), _options_to_str(options))
@@ -21593,8 +21740,12 @@ def from_xml(
         schema = _to_java_column(schema)
     elif not isinstance(schema, str):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR_OR_STRUCT",
-            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "StructType, Column or str",
+                "arg_name": "schema",
+                "arg_type": type(schema).__name__,
+            },
         )
     return _invoke_function("from_xml", _to_java_column(col), schema, _options_to_str(options))
 
@@ -21683,8 +21834,12 @@ def schema_of_xml(xml: Union[Column, str], options: Optional[Mapping[str, str]] 
     xml = _enum_to_value(xml)
     if not isinstance(xml, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "xml", "arg_type": type(xml).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "xml",
+                "arg_type": type(xml).__name__,
+            },
         )
 
     return _invoke_function("schema_of_xml", _to_java_column(lit(xml)), _options_to_str(options))
@@ -21818,8 +21973,12 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     csv = _enum_to_value(csv)
     if not isinstance(csv, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "csv", "arg_type": type(csv).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "csv",
+                "arg_type": type(csv).__name__,
+            },
         )
 
     return _invoke_function("schema_of_csv", _to_java_column(lit(csv)), _options_to_str(options))
@@ -22457,12 +22616,16 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 @_try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns a reversed string or an array with elements in reverse order.
+    Collection function: returns a reversed string, a binary value with bytes in reverse order,
+    or an array with elements in reverse order.
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added support for binary type.
 
     Parameters
     ----------
@@ -22472,7 +22635,8 @@ def reverse(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new column that contains a reversed string or an array with elements in reverse order.
+        A new column that contains a reversed string, a binary value with bytes in reverse order,
+        or an array with elements in reverse order.
 
     Examples
     --------
@@ -22499,6 +22663,17 @@ def reverse(col: "ColumnOrName") -> Column:
     |          [1]|
     |           []|
     +-------------+
+
+    Example 3: Reverse binary data
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytearray(b"\\xCA\\xFE"),)], "data: binary")
+    >>> df.select(sf.hex(sf.reverse(df.data))).show()
+    +------------------+
+    |hex(reverse(data))|
+    +------------------+
+    |              FECA|
+    +------------------+
     """
     return _invoke_function_over_columns("reverse", col)
 
@@ -23367,8 +23542,12 @@ def from_csv(
 
     if not isinstance(schema, (str, Column)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "schema",
+                "arg_type": type(schema).__name__,
+            },
         )
 
     return _invoke_function(
@@ -25087,8 +25266,12 @@ def time_to_micros(col: "ColumnOrName") -> Column:
 def _ensure_column_or_name(arg: Optional[Any]) -> "ColumnOrName":
     if not isinstance(arg, (Column, str)):
         raise PySparkTypeError(
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "arg", "arg_type": type(arg).__name__},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "arg",
+                "arg_type": type(arg).__name__,
+            },
         )
     return arg
 
@@ -26196,15 +26379,21 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_asbinary(geo: "ColumnOrName") -> Column:
+def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
 
     .. versionadded:: 4.1.0
+
+    .. versionchanged:: 4.2.0
+        Added the optional `endianness` parameter.
 
     Parameters
     ----------
     geo : :class:`~pyspark.sql.Column` or str
         A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+    endianness : :class:`~pyspark.sql.Column` or str, optional
+        The optional endianness of the output WKB, 'NDR' for little-endian (default) or 'XDR' for
+        big-endian.
 
     Examples
     --------
@@ -26213,15 +26402,31 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 2: Getting WKB from GEOMETRY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
+
+    Example 3: Getting WKB (little-endian) from GEOGRAPHY.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'), 'NDR'))).collect()
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
+
+    Example 4: Getting WKB (big-endian) from GEOMETRY.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'), 'XDR'))).collect()
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), XDR))='00000000013FF00000000000004000000000000000')]
     """
-    return _invoke_function_over_columns("st_asbinary", geo)
+    if endianness is None:
+        return _invoke_function_over_columns("st_asbinary", geo)
+    else:
+        _endianness = lit(endianness) if isinstance(endianness, str) else endianness
+        return _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 @_try_remote_functions
@@ -26240,7 +26445,7 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geogfromwkb", wkb)
 
@@ -26265,7 +26470,7 @@ def st_geomfromwkb(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
     """
     if srid is None:
         return _invoke_function_over_columns("st_geomfromwkb", wkb)

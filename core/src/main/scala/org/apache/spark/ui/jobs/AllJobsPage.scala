@@ -406,7 +406,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       " Click on a job to see information about the stages of tasks inside it."
 
     UIUtils.headerSparkPage(request, "Spark Jobs", content, parent,
-      helpText = Some(helpText))
+      helpText = Some(helpText), useTimeline = true)
   }
 
 }

@@ -21,7 +21,7 @@ name: "Build / Python-only (branch-4.1, Python 3.14)"
 
 on:
   schedule:
-    - cron: '0 12 * * *'
+    - cron: '0 12 */2 * *'
   workflow_dispatch:
 
 jobs:

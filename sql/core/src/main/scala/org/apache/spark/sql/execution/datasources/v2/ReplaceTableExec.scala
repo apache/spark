@@ -45,7 +45,9 @@ case class ReplaceTableExec(
       invalidateCache(catalog, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(
+        ident,
+        CatalogV2Util.searchPathForTableIdentifier(catalog, ident))
     }
     val tableInfo = new TableInfo.Builder()
       .withColumns(columns)
@@ -97,10 +99,15 @@ case class AtomicReplaceTableExec(
         catalog.stageReplace(identifier, tableInfo)
       } catch {
         case e: NoSuchTableException =>
-          throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier, Some(e))
+          throw QueryCompilationErrors.cannotReplaceMissingTableError(
+            identifier,
+            CatalogV2Util.searchPathForTableIdentifier(catalog, identifier),
+            Some(e))
       }
     } else {
-      throw QueryCompilationErrors.cannotReplaceMissingTableError(identifier)
+      throw QueryCompilationErrors.cannotReplaceMissingTableError(
+        identifier,
+        CatalogV2Util.searchPathForTableIdentifier(catalog, identifier))
     }
     commitOrAbortStagedChanges(staged)
     Seq.empty

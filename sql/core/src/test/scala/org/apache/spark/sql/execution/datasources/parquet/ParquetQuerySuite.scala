@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
 /**
  * A test suite that tests various Parquet queries.
  */
-abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSparkSession {
+abstract class ParquetQuerySuite extends ParquetTest with SharedSparkSession {
   import testImplicits._
 
   test("simple select queries") {

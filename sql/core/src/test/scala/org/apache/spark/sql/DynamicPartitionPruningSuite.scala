@@ -31,14 +31,13 @@ import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test suite for the filtering ratio policy used to trigger dynamic partition pruning (DPP).
  */
 abstract class DynamicPartitionPruningSuiteBase
     extends QueryTest
-    with SQLTestUtils
     with GivenWhenThen
     with AdaptiveSparkPlanHelper {
 

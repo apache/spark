@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeometryDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
@@ -128,6 +128,19 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
       condition = "ST_INVALID_SRID_VALUE",
       parameters = Map("srid" -> "1")
     )
+  }
+
+  test("createDataFrame and round-trip with Geometry SRIDs") {
+    // Covers PROJ-sourced SRIDs, the Spark-specific SRID 0,
+    // and OGC-overridden SRIDs (4326, 4267, 4269).
+    // Includes newer PROJ registry SRIDs (e.g. after PROJ 9.8.x): ESRI:102964, ESRI:104030.
+    Seq(0, 3857, 2000, 4326, 4267, 4269, 102100, 102964, 104030).foreach { srid =>
+      val geom = Geometry.fromWKB(point1, srid)
+      val schema = StructType(Seq(StructField("g", GeometryType(srid), nullable = false)))
+      checkAnswer(
+        spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom))), schema),
+        Seq(Row(geom)))
+    }
   }
 
   test("createDataFrame APIs with Geometry.fromWKB") {

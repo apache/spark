@@ -73,6 +73,9 @@ private[spark] class TaskContextImpl(
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new Stack[TaskFailureListener]
 
+  /** List of callback functions to execute when the task is interrupted. */
+  @transient private val onInterruptCallbacks = new Stack[TaskInterruptListener]
+
   /**
    * The thread currently executing task completion or failure listeners, if any.
    *
@@ -126,6 +129,21 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  override def addTaskInterruptListener(listener: TaskInterruptListener): this.type = {
+    synchronized {
+      // If another thread is already running `invokeTaskInterruptListeners`, adding the new
+      // listener to `onInterruptCallbacks` will cause that thread to execute it (the loop pops
+      // listeners under the TaskContext lock).
+      //
+      // Otherwise, `invokeTaskInterruptListeners()` below will execute all listeners.
+      onInterruptCallbacks.push(listener)
+      reasonIfKilled
+    }.foreach { reason =>
+      invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
+    }
+    this
+  }
+
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
     resources.asJava
   }
@@ -163,6 +181,41 @@ private[spark] class TaskContextImpl(
     // lock. `invokeListeners()` acquires the lock before accessing the contents.
     invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
       _.onTaskFailure(this, error)
+    }
+  }
+
+  private def invokeTaskInterruptListeners(reason: String, error: Throwable): Unit = {
+    // Do not use `invokeListeners()`. That method uses `listenerInvocationThread` to serialize
+    // all listener invocations, which would prevent task completion or failure listeners from
+    // running if the task completes or fails while executing an interrupt listener (causing
+    // resource leaks such as task-managed resources not being freed).
+    //
+    // Instead, directly execute the task interrupt listeners with independent serialization.
+    // Exceptions are collected and thrown as a TaskCompletionListenerException so that
+    // `markInterrupted` can catch and record the aggregate failure (SPARK-56330).
+    def getNextListener(): Option[TaskInterruptListener] = synchronized {
+      if (onInterruptCallbacks.empty()) {
+        None
+      } else {
+        Some(onInterruptCallbacks.pop())
+      }
+    }
+    val listenerExceptions = new ArrayBuffer[Throwable](2)
+    var listenerOption: Option[TaskInterruptListener] = None
+    while ({listenerOption = getNextListener(); listenerOption.nonEmpty}) {
+      try {
+        listenerOption.get.onTaskInterrupted(this, reason)
+      } catch {
+        case e: Throwable =>
+          listenerExceptions += e
+          logError(log"Error in TaskInterruptListener", e)
+      }
+    }
+    if (listenerExceptions.nonEmpty) {
+      val exception = new TaskCompletionListenerException(
+        listenerExceptions.map(_.getMessage).toSeq, Option(error))
+      listenerExceptions.foreach(exception.addSuppressed)
+      throw exception
     }
   }
 
@@ -272,6 +325,15 @@ private[spark] class TaskContextImpl(
 
   private[spark] override def markInterrupted(reason: String): Unit = {
     reasonIfKilled = Some(reason)
+    try {
+      invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
+    } catch {
+      case e: TaskCompletionListenerException =>
+        // SPARK-56330: Do not propagate to the executor kill / RPC thread; record the aggregate
+        // failure for the task (not the first listener exception only).
+        logError(log"Exception(s) in TaskInterruptListener(s) after task was interrupted", e)
+        markTaskFailed(e)
+    }
   }
 
   private[spark] override def killTaskIfInterrupted(): Unit = {

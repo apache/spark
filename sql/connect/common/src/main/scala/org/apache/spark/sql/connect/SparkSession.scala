@@ -84,6 +84,8 @@ class SparkSession private[sql] (
     extends sql.SparkSession
     with Logging {
 
+  private val releaseLock = new Object
+  private var released = false
   private[this] val allocator = new RootAllocator()
   private[sql] lazy val cleaner = new SessionCleaner(this)
 
@@ -117,12 +119,24 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val threshold = conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
-        val maxChunkSizeRows = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
-        val maxChunkSizeBytes = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        val confs = conf.getConfigMap(
+          SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY,
+          SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY,
+          SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY,
+          SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY,
+          SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES,
+          SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY,
+          "spark.sql.session.localRelationSizeLimit")
+
+        val threshold = confs(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
+        val maxChunkSizeRows = confs(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
+        val maxChunkSizeBytes = confs(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toLong
         val maxBatchOfChunksSize =
-          conf.get(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
-        val localRelationSizeLimit = conf.get("spark.sql.session.localRelationSizeLimit").toLong
+          confs(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+        val localRelationSizeLimit = confs("spark.sql.session.localRelationSizeLimit").toLong
+        val largeVarTypes =
+          confs(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toLowerCase(Locale.ROOT).toBoolean
+        val timeZoneId = confs(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
         // Serialize with chunking support
         val it = ArrowSerializer.serialize(
@@ -546,8 +560,6 @@ class SparkSession private[sql] (
   }
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
-  private[sql] def largeVarTypes: Boolean =
-    conf.get(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toLowerCase(Locale.ROOT).toBoolean
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = executeInternal(plan)
@@ -686,19 +698,26 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
-    if (releaseSessionOnClose) {
+    releaseLock.synchronized {
+      if (releaseSessionOnClose && !released && !client.channel.isShutdown) {
+        try {
+          client.releaseSession()
+          released = true
+        } catch {
+          case e: Exception => logWarning("session.stop: Failed to release session", e)
+        }
+      }
       try {
-        client.releaseSession()
+        client.shutdown()
       } catch {
-        case e: Exception => logWarning("session.stop: Failed to release session", e)
+        case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
+      }
+      try {
+        allocator.close()
+      } catch {
+        case e: Exception => logWarning("session.stop: Failed to close the allocator", e)
       }
     }
-    try {
-      client.shutdown()
-    } catch {
-      case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
-    }
-    allocator.close()
     SparkSession.onSessionClose(this)
     SparkSession.server.synchronized {
       if (SparkSession.server.isDefined) {

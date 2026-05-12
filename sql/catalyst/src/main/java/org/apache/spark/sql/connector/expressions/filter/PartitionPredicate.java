@@ -21,9 +21,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.expressions.PartitionColumnReference;
-
-import static org.apache.spark.sql.connector.expressions.Expression.EMPTY_EXPRESSION;
+import org.apache.spark.sql.connector.expressions.PartitionFieldReference;
 
 /**
  * Represents a partition predicate that can be evaluated using {@link Table#partitioning()}.
@@ -47,17 +45,17 @@ public abstract class PartitionPredicate extends Predicate {
   /**
    * {@inheritDoc}
    * <p>
-   * For PartitionPredicate, returns {@link PartitionColumnReference} instances that identify
-   * the partition columns (from {@link Table#partitioning()}) referenced by this predicate.
-   * Each reference's {@link PartitionColumnReference#fieldNames()} gives the partition column
-   * name; {@link PartitionColumnReference#ordinal()} gives the 0-based position in
+   * For PartitionPredicate, returns {@link PartitionFieldReference} instances that identify
+   * the partition fields (from {@link Table#partitioning()}) referenced by this predicate.
+   * Each reference's {@link PartitionFieldReference#fieldNames()} gives the partition field
+   * name; {@link PartitionFieldReference#ordinal()} gives the 0-based position in
    * {@link Table#partitioning()}.
    * <p>
    * <b>Example:</b> Suppose {@code Table.partitioning()} returns three partition
    * transforms: {@code [years(ts), months(ts), bucket(32, id)]} with ordinals 0, 1, 2.
-   * Each {@link PartitionColumnReference} has {@link PartitionColumnReference#fieldNames()}
+   * Each {@link PartitionFieldReference} has {@link PartitionFieldReference#fieldNames()}
    * (the transform display name, e.g. {@code years(ts)}) and
-   * {@link PartitionColumnReference#ordinal()}:
+   * {@link PartitionFieldReference#ordinal()}:
    * <ul>
    *   <li>{@code years(ts) = 2026} returns one reference: (fieldNames=[years(ts)], ordinal=0).</li>
    *   <li>{@code years(ts) = 2026 and months(ts) = 01} returns two references:
@@ -72,7 +70,7 @@ public abstract class PartitionPredicate extends Predicate {
    * partitioned data) to Spark for post-scan filter, while predicates that reference only
    * initially-added partition transforms may be fully pushed.
    *
-   * @return array of partition column references
+   * @return array of partition field references
    */
   @Override
   public abstract NamedReference[] references();
@@ -81,7 +79,7 @@ public abstract class PartitionPredicate extends Predicate {
    * Evaluates this predicate against a single partition's keys.
    * <p>
    * The caller must pass the <b>full</b> partition key: one value per partition transform in
-   * {@link Table#partitioning()}, in order. A key for only a subset of referenced columns is not
+   * {@link Table#partitioning()}, in order. A key for only a subset of referenced fields is not
    * supported.
    *
    * @param partitionKey the full partition key for one partition, ordered according to

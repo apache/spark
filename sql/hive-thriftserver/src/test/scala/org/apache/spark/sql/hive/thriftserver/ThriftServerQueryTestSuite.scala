@@ -173,7 +173,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           val schema = segments(i * 3 + 2).trim
           val originalOut = segments(i * 3 + 3)
           val output =
-            if (schema != emptySchema && isNeedSort(sql)) {
+            if (schema != emptySchema && isNeedSort(sql) && rowCounts(i) > 0) {
               val splits = originalOut.split("\n")
               if (splits.length > rowCounts(i)) {
                 // the result is multiline
