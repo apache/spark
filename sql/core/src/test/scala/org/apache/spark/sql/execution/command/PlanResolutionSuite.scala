@@ -139,6 +139,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .add("s", "string")
       .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(tableType)
+    // Mockito returns false for unstubbed Boolean methods, so analyzer code paths that
+    // dispatch through `CatalogTable.isViewLike` (e.g. `Analyzer.lookupTableOrView`'s v1
+    // session-catalog branch) would misclassify a mocked VIEW fixture as a table. Stub
+    // the method to compute from the just-stubbed `tableType` so any view-like type
+    // (VIEW today, METRIC_VIEW or future kinds) resolves correctly.
+    when(t.isViewLike).thenReturn(CatalogTable.isViewLike(tableType))
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))

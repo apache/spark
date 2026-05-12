@@ -430,6 +430,7 @@ Below is a list of all the keywords in Spark SQL.
 |ATOMIC|non-reserved|non-reserved|non-reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
 |BEGIN|non-reserved|non-reserved|non-reserved|
+|BERNOULLI|non-reserved|non-reserved|non-reserved|
 |BETWEEN|non-reserved|non-reserved|reserved|
 |BIGINT|non-reserved|non-reserved|reserved|
 |BINARY|non-reserved|non-reserved|reserved|
@@ -765,6 +766,7 @@ Below is a list of all the keywords in Spark SQL.
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
 |SYNC|non-reserved|non-reserved|non-reserved|
+|SYSTEM|non-reserved|non-reserved|reserved|
 |SYSTEM_PATH|non-reserved|non-reserved|not a keyword|
 |SYSTEM_TIME|non-reserved|non-reserved|non-reserved|
 |SYSTEM_VERSION|non-reserved|non-reserved|non-reserved|

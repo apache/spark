@@ -632,7 +632,7 @@ object SQLConf {
       .doc("When true, enables geospatial types (GEOGRAPHY/GEOMETRY) and ST functions.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefaultFunction(() => Utils.isTesting)
+      .createWithDefault(true)
 
   val TYPES_FRAMEWORK_ENABLED =
     buildConf("spark.sql.types.framework.enabled")
@@ -2541,6 +2541,35 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_UNION_CODEGEN_ENABLED =
+    buildConf("spark.sql.codegen.wholeStage.union.enabled")
+      .internal()
+      .doc("When both this conf and `spark.sql.codegen.wholeStage` are true, " +
+        "UnionExec participates in whole-stage codegen on its " +
+        "non-partitioning-aware path: the parent and all children fuse into " +
+        "a single WholeStageCodegenExec stage.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val WHOLESTAGE_UNION_MAX_CHILDREN =
+    buildConf("spark.sql.codegen.wholeStage.union.maxChildren")
+      .internal()
+      .doc("Maximum number of UnionExec children eligible for whole-stage " +
+        "codegen fusion. Each child is emitted as its own helper method, so " +
+        "this conf bounds class-level costs of the fused stage (total " +
+        "bytecode size, constant pool growth, JIT compilation time) rather " +
+        "than the JVM per-method bytecode limit. Unions with more children " +
+        "fall back to per-child codegen stages. Only effective when " +
+        s"`${WHOLESTAGE_UNION_CODEGEN_ENABLED.key}` is true.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(v => v >= 2,
+        "The value of spark.sql.codegen.wholeStage.union.maxChildren must be >= 2")
+      .createWithDefault(64)
+
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
@@ -4120,6 +4149,51 @@ object SQLConf {
       .checkValue(_ >= -1,
         "The threshold of window group limit must be -1, 0 or positive integer.")
       .createWithDefault(1000)
+
+  val WINDOW_SEGMENT_TREE_ENABLED =
+    buildConf("spark.sql.window.segmentTree.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Use block-chunked segment tree for moving aggregate window frames " +
+        "whose functions are all DeclarativeAggregate without FILTER/DISTINCT.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS =
+    buildConf("spark.sql.window.segmentTree.minPartitionRows")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Minimum partition row count to activate the segment-tree moving frame. " +
+        "Partitions smaller than this fall back to the default sliding implementation.")
+      .version("4.2.0")
+      .internal()
+      .intConf
+      .checkValue(_ > 0, "minPartitionRows must be > 0")
+      .createWithDefault(64)
+
+  val WINDOW_SEGMENT_TREE_BLOCK_SIZE =
+    buildConf("spark.sql.window.segmentTree.blockSize")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Block size, in rows, for the block-chunked segment tree used by moving " +
+        "window frames. Each leaf of the tree aggregates this many consecutive rows. " +
+        "Smaller values reduce per-partition memory and speed up tree build for small " +
+        "partitions, but make the tree deeper and increase query cost for wide frames. " +
+        "Larger values amortize build cost and shrink the tree but increase the per-block " +
+        "prefix/suffix scan cost within a block. The default is tuned for partitions on " +
+        "the order of tens of thousands to millions of rows.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(_ >= 16, "blockSize must be >= 16")
+      .createWithDefault(65536)
+
+  val WINDOW_SEGMENT_TREE_FANOUT =
+    buildConf("spark.sql.window.segmentTree.fanout")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("Fanout of internal nodes for the block-chunked segment tree.")
+      .version("4.2.0")
+      .internal()
+      .intConf
+      .checkValue(_ >= 2, "fanout must be >= 2")
+      .createWithDefault(16)
 
   val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
@@ -8088,6 +8162,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def windowExecBufferSpillSizeThreshold: Long = getConf(WINDOW_EXEC_BUFFER_SIZE_SPILL_THRESHOLD)
 
   def windowGroupLimitThreshold: Int = getConf(WINDOW_GROUP_LIMIT_THRESHOLD)
+
+  def windowSegmentTreeEnabled: Boolean = getConf(WINDOW_SEGMENT_TREE_ENABLED)
+
+  def windowSegmentTreeMinPartitionRows: Int = getConf(WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS)
+
+  def windowSegmentTreeBlockSize: Int = getConf(WINDOW_SEGMENT_TREE_BLOCK_SIZE)
+
+  def windowSegmentTreeFanout: Int = getConf(WINDOW_SEGMENT_TREE_FANOUT)
 
   def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
 

@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.window
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -36,6 +36,14 @@ trait WindowEvaluatorFactoryBase {
   def orderSpec: Seq[SortOrder]
   def childOutput: Seq[Attribute]
   def spillSize: SQLMetric
+  /**
+   * Counters for [[SegmentTreeWindowFunctionFrame]] observability. Default
+   * `None` means the subclass does not integrate with the segment-tree frame
+   * path (e.g. [[org.apache.spark.sql.execution.python.ArrowWindowPythonEvaluatorFactory]]);
+   * only [[WindowEvaluatorFactory]] wires them.
+   */
+  def numSegmentTreeFrames: Option[SQLMetric] = None
+  def numSegmentTreeFallbackFrames: Option[SQLMetric] = None
 
   /**
    * Create the resulting projection.
@@ -191,13 +199,18 @@ trait WindowEvaluatorFactoryBase {
         // in a single Window physical node. Therefore, we can assume no SQL aggregation
         // functions if Pandas UDF exists. In the future, we might mix Pandas UDF and SQL
         // aggregation function in a single physical node.
+        val aggFilters: Array[Option[Expression]] = expressions.map {
+          case WindowExpression(ae: AggregateExpression, _) => ae.filter
+          case _ => None
+        }.toArray
+        // Keep as `def` (by-name): the FRAME_LESS_OFFSET / UNBOUNDED_OFFSET /
+        // UNBOUNDED_PRECEDING_OFFSET branches do not read `processor`. Eager
+        // `val` construction would invoke `AggregateProcessor.apply` on
+        // Lag / Lead / NthValue and throw
+        // `INTERNAL_ERROR: Unsupported aggregate function`.
         def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
         } else {
-          val aggFilters = expressions.map {
-            case WindowExpression(ae: AggregateExpression, _) => ae.filter
-            case _ => None
-          }.toArray
           AggregateProcessor(
             functions,
             ordinal,
@@ -206,6 +219,8 @@ trait WindowEvaluatorFactoryBase {
               MutableProjection.create(expressions, schema),
             aggFilters)
         }
+        val conf = SQLConf.get
+        val blockSize = conf.windowSegmentTreeBlockSize
 
         // Create the factory to produce WindowFunctionFrame.
         val factory = key match {
@@ -275,12 +290,44 @@ trait WindowEvaluatorFactoryBase {
 
           // Moving Frame.
           case ("AGGREGATE", frameType, lower, upper, _) =>
-            target: InternalRow => {
-              new SlidingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone),
-                createBoundOrdering(frameType, upper, timeZone))
+            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+              val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
+              target: InternalRow => {
+                // Task-completion listener registration lives inside the frame
+                // constructor (one per frame instance) to avoid duplicates when
+                // this closure fires multiple times per task. `TaskContext.get()`
+                // is only called at task-execution time, never at driver planning.
+                val tc = TaskContext.get()
+                if (tc == null) {
+                  throw SparkException.internalError(
+                    "WindowEvaluatorFactoryBase.segTreeFrameFactory requires " +
+                      "an active TaskContext")
+                }
+                val tmm = tc.taskMemoryManager()
+                new SegmentTreeWindowFunctionFrame(
+                  target,
+                  processor,
+                  segFns,
+                  childOutput,
+                  frameType,
+                  createBoundOrdering(frameType, lower, timeZone),
+                  createBoundOrdering(frameType, upper, timeZone),
+                  (e, s) => MutableProjection.create(e, s),
+                  conf,
+                  cacheHint,
+                  tmm,
+                  numSegmentTreeFrames,
+                  numSegmentTreeFallbackFrames)
+              }
+            } else {
+              target: InternalRow => {
+                new SlidingWindowFunctionFrame(
+                  target,
+                  processor,
+                  createBoundOrdering(frameType, lower, timeZone),
+                  createBoundOrdering(frameType, upper, timeZone))
+              }
             }
 
           case _ =>
@@ -293,6 +340,62 @@ trait WindowEvaluatorFactoryBase {
         // Create the Window Expression - Frame Factory pair.
         (expressions, factory)
     }
+  }
+
+  /**
+   * Segment-tree path eligibility. The tree relies on
+   * `DeclarativeAggregate.mergeExpressions`, which [[AggregateWindowFunction]]s
+   * (NthValue, NTile, Rank, RowNumber, NullIndex) refuse via
+   * `mergeUnsupportedByWindowFunctionError`: they extend DeclarativeAggregate
+   * but are NOT merge-capable. Normal aggregate window expressions reach this
+   * code as the inner DeclarativeAggregate unwrapped from
+   * [[AggregateExpression]] (see `windowFrameExpressionFactoryPairs.collect`).
+   *
+   * DISTINCT aggregate window expressions are already rejected earlier in
+   * analysis by `WindowResolution.checkWindowFunction`
+   * (error class `DISTINCT_WINDOW_FUNCTION_UNSUPPORTED`), so no explicit
+   * `isDistinct` gate is needed here.
+   */
+  private def eligibleForSegTree(
+      functions: Array[Expression],
+      filters: Array[Option[Expression]],
+      frameType: FrameType,
+      conf: SQLConf): Boolean = {
+    // RANGE accepted only for single-column order specs. Multi-column RANGE
+    // with non-zero offset is already rejected by `createBoundOrdering`, so
+    // gating here on `orderSpec.size == 1` matches the Sliding-path invariant.
+    val frameTypeOk = frameType match {
+      case RowFrame => true
+      case RangeFrame => orderSpec.size == 1
+    }
+    conf.windowSegmentTreeEnabled &&
+      frameTypeOk &&
+      filters.forall(_.isEmpty) &&
+      functions.forall(WindowSegmentTree.isEligible)
+  }
+
+  private def estimateMaxCachedBlocks(
+      lower: Expression,
+      upper: Expression,
+      frameType: FrameType,
+      blockSize: Int): Option[Int] = {
+    // Reached via the moving-frame branch after `eligibleForSegTree`. Under
+    // RANGE the frame width is data-dependent (defined by order-key distance,
+    // not row count), so no static width inference is possible; fall back to
+    // a default budget and rely on the runtime LRU + TMM spiller.
+    assert(frameType == RowFrame || frameType == RangeFrame,
+      s"estimateMaxCachedBlocks expects RowFrame or RangeFrame, got $frameType")
+    if (frameType == RangeFrame) {
+      return Some(8)
+    }
+    val w: Option[Int] = (lower, upper) match {
+      case (CurrentRow, CurrentRow) => Some(1)
+      case (IntegerLiteral(lo), IntegerLiteral(hi)) => Some(math.abs(hi - lo) + 1)
+      case (CurrentRow, IntegerLiteral(hi)) => Some(math.abs(hi) + 1)
+      case (IntegerLiteral(lo), CurrentRow) => Some(math.abs(lo) + 1)
+      case _ => None
+    }
+    w.map(ww => math.ceil(ww.toDouble / blockSize).toInt + 2).orElse(Some(8))
   }
 
 }

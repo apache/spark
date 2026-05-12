@@ -169,7 +169,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       val tableName = tableIdentWithDB.unquotedString
       val existingTable = catalog.getTableMetadata(tableIdentWithDB)
 
-      if (existingTable.tableType == CatalogTableType.VIEW) {
+      if (existingTable.isViewLike) {
         throw QueryCompilationErrors.saveDataIntoViewNotAllowedError()
       }
 
