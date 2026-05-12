@@ -132,11 +132,12 @@ class GeometryExecutionSuite {
   void testFromWkbWithInvalidSrid() {
     byte[] wkb = getTestWKBPoint();
     for (int invalidSrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
-      IllegalArgumentException exception = assertThrows(
-        IllegalArgumentException.class,
+      SparkIllegalArgumentException exception = assertThrows(
+        SparkIllegalArgumentException.class,
         () -> Geometry.fromWkb(wkb, invalidSrid)
       );
-      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidSrid + "."));
     }
   }
 
@@ -296,11 +297,12 @@ class GeometryExecutionSuite {
   void testSetSridWithInvalidSrid() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
     for (int invalidSrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
-      IllegalArgumentException exception = assertThrows(
-        IllegalArgumentException.class,
+      SparkIllegalArgumentException exception = assertThrows(
+        SparkIllegalArgumentException.class,
         () -> geometry.setSrid(invalidSrid)
       );
-      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidSrid + "."));
     }
   }
 }

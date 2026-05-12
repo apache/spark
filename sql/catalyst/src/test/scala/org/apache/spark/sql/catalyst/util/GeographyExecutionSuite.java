@@ -118,11 +118,12 @@ class GeographyExecutionSuite {
   void testFromWkbWithInvalidSrid() {
     byte[] wkb = getTestWKBPoint();
     for (int invalidSrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
-      IllegalArgumentException exception = assertThrows(
-        IllegalArgumentException.class,
+      SparkIllegalArgumentException exception = assertThrows(
+        SparkIllegalArgumentException.class,
         () -> Geography.fromWkb(wkb, invalidSrid)
       );
-      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidSrid + "."));
     }
   }
 
@@ -276,11 +277,12 @@ class GeographyExecutionSuite {
   void testSetSridWithInvalidSrid() {
     Geography geography = Geography.fromBytes(testGeographyVal);
     for (int invalidSrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
-      IllegalArgumentException exception = assertThrows(
-        IllegalArgumentException.class,
+      SparkIllegalArgumentException exception = assertThrows(
+        SparkIllegalArgumentException.class,
         () -> geography.setSrid(invalidSrid)
       );
-      assertTrue(exception.getMessage().contains(String.valueOf(invalidSrid)));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidSrid + "."));
     }
   }
 }

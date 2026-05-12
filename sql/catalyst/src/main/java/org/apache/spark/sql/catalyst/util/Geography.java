@@ -85,7 +85,7 @@ public final class Geography implements Geo {
   // Returns a Geography object with the specified SRID value by parsing the input WKB.
   public static Geography fromWkb(byte[] wkb, int srid) {
     try {
-      validateSrid(srid); // Validate the SRID before parsing the WKB.
+      checkSrid(srid); // Validate the SRID before parsing the WKB.
       WkbReader reader = new WkbReader(true);
       reader.read(wkb); // Validate WKB with geography coordinate bounds.
 
@@ -184,7 +184,7 @@ public final class Geography implements Geo {
 
   @Override
   public void setSrid(int srid) {
-    validateSrid(srid); // Validate the SRID before actually setting it.
+    checkSrid(srid); // Validate the SRID before actually setting it.
     // This method sets the SRID value in the in-memory Geography representation header.
     getWrapper().putInt(SRID_OFFSET, srid);
   }
@@ -196,10 +196,10 @@ public final class Geography implements Geo {
     return ByteBuffer.wrap(getBytes()).order(DEFAULT_ENDIANNESS);
   }
 
-  // Validates that the given SRID is supported for GEOGRAPHY values.
-  private static void validateSrid(int srid) {
+  // Checks if the provided SRID value is supported and throws a query execution error if not.
+  private static void checkSrid(int srid) {
     if (!GeographyType.isSridSupported(srid)) {
-      throw new IllegalArgumentException("Unsupported SRID value: " + srid);
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
     }
   }
 
