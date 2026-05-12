@@ -188,20 +188,29 @@ private[spark] class DAGScheduler(
 
   // For INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY > 0: shuffles whose mapper-0 corruption
   // has been deferred until enough downstream consumer tasks succeed. The value is the mapId
-  // we will eventually swap to an invalid BlockManagerId.
+  // we will eventually swap to an invalid BlockManagerId and the producing task's original
+  // location - we keep that location's host/port so the consumer's locality-preferred host
+  // is still a real one (only the executorId is INVALID_EXECUTOR_ID).
   private val injectShuffleFetchFailuresPendingDelayedCorruption =
-    new ConcurrentHashMap[Int, Long]()
+    new ConcurrentHashMap[Int, (Long, BlockManagerId)]()
 
   // For INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY: per-shuffle counter of consumer
   // task-success events observed so far.
   private val injectShuffleFetchFailuresDownstreamSuccessCount =
     new ConcurrentHashMap[Int, Int]()
 
-  // Bogus BlockManagerId used by INJECT_SHUFFLE_FETCH_FAILURES to mark a corrupted MapStatus.
-  // Any consumer task that tries to fetch a block from this location will FetchFailed because
-  // the executorId is INVALID_EXECUTOR_ID.
-  private val injectShuffleFetchFailuresInvalidBlockManagerId =
-    BlockManagerId(BlockManagerId.INVALID_EXECUTOR_ID, "invalid", 1, None)
+  // Build the bogus BlockManagerId used by INJECT_SHUFFLE_FETCH_FAILURES to mark a corrupted
+  // MapStatus: keeps the original host/port/topology so the consumer's locality preference
+  // resolves to a real host, only the executorId is INVALID_EXECUTOR_ID so any fetch from this
+  // location FetchFailed.
+  private def injectShuffleFetchFailuresInvalidBlockManagerId(
+      currentLocation: BlockManagerId): BlockManagerId = {
+    BlockManagerId(
+      BlockManagerId.INVALID_EXECUTOR_ID,
+      currentLocation.host,
+      currentLocation.port,
+      currentLocation.topologyInfo)
+  }
 
   // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
@@ -1665,17 +1674,18 @@ private[spark] class DAGScheduler(
 
   /**
    * Apply the test-only fetch-failure injection to this just-completed map task: with
-   * DOWNSTREAM_DELAY > 0 record the mapId so maybeApplyDelayedCorruptionForTest can corrupt
-   * it later, otherwise update the MapStatus location to
-   * injectShuffleFetchFailuresInvalidBlockManagerId inline.
+   * DOWNSTREAM_DELAY > 0 record the (mapId, original location) so
+   * maybeApplyDelayedCorruptionForTest can corrupt it later, otherwise update the MapStatus
+   * location to an invalid block manager id inline.
    */
   private def corruptShuffleOutputForTest(shuffleId: Int, status: MapStatus): Unit = {
     val downstreamDelay =
       sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY)
     if (downstreamDelay > 0) {
-      injectShuffleFetchFailuresPendingDelayedCorruption.put(shuffleId, status.mapId)
+      injectShuffleFetchFailuresPendingDelayedCorruption.put(
+        shuffleId, (status.mapId, status.location))
     } else {
-      status.updateLocation(injectShuffleFetchFailuresInvalidBlockManagerId)
+      status.updateLocation(injectShuffleFetchFailuresInvalidBlockManagerId(status.location))
     }
   }
 
@@ -1720,9 +1730,10 @@ private[spark] class DAGScheduler(
       if (injectShuffleFetchFailuresPendingDelayedCorruption.containsKey(shuffleId)) {
         val newCount = injectShuffleFetchFailuresDownstreamSuccessCount.merge(shuffleId, 1, _ + _)
         if (newCount >= delay) {
-          val mapId = injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
+          val (mapId, originalLocation) =
+            injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
           mapOutputTracker.updateMapOutput(
-            shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId)
+            shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId(originalLocation))
           // Bump the epoch so any executor that already fetched this shuffle's statuses
           // re-fetches them; updateMapOutput on its own only invalidates the driver-side
           // serialized cache.
@@ -1752,9 +1763,10 @@ private[spark] class DAGScheduler(
     }
     parentShuffleIds.foreach { shuffleId =>
       if (injectShuffleFetchFailuresPendingDelayedCorruption.containsKey(shuffleId)) {
-        val mapId = injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
+        val (mapId, originalLocation) =
+          injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
         mapOutputTracker.updateMapOutput(
-          shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId)
+          shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId(originalLocation))
         // Bump the epoch so any executor that already fetched this shuffle's statuses
         // re-fetches them; updateMapOutput on its own only invalidates the driver-side
         // serialized cache.
