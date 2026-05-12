@@ -440,8 +440,8 @@ class _PeakmemBenchBase:
 class _ArrowBatchedBenchMixin:
     """Provides ``_write_scenario`` for SQL_ARROW_BATCHED_UDF.
 
-    Writes the extra ``input_type`` (StructType JSON) that the wire protocol
-    requires before the UDF payload.
+    Passes the ``input_type`` (StructType JSON) through ``EvalConf``, which the
+    non-legacy and legacy paths both read via ``eval_conf.input_type``.
     """
 
     # Row-by-row processing is ~100x slower than columnar Arrow UDFs,
@@ -486,15 +486,12 @@ class _ArrowBatchedBenchMixin:
         if ret_type is None:
             ret_type = schema.fields[0].dataType
 
-        def write_udf(b):
-            MockProtocolWriter.write_utf8(schema.json(), b)
-            MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b)
-
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_ARROW_BATCHED_UDF,
-            write_udf,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
             lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
             buf,
+            eval_conf={"input_type": schema.json()},
         )
 
 
