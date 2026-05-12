@@ -31,8 +31,10 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types._
 
 /**
- * Correctness tests for the INT32 -> Long widening Updater (`IntegerToLongUpdater`)
- * on the Parquet vectorized read path.
+ * Correctness tests for type-converting Updaters on the Parquet vectorized read path
+ * whose `readValues` is a bulk delegation to `VectorizedValuesReader`:
+ *   - `IntegerToLongUpdater` (INT32 -> Long, plus long-decimal dispatch)
+ *   - `IntegerToDoubleUpdater` (INT32 -> Double)
  *
  * Covers boundary batch lengths, sign-extension on negative INT32 values, the singular
  * `readValue` path, and the factory's long-decimal dispatch
@@ -87,6 +89,20 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     val result = new Array[Long](values.length)
     var i = 0
     while (i < values.length) { result(i) = out.getLong(i); i += 1 }
+    result
+  }
+
+  // Reads `values.length` INT32s through `IntegerToDoubleUpdater.readValues` and returns
+  // the resulting double column.
+  private def readViaDoubleUpdater(values: Array[Int]): Array[Double] = {
+    val fac = newFactory(int32Descriptor)
+    val updater = fac.getUpdater(int32Descriptor, DataTypes.DoubleType)
+    val out = new OnHeapColumnVector(values.length.max(1), DataTypes.DoubleType)
+    val reader = newPlainReader(plainIntBytes(values), values.length)
+    updater.readValues(values.length, 0, out, reader)
+    val result = new Array[Double](values.length)
+    var i = 0
+    while (i < values.length) { result(i) = out.getDouble(i); i += 1 }
     result
   }
 
@@ -168,4 +184,31 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     val actual = (0 until input.length).map(out.getLong).toArray
     assert(actual === input.map(_.toLong))
   }
+
+  // ---- IntegerToDoubleUpdater: same bulk-path shape, target column is DoubleType ----
+
+  for (n <- Seq(0, 1, 7, 8, 9, 17, 1024, 4097)) {
+    test(s"IntegerToDoubleUpdater produces correct widened output (total=$n)") {
+      val input = signedSampleValues(n)
+      assert(readViaDoubleUpdater(input) === input.map(_.toDouble))
+    }
+  }
+
+  test("IntegerToDoubleUpdater: readValue widens a single INT32 -> Double") {
+    // The singular readValue is the def-level-decoder's run-of-1 path; see the
+    // IntegerToLongUpdater readValue test for the same rationale.
+    val input = Array(0, 1, -1, 42, Int.MinValue, Int.MaxValue)
+    val fac = newFactory(int32Descriptor)
+    val updater = fac.getUpdater(int32Descriptor, DataTypes.DoubleType)
+    val out = new OnHeapColumnVector(input.length, DataTypes.DoubleType)
+    val reader = newPlainReader(plainIntBytes(input), input.length)
+    var i = 0
+    while (i < input.length) {
+      updater.readValue(i, out, reader)
+      i += 1
+    }
+    val actual = (0 until input.length).map(out.getDouble).toArray
+    assert(actual === input.map(_.toDouble))
+  }
+
 }
