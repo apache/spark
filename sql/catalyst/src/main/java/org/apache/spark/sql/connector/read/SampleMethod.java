@@ -15,13 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
+import org.apache.spark.annotation.Evolving;
 
-case class TableSampleInfo(
-    lowerBound: Double,
-    upperBound: Double,
-    withReplacement: Boolean,
-    seed: Long,
-    sampleMethod: SampleMethod = SampleMethod.Bernoulli)
+/**
+ * The sampling method for TABLESAMPLE.
+ *
+ * @since 4.2.0
+ */
+@Evolving
+public enum SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row is independently selected. */
+  BERNOULLI,
+  /** Block-level sampling (SYSTEM). Entire partitions/splits are included or skipped. */
+  SYSTEM
+}

@@ -1296,7 +1296,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
         limit.copy(child = p2.copy(projectList = newProjectList))
       case Project(l1, r @ Repartition(_, _, p @ Project(l2, _))) if isRenaming(l1, l2) =>
         r.copy(child = p.copy(projectList = buildCleanedProjectList(l1, p.projectList)))
-      case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _))) if isRenaming(l1, l2) =>
+      case Project(l1, s @ Sample(_, _, _, _, p2 @ Project(l2, _), _)) if isRenaming(l1, l2) =>
         s.copy(child = p2.copy(projectList = buildCleanedProjectList(l1, p2.projectList)))
       case o => o
     }
