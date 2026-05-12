@@ -3002,8 +3002,16 @@ def _create_converter(dataType: DataType) -> Callable:
     elif isinstance(dataType, MapType):
         kconv = _create_converter(dataType.keyType)
         vconv = _create_converter(dataType.valueType)
+
+        def _make_hashable(v: Any) -> Any:
+            if isinstance(v, list):
+                return tuple(_make_hashable(e) for e in v)
+            return v
+
         return lambda row: (
-            dict((kconv(k), vconv(v)) for k, v in row.items()) if row is not None else None
+            dict((_make_hashable(kconv(k)), vconv(v)) for k, v in row.items())
+            if row is not None
+            else None
         )
 
     elif isinstance(dataType, NullType):

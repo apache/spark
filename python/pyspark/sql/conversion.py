@@ -1040,6 +1040,11 @@ class ArrowTableToRowsConversion:
                 dataType.valueType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
+            def _make_hashable(v: Any) -> Any:
+                if isinstance(v, list):
+                    return tuple(_make_hashable(e) for e in v)
+                return v
+
             if key_conv is None:
                 if value_conv is None:
 
@@ -1049,7 +1054,7 @@ class ArrowTableToRowsConversion:
                         else:
                             assert isinstance(value, list)
                             assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
-                            return dict(value)
+                            return dict((_make_hashable(t[0]), t[1]) for t in value)
 
                 else:
 
@@ -1059,7 +1064,7 @@ class ArrowTableToRowsConversion:
                         else:
                             assert isinstance(value, list)
                             assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
-                            return dict((t[0], value_conv(t[1])) for t in value)
+                            return dict((_make_hashable(t[0]), value_conv(t[1])) for t in value)
 
             else:
                 if value_conv is None:
@@ -1070,7 +1075,7 @@ class ArrowTableToRowsConversion:
                         else:
                             assert isinstance(value, list)
                             assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
-                            return dict((key_conv(t[0]), t[1]) for t in value)
+                            return dict((_make_hashable(key_conv(t[0])), t[1]) for t in value)
 
                 else:
 
@@ -1080,7 +1085,9 @@ class ArrowTableToRowsConversion:
                         else:
                             assert isinstance(value, list)
                             assert all(isinstance(t, tuple) and len(t) == 2 for t in value)
-                            return dict((key_conv(t[0]), value_conv(t[1])) for t in value)
+                            return dict(
+                                (_make_hashable(key_conv(t[0])), value_conv(t[1])) for t in value
+                            )
 
             return convert_map
 

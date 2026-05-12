@@ -58,6 +58,17 @@ object EvaluatePython {
   }
 
   /**
+   * Recursively converts java.util.ArrayList to Array so that Pyrolite pickles them as
+   * Python tuples (which are hashable) instead of lists. This is needed for map keys
+   * that contain ArrayType, since Python dicts require hashable keys.
+   */
+  private def makeHashable(obj: Any): Any = obj match {
+    case list: java.util.ArrayList[_] =>
+      list.asScala.map(makeHashable).toArray
+    case _ => obj
+  }
+
+  /**
    * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
   def toJava(
@@ -87,7 +98,9 @@ object EvaluatePython {
       case (map: MapData, mt: MapType) =>
         val jmap = new java.util.HashMap[Any, Any](map.numElements())
         map.foreach(mt.keyType, mt.valueType, (k, v) => {
-          jmap.put(toJava(k, mt.keyType, binaryAsBytes), toJava(v, mt.valueType, binaryAsBytes))
+          jmap.put(
+            makeHashable(toJava(k, mt.keyType, binaryAsBytes)),
+            toJava(v, mt.valueType, binaryAsBytes))
         })
         jmap
 
