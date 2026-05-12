@@ -107,9 +107,7 @@ class UtilTests(PySparkTestCase):
             f"source {script_path} && "
             f"echo SOURCED_OK"
         )
-        completed = subprocess.run(
-            ["bash", "-c", cmd], capture_output=True, text=True, check=False
-        )
+        completed = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, check=False)
         self.assertEqual(completed.returncode, 0, msg=completed.stderr)
         self.assertIn("SOURCED_OK", completed.stdout)
 
