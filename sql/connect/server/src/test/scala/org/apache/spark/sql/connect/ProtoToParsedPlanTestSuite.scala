@@ -24,7 +24,7 @@ import java.util
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
@@ -70,10 +70,7 @@ import org.apache.spark.util.Utils
  * compatibility.
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite
-    extends SparkFunSuite
-    with SharedSparkSession
-    with ResourceHelper {
+class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper {
 
   private val cleanOrphanedGoldenFiles: Boolean =
     System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"

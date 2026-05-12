@@ -20,12 +20,11 @@ package org.apache.spark.sql.streaming
 import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream}
 import java.nio.file.Path
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
+class CommitLogSuite extends SharedSparkSession {
 
   private def testCommitLogV2FilePath: Path = {
     getWorkspaceFilePath(
