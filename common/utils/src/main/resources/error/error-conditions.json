@@ -3374,6 +3374,19 @@
     ],
     "sqlState" : "42000"
   },
+  "AUTOCDC_INVALID_COLUMN_SELECTION" : {
+    "message" : [
+      "Invalid column selection."
+    ],
+    "subClass" : {
+      "COLUMNS_NOT_FOUND" : {
+        "message" : [
+          "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>."
+        ]
+      }
+    },
+    "sqlState" : "42703"
+  },
   "INVALID_CONF_VALUE" : {
     "message" : [
       "The value '<confValue>' in the config \"<confName>\" is invalid."
