@@ -195,7 +195,13 @@ $(document).ready(function () {
           data: "duration", name: "duration", title: "Duration",
           render: function (data, type) {
             if (type !== "display") return data;
-            return formatDurationSql(data);
+            var formatted = formatDurationSql(data);
+            if (data > 600000) {
+              return '<span class="text-danger">' + formatted + '</span>';
+            } else if (data > 60000) {
+              return '<span class="text-warning">' + formatted + '</span>';
+            }
+            return formatted;
           }
         },
         {
