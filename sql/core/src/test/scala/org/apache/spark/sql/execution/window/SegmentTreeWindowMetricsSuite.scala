@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.window
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
@@ -32,7 +31,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * `numSegmentTreeFallbackFrames`; feature-flag off leaves both at 0.
  */
 class SegmentTreeWindowMetricsSuite
-    extends QueryTest with SharedSparkSession with SQLMetricsTestUtils {
+    extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
 

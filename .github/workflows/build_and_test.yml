@@ -543,7 +543,8 @@ jobs:
       (!cancelled()) && (
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
-        fromJson(needs.precondition.outputs.required).pyspark-install == 'true')
+        fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
+        fromJson(needs.precondition.outputs.required).sparkr == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -809,7 +810,7 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: [precondition, infra-image]
+    needs: [precondition, infra-image, precompile]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
@@ -868,6 +869,20 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v6
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -875,6 +890,10 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()

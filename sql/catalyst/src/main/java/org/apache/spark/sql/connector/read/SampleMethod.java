@@ -15,25 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.connector.read;
 
-import org.apache.hadoop.fs.Path
+import org.apache.spark.annotation.Evolving;
 
-import org.apache.spark.sql.test.SharedSparkSession
-
-class CacheManagerSuite extends SharedSparkSession {
-
-  test("SPARK-44199: isSubDirectory tests") {
-    val cacheManager = spark.sharedState.cacheManager
-    val testCases = Map[(String, String), Boolean](
-      ("s3://bucket/a/b", "s3://bucket/a/b/c") -> true,
-      ("s3://bucket/a/b/c", "s3://bucket/a/b/c") -> true,
-      ("s3://bucket/a/b/c", "s3://bucket/a/b") -> false,
-      ("s3://bucket/a/z/c", "s3://bucket/a/b/c") -> false,
-      ("s3://bucket/a/b/c", "abfs://bucket/a/b/c") -> false)
-    testCases.foreach { test =>
-      val result = cacheManager.isSubDir(new Path(test._1._1), new Path(test._1._2))
-      assert(result == test._2)
-    }
-  }
+/**
+ * The sampling method for TABLESAMPLE.
+ *
+ * @since 4.2.0
+ */
+@Evolving
+public enum SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row is independently selected. */
+  BERNOULLI,
+  /** Block-level sampling (SYSTEM). Entire partitions/splits are included or skipped. */
+  SYSTEM
 }

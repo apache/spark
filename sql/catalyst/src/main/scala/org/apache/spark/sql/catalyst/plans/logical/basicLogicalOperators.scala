@@ -1911,6 +1911,14 @@ object SubqueryAlias {
   }
 }
 
+sealed trait SampleMethod extends Serializable
+object SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row independently selected. No I/O savings. */
+  case object Bernoulli extends SampleMethod
+  /** System-level sampling (SYSTEM). Entire partitions/splits included or skipped. */
+  case object System extends SampleMethod
+}
+
 object Sample {
   /**
    * Convenience constructor that wraps a concrete seed in [[Some]].
@@ -1925,6 +1933,16 @@ object Sample {
       child: LogicalPlan): Sample = {
     new Sample(lowerBound, upperBound, withReplacement, Some(seed), child)
   }
+
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan,
+      sampleMethod: SampleMethod): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child, sampleMethod)
+  }
 }
 
 /**
@@ -1938,13 +1956,15 @@ object Sample {
  *             (SQL `REPEATABLE` clause or programmatic API), `None` when no seed was
  *             specified and a random seed should be generated at execution time.
  * @param child the LogicalPlan
+ * @param sampleMethod the sampling method (Bernoulli or System)
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Option[Long],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    sampleMethod: SampleMethod = SampleMethod.Bernoulli) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon
   val fraction = upperBound - lowerBound

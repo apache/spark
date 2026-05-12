@@ -2462,10 +2462,14 @@ class AstBuilder extends DataTypeAstBuilder
    * - TABLESAMPLE(x ROWS): Sample the table down to the given number of rows.
    * - TABLESAMPLE(x PERCENT) [REPEATABLE (y)]: Sample the table down to the given percentage with
    * seed 'y'. Note that percentages are defined as a number between 0 and 100.
+   * - TABLESAMPLE SYSTEM(x PERCENT): Sample by data-source-dependent blocks or file splits.
    * - TABLESAMPLE(BUCKET x OUT OF y) [REPEATABLE (z)]: Sample the table down to a 'x' divided by
    * 'y' fraction with seed 'z'.
    */
   private def withSample(ctx: SampleContext, query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val isSystem = ctx.sampleType != null &&
+      ctx.sampleType.getType == SqlBaseParser.SYSTEM
+
     // Create a sampled plan if we need one.
     def sample(fraction: Double, seed: Option[Long]): Sample = {
       // The range of fraction accepted by Sample is [0, 1]. Because Hive's block sampling
@@ -2475,17 +2479,25 @@ class AstBuilder extends DataTypeAstBuilder
       validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
         s"Sampling fraction ($fraction) must be on interval [0, 1]",
         ctx)
-      Sample(0.0, fraction, withReplacement = false, seed, query)
+      val method = if (isSystem) SampleMethod.System else SampleMethod.Bernoulli
+      Sample(0.0, fraction, withReplacement = false, seed, query, method)
     }
 
     if (ctx.sampleMethod() == null) {
       throw QueryParsingErrors.emptyInputForTableSampleError(ctx)
     }
 
+    if (isSystem && ctx.seed != null) {
+      throw QueryParsingErrors.tableSampleSystemRepeatableError(ctx)
+    }
+
     val seed: Option[Long] = Option(ctx.seed).map(_.getText.toLong)
 
     ctx.sampleMethod() match {
       case ctx: SampleByRowsContext =>
+        if (isSystem) {
+          throw QueryParsingErrors.tableSampleSystemSampleMethodError("ROWS", ctx)
+        }
         Limit(expression(ctx.expression), query)
 
       case ctx: SampleByPercentileContext =>
@@ -2497,6 +2509,9 @@ class AstBuilder extends DataTypeAstBuilder
         sample(sign * fraction / 100.0d, seed)
 
       case ctx: SampleByBytesContext =>
+        if (isSystem) {
+          throw QueryParsingErrors.tableSampleSystemSampleMethodError("BYTES", ctx)
+        }
         val bytesStr = ctx.bytes.getText
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError("byteLengthLiteral", ctx)
@@ -2505,6 +2520,9 @@ class AstBuilder extends DataTypeAstBuilder
         }
 
       case ctx: SampleByBucketContext if ctx.ON() != null =>
+        if (isSystem) {
+          throw QueryParsingErrors.tableSampleSystemSampleMethodError("BUCKET", ctx)
+        }
         if (ctx.identifier != null) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
             "BUCKET x OUT OF y ON colname", ctx)
@@ -2514,6 +2532,9 @@ class AstBuilder extends DataTypeAstBuilder
         }
 
       case ctx: SampleByBucketContext =>
+        if (isSystem) {
+          throw QueryParsingErrors.tableSampleSystemSampleMethodError("BUCKET", ctx)
+        }
         sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble, seed)
     }
   }
@@ -2926,7 +2947,7 @@ class AstBuilder extends DataTypeAstBuilder
         // inline table comes in two styles:
         // style 1: values (1), (2), (3)  -- multiple columns are supported
         // style 2: values 1, 2, 3  -- only a single column is supported here
-        // Strip Alias wrappers from row values — CreateStruct.apply preserves them for
+        // Strip Alias wrappers from row values - CreateStruct.apply preserves them for
         // expressions like `(1 AS id, 'a' AS name)`, but they are redundant here since
         // column names are determined by the table alias or generated defaults.
         case struct: CreateNamedStruct => struct.valExprs.map {
