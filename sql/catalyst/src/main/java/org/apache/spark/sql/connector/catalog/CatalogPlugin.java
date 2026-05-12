@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -28,7 +27,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * views, and functions.
  * <p>
  * Catalog implementations must implement this marker interface to be loaded by
- * {@link Catalogs#load(String, SQLConf)}. The loader will instantiate catalog classes using the
+ * {@link Catalogs#load}. The loader will instantiate catalog classes using the
  * required public no-arg constructor. After creating an instance, it will be configured by calling
  * {@link #initialize(String, CaseInsensitiveStringMap)}.
  * <p>

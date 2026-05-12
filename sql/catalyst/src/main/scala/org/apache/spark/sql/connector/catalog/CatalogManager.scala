@@ -265,7 +265,8 @@ class CatalogManager(
 
   /**
    * True if `system.session` is on the SQL path. Only literal path entries can match: the
-   * [[CatalogManager#CurrentSchemaEntry]] marker expands to `currentCatalog.name() +: currentNamespace`, and
+   * [[CatalogManager#CurrentSchemaEntry]] marker expands to
+   * `currentCatalog.name() +: currentNamespace`, and
    * `system` is not a registered catalog (it is a synthetic namespace served via
    * [[org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog]] / `lookupBuiltinOrTempFunction`,
    * not loadable via [[catalog]]), so `currentCatalog.name()` cannot be `"system"`. If that
