@@ -342,6 +342,7 @@
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
       -Dio.netty.noUnsafe=false
       --enable-native-access=ALL-UNNAMED
+      -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
