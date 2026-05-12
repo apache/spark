@@ -1856,50 +1856,85 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
-  test("SPARK-56539: validate state row format in prefixScan") {
-    // Verify that prefixScan triggers validateStateRowFormat
-    // by calling it without get() first (isValidated = false, useColumnFamilies = false)
-    tryWithProviderResource(newStoreProvider(keySchema,
-      PrefixKeyScanStateEncoderSpec(keySchema, 1),
-      useColumnFamilies = false)) { provider =>
-      val store = provider.getStore(0)
-      try {
-        store.put(dataToKeyRow("a", 1), dataToValueRow(1))
-        store.put(dataToKeyRow("a", 2), dataToValueRow(2))
-        // Do NOT call get() - prefixScan must trigger validation itself
-        val result = store.prefixScan(dataToPrefixKeyRow("a")).map { kv =>
-          (keyRowToData(kv.key), valueRowToData(kv.value))
-        }.toSeq
-        assert(result.toSet === Set((("a", 1), 1), (("a", 2), 2)))
-        store.commit()
-      } finally {
-        if (!store.hasCommitted) store.abort()
+  test("SPARK-56539: prefixScan triggers validateStateRowFormat on schema mismatch") {
+    // Write data with correct schema, then reopen with a mismatched valueSchema.
+    // prefixScan should trigger validateStateRowFormat and throw on the first iteration.
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    // Step 1: Write data with correct schema and commit
+    val provider1 = new RocksDBStateStoreProvider()
+    provider1.init(storeId, keySchema, valueSchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1), useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store1 = provider1.getStore(0)
+    store1.put(dataToKeyRow("a", 1), dataToValueRow(1))
+    store1.commit()
+    provider1.close()
+
+    // Step 2: Reopen with a wrong valueSchema (StringType instead of IntegerType)
+    // The stored IntegerType value bytes will be misinterpreted as a variable-length
+    // StringType offset/size, causing structural integrity validation to fail.
+    val wrongValueSchema = StructType(Seq(StructField("v1", StringType, true)))
+    val provider2 = new RocksDBStateStoreProvider()
+    provider2.init(storeId, keySchema, wrongValueSchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1), useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store2 = provider2.getStore(1)
+    try {
+      // prefixScan should trigger validation and throw because stored value bytes
+      // are not structurally valid for the declared StringType schema
+      intercept[StateStoreValueRowFormatValidationFailure] {
+        store2.prefixScan(dataToPrefixKeyRow("a")).toSeq
       }
+    } finally {
+      store2.abort()
+      provider2.close()
     }
   }
 
-  test("SPARK-56539: validate state row format in rangeScan") {
-    // Verify that rangeScan triggers validateStateRowFormat
-    // by calling it without get() first (isValidated = false, useColumnFamilies = false)
-    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+  test("SPARK-56539: rangeScan triggers validateStateRowFormat on schema mismatch") {
+    // Write data with correct schema, then reopen with a mismatched valueSchema.
+    // rangeScan should trigger validateStateRowFormat and throw on the first iteration.
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    // Step 1: Write data with correct schema and commit
+    val provider1 = new RocksDBStateStoreProvider()
+    provider1.init(storeId, keySchemaWithRangeScan, valueSchema,
       RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
-      useColumnFamilies = false)) { provider =>
-      val store = provider.getStore(0)
-      try {
-        store.put(dataToKeyRowWithRangeScan(10L, "a"), dataToValueRow(10))
-        store.put(dataToKeyRowWithRangeScan(20L, "a"), dataToValueRow(20))
-        store.put(dataToKeyRowWithRangeScan(30L, "a"), dataToValueRow(30))
-        // Do NOT call get() - rangeScan must trigger validation itself
-        val result = store.rangeScan(
+      useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store1 = provider1.getStore(0)
+    store1.put(dataToKeyRowWithRangeScan(10L, "a"), dataToValueRow(10))
+    store1.commit()
+    provider1.close()
+
+    // Step 2: Reopen with a wrong valueSchema (StringType instead of IntegerType)
+    val wrongValueSchema = StructType(Seq(StructField("v1", StringType, true)))
+    val provider2 = new RocksDBStateStoreProvider()
+    provider2.init(storeId, keySchemaWithRangeScan, wrongValueSchema,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store2 = provider2.getStore(1)
+    try {
+      // rangeScan should trigger validation and throw because stored value bytes
+      // are not structurally valid for the declared StringType schema
+      intercept[StateStoreValueRowFormatValidationFailure] {
+        store2.rangeScan(
           Some(dataToKeyRowWithRangeScan(10L, "a")),
-          Some(dataToKeyRowWithRangeScan(25L, "a"))).map { kv =>
-          (kv.key.getLong(0), kv.value.getInt(0))
-        }.toSeq
-        assert(result === Seq((10L, 10), (20L, 20)))
-        store.commit()
-      } finally {
-        if (!store.hasCommitted) store.abort()
+          Some(dataToKeyRowWithRangeScan(20L, "a"))).toSeq
       }
+    } finally {
+      store2.abort()
+      provider2.close()
     }
   }
 
