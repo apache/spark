@@ -550,26 +550,31 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
               found <- sapply(funcList, function(func) {
-                ifelse(
-                  identical(func, obj) &&
-                    # Also check if the parent environment is identical to current parent
-                    identical(parent.env(environment(func)), func.env),
-                  TRUE, FALSE)
+                if (!identical(func, obj)) {
+                  return(FALSE)
+                }
+                # Primitive functions have no R-level environment; identity is enough.
+                if (is.primitive(func)) {
+                  return(TRUE)
+                }
+                # Also check if the parent environment is identical to current parent
+                identical(parent.env(environment(func)), func.env)
               })
-              if (sum(found) > 0) {
-                # If function has been examined ignore
-                break
+              if (sum(found) == 0) {
+                # Function has not been examined, record it and recursively clean its closure.
+                assign(nodeChar,
+                       if (is.null(funcList[[1]])) {
+                         list(obj)
+                       } else {
+                         append(funcList, obj)
+                       },
+                       envir = checkedFuncs)
+                obj <- cleanClosure(obj, checkedFuncs)
               }
-              # Function has not been examined, record it and recursively clean its closure.
-              assign(nodeChar,
-                     if (is.null(funcList[[1]])) {
-                       list(obj)
-                     } else {
-                       append(funcList, obj)
-                     },
-                     envir = checkedFuncs)
-              obj <- cleanClosure(obj, checkedFuncs)
             }
+            # Always include the captured object in the cleaned environment,
+            # even if a function with the same identity was already examined
+            # elsewhere (e.g. primitives like `+` shared across closures).
             assign(nodeChar, obj, envir = newEnv)
             break
           }
