@@ -109,6 +109,8 @@ class MockProtocolWriter:
             json.dumps(
                 {
                     "isBarrier": False,
+                    "connInfo": None,
+                    "secret": None,
                     "stageId": 0,
                     "partitionId": 0,
                     "attemptNumber": 0,
@@ -605,6 +607,102 @@ class ArrowUDTFTimeBench(_ArrowUDTFBenchMixin, _TimeBenchBase):
 
 
 class ArrowUDTFPeakmemBench(_ArrowUDTFBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_ARROW_TABLE_UDF ----------------------------------------------------
+# Python UDTF (``@udtf(useArrow=True)``): handler is a class with ``eval(self, *args)``
+# that yields output rows. Each input row triggers one ``eval`` call; yielded rows
+# are converted to Arrow via ``LocalDataToArrowConversion``.
+
+
+class _ArrowTableUDFIdentity:
+    def eval(self, x):
+        yield (x,)
+
+
+class _ArrowTableUDFExplode:
+    def eval(self, x):
+        for _ in range(3):
+            yield (x,)
+
+
+class _ArrowTableUDFFilter:
+    def eval(self, x):
+        if x is not None and (hash(x) & 1):
+            yield (x,)
+
+
+class _ArrowTableUDFStringify:
+    def eval(self, x):
+        yield (str(x),)
+
+
+class _ArrowTableUDFBenchMixin:
+    """Provides ``_write_scenario`` for SQL_ARROW_TABLE_UDF (Python UDTF, useArrow=True).
+
+    Writes the extra ``input_type`` (StructType JSON) into ``EvalConf`` that the
+    non-legacy path requires, and uses the UDTF wire protocol (no num_udfs/result_id).
+    """
+
+    # Per-input-row ``LocalDataToArrowConversion.convert`` call makes this path
+    # ~15-20x slower than SQL_ARROW_BATCHED_UDF, so row counts are scaled down
+    # accordingly to keep each measurement under ASV's per-sample budget.
+    _scenario_configs = {
+        "sm_batch_few_col": ("mixed", 2_000, 5, 500),
+        "sm_batch_many_col": ("mixed", 500, 50, 500),
+        "lg_batch_few_col": ("mixed", 5_000, 5, 2_500),
+        "lg_batch_many_col": ("mixed", 2_000, 50, 2_000),
+        "pure_ints": ("pure_ints", 5_000, 10, 2_500),
+        "pure_strings": ("pure_strings", 5_000, 10, 2_500),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        np.random.seed(42)
+        type_key, num_rows, num_cols, batch_size = _ArrowTableUDFBenchMixin._scenario_configs[name]
+        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
+        return MockDataFactory.make_batches(
+            num_rows=num_rows,
+            num_cols=num_cols,
+            spark_type_pool=pool,
+            batch_size=batch_size,
+        )
+
+    # Each entry: (handler_class, return_type_or_None, arg_offsets).
+    # ``None`` return_type means "use input column 0's type".
+    _udtfs = {
+        "identity_udtf": (_ArrowTableUDFIdentity, None, [0]),
+        "explode_udtf": (_ArrowTableUDFExplode, None, [0]),
+        "filter_udtf": (_ArrowTableUDFFilter, None, [0]),
+        "stringify_udtf": (_ArrowTableUDFStringify, StringType(), [0]),
+    }
+    params = [list(_scenario_configs), list(_udtfs)]
+    param_names = ["scenario", "udtf"]
+
+    def _write_scenario(self, scenario, udtf_name, buf):
+        batches, schema = self._build_scenario(scenario)
+        handler, ret_type, arg_offsets = self._udtfs[udtf_name]
+        if ret_type is None:
+            ret_type = schema.fields[0].dataType
+        return_type = StructType([StructField("c0", ret_type)])
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            lambda b: MockProtocolWriter.write_arrow_udtf_payload(
+                handler, return_type, arg_offsets, b
+            ),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+            eval_conf={"input_type": schema.json()},
+        )
+
+
+class ArrowTableUDFTimeBench(_ArrowTableUDFBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ArrowTableUDFPeakmemBench(_ArrowTableUDFBenchMixin, _PeakmemBenchBase):
     pass
 
 
