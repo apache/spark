@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -27,10 +28,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * views, and functions.
  * <p>
  * Catalog implementations must implement this marker interface to be loaded by
- * {@link org.apache.spark.sql.connector.catalog.Catalogs#load(java.lang.String,org.apache.spark.sql.internal.SQLConf)}.
+ * {@link org.apache.spark.sql.connector.catalog.Catalogs#load(String,SQLConf)}.
  * The loader will instantiate catalog classes using the
  * required public no-arg constructor. After creating an instance, it will be configured by calling
- * {@link #initialize(java.lang.String,org.apache.spark.sql.util.CaseInsensitiveStringMap)}.
+ * {@link #initialize(String,CaseInsensitiveStringMap)}.
  * <p>
  * Catalog implementations are registered to a name by adding a configuration option to Spark:
  * {@code spark.sql.catalog.catalog-name=com.example.YourCatalogClass}. All configuration properties
@@ -56,8 +57,8 @@ public interface CatalogPlugin {
   /**
    * Called to get this catalog's name.
    * <p>
-   * This method is only called after {@link #initialize(java.lang.String,org.apache.spark.sql.util.CaseInsensitiveStringMap)} is
-   * called to pass the catalog's name.
+   * This method is only called after
+   * {@link #initialize(String,CaseInsensitiveStringMap)} is called to pass the catalog's name.
    */
   String name();
 
