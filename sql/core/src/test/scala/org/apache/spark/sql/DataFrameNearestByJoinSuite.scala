@@ -109,8 +109,6 @@ class DataFrameNearestByJoinSuite extends QueryTest with SharedSparkSession {
     // the ranking expression bind to the original (left) attribute, so the rank is
     // identically 0 for every candidate -- this test exercises self-join resolution,
     // not nearest-row selection.
-    // We pass `users` as both sides; DeduplicateRelations should rewrite the right side to
-    // generate fresh ExprIds, allowing the join to resolve.
     val result = users.nearestByJoin(
       users,
       -abs(users("score") - users("score")),
