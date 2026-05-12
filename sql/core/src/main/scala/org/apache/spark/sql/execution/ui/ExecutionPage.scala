@@ -169,6 +169,27 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
               <span>Show metrics in graph nodes (detailed mode)</span>
             </div>
             <div id="plan-viz-zoom-toolbar" class="plan-viz-zoom-toolbar">
+              <div id="plan-viz-search-collapsed" class="btn-group btn-group-sm me-2"
+                   role="group" aria-label="Search">
+                <button id="plan-viz-search-toggle" type="button"
+                        class="btn btn-light border" title="Find node (/)">&#x1f50d;</button>
+              </div>
+              <div id="plan-viz-search-expanded" class="input-group input-group-sm me-2 d-none"
+                   role="group" aria-label="Search">
+                <input id="plan-viz-search-input" type="search" autocomplete="off"
+                       class="form-control form-control-sm border"
+                       placeholder="Find node..." aria-label="Find node"/>
+                <span id="plan-viz-search-count" class="input-group-text bg-light"></span>
+                <button id="plan-viz-search-prev" type="button"
+                        class="btn btn-light border"
+                        title="Previous match (Shift+Enter)">&#x2191;</button>
+                <button id="plan-viz-search-next" type="button"
+                        class="btn btn-light border"
+                        title="Next match (Enter)">&#x2193;</button>
+                <button id="plan-viz-search-close" type="button"
+                        class="btn btn-light border"
+                        title="Close search (Esc)">&times;</button>
+              </div>
               <div class="btn-group btn-group-sm" role="group" aria-label="Zoom controls">
                 <button id="plan-viz-zoom-out" type="button"
                         class="btn btn-light border" title="Zoom out (-)">&#x2212;</button>
