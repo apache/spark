@@ -37,9 +37,7 @@ import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkConnectListenerBusListenerSuite
-    extends SharedSparkSession
-    with MockitoSugar {
+class SparkConnectListenerBusListenerSuite extends SharedSparkSession with MockitoSugar {
 
   override def afterEach(): Unit = {
     try {

@@ -70,9 +70,7 @@ import org.apache.spark.util.Utils
  * compatibility.
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite
-    extends SharedSparkSession
-    with ResourceHelper {
+class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper {
 
   private val cleanOrphanedGoldenFiles: Boolean =
     System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
