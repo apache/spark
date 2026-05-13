@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.kafka010.benchmark
 
 import java.nio.file.Files
 import java.util.{Properties, Timer, TimerTask}
@@ -32,6 +32,7 @@ import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.apache.spark.sql.streaming.StreamingQueryListener
 
 /**
@@ -52,6 +53,17 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql-kafka-0-10/Test/runMain <this class>"
  *      Results will be written to:
  *      "connector/kafka-0-10-sql/benchmarks/RTMKafkaKafkaBenchmark-results.txt".
+ * }}}
+ *
+ * Example output from a recent run (Linux x86_64, OpenJDK 17):
+ * {{{
+ *   Kafka to kafka query e2e_latency in milliseconds is
+ *   p0:   45
+ *   p50:  70
+ *   p90:  78
+ *   p95:  81
+ *   p99:  85
+ *   p100: 331
  * }}}
  */
 object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
