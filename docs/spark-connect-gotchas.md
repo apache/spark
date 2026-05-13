@@ -434,7 +434,7 @@ df.withColumn("c", sf.col("c").cast("string")).select(df["c"]).collect()
 `withColumn("c", ...)` does not mutate `df`; it returns a new DataFrame whose `c` is a new attribute that hides the original. The trailing `df["c"]` still refers to the *original* `c` attribute, which is no longer in the projection list.
 
 * **Spark Classic** has always rejected this query at analysis time with `MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION`, because the original attribute is not present in the operator's child output.
-* **Spark Connect** rejects it with `CANNOT_RESOLVE_DATAFRAME_COLUMN` by default. The plan-id-tagged reference does not match any attribute in the current plan, and strict resolution does not fall back to name-based resolution. The strict behavior is controlled by the SQL config `spark.sql.analyzer.strictDataFrameColumnResolution` (added in Spark 4.2.0, default `true`). Setting it to `false` opts into a name-based fallback that resolves the tagged reference by name when plan-id-based resolution does not find the tagged attribute.
+* **Spark Connect** rejects it with `CANNOT_RESOLVE_DATAFRAME_COLUMN` by default. The plan-id-tagged reference does not match any attribute in the current plan. But when the SQL config `spark.sql.analyzer.strictDataFrameColumnResolution` (added in Spark 4.2.0, default `true`) is set to `false`, the analyzer falls back to name-based resolution: the tagged `df["c"]` is resolved by name against the projected `c` from `withColumn`, and the query succeeds.
 
 ### Mitigation
 
