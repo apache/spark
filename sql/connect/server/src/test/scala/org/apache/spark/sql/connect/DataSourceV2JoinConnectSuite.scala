@@ -76,7 +76,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   }
 
   // Scenario 1: join after insert refreshes both sides to latest version.
-  test("[connect] join refreshes both sides after insert") {
+  test("[connect] join refreshes both sides after external insert") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -93,7 +93,26 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
         val df2 = session.table(T)
 
-        // Both sides re-analyze to latest version
+        assertRows(
+          df1.join(df2, df1("id") === df2("id")).collect(),
+          Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
+      }
+    }
+  }
+
+  test("[connect] join refreshes both sides after session insert") {
+    withSession { session =>
+      withCleanup(session) {
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+        val df1 = session.table(T)
+
+        // session insert via SQL
+        session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+
+        val df2 = session.table(T)
+
         assertRows(
           df1.join(df2, df1("id") === df2("id")).collect(),
           Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
@@ -104,7 +123,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 2: join after ADD COLUMN.
   // In Connect, df1 also re-analyzes to the 3-column schema
   // (unlike classic where df1 keeps original 2-column schema).
-  test("[connect] join after ADD COLUMN sees new schema on both sides") {
+  test("[connect] join after external ADD COLUMN sees new schema on both sides") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -119,9 +138,30 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, addCol)
 
         // external writer adds (2, 200, -1) with new schema
-        val schema3 = StructType.fromDDL("id INT, salary INT, new_column INT")
+        val newSchema = StructType.fromDDL("id INT, salary INT, new_column INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200, -1))
+
+        val df2 = session.table(T)
+
+        assertRows(
+          df1.join(df2, df1("id") === df2("id")).collect(),
+          Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
+      }
+    }
+  }
+
+  test("[connect] join after session ADD COLUMN sees new schema on both sides") {
+    withSession { session =>
+      withCleanup(session) {
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+        val df1 = session.table(T)
+
+        // session schema change + data via SQL
+        session.sql(s"ALTER TABLE $T ADD COLUMN new_column INT").collect()
+        session.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
 
         val df2 = session.table(T)
 
@@ -135,7 +175,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 3: join after DROP COLUMN.
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see only 'id'.
-  test("[connect] join after DROP COLUMN succeeds") {
+  test("[connect] join after external DROP COLUMN succeeds") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -150,9 +190,28 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, dropCol)
 
         // external writer adds (2) with 1-col schema
-        val schema1 = StructType.fromDDL("id INT")
+        val newSchema = StructType.fromDDL("id INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema1, row = InternalRow(2))
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2))
+
+        val df2 = session.table(T)
+
+        assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(1, 1), Row(2, 2)))
+      }
+    }
+  }
+
+  test("[connect] join after session DROP COLUMN succeeds") {
+    withSession { session =>
+      withCleanup(session) {
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+        val df1 = session.table(T)
+
+        // session column removal + insert via SQL
+        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        session.sql(s"INSERT INTO $T VALUES (2)").collect()
 
         val df2 = session.table(T)
 
