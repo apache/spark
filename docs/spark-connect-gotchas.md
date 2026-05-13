@@ -468,6 +468,6 @@ If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColu
 | **Schema access**     | Local         | Triggers RPC, and caches the schema on first access |
 | **Temporary views**   | Plan embedded | Name lookup                                         |
 | **UDF serialization** | At creation   | At execution                                        |
-| **DataFrame column references** | Resolved against child attributes by id/name | Resolved against the tagged ancestor's plan id      |
+| **DataFrame column references** | Eagerly resolved | Lazily resolved against plan id                     |
 
 The key difference is that Spark Connect defers analysis and name resolution to execution time.
