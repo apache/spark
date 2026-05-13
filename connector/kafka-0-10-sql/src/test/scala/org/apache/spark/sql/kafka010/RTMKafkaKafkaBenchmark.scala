@@ -61,25 +61,44 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
   private var testUtils: KafkaTestUtils = _
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    // BenchmarkBase.main does not wrap this call in try/finally, so we must own
+    // teardown ourselves — partial setup, a timeout, or a getLatencies failure
+    // would otherwise leak the embedded Kafka broker and local-cluster workers.
     testUtils = new KafkaTestUtils(Map.empty)
-    testUtils.setup()
-
-    spark = SparkSession.builder()
-      .master("local-cluster[3, 5, 1024]")
-      .appName(this.getClass.getCanonicalName)
-      .getOrCreate()
-
-    runBenchmark("RTM stateless kafka-to-kafka") {
-      benchmark(60.seconds.toMillis, 4)
+    try {
+      testUtils.setup()
+      spark = SparkSession.builder()
+        .master("local-cluster[3, 5, 1024]")
+        .appName(this.getClass.getCanonicalName)
+        .getOrCreate()
+      runBenchmark("RTM stateless kafka-to-kafka") {
+        benchmark(60.seconds.toMillis, 4)
+      }
+    } finally {
+      cleanup()
     }
   }
 
-  override def afterAll(): Unit = {
+  /**
+   * Idempotent cleanup of the Spark session and embedded Kafka broker. Safe to call
+   * after any combination of partial setup, normal completion, or exception.
+   */
+  private def cleanup(): Unit = {
     if (spark != null) {
-      spark.stop()
+      try {
+        spark.stop()
+      } catch {
+        case t: Throwable => logWarning("Failed to stop SparkSession during cleanup", t)
+      }
+      spark = null
     }
     if (testUtils != null) {
-      testUtils.teardown()
+      try {
+        testUtils.teardown()
+      } catch {
+        case t: Throwable => logWarning("Failed to teardown KafkaTestUtils during cleanup", t)
+      }
+      testUtils = null
     }
   }
 
