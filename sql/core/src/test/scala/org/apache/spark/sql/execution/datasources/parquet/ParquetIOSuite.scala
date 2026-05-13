@@ -1972,6 +1972,55 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("FLOAT -> Double widening end-to-end via vectorized read path") {
+    // Round-trips a FLOAT Parquet file read back as DoubleType, exercising
+    // FloatToDoubleUpdater. Same REQUIRED/OPTIONAL coverage as the INT32 -> Long
+    // sibling test above. The widening is Java's primitive float-to-double conversion;
+    // `checkAnswer`'s Double comparison treats any NaN as equal to any NaN, so NaN
+    // payload preservation is not asserted at this level.
+    withTempPath { file =>
+      val n = 5000
+      def sampleAt(i: Int): Float = i % 7 match {
+        case 0 => Float.MinValue
+        case 1 => -1.5f
+        case 2 => -0.0f
+        case 3 => 0.0f
+        case 4 => Float.MaxValue
+        case 5 => Float.NaN
+        case _ => i * 0.125f - 3.25f
+      }
+
+      val nonNullData = (0 until n).map(i => Row(sampleAt(i)))
+      // Every 11th row is null. Mixed with NaN entries above, this exercises the PACKED
+      // def-level path interleaving runs of values with runs of nulls.
+      val nullableData = (0 until n).map { i =>
+        if (i % 11 == 0) Row(null) else Row(sampleAt(i))
+      }
+
+      val nonNullWriteSchema = new StructType().add("v", FloatType, nullable = false)
+      val nonNullReadSchema = new StructType().add("v", DoubleType, nullable = false)
+      val nullableWriteSchema = new StructType().add("v", FloatType, nullable = true)
+      val nullableReadSchema = new StructType().add("v", DoubleType, nullable = true)
+
+      val nonNullPath = new java.io.File(file, "nonnull").getCanonicalPath
+      val nullablePath = new java.io.File(file, "nullable").getCanonicalPath
+      spark.createDataFrame(spark.sparkContext.parallelize(nonNullData, 4), nonNullWriteSchema)
+        .write.parquet(nonNullPath)
+      spark.createDataFrame(spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
+        .write.parquet(nullablePath)
+
+      val expectedNonNull = nonNullData.map(r => Row(r.getFloat(0).toDouble))
+      val expectedNullable = nullableData.map { r =>
+        if (r.isNullAt(0)) Row(null) else Row(r.getFloat(0).toDouble)
+      }
+
+      withAllParquetReaders {
+        checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath), expectedNonNull)
+        checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath), expectedNullable)
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

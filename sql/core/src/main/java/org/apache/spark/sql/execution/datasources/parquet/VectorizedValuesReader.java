@@ -94,6 +94,27 @@ public interface VectorizedValuesReader {
     }
   }
 
+  /**
+   * Reads {@code total} FLOAT values, widens each to a double, and writes them into
+   * {@code c} starting at {@code c[rowId]}. The widening is Java's primitive
+   * float-to-double conversion: exact for every finite and infinite float; a NaN
+   * float widens to a double NaN (the payload may be canonicalized by the JVM).
+   * Used by the type-converting updater that reads parquet FLOAT columns into
+   * Spark {@code DoubleType} targets.
+   *
+   * <p>The default implementation falls back to a per-row read+widen+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readFloat()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readFloatsAsDoubles(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putDouble(rowId + i, readFloat());
+    }
+  }
+
   void readBinary(int total, WritableColumnVector c, int rowId);
   void readGeometry(int total, WritableColumnVector c, int rowId);
   void readGeography(int total, WritableColumnVector c, int rowId);
