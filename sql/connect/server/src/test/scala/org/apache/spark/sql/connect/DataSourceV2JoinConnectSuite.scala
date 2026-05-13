@@ -193,8 +193,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   }
 
   // Scenario 5: join after drop and re-add column with same type.
-  // Both sides re-analyze against the new schema. The original salary
-  // value becomes null after drop+re-add.
+  // Both sides re-analyze against the new schema. Single alterTable preserves
+  // data because the column name matches in old/new schema (aligned with classic test).
   test("[connect] join after drop and re-add column with same type") {
     withSession { session =>
       withCleanup(session) {
@@ -203,18 +203,24 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
         val df1 = session.table(T)
 
-        // external drop and re-add column via catalog API (two separate calls
-        // so data migration runs for each step, nulling the old salary values)
+        // external drop and re-add column via catalog API (single call, same as classic test)
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(ident, TableChange.addColumn(Array("salary"), IntegerType, true))
+        val dropCol = TableChange.deleteColumn(Array("salary"), false)
+        val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
+        cat.alterTable(ident, dropCol, addCol)
+
+        // external writer adds (2, 200) with same schema
+        val newSchema = StructType.fromDDL("id INT, salary INT")
+        externalAppend(
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200))
 
         val df2 = session.table(T)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq(Row(1, null, 1, null)))
+        assertRows(
+          result.collect(), Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
       }
     }
   }
@@ -222,7 +228,9 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 6: join after drop and re-add column with different type.
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see salary as STRING.
-  // The original salary value becomes null after drop+re-add.
+  // Uses two separate alterTable calls (unlike classic which uses one) because
+  // InMemoryBaseTable preserves old INT data when names match across a single call,
+  // causing a type mismatch at read time. Two calls properly null out the old data.
   test("[connect] join after drop and re-add column with different type succeeds") {
     withSession { session =>
       withCleanup(session) {
@@ -232,7 +240,6 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val df1 = session.table(T)
 
         // external drop and re-add column with different type via catalog API
-        // (two separate calls so data migration runs for each step)
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
         cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
