@@ -21,11 +21,11 @@ import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.StructType
 
-/** A column reference that must be a single, unqualified identifier (no nested
-  * field path and no table/alias qualifier). The constructor parses
-  * [[columnName]] with the Spark SQL parser and throws an [[AnalysisException]]
-  * if it does not resolve to exactly one name part.
-  */
+/**
+ * A column reference that must be a single, unqualified identifier (no nested field path and
+ * no table/alias qualifier). The constructor parses [[name]] with the Spark SQL parser and
+ * throws an [[AnalysisException]] if it does not resolve to exactly one name part.
+ */
 case class UnqualifiedColumnName(name: String) {
   UnqualifiedColumnName.validate(name)
 }
