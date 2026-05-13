@@ -275,7 +275,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 5: join after drop and re-add column with same type.
   // Both sides re-analyze against the new schema. Single alterTable preserves
   // data because the column name matches in old/new schema (aligned with classic test).
-  test("[connect] join after external drop+re-add same-type column succeeds") {
+  test("[connect] join after external drop+re-add same-type column succeeds" +
+      " (table with column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -305,7 +306,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join after session drop+re-add same-type column succeeds") {
+  test("[connect] join after session drop+re-add same-type column succeeds" +
+      " (table with column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -332,7 +334,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Uses two separate alterTable calls (unlike classic which uses one) because
   // InMemoryBaseTable preserves old INT data when names match across a single call,
   // causing a type mismatch at read time. Two calls properly null out the old data.
-  test("[connect] join after external drop+re-add different-type column succeeds") {
+  test("[connect] join after external drop+re-add different-type column succeeds" +
+      " (table with column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -355,7 +358,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join after session drop+re-add different-type column succeeds") {
+  test("[connect] join after session drop+re-add different-type column succeeds" +
+      " (table with column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
