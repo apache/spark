@@ -2575,8 +2575,8 @@ object functions {
    *   A cumulative counter. Must be a numeric data type. Must be non-negative.
    *
    * @param startTime
-   *   An optional timestamp parameter which indicates when the counter was last set to zero. Used
-   *   to signal counter resets.
+   *   A timestamp indicating when the counter was last set to zero. Used to signal counter
+   *   resets.
    *
    * @return
    *   The difference between the current and previous counter value within the window partition,

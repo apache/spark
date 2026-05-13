@@ -37,8 +37,6 @@ abstract class CounterDiffBase(val counter: Expression)
 
   override def prettyName: String = "counter_diff"
 
-  override def nullable: Boolean = true
-
   override def dataType: DataType = counter.dataType
 
   /**
@@ -327,7 +325,8 @@ case class CounterDiffWithStartTime(
     in ascending order.
 
     The following special cases are handled:
-    1. If the counter value is NULL, the row is skipped and NULL is returned.
+    1. If the counter value is NULL, NULL is returned for that row, and the row's counter is
+       excluded from the baseline used by subsequent rows.
     2. If the value is negative, or the start time decreases, an error is raised.
     3. In the case of a counter reset, NULL is returned.
     4. NULL is returned for the first row.
@@ -352,9 +351,11 @@ object CounterDiffExpressionBuilder extends ExpressionBuilder {
   }
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The function signature defines two parameters, so two expressions are always provided.
+    // For the single-parameter form, the start_time argument takes on the default value, which is
+    // exactly `DefaultStartTime`, so `eq` is used to check this case. This also differentiates
+    // the single-parameter form from the two-parameter form with an explicit NULL start time.
     expressions match {
-      case Seq(value) =>
-        CounterDiff(value)
       case Seq(value, startTime) if startTime eq DefaultStartTime =>
         CounterDiff(value)
       case Seq(value, startTime) =>

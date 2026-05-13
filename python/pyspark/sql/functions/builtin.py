@@ -6484,7 +6484,7 @@ def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = No
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or column name
+    value : :class:`~pyspark.sql.Column` or column name
         A cumulative counter. Must be a numeric data type. Must be non-negative.
     startTime : :class:`~pyspark.sql.Column` or column name, optional
         An optional timestamp parameter which indicates when the counter was last set to zero.
