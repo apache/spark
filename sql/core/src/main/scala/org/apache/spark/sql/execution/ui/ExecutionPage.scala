@@ -46,53 +46,48 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     val executionId = parameterExecutionId.toLong
     val content = sqlStore.execution(executionId).map { executionUIData =>
-      val currentTime = System.currentTimeMillis()
-      val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
-        executionUIData.submissionTime
+      val isSubExec = executionUIData.rootExecutionId != executionId
+      val subExecutions = if (groupSubExecutionEnabled) {
+        sqlStore.executionsList()
+          .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
+      } else {
+        Seq.empty
+      }
 
       val summary =
-        <div>
-          <ul class="list-unstyled">
-            <li>
-              <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}
-            </li>
-            <li>
-              <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
-            </li>
-            {
-              Option(executionUIData.queryId).map { qId =>
-                <li>
-                  <strong>Query ID: </strong>{qId}
-                </li>
-              }.getOrElse(Seq.empty)
-            }
-            {
-              if (executionUIData.rootExecutionId != executionId) {
-                <li>
-                  <strong>Parent Execution: </strong>
-                  <a href={"?id=" + executionUIData.rootExecutionId}>
-                    {executionUIData.rootExecutionId}
-                  </a>
-                </li>
-              }
-            }
-            {
-              if (groupSubExecutionEnabled) {
-                val subExecutions = sqlStore.executionsList()
-                  .filter(e => e.rootExecutionId == executionId && e.executionId != executionId)
-                if (subExecutions.nonEmpty) {
-                  <li>
-                    <strong>Sub Executions: </strong>
-                    {
-                      subExecutions.map { e =>
-                        <a href={"?id=" + e.executionId}>{e.executionId}</a><span>&nbsp;</span>
-                      }
-                    }
-                  </li>
+        <div class="mb-3">
+          <table id="sql-execution-table" class="table table-striped compact cell-border"
+                 style="width:100%" data-execution-id={executionId.toString}>
+          </table>
+          {
+            if (isSubExec || subExecutions.nonEmpty) {
+              <ul class="list-unstyled small text-muted mb-2">
+                {
+                  if (isSubExec) {
+                    <li>
+                      <strong>Parent Execution: </strong>
+                      <a href={"?id=" + executionUIData.rootExecutionId}>
+                        {executionUIData.rootExecutionId}
+                      </a>
+                    </li>
+                  }
                 }
-              }
+                {
+                  if (subExecutions.nonEmpty) {
+                    <li>
+                      <strong>Sub Executions: </strong>
+                      {
+                        subExecutions.map { e =>
+                          <a href={"?id=" + e.executionId}>{e.executionId}</a>
+                          <span>&nbsp;</span>
+                        }
+                      }
+                    </li>
+                  }
+                }
+              </ul>
             }
-          </ul>
+          }
           <div id="plan-viz-download-btn-container">
             <select id="plan-viz-format-select">
               <option value="svg">SVG</option>
@@ -109,6 +104,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
                     type="button" title="Copy shareable link to this execution">
               &#x1f517; Copy Link</button>
           </div>
+          <script src={UIUtils.prependBaseUri(
+            request, "/static/sql/sql-table-utils.js")}></script>
+          <script src={UIUtils.prependBaseUri(
+            request, "/static/sql/executionpage.js")}></script>
         </div>
 
       val metrics = sqlStore.executionMetrics(executionId)
@@ -128,7 +127,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Query $executionId", content, parent, useTimeline = true)
+      request, s"Details for Query $executionId", content, parent,
+      useDataTables = true, useTimeline = true)
   }
 
 
