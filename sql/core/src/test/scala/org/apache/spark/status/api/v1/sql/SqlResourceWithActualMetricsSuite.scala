@@ -31,6 +31,7 @@ import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
+import org.apache.spark.sql.execution.ui.SQLExecutionUIData
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -213,6 +214,119 @@ class SqlResourceWithActualMetricsSuite
         assert((row \ "status").extract[String] === "COMPLETED")
       }
     }
+  }
+
+  test("SPARK-56811: sqlTable groups sub-executions under their root execution") {
+    // CACHE TABLE produces a root execution plus an inner sub-execution that
+    // shares its rootExecutionId. This is the canonical case where the SQL
+    // listing should fold the sub row under the root rather than flattening it.
+    spark.sql("CREATE OR REPLACE TEMP VIEW spark_56811 AS SELECT id FROM RANGE(10)")
+      .collect()
+    spark.sql("CACHE TABLE spark_56811_cached AS SELECT * FROM spark_56811").collect()
+    try {
+      eventually(timeout(10.seconds), interval(1.second)) {
+        val baseUrl = spark.sparkContext.ui.get.webUrl +
+          s"/api/v1/applications/${spark.sparkContext.applicationId}/sql/sqlTable"
+
+        // Grouping ON: roots only, with subExecutions embedded on the root that
+        // owns a sub-execution.
+        val groupedUrl = new URI(
+          s"$baseUrl?start=0&length=100&draw=1&groupSubExecution=true").toURL
+        val (groupedCode, groupedOpt, _) = getContentAndCode(groupedUrl)
+        assert(groupedCode === HttpServletResponse.SC_OK)
+        val groupedJson = JsonMethods.parse(groupedOpt.get)
+        val groupedRecordsTotal = (groupedJson \ "recordsTotal").extract[Long]
+        val groupedRecordsFiltered = (groupedJson \ "recordsFiltered").extract[Long]
+        val groupedRows = (groupedJson \ "aaData").children
+        assert(groupedRecordsTotal === groupedRows.size,
+          "with no filter, recordsTotal should match returned root count")
+        assert(groupedRecordsFiltered === groupedRows.size,
+          "with no filter, recordsFiltered should match returned root count")
+        // Every row in grouped mode is either a true root (id == rootExecutionId)
+        // or an orphan sub whose real parent is absent from the result set.
+        val visibleIds = groupedRows.map(r => (r \ "id").extract[Long]).toSet
+        groupedRows.foreach { row =>
+          val id = (row \ "id").extract[Long]
+          val rootId = (row \ "rootExecutionId").extract[Long]
+          assert(id == rootId || !visibleIds.contains(rootId),
+            s"grouped row $id (rootId=$rootId) is neither a root nor an orphan")
+        }
+        val rootsWithSubs = groupedRows.filter { row =>
+          (row \ "subExecutions").children.nonEmpty
+        }
+        assert(rootsWithSubs.nonEmpty,
+          "CACHE TABLE should produce at least one root with sub-executions")
+        rootsWithSubs.foreach { row =>
+          val rootId = (row \ "id").extract[Long]
+          (row \ "subExecutions").children.foreach { sub =>
+            assert((sub \ "rootExecutionId").extract[Long] === rootId,
+              "sub-execution should reference its parent root")
+            assert((sub \ "id").extract[Long] !== rootId,
+              "sub-execution must not have the same id as its root")
+          }
+        }
+
+        // Grouping OFF: flat list of every execution, with no embedded subs.
+        val flatUrl = new URI(
+          s"$baseUrl?start=0&length=100&draw=2&groupSubExecution=false").toURL
+        val (flatCode, flatOpt, _) = getContentAndCode(flatUrl)
+        assert(flatCode === HttpServletResponse.SC_OK)
+        val flatJson = JsonMethods.parse(flatOpt.get)
+        val flatRows = (flatJson \ "aaData").children
+        assert(flatRows.size > groupedRows.size,
+          "flat listing should contain at least one extra sub-execution row")
+        val embeddedSubs = groupedRows.map(r => (r \ "subExecutions").children.size).sum
+        assert(flatRows.size === groupedRows.size + embeddedSubs,
+          "flat size should equal grouped roots plus embedded sub rows")
+        flatRows.foreach { row =>
+          assert((row \ "subExecutions").children.isEmpty,
+            "flat listing should not embed subExecutions")
+        }
+      }
+    } finally {
+      spark.sql("UNCACHE TABLE IF EXISTS spark_56811_cached")
+    }
+  }
+
+  test("SPARK-56811: partitionRoots surfaces orphan sub-executions as root rows") {
+    def mkExec(id: Long, rootId: Long): SQLExecutionUIData = new SQLExecutionUIData(
+      executionId = id,
+      rootExecutionId = rootId,
+      description = s"exec $id",
+      details = "",
+      physicalPlanDescription = "",
+      modifiedConfigs = Map.empty,
+      metrics = Seq.empty,
+      submissionTime = id,
+      completionTime = None,
+      errorMessage = None,
+      jobs = Map.empty,
+      stages = Set.empty,
+      metricValues = null,
+      queryId = null)
+
+    // Tree:
+    //   1 (root) -> 2, 3 (subs)
+    //   4 (root, no subs)
+    //   6 (sub of 5, but 5 is missing -> orphan)
+    val root1 = mkExec(1, 1)
+    val sub2 = mkExec(2, 1)
+    val sub3 = mkExec(3, 1)
+    val root4 = mkExec(4, 4)
+    val orphan6 = mkExec(6, 5)
+
+    val (roots, subsByRoot) =
+      SqlResource.partitionRoots(Seq(root1, sub2, sub3, root4, orphan6))
+
+    assert(roots.map(_.executionId).toSet === Set(1L, 4L, 6L),
+      "true roots and orphan subs should both be promoted to root rows")
+    assert(subsByRoot.keySet === Set(1L),
+      "only execs with a parent present in the input should appear in subsByRoot")
+    assert(subsByRoot(1L).map(_.executionId).toSet === Set(2L, 3L),
+      "subs should be grouped under their parent root id")
+    val orphanRow = roots.find(_.executionId == 6L).get
+    assert(orphanRow.rootExecutionId === 5L,
+      "orphan promoted to a root row preserves its original rootExecutionId")
   }
 
   test("SPARK-56137: sqlList returns ISO date format in submissionTime") {

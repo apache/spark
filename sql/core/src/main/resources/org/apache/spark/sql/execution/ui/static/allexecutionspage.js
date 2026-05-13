@@ -116,6 +116,13 @@ $(document).ready(function () {
     }
   }
 
+  // Read the cluster-level grouping toggle rendered into the page by Scala
+  var groupSubExecEnabled = true;
+  var configEl = document.getElementById("group-sub-exec-config");
+  if (configEl) {
+    groupSubExecEnabled = configEl.getAttribute("data-value") === "true";
+  }
+
   function init(resolvedAppId) {
     var sqlTableEndPoint = createSQLTableEndPoint(resolvedAppId);
 
@@ -130,6 +137,94 @@ $(document).ready(function () {
       '</select>' +
       '<table id="sql-table" class="table table-striped compact cell-border" ' +
       'style="width:100%"></table>';
+
+    var columns = [
+      {
+        data: "id", name: "id", title: "ID",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          var basePath = uiRoot + appBasePath;
+          return '<a href="' + basePath + '/SQL/execution/?id=' + data + '">' +
+            data + '</a>';
+        }
+      },
+      {
+        data: "queryId", name: "queryId", title: "Query ID",
+        orderable: false,
+        render: function (data, type) {
+          if (type !== "display" || !data) return data || "";
+          var safe = escapeHtml(data);
+          return '<span title="' + safe + '">' + escapeHtml(data.substring(0, 8)) + '...</span>';
+        }
+      },
+      {
+        data: "status", name: "status", title: "Status",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          return statusBadge(data);
+        }
+      },
+      {
+        data: "description", name: "description", title: "Description",
+        render: function (data, type, row) {
+          if (type !== "display") return data || "";
+          return descriptionHtml({ id: row.id, description: data });
+        }
+      },
+      {
+        data: "submissionTime", name: "submissionTime", title: "Submitted",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          return formatDateSql(data);
+        }
+      },
+      {
+        data: "duration", name: "duration", title: "Duration",
+        render: function (data, type) {
+          if (type !== "display") return data;
+          return formatDurationSql(data);
+        }
+      },
+      {
+        data: "jobIds", name: "jobIds", title: "Succeeded Jobs",
+        orderable: false,
+        render: function (data, type) {
+          if (type !== "display") return (data || []).join(",");
+          return jobIdLinks(data || []);
+        }
+      },
+      {
+        data: "errorMessage", name: "errorMessage", title: "Error Message",
+        orderable: false,
+        render: function (data, type) {
+          if (type !== "display" || !data) return data || "";
+          if (data.length > 100) {
+            return '<span title="' + escapeHtml(data) + '">' +
+              escapeHtml(data.substring(0, 100)) + '...</span>';
+          }
+          return escapeHtml(data);
+        }
+      }
+    ];
+    if (groupSubExecEnabled) {
+      // Trailing "Sub Executions" column matching the SPARK-41752 / 4.1 layout:
+      // shows "+N sub" when the root has children, blank otherwise. Click to
+      // expand a child row containing the sub-execution rows.
+      columns.push({
+        data: null, name: "subExecutions", title: "Sub Executions",
+        orderable: false, searchable: false,
+        className: "sub-exec-toggle",
+        render: function (data, type, row) {
+          if (type !== "display") return "";
+          var subs = row.subExecutions || [];
+          if (subs.length === 0) return "";
+          var childId = "sub-exec-" + row.id;
+          return '<a href="#" class="toggle-sub-exec" role="button" ' +
+            'aria-expanded="false" aria-controls="' + childId + '">' +
+            '+' + subs.length + ' sub</a>';
+        }
+      });
+    }
 
     var table = $("#sql-table").DataTable({
       serverSide: true,
@@ -146,82 +241,82 @@ $(document).ready(function () {
           if (sel) {
             d.status = sel;
           }
+          d.groupSubExecution = groupSubExecEnabled ? "true" : "false";
         },
         dataSrc: function (json) { return json.aaData; },
         error: function () {
           $("#sql-table_processing").css("display", "none");
         }
       },
-      columns: [
-        {
-          data: "id", name: "id", title: "ID",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            var basePath = uiRoot + appBasePath;
-            return '<a href="' + basePath + '/SQL/execution/?id=' + data + '">' +
-              data + '</a>';
-          }
-        },
-        {
-          data: "queryId", name: "queryId", title: "Query ID",
-          orderable: false,
-          render: function (data, type) {
-            if (type !== "display" || !data) return data || "";
-            return '<span title="' + data + '">' + data.substring(0, 8) + '...</span>';
-          }
-        },
-        {
-          data: "status", name: "status", title: "Status",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            return statusBadge(data);
-          }
-        },
-        {
-          data: "description", name: "description", title: "Description",
-          render: function (data, type, row) {
-            if (type !== "display") return data || "";
-            return descriptionHtml({ id: row.id, description: data });
-          }
-        },
-        {
-          data: "submissionTime", name: "submissionTime", title: "Submitted",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            return formatDateSql(data);
-          }
-        },
-        {
-          data: "duration", name: "duration", title: "Duration",
-          render: function (data, type) {
-            if (type !== "display") return data;
-            return formatDurationSql(data);
-          }
-        },
-        {
-          data: "jobIds", name: "jobIds", title: "Succeeded Jobs",
-          orderable: false,
-          render: function (data, type) {
-            if (type !== "display") return (data || []).join(",");
-            return jobIdLinks(data || []);
-          }
-        },
-        {
-          data: "errorMessage", name: "errorMessage", title: "Error Message",
-          orderable: false,
-          render: function (data, type) {
-            if (type !== "display" || !data) return data || "";
-            if (data.length > 100) {
-              return '<span title="' + escapeHtml(data) + '">' +
-                escapeHtml(data.substring(0, 100)) + '...</span>';
-            }
-            return escapeHtml(data);
-          }
-        }
-      ],
+      columns: columns,
       order: [[0, "desc"]],
       language: { search: "Search:&#160;" }
     });
+
+    // Child-row expansion for sub-executions. Sub data is embedded per root row
+    // in the server payload (`row.subExecutions`), so no second fetch is needed.
+    // Under serverSide: true DataTables destroys/recreates rows on every sort,
+    // filter or page change, so we track expanded row IDs out-of-band and
+    // re-attach the child on each draw.
+    if (groupSubExecEnabled) {
+      var expandedRowIds = {};
+
+      var renderSubExecutionsHtml = function (rowData) {
+        var subs = (rowData && rowData.subExecutions) || [];
+        var basePath = uiRoot + appBasePath;
+        var childId = "sub-exec-" + (rowData && rowData.id);
+        var html = '<table id="' + childId +
+          '" class="table table-sm table-bordered mb-0 sub-exec-table">';
+        html += '<thead><tr><th>ID</th><th>Status</th><th>Description</th>' +
+          '<th>Duration</th><th>Succeeded Jobs</th></tr></thead><tbody>';
+        subs.forEach(function (child) {
+          html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' +
+            child.id + '">' + child.id + '</a></td>';
+          html += '<td>' + statusBadge(child.status) + '</td>';
+          html += '<td>' + descriptionHtml({
+            id: child.id, description: child.description || ""
+          }) + '</td>';
+          html += '<td>' + formatDurationSql(child.duration) + '</td>';
+          html += '<td>' + jobIdLinks(child.jobIds || []) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+      };
+
+      $("#sql-table tbody").on("click", "a.toggle-sub-exec", function (e) {
+        e.preventDefault();
+        var tr = $(this).closest("tr");
+        var dtRow = table.row(tr);
+        var rowData = dtRow.data();
+        var subs = (rowData && rowData.subExecutions) || [];
+        if (dtRow.child.isShown()) {
+          dtRow.child.hide();
+          tr.removeClass("shown");
+          $(this).text("+" + subs.length + " sub").attr("aria-expanded", "false");
+          delete expandedRowIds[rowData.id];
+        } else {
+          dtRow.child(renderSubExecutionsHtml(rowData)).show();
+          tr.addClass("shown");
+          $(this).text("\u2212" + subs.length + " sub").attr("aria-expanded", "true");
+          expandedRowIds[rowData.id] = true;
+        }
+      });
+
+      table.on("draw", function () {
+        $("#sql-table tbody > tr").each(function () {
+          var dtRow = table.row(this);
+          var data = dtRow.data();
+          if (data && expandedRowIds[data.id]) {
+            var subs = data.subExecutions || [];
+            dtRow.child(renderSubExecutionsHtml(data)).show();
+            $(this).addClass("shown");
+            $(this).find("a.toggle-sub-exec")
+              .text("\u2212" + subs.length + " sub")
+              .attr("aria-expanded", "true");
+          }
+        });
+      });
+    }
 
     $("#status-filter").on("change", function () {
       table.draw();
