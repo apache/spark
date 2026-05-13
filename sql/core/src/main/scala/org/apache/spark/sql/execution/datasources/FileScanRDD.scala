@@ -26,6 +26,7 @@ import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
@@ -167,6 +168,13 @@ class FileScanRDD(
             metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors)
         }
 
+      private val memoryMode: MemoryMode =
+        if (sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
+          MemoryMode.OFF_HEAP
+        } else {
+          MemoryMode.ON_HEAP
+        }
+
       /**
        * Create an array of constant column vectors containing all required metadata columns
        */
@@ -183,7 +191,7 @@ class FileScanRDD(
           }
 
           val columnVector = new ConstantColumnVector(c.numRows(), attr.dataType)
-          ColumnVectorUtils.populate(columnVector, tmpRow, 0)
+          ColumnVectorUtils.populate(columnVector, tmpRow, 0, memoryMode)
           columnVector
         }.toArray
       }

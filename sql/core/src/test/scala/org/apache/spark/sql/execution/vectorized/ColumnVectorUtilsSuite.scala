@@ -184,6 +184,36 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
     }
   }
 
+  testConstantColumnVector("fill struct with null field", 10,
+    new StructType()
+      .add(StructField("name", StringType, nullable = true))
+      .add(StructField("age", IntegerType))) { vector =>
+    val row = InternalRow(null, 27)
+    ColumnVectorUtils.populate(vector, InternalRow(row), 0)
+    (0 until 10).foreach { i =>
+      assert(vector.getChild(0).isNullAt(i))
+      assert(vector.getChild(1).getInt(i) == 27)
+    }
+  }
+
+  testConstantColumnVector("fill nested struct", 10,
+    new StructType()
+      .add(StructField("inner",
+        new StructType()
+          .add(StructField("k", StringType))
+          .add(StructField("v", IntegerType))))
+      .add(StructField("flag", BooleanType))) { vector =>
+    val inner = InternalRow(UTF8String.fromString("a"), 1)
+    val outer = InternalRow(inner, true)
+    ColumnVectorUtils.populate(vector, InternalRow(outer), 0)
+    (0 until 10).foreach { i =>
+      val s = vector.getChild(0)
+      assert(s.getChild(0).getUTF8String(i) == UTF8String.fromString("a"))
+      assert(s.getChild(1).getInt(i) == 1)
+      assert(vector.getChild(1).getBoolean(i))
+    }
+  }
+
   testConstantColumnVector("fill nested array<struct>", 10,
     ArrayType(new StructType()
       .add(StructField("k", StringType))
@@ -193,8 +223,8 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
       InternalRow(UTF8String.fromString("bb"), 2),
       InternalRow(null, 3)))
     ColumnVectorUtils.populate(vector, InternalRow(structs), 0)
-    (0 until 10).foreach { _ =>
-      val a = vector.getArray(0)
+    (0 until 10).foreach { i =>
+      val a = vector.getArray(i)
       assert(a.numElements() == 3)
       assert(a.getStruct(0, 2).getUTF8String(0) == UTF8String.fromString("a"))
       assert(a.getStruct(0, 2).getInt(1) == 1)
