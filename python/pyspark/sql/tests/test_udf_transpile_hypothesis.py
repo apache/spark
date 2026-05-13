@@ -70,6 +70,7 @@ Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
 import os
 import unittest
 import warnings
+from typing import Optional
 
 from pyspark.sql import Row
 from pyspark.sql.types import (
@@ -82,6 +83,12 @@ from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_package
 from pyspark.util import is_remote_only
+
+
+# Sentinel value used by ``_run`` to mark "this side raised". A unique
+# object is sufficient because we only ever compare it against itself
+# inside the helper.
+_SENTINEL_RAISED = object()
 
 
 _HYPOTHESIS_ENV = "RUN_HYPOTHESIS"
@@ -160,6 +167,23 @@ if _have_hypothesis:
         (0, 0),
         (1, -1),
         (-1, 1),
+        (_LONG_BOUND, 1),
+        (1, -_LONG_BOUND),
+    )
+    # Sign-combo edges (plus NULL combinations) for the boolean tests.
+    # The bodies (``x > 0 and y > 0`` / ``x > 0 or y > 0``) raise in
+    # pure Python on a None input (``TypeError``), and the transpiler's
+    # NULL-guarded Compare also raises -- so the ``_run`` helper's "both
+    # raised" equivalence covers the NULL cases here.
+    _BOOLEAN_PAIR_EDGES = (
+        (None, None),
+        (None, 0),
+        (0, None),
+        (0, 0),
+        (1, -1),
+        (-1, 1),
+        (1, 1),
+        (-1, -1),
         (_LONG_BOUND, 1),
         (1, -_LONG_BOUND),
     )
@@ -253,6 +277,21 @@ def negate_truthy(x):
         return 1
 
 
+def both_positive(x, y):
+    # Exercises ast.BoolOp(And) over Compare operands -- both operands
+    # are statically boolean, so the transpiler should lower to `&`.
+    # Kept as a single-statement body since the transpiler doesn't yet
+    # support multi-statement function bodies; NULL inputs flow through
+    # `>` to NULL on the Spark side and to a raise on the Python side,
+    # so the strategy below skips None.
+    return x > 0 and y > 0
+
+
+def either_positive(x, y):
+    # Exercises ast.BoolOp(Or) over Compare operands.
+    return x > 0 or y > 0
+
+
 def add_two(x, y):
     # Multi-arg UDF -- exercises the parameter-index plumbing for
     # functions with more than one positional argument.
@@ -310,6 +349,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # doesn't depend on the surrounding session default.
             "spark.sql.ansi.enabled": True,
         }
+        transpiled_error: Optional[Exception] = None
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             with self.sql_conf(transpile_on_conf):
@@ -320,9 +360,13 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                     f"{func_name!r} -- the differential comparison would be "
                     "meaningless without it",
                 )
-                transpiled_value = df.select(transpiled_udf(*udf_arg_columns, **kwargs)).collect()[
-                    0
-                ][0]
+                try:
+                    transpiled_value = df.select(
+                        transpiled_udf(*udf_arg_columns, **kwargs)
+                    ).collect()[0][0]
+                except Exception as e:
+                    transpiled_value = _SENTINEL_RAISED
+                    transpiled_error = e
             bad = [
                 w
                 for w in caught
@@ -333,11 +377,30 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 f"unexpected transpile warnings for {func_name!r}: {[str(w.message) for w in bad]}",
             )
 
+        interpreted_error: Optional[Exception] = None
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": False}):
             interpreted_udf = UserDefinedFunction(func, return_type)
-            interpreted_value = df.select(interpreted_udf(*udf_arg_columns, **kwargs)).collect()[0][
-                0
-            ]
+            try:
+                interpreted_value = df.select(
+                    interpreted_udf(*udf_arg_columns, **kwargs)
+                ).collect()[0][0]
+            except Exception as e:
+                interpreted_value = _SENTINEL_RAISED
+                interpreted_error = e
+
+        # If both sides raise, treat that as "matching" -- e.g. Python's
+        # ``None > 0`` raises TypeError, and the transpiler's NULL-guarded
+        # comparison raises a SparkRuntimeException. The actual exception
+        # types differ; we only require both sides to have failed.
+        if transpiled_error is not None or interpreted_error is not None:
+            self.assertIsNotNone(
+                transpiled_error,
+                f"{func_name!r}: interpreted raised {interpreted_error!r} but transpiled did not",
+            )
+            self.assertIsNotNone(
+                interpreted_error,
+                f"{func_name!r}: transpiled raised {transpiled_error!r} but interpreted did not",
+            )
 
         return transpiled_value, interpreted_value
 
@@ -465,6 +528,38 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 transpiled,
                 interpreted,
                 f"add_two named-args mismatch on (x={x!r}, y={y!r})",
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
+        def test_both_positive_matches_python(self, x, y):
+            schema = StructType(
+                [
+                    StructField("a", LongType(), nullable=True),
+                    StructField("b", LongType(), nullable=True),
+                ]
+            )
+            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            transpiled, interpreted = self._run(both_positive, BooleanType(), df, "a", "b")
+            self.assertEqual(
+                transpiled, interpreted, f"both_positive mismatch on (x={x!r}, y={y!r})"
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
+        def test_either_positive_matches_python(self, x, y):
+            schema = StructType(
+                [
+                    StructField("a", LongType(), nullable=True),
+                    StructField("b", LongType(), nullable=True),
+                ]
+            )
+            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            transpiled, interpreted = self._run(either_positive, BooleanType(), df, "a", "b")
+            self.assertEqual(
+                transpiled, interpreted, f"either_positive mismatch on (x={x!r}, y={y!r})"
             )
 
         @_hyp_settings

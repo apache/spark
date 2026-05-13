@@ -657,9 +657,13 @@ class Column(ParentColumn):
         return Column(jc)
 
     def __nonzero__(self) -> None:
+        try:
+            column_repr = self._jc.toString()
+        except Exception:
+            column_repr = "<unknown>"
         raise PySparkValueError(
             errorClass="CANNOT_CONVERT_COLUMN_INTO_BOOL",
-            messageParameters={},
+            messageParameters={"column": column_repr},
         )
 
     __bool__ = __nonzero__

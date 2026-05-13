@@ -72,7 +72,7 @@
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
-      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+      "Cannot convert column into bool (offending column: <column>): please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
   "CANNOT_CONVERT_TYPE": {
