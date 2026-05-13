@@ -128,4 +128,72 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
         .build()
     assert(outputConfigMap === expectedConfigMap)
   }
+
+  test("SPARK-56845: configMapName with custom suffix truncates correctly") {
+    // Test that short names pass through unchanged
+    val shortPrefix = "my-app"
+    val suffix = "-hadoop-config"
+    val shortResult = KubernetesClientUtils.configMapName(shortPrefix, suffix)
+    assert(shortResult === s"$shortPrefix$suffix")
+
+    // Test that names within limit pass through unchanged
+    val longPrefix = "a" * 239  // 239 + 14 ("-hadoop-config") = 253, exactly at limit
+    val longResult = KubernetesClientUtils.configMapName(longPrefix, suffix)
+    assert(longResult.length === 253)
+    assert(longResult === s"$longPrefix$suffix")
+
+    // Test that names exceeding limit fall back to spark-<uniqueID><suffix>
+    val veryLongPrefix = "a" * 240  // 240 + 14 = 254, exceeds limit
+    val fallbackResult = KubernetesClientUtils.configMapName(veryLongPrefix, suffix)
+    assert(fallbackResult.length <= 253)
+    assert(fallbackResult.startsWith("spark-"))
+    assert(fallbackResult.endsWith(suffix))
+    // Verify it's not the original prefix
+    assert(!fallbackResult.startsWith(veryLongPrefix))
+  }
+
+  test("SPARK-56845: configMapName with different suffixes") {
+    val prefix = "my-spark-application"
+
+    // Test with -hadoop-config suffix
+    val hadoopResult = KubernetesClientUtils.configMapName(prefix, "-hadoop-config")
+    assert(hadoopResult === s"$prefix-hadoop-config")
+
+    // Test with -krb5-file suffix
+    val krb5Result = KubernetesClientUtils.configMapName(prefix, "-krb5-file")
+    assert(krb5Result === s"$prefix-krb5-file")
+
+    // Test with -driver-podspec-conf-map suffix
+    val podspecResult = KubernetesClientUtils.configMapName(prefix, "-driver-podspec-conf-map")
+    assert(podspecResult === s"$prefix-driver-podspec-conf-map")
+  }
+
+  test("SPARK-56845: configMapName fallback when prefix+suffix exceeds limit") {
+    // Create a prefix that when combined with suffix exceeds 253 chars
+    val longPrefix = "a" * 230
+    val suffix = "-hadoop-config" // 14 chars, total would be 244 chars (within limit)
+    val result1 = KubernetesClientUtils.configMapName(longPrefix, suffix)
+    assert(result1.length <= 253)
+    assert(result1 === s"$longPrefix$suffix")
+
+    // Create a prefix that definitely exceeds the limit with suffix
+    val veryLongPrefix = "a" * 245
+    val result2 = KubernetesClientUtils.configMapName(veryLongPrefix, suffix)
+    assert(result2.length <= 253)
+    assert(result2.startsWith("spark-"))
+    assert(result2.endsWith(suffix))
+    // Verify it's not the original prefix
+    assert(!result2.startsWith(veryLongPrefix))
+  }
+
+  test("SPARK-56845: configMapName backward compatibility with default suffix") {
+    val prefix = "my-app"
+    // Test that the single-argument version still works
+    val defaultResult = KubernetesClientUtils.configMapName(prefix)
+    assert(defaultResult === s"$prefix-conf-map")
+
+    // Test that it's equivalent to calling with explicit -conf-map suffix
+    val explicitResult = KubernetesClientUtils.configMapName(prefix, "-conf-map")
+    assert(defaultResult === explicitResult)
+  }
 }
