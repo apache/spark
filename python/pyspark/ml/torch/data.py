@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None  # type: ignore[assignment]
 import numpy as np
 from typing import Any, Callable, Iterator
 from pyspark.sql.types import StructType

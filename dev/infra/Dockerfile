@@ -114,6 +114,7 @@ RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' '
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
+RUN python3.8 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
 
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval

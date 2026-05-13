@@ -1613,8 +1613,8 @@ class WriteOperationV2(LogicalPlan):
         self.table_name: Optional[str] = table_name
         self.provider: Optional[str] = None
         self.partitioning_columns: List["ColumnOrName"] = []
-        self.options: dict[str, Optional[str]] = {}
-        self.table_properties: dict[str, Optional[str]] = {}
+        self.options: Dict[str, Optional[str]] = {}
+        self.table_properties: Dict[str, Optional[str]] = {}
         self.mode: Optional[str] = None
         self.overwrite_condition: Optional["ColumnOrName"] = None
 
