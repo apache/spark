@@ -1345,4 +1345,64 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       "INVALID_NON_DETERMINISTIC_EXPRESSIONS" :: Nil
     )
   }
+
+  test("SPARK-56729: ReplaceData and WriteDelta allow non-deterministic expressions") {
+    import org.apache.spark.sql.catalyst.ProjectingInternalRow
+    import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
+    import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTable
+    import org.apache.spark.sql.connector.write.{RowLevelOperationInfoImpl,
+      RowLevelOperationTable}
+    import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+    import org.apache.spark.sql.util.CaseInsensitiveStringMap
+
+    val schema = StructType(Seq(StructField("id", IntegerType)))
+    val tableProps = new java.util.HashMap[String, String]()
+    val inMemoryTable = new InMemoryRowLevelOperationTable(
+      "t", schema, Array.empty, tableProps)
+    val deltaProps = new java.util.HashMap[String, String]()
+    deltaProps.put("supports-deltas", "true")
+    val deltaTable = new InMemoryRowLevelOperationTable(
+      "t", schema, Array.empty, deltaProps)
+
+    def buildRelation(table: InMemoryRowLevelOperationTable,
+        command: Command): DataSourceV2Relation = {
+      val info = RowLevelOperationInfoImpl(command, CaseInsensitiveStringMap.empty())
+      val operation = table.newRowLevelOperationBuilder(info).build()
+      val opTable = RowLevelOperationTable(table, operation)
+      DataSourceV2Relation(
+        opTable,
+        Seq(AttributeReference("id", IntegerType)()),
+        None, None, CaseInsensitiveStringMap.empty())
+    }
+
+    val rowProjection = ProjectingInternalRow(schema, IndexedSeq(0))
+    val replaceProjections = ReplaceDataProjections(rowProjection, None)
+    val deltaProjections = WriteDeltaProjections(None, rowProjection, None)
+    val dummyQuery = testRelation
+
+    // MERGE should allow non-deterministic expressions
+    val mergeRelation = buildRelation(inMemoryTable, Command.MERGE)
+    val replaceDataMerge = ReplaceData(
+      mergeRelation, Literal(true), dummyQuery, mergeRelation, replaceProjections)
+    assert(replaceDataMerge.allowNonDeterministicExpression,
+      "ReplaceData should allow non-deterministic expressions for MERGE")
+    val mergeDeltaRelation = buildRelation(deltaTable, Command.MERGE)
+    val writeDeltaMerge = WriteDelta(
+      mergeDeltaRelation, Literal(true), dummyQuery, mergeDeltaRelation, deltaProjections)
+    assert(writeDeltaMerge.allowNonDeterministicExpression,
+      "WriteDelta should allow non-deterministic expressions for MERGE")
+
+    // DELETE should NOT allow non-deterministic expressions
+    val deleteRelation = buildRelation(inMemoryTable, Command.DELETE)
+    val replaceDataDelete = ReplaceData(
+      deleteRelation, Literal(true), dummyQuery, deleteRelation, replaceProjections)
+    assert(!replaceDataDelete.allowNonDeterministicExpression,
+      "ReplaceData should not allow non-deterministic expressions for DELETE")
+    val deleteDeltaRelation = buildRelation(deltaTable, Command.DELETE)
+    val writeDeltaDelete = WriteDelta(
+      deleteDeltaRelation, Literal(true), dummyQuery, deleteDeltaRelation, deltaProjections)
+    assert(!writeDeltaDelete.allowNonDeterministicExpression,
+      "WriteDelta should not allow non-deterministic expressions for DELETE")
+  }
 }

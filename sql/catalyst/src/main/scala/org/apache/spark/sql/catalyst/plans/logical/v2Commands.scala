@@ -367,7 +367,10 @@ case class ReplaceData(
     originalTable: NamedRelation,
     projections: ReplaceDataProjections,
     groupFilterCondition: Option[Expression] = None,
-    write: Option[Write] = None) extends RowLevelWrite {
+    write: Option[Write] = None)
+    extends RowLevelWrite with SupportsNonDeterministicExpression {
+
+  override def allowNonDeterministicExpression: Boolean = operation.command() == MERGE
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
@@ -455,7 +458,10 @@ case class WriteDelta(
     originalTable: NamedRelation,
     projections: WriteDeltaProjections,
     groupFilterCondition: Option[Expression] = None,
-    write: Option[DeltaWrite] = None) extends RowLevelWrite {
+    write: Option[DeltaWrite] = None)
+    extends RowLevelWrite with SupportsNonDeterministicExpression {
+
+  override def allowNonDeterministicExpression: Boolean = operation.command() == MERGE
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
