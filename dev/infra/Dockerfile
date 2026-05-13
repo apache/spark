@@ -64,7 +64,7 @@ RUN printf 'beniget==0.4.1\npyproject-metadata==0.8.1\n' > /tmp/pypy-constraints
     PIP_CONSTRAINT=/tmp/pypy-constraints.txt pypy3 -m pip install numpy scipy coverage matplotlib && \
     SETUPTOOLS_USE_DISTUTILS=stdlib pypy3 -m pip install 'pandas<=2.0.3' && \
     rm /tmp/pypy-constraints.txt
-RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting 'plotly<6.0' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'Flask==1.1.2'
+RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting 'plotly<6.0' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'Flask==1.1.2' 'Werkzeug==2.1.2'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'

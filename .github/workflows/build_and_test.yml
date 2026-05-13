@@ -709,6 +709,7 @@ jobs:
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('remotes', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2', 'ggplot2', 'mvtnorm', 'statmod'), repos='https://cloud.r-project.org/')"
+        Rscript -e "remotes::install_version('ragg', version='1.2.5', repos='https://cloud.r-project.org')"
         Rscript -e "remotes::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')"
         Rscript -e "remotes::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
         gem install bundler -v 2.4.22
