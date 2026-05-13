@@ -223,7 +223,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 4: join after drop and recreate table.
   // Classic fails with TABLE_ID_MISMATCH; Connect succeeds because
   // both sides re-analyze against the new table.
-  test("[connect] join after external drop/recreate table succeeds") {
+  test("[connect] join after external drop/recreate table succeeds" +
+      " (table with column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -251,7 +252,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join after session drop/recreate table succeeds") {
+  test("[connect] join after session drop/recreate table succeeds" +
+      " (table with column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
