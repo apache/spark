@@ -434,11 +434,11 @@ df.withColumn("c", sf.col("c").cast("string")).select(df["c"]).collect()
 `withColumn("c", ...)` does not mutate `df`; it returns a new DataFrame whose `c` is a new attribute that hides the original. The trailing `df["c"]` still refers to the *original* `c` attribute, which is no longer in the projection list.
 
 * **Spark Classic** has always rejected this query at analysis time with `MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION`, because the original attribute is not present in the operator's child output.
-* **Spark Connect** rejects it with `CANNOT_RESOLVE_DATAFRAME_COLUMN` by default. The plan-id-tagged reference does not match any attribute in the current plan, and strict resolution does not fall back to name-based resolution.
+* **Spark Connect** rejects it with `CANNOT_RESOLVE_DATAFRAME_COLUMN` by default. The plan-id-tagged reference does not match any attribute in the current plan, and strict resolution does not fall back to name-based resolution. The strict behavior is controlled by the SQL config `spark.sql.analyzer.strictDataFrameColumnResolution` (added in Spark 4.2.0, default `true`). Setting it to `false` opts into a name-based fallback that resolves the tagged reference by name when plan-id-based resolution does not find the tagged attribute.
 
 ### Mitigation
 
-Use `sf.col("c")` (an untagged name reference) when you intend to refer to the column produced by the most recent projection or `withColumn`, rather than `df["c"]` (a tagged reference to `df`'s original column):
+Prefer fixing the call site: use `sf.col("c")` (an untagged name reference) when you intend to refer to the column produced by the most recent projection or `withColumn`, rather than `df["c"]` (a tagged reference to `df`'s original column):
 
 ```python
 import pyspark.sql.functions as sf
@@ -456,7 +456,7 @@ val df = spark.sql("SELECT 'x' AS c")
 df.withColumn("c", col("c").cast("string")).select(col("c")).collect()
 ```
 
-If you cannot change the call sites and want Spark Connect to accept the shadowed pattern, set the internal config `spark.sql.analyzer.strictDataFrameColumnResolution=false` to opt into a name-based fallback: when plan-id-based resolution does not find the tagged attribute, the analyzer also tries to resolve the reference by name. The lenient fallback is intended as an escape hatch and is not the default — prefer fixing the call site.
+If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColumnResolution=false` to opt into the lenient name-based fallback. This is intended as an escape hatch and is not the default.
 
 # Summary
 
