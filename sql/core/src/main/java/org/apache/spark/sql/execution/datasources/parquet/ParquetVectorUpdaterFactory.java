@@ -684,9 +684,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putInt(offset + i, (int) valuesReader.readLong());
-      }
+      valuesReader.readLongsAsInts(total, values, offset);
     }
 
     @Override
