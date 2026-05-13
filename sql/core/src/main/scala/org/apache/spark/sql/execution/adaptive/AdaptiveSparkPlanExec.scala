@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -376,7 +377,8 @@ case class AdaptiveSparkPlanExec(
                 currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
               logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
               cleanUpTempTags(newPhysicalPlan)
-              obsoleteCancelledStageIds ++= cancelObsoleteStages(newPhysicalPlan, stagesToReplace)
+              obsoleteCancelledStageIds ++=
+                cancelObsoleteStages(newPhysicalPlan, stagesToReplace)
               currentPhysicalPlan = newPhysicalPlan
               currentLogicalPlan = newLogicalPlan
               stagesToReplace = Seq.empty[QueryStageExec]
@@ -402,6 +404,11 @@ case class AdaptiveSparkPlanExec(
   private def cancelObsoleteStages(
       newPhysicalPlan: SparkPlan,
       stagesToReplace: Seq[QueryStageExec]): Seq[Int] = {
+    // Adaptive subqueries share this context's stage cache when exchange reuse is enabled and can
+    // still depend on the stage.
+    if (!context.canCancelObsoleteStages(conf.exchangeReuseEnabled)) {
+      return Seq.empty
+    }
     val newStages = newPhysicalPlan.collect {
       case stage: QueryStageExec => stage
     }
@@ -412,6 +419,7 @@ case class AdaptiveSparkPlanExec(
     }
     obsoleteStages.foreach { stage =>
       if (!stage.isMaterialized) {
+        removeStageFromCache(stage)
         try {
           stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
         } catch {
@@ -421,6 +429,14 @@ case class AdaptiveSparkPlanExec(
       }
     }
     obsoleteStages.map(_.id)
+  }
+
+  private def removeStageFromCache(stage: ExchangeQueryStageExec): Unit = {
+    context.stageCache.foreach { case (plan, cachedStage) =>
+      if (cachedStage.resultOption.eq(stage.resultOption)) {
+        context.stageCache.remove(plan)
+      }
+    }
   }
 
   // Use a lazy val to avoid this being called more than once.
@@ -987,6 +1003,14 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
+  private val stageCacheSharedAcrossAdaptivePlans = new AtomicBoolean(false)
+
+  def markStageCacheSharedAcrossAdaptivePlans(): Unit = {
+    stageCacheSharedAcrossAdaptivePlans.set(true)
+  }
+
+  def canCancelObsoleteStages(exchangeReuseEnabled: Boolean): Boolean =
+    !exchangeReuseEnabled || !stageCacheSharedAcrossAdaptivePlans.get()
 
   /**
    * The subquery-reuse map shared across the entire query.

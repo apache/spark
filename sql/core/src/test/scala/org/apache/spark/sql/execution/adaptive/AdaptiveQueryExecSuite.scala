@@ -387,6 +387,22 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("adaptive subqueries only disable obsolete stage cancellation with exchange reuse") {
+    Seq(true, false).foreach { exchangeReuseEnabled =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> exchangeReuseEnabled.toString) {
+        val df = sql("SELECT id, (SELECT max(id) FROM range(2)) FROM range(5)")
+        val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        assert(adaptivePlan.context.canCancelObsoleteStages(exchangeReuseEnabled) ===
+          !exchangeReuseEnabled)
+        checkAnswer(df, (0 until 5).map(id => Row(id, 1)))
+      }
+    }
+  }
+
   test("Scalar subquery") {
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
