@@ -44,7 +44,7 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
 
 | Session provider | Module / location | Typical usage |
 |---|---|---|
-| `SharedSparkSession` | `sql/core` | Itself extends `QueryTest`, so concrete suites just `extends SharedSparkSession`. Default for tests under `sql/core`. |
+| `SharedSparkSession` | `sql/core` | Already extends `QueryTest` for historical reasons, but still mix in `QueryTest` explicitly, e.g. `class X extends QueryTest with SharedSparkSession`. Default for tests under `sql/core`. |
 | `TestHiveSingleton` | `sql/hive` | Mixed in alongside `QueryTest`, e.g. `class X extends QueryTest with TestHiveSingleton`. Used by tests under `sql/hive`. |
 
 ## Build and Test
