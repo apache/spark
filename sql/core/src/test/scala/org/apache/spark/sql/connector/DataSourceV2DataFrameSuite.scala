@@ -102,7 +102,9 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t2 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.insertInto(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       spark.table(t1).write.insertInto(t2)
+      checkInsertMetrics(t2, numInsertedRows = 3)
       checkAnswer(spark.table(t2), df)
     }
   }
@@ -112,6 +114,7 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -129,6 +132,7 @@ class DataSourceV2DataFrameSuite
 
       // appends are by name not by position
       df.select($"data", $"id").write.mode("append").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -157,6 +161,7 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.mode("ignore").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -190,6 +195,7 @@ class DataSourceV2DataFrameSuite
 
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.option("other", "20").mode("append").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
 
       sparkContext.listenerBus.waitUntilEmpty()
       plan match {
@@ -391,24 +397,29 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq((1, "hr")).toDF("id", "dep")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       sql(s"ALTER TABLE $tableName ADD COLUMN txt STRING DEFAULT 'initial-text'")
 
       val df2 = Seq((2, "hr"), (3, "software")).toDF("id", "dep")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN txt SET DEFAULT 'new-text'")
 
       val df3 = Seq((4, "hr"), (5, "hr")).toDF("id", "dep")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       val df4 = Seq((6, "hr", null), (7, "hr", "explicit-text")).toDF("id", "dep", "txt")
       df4.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN txt DROP DEFAULT")
 
       val df5 = Seq((8, "hr"), (9, "hr")).toDF("id", "dep")
       df5.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -432,11 +443,13 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq(1, 2).toDF("id")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT 'it'")
 
       val df2 = Seq(3, 4).toDF("id")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -450,6 +463,7 @@ class DataSourceV2DataFrameSuite
 
       val df3 = Seq(1, 2).toDF("id")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -493,11 +507,13 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq(1).toDF("id")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('i' || 't')")
 
       val df2 = Seq(2).toDF("id")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -536,6 +552,7 @@ class DataSourceV2DataFrameSuite
 
       val df3 = Seq(1).toDF("id")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),

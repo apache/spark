@@ -484,6 +484,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
+
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsInserted === 3L)
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -510,6 +520,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         Seq(
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
+
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsInserted === 2L)
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -539,6 +559,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
+
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsInserted === 3L)
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
