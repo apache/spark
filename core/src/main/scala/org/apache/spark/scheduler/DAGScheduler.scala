@@ -183,21 +183,22 @@ private[spark] class DAGScheduler(
   // we corrupted. Read to (a) avoid re-corrupting that partition on recompute, and (b) decide
   // when to fire INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE - the recompute is the
   // task whose stageAttemptId is not the recorded one.
-  private val injectShuffleFetchFailuresCorruptedAttempt =
-    new ConcurrentHashMap[Int, Int]()
+  private val injectShuffleFetchFailuresCorruptedAttempt: ConcurrentHashMap[Int, Int] =
+    if (Utils.isTesting) new ConcurrentHashMap[Int, Int]() else null
 
   // For INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY > 0: shuffles whose mapper-0 corruption
   // has been deferred until enough downstream consumer tasks succeed. The value is the mapId
   // we will eventually swap to an invalid BlockManagerId and the producing task's original
   // location - we keep that location's host/port so the consumer's locality-preferred host
   // is still a real one (only the executorId is INVALID_EXECUTOR_ID).
-  private val injectShuffleFetchFailuresPendingDelayedCorruption =
-    new ConcurrentHashMap[Int, (Long, BlockManagerId)]()
+  private val injectShuffleFetchFailuresPendingDelayedCorruption
+    : ConcurrentHashMap[Int, (Long, BlockManagerId)] =
+    if (Utils.isTesting) new ConcurrentHashMap[Int, (Long, BlockManagerId)]() else null
 
   // For INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY: per-shuffle counter of consumer
   // task-success events observed so far.
-  private val injectShuffleFetchFailuresDownstreamSuccessCount =
-    new ConcurrentHashMap[Int, Int]()
+  private val injectShuffleFetchFailuresDownstreamSuccessCount: ConcurrentHashMap[Int, Int] =
+    if (Utils.isTesting) new ConcurrentHashMap[Int, Int]() else null
 
   // Build the bogus BlockManagerId used by INJECT_SHUFFLE_FETCH_FAILURES to mark a corrupted
   // MapStatus: keeps the original host/port/topology so the consumer's locality preference
