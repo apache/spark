@@ -23,6 +23,7 @@
   --spark-sql-selected-fill: #E25A1CFF;
   --spark-sql-selected-stroke: #317EACFF;
   --spark-sql-linked-fill: #FFC106FF;
+  --spark-sql-search-stroke: #FD7E14;
 }
 [data-bs-theme="dark"] {
   --spark-sql-cluster-fill: #1a5276;
@@ -32,6 +33,7 @@
   --spark-sql-selected-fill: #c0470fff;
   --spark-sql-selected-stroke: #5dade2ff;
   --spark-sql-linked-fill: #d4a00aff;
+  --spark-sql-search-stroke: #ffa94d;
 }
 
 svg g.label {
@@ -166,10 +168,51 @@ svg path.linked {
   top: 8px;
   right: 16px;
   z-index: 10;
+  display: flex;
+  align-items: center;
 }
 
 .plan-viz-zoom-toolbar #plan-viz-zoom-level {
   display: inline-block;
   min-width: 3.25rem;
   font-variant-numeric: tabular-nums;
+}
+
+#plan-viz-search-expanded {
+  width: auto;
+}
+
+#plan-viz-search-input {
+  width: 12rem;
+}
+
+#plan-viz-search-count {
+  min-width: 4.5rem;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+
+#plan-viz-search-count.no-match {
+  color: var(--bs-danger);
+}
+
+/* Search result highlight: outline matched node/cluster with the search color. */
+svg g.node rect.search-match,
+svg g.cluster.search-match > rect {
+  stroke: var(--spark-sql-search-stroke);
+  stroke-width: 3px;
+}
+
+/* Currently active match: keep the outline visible and add an accent fill. */
+svg g.node rect.search-match.search-active {
+  fill: var(--spark-sql-linked-fill);
+}
+
+/* Dim non-matching nodes/clusters when a search is active.
+   `!important` is needed because dagre-d3 writes an inline `opacity: 1`
+   style on each <g class="node">/<g class="cluster"> at render time. */
+svg g.node.search-dimmed,
+svg g.cluster.search-dimmed {
+  opacity: 0.3 !important;
 }

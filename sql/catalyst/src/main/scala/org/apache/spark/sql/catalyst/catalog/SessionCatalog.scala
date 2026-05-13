@@ -113,17 +113,66 @@ class SessionCatalog(
     identifier.copy(funcName = "") == SESSION_NAMESPACE_TEMPLATE
 
   /**
-   * Session function kinds in resolution order for unqualified lookups.
-   * Matches [[SQLConf.sessionFunctionResolutionOrder]]: "first" (session first),
-   * "second" (default), "last" (builtin only; session tried after persistent).
+   * When set, unqualified builtin/temp function resolution uses this fixed kind order instead of
+   * [[catalogManagerForSessionFunctionKinds]] / [[SQLConf.systemPathOrder]]. For unit tests only;
+   * production relies on the catalog manager binding.
    */
-  private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] = {
-    conf.sessionFunctionResolutionOrder match {
-      case "first" => Seq(Temp, Builtin)
-      case "last" => Seq(Builtin)
-      case _ => Seq(Builtin, Temp) // "second" (default)
-    }
+  @volatile private var sessionFunctionKindsTestOverride: Option[Seq[SessionFunctionKind]] = None
+
+  /**
+   * Live PATH for session function kinds. Set from
+   * [[org.apache.spark.sql.connector.catalog.CatalogManager]]'s constructor via
+   * [[bindCatalogManagerForSessionFunctionKinds]] so unqualified lookups and the security check
+   * that blocks temp functions from shadowing builtins read the effective SQL PATH (post-`SET
+   * PATH`, with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already
+   * applied).
+   *
+   * When unset (e.g. standalone [[SessionCatalog]] in tests), kinds derive from
+   * [[SQLConf.systemPathOrder]] -- the seeded default path -- without assuming other legacy
+   * resolution-order conf beyond seeding `defaultPathOrder`.
+   */
+  @volatile private var catalogManagerForSessionFunctionKinds: Option[CatalogManager] = None
+
+  /**
+   * Wire live PATH-derived session function kinds from the session [[CatalogManager]].
+   * Called once from [[org.apache.spark.sql.connector.catalog.CatalogManager]]'s constructor.
+   */
+  private[sql] def bindCatalogManagerForSessionFunctionKinds(cm: CatalogManager): Unit = {
+    catalogManagerForSessionFunctionKinds = Some(cm)
   }
+
+  /**
+   * Pin session function kinds for tests (`None` clears). Uses `private[sql]` so tests under the
+   * `org.apache.spark.sql` package can control ordering without a public catalog API.
+   */
+  private[sql] def setSessionFunctionKindsTestOverride(
+      kinds: Option[Seq[SessionFunctionKind]]): Unit = {
+    sessionFunctionKindsTestOverride = kinds
+  }
+
+  /**
+   * Session function kinds in resolution order for unqualified lookups: test override if set,
+   * else live PATH from [[catalogManagerForSessionFunctionKinds]], else
+   * [[SQLConf.systemPathOrder]].
+   */
+  private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] =
+    sessionFunctionKindsTestOverride.getOrElse {
+      catalogManagerForSessionFunctionKinds match {
+        case Some(cm) =>
+          CatalogManager.systemFunctionKindsFromPath(
+            cm.sqlResolutionPathEntries(cm.currentCatalog.name(), cm.currentNamespace.toSeq))
+        case None =>
+          CatalogManager.systemFunctionKindsFromPath(conf.systemPathOrder)
+      }
+    }
+
+  /**
+   * True iff the effective SQL PATH searches `system.session` before `system.builtin`. Used
+   * to gate the security check that blocks temporary functions from silently shadowing a
+   * builtin of the same name.
+   */
+  private def sessionFirstInPath: Boolean =
+    sessionFunctionKindsInResolutionOrder.headOption.contains(Temp)
 
   /**
    * Checks if a namespace represents temporary functions.
@@ -2080,12 +2129,11 @@ class SessionCatalog(
       qualifyIdentifier(func)
     }
 
-    // Security check: When legacy mode is enabled, block SQL-created temporary functions
-    // from shadowing builtin functions (to preserve master behavior)
-    // Scala UDFs are still allowed to shadow in legacy mode
-    // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
-    val sessionFirst = conf.sessionFunctionResolutionOrder == "first"
-    if (func.database.isEmpty && sessionFirst && !overrideIfExists) {
+    // Security check: when the effective SQL PATH searches `system.session` before
+    // `system.builtin`, block creating an unqualified temporary function whose name
+    // collides with a builtin so it cannot silently shadow that builtin via unqualified
+    // resolution. We throw ROUTINE_ALREADY_EXISTS to indicate the conflict.
+    if (func.database.isEmpty && sessionFirstInPath && !overrideIfExists) {
       val funcName = func.funcName
       // Check if function exists in builtin namespace (extensions are stored as builtins)
       val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
@@ -2195,10 +2243,11 @@ class SessionCatalog(
       // Use FunctionIdentifier with session namespace for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
 
-      // Security check: When legacy mode is enabled, block SQL-created temporary functions
-      // from shadowing builtin functions (including extensions) as a safeguard
-      // We throw ROUTINE_ALREADY_EXISTS to indicate the builtin function already exists
-      if ((conf.sessionFunctionResolutionOrder == "first") && !overrideIfExists) {
+      // Security check: when the effective SQL PATH searches `system.session` before
+      // `system.builtin`, block creating an unqualified temporary function whose name
+      // collides with a builtin (including extensions) so it cannot silently shadow that
+      // builtin via unqualified resolution.
+      if (sessionFirstInPath && !overrideIfExists) {
         val funcName = function.name.funcName
         // Check if function exists in builtin namespace (extensions are stored as builtins)
         val builtinIdent = FunctionRegistry.builtinFunctionIdentifier(funcName)
@@ -2499,7 +2548,12 @@ class SessionCatalog(
    * Look up the `ExpressionInfo` of the given function by name.
    * Resolution order follows the configured path (e.g. builtin then session).
    */
-  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = synchronized {
+  def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
+    // Intentionally not `synchronized` on this [[SessionCatalog]]. Resolution order may call
+    // into [[CatalogManager]] (e.g. [[CatalogManager.sqlResolutionPathEntries]]), which can
+    // synchronize on the manager; another
+    // thread can hold that lock and call into this catalog (e.g. via `setCurrentNamespace`),
+    // which would deadlock if this method also synchronized on `this`.
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
   }
 
@@ -2650,7 +2704,11 @@ class SessionCatalog(
   /**
    * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
    */
-  def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
+  def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
+    // Intentionally not `synchronized` on this [[SessionCatalog]] (see
+    // [[lookupBuiltinOrTempTableFunction]]): unqualified builtin/temp resolution uses
+    // [[sessionFunctionKindsInResolutionOrder]] / [[CatalogManager]] and must not run under
+    // this catalog's intrinsic lock.
     if (name.database.isEmpty) {
       lookupBuiltinOrTempFunction(name.funcName)
         .orElse(lookupBuiltinOrTempTableFunction(name.funcName))

@@ -77,6 +77,22 @@ class FunctionResolution(
       nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
 
   /**
+   * True iff `system.session` is searched before `system.builtin` in the effective SQL PATH.
+   *
+   * Drives the `count(*) -> count(1)` rewrite (which must skip transformation when a temp
+   * `count` shadows the builtin) and the `SessionCatalog` security check that blocks creating
+   * a temp function with a builtin's name. Reads the live PATH via `CatalogManager` and
+   * applies the same kinds extraction that drives `SessionCatalog`'s fast-path provider, so
+   * the predicate stays in sync with the lookup loop's actual order.
+   */
+  def isSessionBeforeBuiltinInPath: Boolean = {
+    val path = catalogManager.sqlResolutionPathEntries(
+      catalogManager.currentCatalog.name(), catalogManager.currentNamespace.toSeq)
+    CatalogManager.systemFunctionKindsFromPath(path).headOption
+      .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
+  }
+
+  /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
    * 1. Single-part names: expanded via [[CatalogManager.sqlResolutionPathEntries]] (same list as

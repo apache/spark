@@ -167,9 +167,13 @@ case class DropFunctionCommand(
         identifier.funcName
       }
 
-      // Check if temp function exists first - if it does, allow dropping it even if a builtin
-      // with the same name exists (shadowing case)
-      if (!catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
+      // Keep DROP TEMPORARY FUNCTION semantics consistent for unqualified names:
+      // - builtin name, no temp present, no IF EXISTS => FORBIDDEN_OPERATION
+      // - IF EXISTS => no-op
+      // Qualified temp namespaces (session / system.session) always target temp functions.
+      if (identifier.database.isEmpty &&
+          !ifExists &&
+          !catalog.isTemporaryFunction(FunctionIdentifier(funcName)) &&
           catalog.isBuiltinFunction(funcName)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }
