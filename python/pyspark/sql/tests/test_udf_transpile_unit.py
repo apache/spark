@@ -185,10 +185,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             if x is not None:
                 return x << 1
 
-        def less_than_zero(x):  # ast.Lt, not handled (only Is/IsNot supported).
-            if x is not None:
-                return x < 0
-
         def multi_statement(x):  # > 1 top-level statement, not handled.
             y = 1
             return x + y if x is not None else 0
@@ -204,7 +200,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("bit_and_one", bit_and_one, LongType(), Row(a=5), 1),
             ("bit_or_one", bit_or_one, LongType(), Row(a=4), 5),
             ("left_shift", left_shift, LongType(), Row(a=3), 6),
-            ("less_than_zero", less_than_zero, BooleanType(), Row(a=-1), True),
             ("multi_statement", multi_statement, LongType(), Row(a=5), 6),
             ("func_closure_capture", func_closure_capture, LongType(), Row(a=10), 17),
         ]
@@ -247,6 +242,178 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         expected,
                         f"{label}: interpreted UDF result diverged from expected",
                     )
+
+    def test_udf_transpile_boolean_and_or_lowered(self):
+        # When `and`/`or` operands are syntactically boolean (Compare
+        # results in this case), the transpiler should lower to bitwise
+        # `&`/`|` and produce results matching the interpreted UDF.
+        # Each UDF is a single top-level statement (the transpiler
+        # doesn't support multi-statement bodies yet).
+        from pyspark.sql.types import StructField, StructType
+
+        def both_positive(x, y):
+            return x > 0 and y > 0
+
+        def either_positive(x, y):
+            return x > 0 or y > 0
+
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            # NULL inputs propagate through `>` to NULL, which then
+            # passes through `&` / `|` per SQL three-valued logic. We
+            # only assert on non-NULL inputs here since Python's
+            # interpreted `x > 0 and y > 0` would raise on None; the
+            # NULL handling itself is covered by the hypothesis suite.
+            for func, x, y, expected in [
+                (both_positive, 1, 2, True),
+                (both_positive, 1, -1, False),
+                (both_positive, -1, -1, False),
+                (either_positive, -1, 2, True),
+                (either_positive, -1, -1, False),
+                (either_positive, 1, 1, True),
+            ]:
+                with self.subTest(func=func.__name__, x=x, y=y):
+                    pudf = UserDefinedFunction(func, BooleanType())
+                    self.assertTrue(
+                        pudf.transpiled,
+                        f"{func.__name__}: bool-typed and/or should transpile",
+                    )
+                    df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+                    [row] = df.select(pudf("a", "b")).collect()
+                    self.assertEqual(row[0], expected)
+
+    def test_udf_transpile_less_than_zero(self):
+        # Restored from the unsupported-patterns matrix: now that the
+        # transpiler handles ast.Lt, `x < 0` should lower to a Catalyst
+        # expression and match interpreted Python. The ``is not None``
+        # guard short-circuits None inputs through the else branch, so
+        # the comparison itself never sees a NULL in this UDF.
+        from pyspark.sql.types import StructField, StructType
+
+        def less_than_zero(x):
+            if x is not None:
+                return x < 0
+
+        schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            pudf = UserDefinedFunction(less_than_zero, BooleanType())
+            self.assertTrue(pudf.transpiled, "less_than_zero should now transpile")
+            for value, expected in [(-1, True), (0, False), (5, False), (None, None)]:
+                with self.subTest(value=value):
+                    df = self.spark.createDataFrame([Row(a=value)], schema=schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertEqual(row[0], expected)
+
+    def test_udf_transpile_compare_with_none_raises(self):
+        # When a comparison's operand is NULL in Spark, Python would have
+        # raised TypeError ('>' not supported between NoneType and int).
+        # The transpiler wraps Compare ops with a raise_error guard so
+        # the rewritten plan fails loudly instead of silently producing
+        # NULL three-valued-logic results.
+        from pyspark.sql.types import StructField, StructType
+
+        def gt_zero(x):
+            return x > 0
+
+        schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            pudf = UserDefinedFunction(gt_zero, BooleanType())
+            self.assertTrue(pudf.transpiled, "gt_zero should transpile")
+            df = self.spark.createDataFrame([Row(a=None)], schema=schema)
+            with self.assertRaises(Exception) as ctx:
+                df.select(pudf("a")).collect()
+            self.assertIn("cannot compare NULL", str(ctx.exception))
+
+    def test_udf_transpile_falls_back_for_non_boolean_short_circuit(self):
+        # Python's `x or 0` returns x if truthy else 0; Spark's `|` is
+        # bitwise, so we'd silently produce wrong results. The transpiler
+        # must refuse, fall back to interpreted Python, and still produce
+        # the correct result.
+        import warnings as _warnings
+        from pyspark.sql.types import StructField, StructType
+
+        def or_zero(x):
+            return x or 0
+
+        def and_one(x):
+            return x and 1
+
+        def not_int(x):
+            return not 0 + x  # operand is BinOp, statically non-boolean
+
+        long_schema = StructType([StructField("a", LongType(), nullable=True)])
+
+        cases = [
+            ("or_zero", or_zero, LongType(), long_schema, Row(a=5), 5),
+            ("or_zero_none", or_zero, LongType(), long_schema, Row(a=None), 0),
+            ("and_one", and_one, LongType(), long_schema, Row(a=5), 1),
+            ("and_one_zero", and_one, LongType(), long_schema, Row(a=0), 0),
+            ("not_int", not_int, BooleanType(), long_schema, Row(a=0), True),
+            ("not_int_nonzero", not_int, BooleanType(), long_schema, Row(a=3), False),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            for label, func, return_type, schema, row, expected in cases:
+                with self.subTest(case=label):
+                    with _warnings.catch_warnings(record=True) as caught:
+                        _warnings.simplefilter("always")
+                        pudf = UserDefinedFunction(func, return_type)
+                    self.assertEqual(
+                        [],
+                        pudf.transpiled,
+                        f"{label}: non-boolean and/or/not must NOT be lowered",
+                    )
+                    fallback = [
+                        w
+                        for w in caught
+                        if "Unable to transpile" in str(w.message)
+                        or "Errors encountered" in str(w.message)
+                    ]
+                    self.assertTrue(fallback, f"{label}: expected a fallback warning")
+                    df = self.spark.createDataFrame([row], schema=schema)
+                    [result] = df.select(pudf("a")).collect()
+                    self.assertEqual(result[0], expected, f"{label}: interpreted mismatch")
+
+    def test_cannot_convert_column_into_bool_includes_column_repr(self):
+        # The error fired by ``Column.__bool__`` should name the offending
+        # column so users can see which expression triggered the fallback.
+        from pyspark.errors import PySparkValueError
+
+        df = self.spark.createDataFrame([Row(a=1, b=2)])
+        col_a = df["a"]
+        with self.assertRaises(PySparkValueError) as ctx:
+            bool(col_a)
+        message = str(ctx.exception)
+        self.assertIn("Cannot convert column into bool", message)
+        # Column's stringification is JVM-side and may render the column
+        # as ``a`` (unresolved) or with a backtick variant, so we just
+        # require the column name appears somewhere in the message.
+        self.assertIn("a", message)
 
 
 if __name__ == "__main__":

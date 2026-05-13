@@ -213,7 +213,6 @@ class UserDefinedFunction:
         # user-supplied kwargs against this positional parameter list so
         # the JVM-side ``_udf_param_N`` substitution sees the inputs in
         # the right order. Empty list when transpilation didn't happen.
-        transpiled_param_names: list = []
         from pyspark.sql import SparkSession
 
         session = SparkSession._instantiatedSession
@@ -223,9 +222,7 @@ class UserDefinedFunction:
             else session.conf.get("spark.sql.experimental.optimizer.transpilePyUDFS") == "true"
         )
         ansi_enabled = (
-            False
-            if session is None
-            else session.conf.get("spark.sql.ansi.enabled") == "true"
+            False if session is None else session.conf.get("spark.sql.ansi.enabled") == "true"
         )
         self._transpile_errors = []
         # Transpilation only attempts to reproduce ANSI-mode Spark SQL semantics
