@@ -120,7 +120,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
 
   private def hasKerberosConf: Boolean = krb5CMap.isDefined | krb5File.isDefined
 
-  private def newConfigMapName: String = KubernetesClientUtils.configMapName(kubernetesConf.resourceNamePrefix, "-krb5-file")
+  private def newConfigMapName: String =
+    KubernetesClientUtils.configMapName(kubernetesConf.resourceNamePrefix, "-krb5-file")
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if hasKerberosConf =>

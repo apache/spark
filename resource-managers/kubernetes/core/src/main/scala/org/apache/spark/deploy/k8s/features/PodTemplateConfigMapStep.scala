@@ -34,7 +34,8 @@ private[spark] class PodTemplateConfigMapStep(conf: KubernetesConf)
 
   private val hasTemplate = conf.contains(KUBERNETES_EXECUTOR_PODTEMPLATE_FILE)
 
-  private val configmapName = KubernetesClientUtils.configMapName(conf.resourceNamePrefix, s"-$POD_TEMPLATE_CONFIGMAP")
+  private val configmapName =
+    KubernetesClientUtils.configMapName(conf.resourceNamePrefix, s"-$POD_TEMPLATE_CONFIGMAP")
 
   def configurePod(pod: SparkPod): SparkPod = {
     if (hasTemplate) {
