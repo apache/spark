@@ -19,6 +19,7 @@ package org.apache.spark.status.api.v1.sql
 
 import java.util.{Date, HashMap}
 
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import jakarta.ws.rs._
@@ -91,9 +92,10 @@ private[v1] class SqlResource extends BaseAppResource {
       // Echo draw counter to prevent stale responses
       val draw = Option(uriParams.getFirst("draw")).map(_.toInt).getOrElse(0)
 
-      // Sub-execution grouping flag; default to the cluster config
+      // Sub-execution grouping flag; default to the cluster config. Defensive
+      // parse - bad values should not 500 the public REST endpoint.
       val groupSubExec = Option(uriParams.getFirst("groupSubExecution"))
-        .map(_.toBoolean)
+        .flatMap(v => Try(v.toBoolean).toOption)
         .getOrElse(ui.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED))
 
       // Search and status filter
@@ -146,23 +148,23 @@ private[v1] class SqlResource extends BaseAppResource {
       val sortedRoots = sortExecs(rootRows, sortCol, sortDir)
       val page = if (length > 0) sortedRoots.slice(start, start + length) else sortedRoots
 
-      // Convert to Java-compatible row data; embed sub-executions when grouping
+      // Convert to Java-compatible row data; embed sub-executions when grouping.
+      // Always emit a `subExecutions` field (possibly empty) in grouped mode so
+      // JSON consumers see a consistent schema; flat mode never includes it.
       val aaData = page.map { exec =>
         val row = execToRow(exec)
         if (groupSubExec) {
           val subs = subsByRoot.getOrElse(exec.executionId, Seq.empty)
-          if (subs.nonEmpty) {
-            // Sort subs by id ascending so they appear in chronological order
-            val subRows = new java.util.ArrayList[java.util.LinkedHashMap[String, Object]]()
-            sortExecs(subs, "id", "asc").foreach(s => subRows.add(execToRow(s)))
-            row.put("subExecutions", subRows)
-          }
+          // Sort subs by id ascending so they appear in chronological order
+          row.put("subExecutions", sortExecs(subs, "id", "asc").map(execToRow).asJava)
         }
         row
       }
 
-      // Counts: when grouping, totals reflect root-only counts so DataTables shows
+      // Counts: grouped totals reflect root-only counts so DataTables shows
       // "Showing X to Y of Z entries" matching the rows the user actually sees.
+      // Flat mode's recordsTotal is the unfiltered total (from the KVStore),
+      // which lets DataTables show the "filtered from W total entries" suffix.
       val recordsTotal = if (groupSubExec) {
         if (needsFilter) {
           // Re-derive root rows from the unfiltered set using the same predicate
@@ -170,8 +172,6 @@ private[v1] class SqlResource extends BaseAppResource {
         } else {
           rootRows.size
         }
-      } else if (needsFilter) {
-        filteredExecs.size
       } else {
         sqlStore.executionsCount()
       }

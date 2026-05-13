@@ -275,6 +275,9 @@ class SqlResourceWithActualMetricsSuite
         val flatRows = (flatJson \ "aaData").children
         assert(flatRows.size > groupedRows.size,
           "flat listing should contain at least one extra sub-execution row")
+        val embeddedSubs = groupedRows.map(r => (r \ "subExecutions").children.size).sum
+        assert(flatRows.size === groupedRows.size + embeddedSubs,
+          "flat size should equal grouped roots plus embedded sub rows")
         flatRows.foreach { row =>
           assert((row \ "subExecutions").children.isEmpty,
             "flat listing should not embed subExecutions")

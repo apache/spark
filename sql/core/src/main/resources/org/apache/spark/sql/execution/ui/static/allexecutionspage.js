@@ -255,7 +255,34 @@ $(document).ready(function () {
 
     // Child-row expansion for sub-executions. Sub data is embedded per root row
     // in the server payload (`row.subExecutions`), so no second fetch is needed.
+    // Under serverSide: true DataTables destroys/recreates rows on every sort,
+    // filter or page change, so we track expanded row IDs out-of-band and
+    // re-attach the child on each draw.
     if (groupSubExecEnabled) {
+      var expandedRowIds = {};
+
+      var renderSubExecutionsHtml = function (rowData) {
+        var subs = (rowData && rowData.subExecutions) || [];
+        var basePath = uiRoot + appBasePath;
+        var childId = "sub-exec-" + (rowData && rowData.id);
+        var html = '<table id="' + childId +
+          '" class="table table-sm table-bordered mb-0 sub-exec-table">';
+        html += '<thead><tr><th>ID</th><th>Status</th><th>Description</th>' +
+          '<th>Duration</th><th>Succeeded Jobs</th></tr></thead><tbody>';
+        subs.forEach(function (child) {
+          html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' +
+            child.id + '">' + child.id + '</a></td>';
+          html += '<td>' + statusBadge(child.status) + '</td>';
+          html += '<td>' + descriptionHtml({
+            id: child.id, description: child.description || ""
+          }) + '</td>';
+          html += '<td>' + formatDurationSql(child.duration) + '</td>';
+          html += '<td>' + jobIdLinks(child.jobIds || []) + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+      };
+
       $("#sql-table tbody").on("click", "a.toggle-sub-exec", function (e) {
         e.preventDefault();
         var tr = $(this).closest("tr");
@@ -266,28 +293,28 @@ $(document).ready(function () {
           dtRow.child.hide();
           tr.removeClass("shown");
           $(this).text("+" + subs.length + " sub").attr("aria-expanded", "false");
+          delete expandedRowIds[rowData.id];
         } else {
-          var basePath = uiRoot + appBasePath;
-          var childId = "sub-exec-" + (rowData && rowData.id);
-          var html = '<table id="' + childId +
-            '" class="table table-sm table-bordered mb-0 sub-exec-table">';
-          html += '<thead><tr><th>ID</th><th>Status</th><th>Description</th>' +
-            '<th>Duration</th><th>Succeeded Jobs</th></tr></thead><tbody>';
-          subs.forEach(function (child) {
-            html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' +
-              child.id + '">' + child.id + '</a></td>';
-            html += '<td>' + statusBadge(child.status) + '</td>';
-            html += '<td>' + descriptionHtml({
-              id: child.id, description: child.description || ""
-            }) + '</td>';
-            html += '<td>' + formatDurationSql(child.duration) + '</td>';
-            html += '<td>' + jobIdLinks(child.jobIds || []) + '</td></tr>';
-          });
-          html += '</tbody></table>';
-          dtRow.child(html).show();
+          dtRow.child(renderSubExecutionsHtml(rowData)).show();
           tr.addClass("shown");
           $(this).text("\u2212" + subs.length + " sub").attr("aria-expanded", "true");
+          expandedRowIds[rowData.id] = true;
         }
+      });
+
+      table.on("draw", function () {
+        $("#sql-table tbody > tr").each(function () {
+          var dtRow = table.row(this);
+          var data = dtRow.data();
+          if (data && expandedRowIds[data.id]) {
+            var subs = data.subExecutions || [];
+            dtRow.child(renderSubExecutionsHtml(data)).show();
+            $(this).addClass("shown");
+            $(this).find("a.toggle-sub-exec")
+              .text("\u2212" + subs.length + " sub")
+              .attr("aria-expanded", "true");
+          }
+        });
       });
     }
 
