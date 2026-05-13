@@ -159,7 +159,6 @@ case class InsertAdaptiveSparkPlan(
   def compileSubquery(plan: LogicalPlan): SparkPlan = {
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
-    adaptiveExecutionContext.markStageCacheSharedAcrossAdaptivePlans()
     this.applyInternal(
       QueryExecution.createSparkPlan(
         adaptiveExecutionContext.session.sessionState.planner, plan.clone()), true)
