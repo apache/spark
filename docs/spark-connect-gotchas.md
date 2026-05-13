@@ -427,7 +427,7 @@ The two resolution strategies diverge once a column has been shadowed by another
 ```python
 import pyspark.sql.functions as sf
 
-df = spark.sql("SELECT 'x' AS c")
+df = spark.sql("SELECT 1 AS c")
 df.withColumn("c", sf.col("c").cast("string")).select(df["c"]).collect()
 ```
 
@@ -443,7 +443,7 @@ Prefer fixing the call site: use `sf.col("c")` (an untagged name reference) when
 ```python
 import pyspark.sql.functions as sf
 
-df = spark.sql("SELECT 'x' AS c")
+df = spark.sql("SELECT 1 AS c")
 df.withColumn("c", sf.col("c").cast("string")).select(sf.col("c")).collect()
 ```
 
@@ -452,7 +452,7 @@ df.withColumn("c", sf.col("c").cast("string")).select(sf.col("c")).collect()
 ```scala
 import org.apache.spark.sql.functions._
 
-val df = spark.sql("SELECT 'x' AS c")
+val df = spark.sql("SELECT 1 AS c")
 df.withColumn("c", col("c").cast("string")).select(col("c")).collect()
 ```
 
