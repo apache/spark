@@ -73,7 +73,7 @@ Unlike query execution, Spark Classic and Spark Connect differ in when schema an
 
 # Common Gotchas (with Mitigations)
 
-If you are not careful about the difference between lazy vs. eager analysis, there are four key gotchas to be aware of: 1) overwriting temporary view names, 2) capturing external variables in UDFs, 3) delayed error detection, and 4) excessive schema access on new DataFrames.
+If you are not careful about the difference between lazy vs. eager analysis, there are five key gotchas to be aware of: 1) overwriting temporary view names, 2) capturing external variables in UDFs, 3) delayed error detection, 4) excessive schema access on new DataFrames, and 5) DataFrame column references after a column is shadowed.
 
 ## 1. Reusing temporary view names
 
@@ -418,6 +418,46 @@ println(structColumnFields)
 
 This approach is significantly faster when dealing with a large number of columns because it avoids creating and analyzing numerous DataFrames.
 
+## 5. DataFrame column references after column shadowing
+
+In Spark Connect, a DataFrame column reference such as `df["col"]` is tagged with the plan id of `df`. At analysis time the server resolves the reference by looking for the tagged ancestor in the plan and pulling the matching attribute from it. Spark Classic does not use plan ids; it resolves column references against the immediate child's output by attribute id and name.
+
+The two resolution strategies diverge once a column has been shadowed by another operator that produces an attribute with the same name:
+
+```python
+import pyspark.sql.functions as F
+
+df = spark.sql("SELECT 'x' AS col")
+df.withColumn("col", F.col("col").cast("string")).select(df["col"]).collect()
+```
+
+`withColumn("col", ...)` does not mutate `df`; it returns a new DataFrame whose `col` is a new attribute that hides the original. The trailing `df["col"]` still refers to the *original* `col` attribute, which is no longer in the projection list.
+
+* **Spark Classic** has always rejected this query at analysis time with `MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION`, because the original attribute is not present in the operator's child output.
+* **Spark Connect** rejects it with `CANNOT_RESOLVE_DATAFRAME_COLUMN` by default. The plan-id-tagged reference does not match any attribute in the current plan, and strict resolution does not fall back to name-based resolution.
+
+### Mitigation
+
+Use `F.col("col")` (an untagged name reference) when you intend to refer to the column produced by the most recent projection or `withColumn`, rather than `df["col"]` (a tagged reference to `df`'s original column):
+
+```python
+import pyspark.sql.functions as F
+
+df = spark.sql("SELECT 'x' AS col")
+df.withColumn("col", F.col("col").cast("string")).select(F.col("col")).collect()
+```
+
+**Scala example:**
+
+```scala
+import org.apache.spark.sql.functions._
+
+val df = spark.sql("SELECT 'x' AS col")
+df.withColumn("col", col("col").cast("string")).select(col("col")).collect()
+```
+
+If you cannot change the call sites and want Spark Connect to accept the shadowed pattern, set the internal config `spark.sql.analyzer.strictDataFrameColumnResolution=false` to opt into a name-based fallback: when plan-id-based resolution does not find the tagged attribute, the analyzer also tries to resolve the reference by name. The lenient fallback is intended as an escape hatch and is not the default — prefer fixing the call site.
+
 # Summary
 
 | Aspect                | Spark Classic | Spark Connect                                       |
@@ -428,5 +468,6 @@ This approach is significantly faster when dealing with a large number of column
 | **Schema access**     | Local         | Triggers RPC, and caches the schema on first access |
 | **Temporary views**   | Plan embedded | Name lookup                                         |
 | **UDF serialization** | At creation   | At execution                                        |
+| **DataFrame column references** | Resolved against child attributes by id/name | Resolved against the tagged ancestor's plan id      |
 
 The key difference is that Spark Connect defers analysis and name resolution to execution time.
