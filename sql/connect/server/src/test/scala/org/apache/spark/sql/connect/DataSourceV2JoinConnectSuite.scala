@@ -164,7 +164,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 4: join after drop and recreate table.
   // Classic fails with TABLE_ID_MISMATCH; Connect succeeds because
   // both sides re-analyze against the new table.
-  test("[connect] join after drop and recreate table succeeds") {
+  test("[connect] join after external drop/recreate table succeeds") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -192,10 +192,31 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
+  test("[connect] join after session drop/recreate table succeeds") {
+    withSession { session =>
+      withCleanup(session) {
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+        val df1 = session.table(T)
+
+        // session drop and recreate via SQL
+        session.sql(s"DROP TABLE $T").collect()
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+
+        val df2 = session.table(T)
+
+        val result = df1.join(df2, df1("id") === df2("id"))
+        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+        assertRows(result.collect(), Seq.empty)
+      }
+    }
+  }
+
   // Scenario 5: join after drop and re-add column with same type.
   // Both sides re-analyze against the new schema. Single alterTable preserves
   // data because the column name matches in old/new schema (aligned with classic test).
-  test("[connect] join after drop and re-add column with same type") {
+  test("[connect] join after external drop+re-add same-type column succeeds") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -225,13 +246,34 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
+  test("[connect] join after session drop+re-add same-type column succeeds") {
+    withSession { session =>
+      withCleanup(session) {
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+        val df1 = session.table(T)
+
+        // session drop and re-add column via SQL
+        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        session.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+
+        val df2 = session.table(T)
+
+        val result = df1.join(df2, df1("id") === df2("id"))
+        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+        assertRows(result.collect(), Seq(Row(1, null, 1, null)))
+      }
+    }
+  }
+
   // Scenario 6: join after drop and re-add column with different type.
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see salary as STRING.
   // Uses two separate alterTable calls (unlike classic which uses one) because
   // InMemoryBaseTable preserves old INT data when names match across a single call,
   // causing a type mismatch at read time. Two calls properly null out the old data.
-  test("[connect] join after drop and re-add column with different type succeeds") {
+  test("[connect] join after external drop+re-add different-type column succeeds") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -244,6 +286,27 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
         cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
         cat.alterTable(ident, TableChange.addColumn(Array("salary"), StringType, true))
+
+        val df2 = session.table(T)
+
+        val result = df1.join(df2, df1("id") === df2("id"))
+        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+        assertRows(result.collect(), Seq(Row(1, null, 1, null)))
+      }
+    }
+  }
+
+  test("[connect] join after session drop+re-add different-type column succeeds") {
+    withSession { session =>
+      withCleanup(session) {
+        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+
+        val df1 = session.table(T)
+
+        // session drop and re-add column with different type via SQL
+        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        session.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
 
         val df2 = session.table(T)
 
