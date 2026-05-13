@@ -49,6 +49,8 @@ public class ConstantColumnVector extends ColumnVector {
   private ConstantColumnVector[] childData;
   private ColumnarArray arrayData;
   private ColumnarMap mapData;
+  // Optionally owned backing storage for arrayData / mapData. Closed by close().
+  private WritableColumnVector ownedBacking;
 
   private final int numRows;
 
@@ -62,6 +64,9 @@ public class ConstantColumnVector extends ColumnVector {
 
     if (type instanceof StructType structType) {
       this.childData = new ConstantColumnVector[structType.fields().length];
+      for (int i = 0; i < structType.fields().length; i++) {
+        this.childData[i] = new ConstantColumnVector(1, structType.fields()[i].dataType());
+      }
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childData = new ConstantColumnVector[3];
@@ -97,6 +102,10 @@ public class ConstantColumnVector extends ColumnVector {
     }
     arrayData = null;
     mapData = null;
+    if (ownedBacking != null) {
+      ownedBacking.close();
+      ownedBacking = null;
+    }
   }
 
   @Override
@@ -218,10 +227,20 @@ public class ConstantColumnVector extends ColumnVector {
   }
 
   /**
-   * Sets the `ColumnarArray` `value` for all rows
+   * Sets the `ColumnarArray` `value` for all rows. The caller retains ownership of the backing
+   * storage for `value`; use `setArrayWithBacking` if this vector should own and close it.
    */
   public void setArray(ColumnarArray value) {
     arrayData = value;
+  }
+
+  /**
+   * Sets the `ColumnarArray` `value` for all rows and takes ownership of `backing`, which will be
+   * closed when this vector is closed.
+   */
+  public void setArrayWithBacking(ColumnarArray value, WritableColumnVector backing) {
+    arrayData = value;
+    replaceOwnedBacking(backing);
   }
 
   @Override
@@ -230,10 +249,27 @@ public class ConstantColumnVector extends ColumnVector {
   }
 
   /**
-   * Sets the `ColumnarMap` `value` for all rows
+   * Sets the `ColumnarMap` `value` for all rows. The caller retains ownership of the backing
+   * storage for `value`; use `setMapWithBacking` if this vector should own and close it.
    */
   public void setMap(ColumnarMap value) {
     mapData = value;
+  }
+
+  /**
+   * Sets the `ColumnarMap` `value` for all rows and takes ownership of `backing`, which will be
+   * closed when this vector is closed.
+   */
+  public void setMapWithBacking(ColumnarMap value, WritableColumnVector backing) {
+    mapData = value;
+    replaceOwnedBacking(backing);
+  }
+
+  private void replaceOwnedBacking(WritableColumnVector backing) {
+    if (ownedBacking != null && ownedBacking != backing) {
+      ownedBacking.close();
+    }
+    ownedBacking = backing;
   }
 
   @Override
@@ -303,9 +339,14 @@ public class ConstantColumnVector extends ColumnVector {
   }
 
   /**
-   * Sets the child `ConstantColumnVector` `value` at the given ordinal for all rows
+   * Sets the child `ConstantColumnVector` `value` at the given ordinal for all rows. Closes any
+   * previously-set child at this ordinal (e.g., one auto-allocated by the constructor) to avoid
+   * leaking its backing storage.
    */
   public void setChild(int ordinal, ConstantColumnVector value) {
+    if (childData[ordinal] != null && childData[ordinal] != value) {
+      childData[ordinal].close();
+    }
     childData[ordinal] = value;
   }
 

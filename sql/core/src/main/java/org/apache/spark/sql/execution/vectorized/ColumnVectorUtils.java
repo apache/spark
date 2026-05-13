@@ -31,8 +31,10 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -93,6 +95,31 @@ public class ColumnVectorUtils {
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
       } else if (pdt instanceof PhysicalVariantType) {
         col.setVariant((VariantVal)row.get(fieldIdx, t));
+      } else if (pdt instanceof PhysicalStructType) {
+        StructType st = (StructType) t;
+        InternalRow inner = row.getStruct(fieldIdx, st.fields().length);
+        InternalRow tmpRow = new GenericInternalRow(1);
+        for (int i = 0; i < st.fields().length; i++) {
+          StructField field = st.fields()[i];
+          tmpRow.update(0, inner.isNullAt(i) ? null : inner.get(i, field.dataType()));
+          // ConstantColumnVector's constructor pre-allocates struct children with the parent's
+          // numRows, so writeToOffHeapColumnVector recurses with the right capacity.
+          populate((ConstantColumnVector) col.getChild(i), tmpRow, 0);
+        }
+      } else if (pdt instanceof PhysicalArrayType || pdt instanceof PhysicalMapType) {
+        // Allocate a 1-row off-heap backing vector to hold the constant complex value.
+        OffHeapColumnVector backing = new OffHeapColumnVector(1, t);
+        // Reuse RowToColumnConverter by wrapping `t` as a single-field struct schema and
+        // converting the one-row input. This recursively handles all element types correctly.
+        StructType wrapperSchema = new StructType().add("v", t, true);
+        RowToColumnConverter converter = new RowToColumnConverter(wrapperSchema);
+        InternalRow wrapped = new GenericInternalRow(new Object[]{row.get(fieldIdx, t)});
+        converter.convert(wrapped, new WritableColumnVector[]{backing});
+        if (pdt instanceof PhysicalArrayType) {
+          col.setArrayWithBacking(backing.getArray(0), backing);
+        } else {
+          col.setMapWithBacking(backing.getMap(0), backing);
+        }
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
             " in column vectorized reader.", t.sql()));
