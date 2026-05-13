@@ -19,11 +19,9 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SessionConfigSupport, SupportsCatalogOptions}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Tests for transactional writes to path-based tables, where the table is identified by a
@@ -196,46 +194,4 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       assert(catalog.lastTransaction.isClosed)
     }
   }
-}
-
-/**
- * Simulates a path-based connector (e.g. Delta) that implements [[SupportsCatalogOptions]]
- * to route `pathformat.\`/path/to/t\`` SQL identifiers to the session catalog. We rely on
- * the default [[SupportsCatalogOptions#extractCatalog]] which returns
- * [[org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME]].
- */
-class FakePathBasedSource
-    extends FakeV2ProviderWithCustomSchema
-    with SupportsCatalogOptions
-    with DataSourceRegister {
-
-  override def shortName(): String = "pathformat"
-
-  // Strip our own format prefix from the multipart path and return the rest under our
-  // format-name namespace.
-  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
-    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
-}
-
-/**
- * Like [[FakePathBasedSource]] but resolves the owning catalog from the session config
- * `spark.datasource.pathformat2.catalog` instead of always returning null. This simulates
- * a connector that lets users configure the target catalog.
- */
-class FakePathBasedSourceWithSessionConfig
-    extends FakeV2ProviderWithCustomSchema
-    with SupportsCatalogOptions
-    with SessionConfigSupport
-    with DataSourceRegister {
-
-  override def shortName(): String = "pathformat2"
-
-  override def keyPrefix: String = "pathformat2"
-
-  override def extractCatalog(options: CaseInsensitiveStringMap): String = options.get("catalog")
-
-  // Strip our own format prefix from the multipart path and return the rest under our
-  // format-name namespace.
-  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
-    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
 }
