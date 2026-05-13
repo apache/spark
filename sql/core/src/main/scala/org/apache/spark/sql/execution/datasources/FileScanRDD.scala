@@ -90,6 +90,14 @@ class FileScanRDD(
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
+  // Evaluated on the driver (sparkSession is @transient) and serialized to executors so the
+  // `compute` iterator below can pass it through to ColumnVectorUtils.populate.
+  private val memoryMode: MemoryMode =
+    if (sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -166,13 +174,6 @@ class FileScanRDD(
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(
             metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors)
-        }
-
-      private val memoryMode: MemoryMode =
-        if (sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
-          MemoryMode.OFF_HEAP
-        } else {
-          MemoryMode.ON_HEAP
         }
 
       /**
