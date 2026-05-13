@@ -1105,8 +1105,8 @@ class Analyzer(
             relationResolution.resolveReference(ref) match {
               case r: NamedRelation => write.withNewTable(r)
               case other => throw SparkException.internalError(
-                s"""Expected V2TableReference write target to resolve to a NamedRelation,
-                   |but got ${other.getClass.getName}""".stripMargin)
+                s"Expected V2TableReference write target to resolve to a NamedRelation, " +
+                  s"but got ${other.getClass.getName}")
             }
           case _ => write
         }
