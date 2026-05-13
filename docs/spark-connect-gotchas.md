@@ -425,10 +425,10 @@ In Spark Connect, a DataFrame column reference such as `df["c"]` is tagged with 
 The two resolution strategies diverge once a column has been shadowed by another operator that produces an attribute with the same name:
 
 ```python
-import pyspark.sql.functions as F
+import pyspark.sql.functions as sf
 
 df = spark.sql("SELECT 'x' AS c")
-df.withColumn("c", F.col("c").cast("string")).select(df["c"]).collect()
+df.withColumn("c", sf.col("c").cast("string")).select(df["c"]).collect()
 ```
 
 `withColumn("c", ...)` does not mutate `df`; it returns a new DataFrame whose `c` is a new attribute that hides the original. The trailing `df["c"]` still refers to the *original* `c` attribute, which is no longer in the projection list.
@@ -438,13 +438,13 @@ df.withColumn("c", F.col("c").cast("string")).select(df["c"]).collect()
 
 ### Mitigation
 
-Use `F.col("c")` (an untagged name reference) when you intend to refer to the column produced by the most recent projection or `withColumn`, rather than `df["c"]` (a tagged reference to `df`'s original column):
+Use `sf.col("c")` (an untagged name reference) when you intend to refer to the column produced by the most recent projection or `withColumn`, rather than `df["c"]` (a tagged reference to `df`'s original column):
 
 ```python
-import pyspark.sql.functions as F
+import pyspark.sql.functions as sf
 
 df = spark.sql("SELECT 'x' AS c")
-df.withColumn("c", F.col("c").cast("string")).select(F.col("c")).collect()
+df.withColumn("c", sf.col("c").cast("string")).select(sf.col("c")).collect()
 ```
 
 **Scala example:**
