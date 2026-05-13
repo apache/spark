@@ -125,6 +125,11 @@ object SparkBuild extends PomBuild {
           "The Java version used to build the project is outdated. " +
             s"Please use Java $minimumVersion or later.")
       }
+      if (currentVersionFeature == 25 && currentVersionUpdate < 3) {
+        throw new MessageOnlyException(
+          s"Java 25 requires update 3 or later due to JDK-8377811. " +
+            s"Current version: $currentVersion. Please use Java 25.0.3 or later.")
+      }
     },
     (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
     (Test / compile) := ((Test / compile) dependsOn checkJavaVersion).value
