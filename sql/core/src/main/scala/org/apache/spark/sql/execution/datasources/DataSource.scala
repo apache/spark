@@ -420,6 +420,11 @@ case class DataSource(
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
+          if (caseInsensitiveOptions.getOrElse(
+              FileIndexOptions.RECURSIVE_FILE_LOOKUP, "false").toBoolean) {
+            throw QueryCompilationErrors
+              .recursiveFileLookupNotSupportedForPartitionedDataSourceError()
+          }
           val defaultTableSize = conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
             sparkSession,
