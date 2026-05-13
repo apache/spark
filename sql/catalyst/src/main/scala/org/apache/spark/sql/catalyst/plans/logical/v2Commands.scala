@@ -195,6 +195,26 @@ object AppendData {
 }
 
 /**
+ * Append data to an existing table as the result of an insert-only MERGE rewrite.
+ *
+ * Functionally equivalent to [[AppendData]] but distinguishes the row-level MERGE rewrite path.
+ */
+case class InsertOnlyMerge(
+    table: NamedRelation,
+    query: LogicalPlan,
+    write: Option[Write] = None,
+    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
+  override val isByName: Boolean = false
+  override val withSchemaEvolution: Boolean = false
+  override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
+  override def withNewQuery(newQuery: LogicalPlan): InsertOnlyMerge = copy(query = newQuery)
+  override def withNewTable(newTable: NamedRelation): InsertOnlyMerge = copy(table = newTable)
+  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
+  override protected def withNewChildInternal(newChild: LogicalPlan): InsertOnlyMerge =
+    copy(query = newChild)
+}
+
+/**
  * Overwrite data matching a filter in an existing table.
  */
 case class OverwriteByExpression(

@@ -24,6 +24,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.connector.write.InsertSummary
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2Table
 import org.apache.spark.sql.functions.{array, lit, map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
@@ -60,6 +63,7 @@ abstract class InsertIntoTests(
     sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     doInsert(t1, df)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
@@ -70,6 +74,7 @@ abstract class InsertIntoTests(
     val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
 
     doInsert(t1, dfr)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
@@ -79,6 +84,7 @@ abstract class InsertIntoTests(
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       doInsert(t1, df)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       verifyTable(t1, df)
     }
   }
@@ -89,6 +95,7 @@ abstract class InsertIntoTests(
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     val df2 = Seq((4L, "d"), (5L, "e"), (6L, "f")).toDF("id", "data")
     doInsert(t1, df)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     doInsert(t1, df2, SaveMode.Overwrite)
     verifyTable(t1, df2)
   }
@@ -99,6 +106,7 @@ abstract class InsertIntoTests(
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
       doInsert(t1, init)
+      checkInsertMetrics(t1, numInsertedRows = 2)
 
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       doInsert(t1, df, SaveMode.Overwrite)
@@ -114,6 +122,7 @@ abstract class InsertIntoTests(
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
         doInsert(t1, init)
+        checkInsertMetrics(t1, numInsertedRows = 2)
 
         val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
         doInsert(t1, dfr, SaveMode.Overwrite)
@@ -210,6 +219,15 @@ trait InsertIntoSQLOnlyTests
   /** Check that the results in `tableName` match the `expected` DataFrame. */
   protected def verifyTable(tableName: String, expected: DataFrame): Unit
 
+  protected def checkInsertMetrics(tableName: String, numInsertedRows: Long): Unit = {
+    val inMemoryTable = spark.table(tableName).queryExecution.analyzed.collectFirst {
+      case ExtractV2Table(t) => t.asInstanceOf[InMemoryBaseTable]
+    }.get
+    val summary = inMemoryTable.commits.last.writeSummary.get.asInstanceOf[InsertSummary]
+    assert(summary.numInsertedRows() === numInsertedRows,
+      s"Expected numInsertedRows=$numInsertedRows, got ${summary.numInsertedRows()}")
+  }
+
   protected val v2Format: String
   protected val catalogAndNamespace: String
 
@@ -293,6 +311,7 @@ trait InsertIntoSQLOnlyTests
       withTableAndData(t1) { view =>
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM $view")
+        checkInsertMetrics(t1, numInsertedRows = 3)
         verifyTable(t1, sql(s"SELECT 23, data FROM $view"))
       }
     }
@@ -303,6 +322,7 @@ trait InsertIntoSQLOnlyTests
         withTableAndData(t1) { view =>
           sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
+          checkInsertMetrics(t1, numInsertedRows = 2)
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
           verifyTable(t1, Seq(
             (1, "a"),
@@ -317,6 +337,7 @@ trait InsertIntoSQLOnlyTests
       withTableAndData(t1) { view =>
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
         verifyTable(t1, Seq(
           (1, "a"),
@@ -332,6 +353,7 @@ trait InsertIntoSQLOnlyTests
         withTableAndData(t1) { view =>
           sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
+          checkInsertMetrics(t1, numInsertedRows = 2)
           sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM $view")
           verifyTable(t1, Seq(
             (1, "a"),
@@ -346,6 +368,7 @@ trait InsertIntoSQLOnlyTests
       withTableAndData(t1) { view =>
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM $view")
         verifyTable(t1, Seq(
           (1, "a"),
@@ -361,6 +384,7 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string, p1 int) " +
           s"USING $v2Format PARTITIONED BY (p1)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 23), (4L, 'keep', 2)")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p1 = 23) SELECT * FROM $view")
         verifyTable(t1, Seq(
           (1, "a", 23),
@@ -377,6 +401,7 @@ trait InsertIntoSQLOnlyTests
           sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
             s"USING $v2Format PARTITIONED BY (id, p)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
+          checkInsertMetrics(t1, numInsertedRows = 2)
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM $view")
           verifyTable(t1, Seq(
             (1, "a", 2),
@@ -393,6 +418,7 @@ trait InsertIntoSQLOnlyTests
           sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
             s"USING $v2Format PARTITIONED BY (id, p)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
+          checkInsertMetrics(t1, numInsertedRows = 2)
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM $view")
           verifyTable(t1, Seq(
             (1, "a", 2),
@@ -409,6 +435,7 @@ trait InsertIntoSQLOnlyTests
           sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
             s"USING $v2Format PARTITIONED BY (id, p)")
           sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
+          checkInsertMetrics(t1, numInsertedRows = 2)
           sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM $view")
           verifyTable(t1, Seq(
             (1, "a", 2),
@@ -424,6 +451,7 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
           s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM $view")
         verifyTable(t1, Seq(
           (1, "a", 2),
@@ -439,6 +467,7 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
           s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM $view")
         verifyTable(t1, Seq(
           (1, "a", 2),
@@ -454,6 +483,7 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
           s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM $view")
         verifyTable(t1, Seq(
           (1, "a", 2),
@@ -469,6 +499,7 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
           s"USING $v2Format PARTITIONED BY (id, p)")
         sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        checkInsertMetrics(t1, numInsertedRows = 2)
         sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
         verifyTable(t1, Seq(
           (2, "a", 2),
@@ -491,6 +522,7 @@ trait InsertIntoSQLOnlyTests
         df.where("true").take(5)
         df.where("true").tail(5)
 
+        checkInsertMetrics(t1, numInsertedRows = 3)
         verifyTable(t1, spark.table(view))
       }
     }
@@ -510,9 +542,11 @@ trait InsertIntoSQLOnlyTests
       withTable(t1) {
         sql(s"CREATE TABLE $t1 (c1 INT DEFAULT 42, c2 STRING DEFAULT 'hello') USING $v2Format")
         sql(s"INSERT INTO $t1 VALUES (1, DEFAULT)")
+        checkInsertMetrics(t1, numInsertedRows = 1)
         checkAnswer(sql(s"SELECT * FROM $t1"), Row(1, "hello"))
 
         sql(s"INSERT INTO $t1 VALUES (DEFAULT, DEFAULT)")
+        checkInsertMetrics(t1, numInsertedRows = 1)
         checkAnswer(
           sql(s"SELECT * FROM $t1 ORDER BY c1"),
           Seq(Row(1, "hello"), Row(42, "hello")))
@@ -565,8 +599,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
         s"TBLPROPERTIES ('auto-schema-evolution' = 'false')")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // Same column count, no evolution needed: should succeed even without capability.
       doInsertWithSchemaEvolution(t1, Seq((2L, "b")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
     }
   }
@@ -576,7 +612,9 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1, Seq((2L, "b")).toDF("x", "y"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // No evolution
       verifyTable(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
     }
@@ -587,8 +625,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "b", true)).toDF("id", "data", "active"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq[(Long, String, java.lang.Boolean)](
         (1L, "a", null),
         (2L, "b", true)
@@ -601,8 +641,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "b", true, 100L)).toDF("id", "data", "active", "score"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq[(Long, String, java.lang.Boolean, java.lang.Long)](
         (1L, "a", null, null),
         (2L, "b", true, 100L)
@@ -615,7 +657,9 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1, Seq((2L, "b", true)).toDF("x", "y", "z"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq[(Long, String, java.lang.Boolean)](
         (1L, "a", null),
         (2L, "b", true)
@@ -629,6 +673,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsertWithSchemaEvolution(t1,
         Seq((1L, "a", true)).toDF("id", "data", "active"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq(
         (1L, "a", true)
       ).toDF("id", "data", "active"))
@@ -642,9 +687,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1, "Alice")).toDF("id", "name")
           .select($"id", struct($"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2, "Bob", 30)).toDF("id", "name", "age")
           .select($"id", struct($"name", $"age").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null)), Row(2, Row("Bob", 30))))
@@ -658,9 +705,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1, "Alice")).toDF("id", "name")
           .select($"id", struct($"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2, "Bob", 30)).toDF("id", "firstName", "age")
           .select($"id", struct($"firstName", $"age").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null)), Row(2, Row("Bob", 30))))
@@ -672,8 +721,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq(("b", true, 2L)).toDF("data", "active", "id"), byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq[(Long, String, java.lang.Boolean)](
         (1L, "a", null),
         (2L, "b", true)
@@ -688,10 +739,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1, "Alice")).toDF("id", "name")
           .select($"id", struct($"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2, 30, "Bob")).toDF("id", "age", "name")
           .select($"id", struct($"age", $"name").as("info")),
         byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null)), Row(2, Row("Bob", 30))))
@@ -705,10 +758,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1, "Alice")).toDF("id", "name")
           .select($"id", struct($"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2, 30, "Bob", "NYC")).toDF("id", "age", "name", "city")
           .select($"id", struct($"age", $"name", $"city").as("info")),
         byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, Row("Alice", null, null)), Row(2, Row("Bob", 30, "NYC"))))
@@ -720,8 +775,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq(("b", 2L)).toDF("data", "id"), byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // No evolution
       verifyTable(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
     }
@@ -732,8 +789,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq(("b", 2L)).toDF("x", "y"), byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq[(java.lang.Long, String, String, java.lang.Long)](
         (1L, "a", null, null),
         (null, null, "b", 2L)
@@ -748,6 +807,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1, "Alice")).toDF("id", "name")
           .select($"id", struct($"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2, 30, "Bob")).toDF("id", "age", "name")
           .select($"id", struct($"age", $"name").as("info")),
@@ -764,6 +824,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 2)
       // REPLACE WHERE only deletes rows matching the predicate, then inserts new data.
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "x", true), (4L, "y", false)).toDF("id", "data", "active"),
@@ -781,6 +842,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 2)
       doInsertWithSchemaEvolution(t1,
         Seq((true, "x", 2L), (false, "y", 4L)).toDF("active", "data", "id"),
         byName = true,
@@ -801,6 +863,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       val initDf = Seq((1L, "Alice"), (2L, "Bob")).toDF("id", "name")
         .select($"id", struct($"name").as("info"))
       doInsert(t1, initDf)
+      checkInsertMetrics(t1, numInsertedRows = 2)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bobby", 25)).toDF("id", "name", "age")
           .select($"id", struct($"name", $"age").as("info")),
@@ -820,6 +883,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       val initDf = Seq((1L, "Alice"), (2L, "Bob")).toDF("id", "name")
         .select($"id", struct($"name").as("info"))
       doInsert(t1, initDf)
+      checkInsertMetrics(t1, numInsertedRows = 2)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bobby", 25)).toDF("id", "name", "age")
           .select($"id", struct($"age", $"name").as("info")),
@@ -853,6 +917,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       withTable(t1) {
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 2)
         // Overwrite with schema evolution adding a new column, dynamic mode should only replace
         // partitions present in the inserted data.
         doInsertWithSchemaEvolution(t1,
@@ -874,6 +939,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       withTable(t1) {
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 2)
         doInsertWithSchemaEvolution(t1,
           Seq((true, "x", 2L), (false, "y", 3L)).toDF("active", "data", "id"),
           mode = SaveMode.Overwrite,
@@ -894,6 +960,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       withTable(t1) {
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         doInsert(t1, Seq((1L, "a"), (2L, "b")).toDF("id", "data"))
+        checkInsertMetrics(t1, numInsertedRows = 2)
         // Static mode overwrites the entire table.
         doInsertWithSchemaEvolution(t1,
           Seq((2L, "x", true), (3L, "y", false)).toDF("id", "data", "active"),
@@ -949,8 +1016,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       sql(s"CREATE TABLE $t1 (id bigint) USING $v2Format")
       doInsertWithSchemaEvolution(t1,
         Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "b", true)).toDF("id", "data", "active"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       verifyTable(t1, Seq[(Long, String, java.lang.Boolean)](
         (1L, "a", null),
         (2L, "b", true)
@@ -965,9 +1034,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice")).toDF("id", "name")
           .select($"id", struct(struct($"name").as("nested")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bob", 30)).toDF("id", "name", "age")
           .select($"id", struct(struct($"name", $"age").as("nested")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, Row(Row("Alice", null))), Row(2L, Row(Row("Bob", 30)))))
@@ -981,10 +1052,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice")).toDF("id", "name")
           .select($"id", struct(struct($"name").as("nested")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bob", 30)).toDF("id", "name", "age")
           .select($"id", struct(struct($"age", $"name").as("nested")).as("info")),
         byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, Row(Row("Alice", null))), Row(2L, Row(Row("Bob", 30)))))
@@ -998,9 +1071,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice")).toDF("id", "name")
           .select($"id", array(struct($"name")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bob", 30)).toDF("id", "name", "age")
           .select($"id", array(struct($"name", $"age")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(
@@ -1016,9 +1091,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "A", "Alice")).toDF("id", "key", "name")
           .select($"id", map($"key", struct($"name")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "B", "Bob", 30)).toDF("id", "key", "name", "age")
           .select($"id", map($"key", struct($"name", $"age")).as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(
@@ -1034,9 +1111,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice", "A")).toDF("id", "name", "value")
           .select($"id", map(struct($"name"), $"value").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bob", 30, "B")).toDF("id", "name", "age", "value")
           .select($"id", map(struct($"name", $"age"), $"value").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(
@@ -1050,8 +1129,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
       doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((Long.MaxValue, "b")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, "a"), Row(Long.MaxValue, "b")))
@@ -1064,8 +1145,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
       doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq(("b", Long.MaxValue)).toDF("data", "id"), byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, "a"), Row(Long.MaxValue, "b")))
@@ -1078,8 +1161,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
       doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((Long.MaxValue, "b", true)).toDF("id", "data", "active"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(
@@ -1098,9 +1183,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice", 100)).toDF("id", "name", "value")
           .select($"id", struct($"value", $"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bob", Long.MaxValue)).toDF("id", "name", "value")
           .select($"id", struct($"value", $"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT id, info.value, info.name FROM $t1"),
         Seq(Row(1L, 100L, "Alice"), Row(2L, Long.MaxValue, "Bob")))
@@ -1116,10 +1203,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice", 100)).toDF("id", "name", "value")
           .select($"id", struct($"value", $"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "Bob", Long.MaxValue)).toDF("id", "name", "value")
           .select($"id", struct($"name", $"value").as("info")),
         byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT id, info.value, info.name FROM $t1"),
         Seq(Row(1L, 100L, "Alice"), Row(2L, Long.MaxValue, "Bob")))
@@ -1135,9 +1224,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, 100)).toDF("id", "value")
           .select($"id", array(struct($"value")).as("arr")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, Long.MaxValue)).toDF("id", "value")
           .select($"id", array(struct($"value")).as("arr")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT id, arr[0].value FROM $t1"),
         Seq(Row(1L, 100L), Row(2L, Long.MaxValue)))
@@ -1154,9 +1245,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "k1", 100)).toDF("id", "key", "value")
           .select($"id", map($"key", struct($"value")).as("m")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((2L, "k2", Long.MaxValue)).toDF("id", "key", "value")
           .select($"id", map($"key", struct($"value")).as("m")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT id, m['k1'].value, m['k2'].value FROM $t1"),
         Seq(Row(1L, 100L, null), Row(2L, null, Long.MaxValue)))
@@ -1171,6 +1264,7 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
       doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq((Long.MaxValue, "b")).toDF("id", "data"), mode = SaveMode.Overwrite)
       checkAnswer(
@@ -1185,8 +1279,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // Inserting an int into a long column should not narrow the schema.
       doInsertWithSchemaEvolution(t1, Seq((2, "b")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, "a"), Row(2L, "b")))
@@ -1200,9 +1296,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id float, data string) USING $v2Format")
       doInsert(t1, Seq((1f, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // Inserting a double into a float should widen the schema, inserting an int into a string
       // should retain the string type.
       doInsertWithSchemaEvolution(t1, Seq((2d, 3)).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1d, "a"), Row(2d, "3")))
@@ -1239,9 +1337,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // Insert a null value with NullType - should not change the target column type.
       doInsertWithSchemaEvolution(t1,
         Seq(2L).toDF("id").withColumn("data", lit(null)))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, "a"), Row(2L, null)))
@@ -1254,9 +1354,11 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       doInsert(t1, Seq((1L, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       doInsertWithSchemaEvolution(t1,
         Seq(2L).toDF("id").withColumn("data", lit(null)),
         byName = true)
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1L, "a"), Row(2L, null)))
@@ -1271,10 +1373,12 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
       doInsert(t1,
         Seq((1L, "Alice", 100)).toDF("id", "name", "value")
           .select($"id", struct($"value", $"name").as("info")))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // Insert with NullType for nested field - should not change the struct field type.
       doInsertWithSchemaEvolution(t1,
         Seq(2L).toDF("id")
           .withColumn("info", struct(lit(null).as("value"), lit("Bob").as("name"))))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT id, info.value, info.name FROM $t1"),
         Seq(Row(1L, 100, "Alice"), Row(2L, null, "Bob")))
@@ -1288,8 +1392,10 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id int, data string) USING $v2Format")
       doInsert(t1, Seq((1, "a")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       // Insert without schema evolution - should cast to target type, not widen.
       doInsert(t1, Seq((2L, "b")).toDF("id", "data"))
+      checkInsertMetrics(t1, numInsertedRows = 1)
       checkAnswer(
         sql(s"SELECT * FROM $t1"),
         Seq(Row(1, "a"), Row(2, "b")))

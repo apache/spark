@@ -22,7 +22,7 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
@@ -50,6 +50,13 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
+
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
+      val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
+      val write = writeBuilder.build()
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
+      m.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(
         r: DataSourceV2Relation, deleteExpr, query, options, _, _, None, _) =>
