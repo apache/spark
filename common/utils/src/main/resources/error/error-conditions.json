@@ -200,6 +200,11 @@
         "message" : [
           "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>."
         ]
+      },
+      "MULTIPART_COLUMN_IDENTIFIER" : {
+        "message" : [
+          "Column selection entries must be a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+        ]
       }
     },
     "sqlState" : "42703"
