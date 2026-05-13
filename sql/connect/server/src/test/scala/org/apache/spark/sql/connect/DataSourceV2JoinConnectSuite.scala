@@ -70,11 +70,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   }
 
   /** Runs a test body and ensures the test table is dropped afterward. */
-  private def withCleanup(session: SparkSession)(body: => Unit): Unit = {
+  private def withCleanup(session: SparkSession, table: String = T)(body: => Unit): Unit = {
     try {
       body
     } finally {
-      session.sql(s"DROP TABLE IF EXISTS $T").collect()
+      session.sql(s"DROP TABLE IF EXISTS $table").collect()
     }
   }
 
@@ -281,7 +281,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       " (table without column ID support)") {
     val NC = "nullcolidcat.ns1.ns2.tbl"
     withSession { session =>
-      try {
+      withCleanup(session, table = NC) {
         session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $NC VALUES (1, 100)").collect()
 
@@ -296,8 +296,6 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
         assertRows(result.collect(), Seq.empty)
-      } finally {
-        session.sql(s"DROP TABLE IF EXISTS $NC").collect()
       }
     }
   }
