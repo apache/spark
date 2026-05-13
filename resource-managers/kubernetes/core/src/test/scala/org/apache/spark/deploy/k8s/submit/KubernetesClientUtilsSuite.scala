@@ -30,6 +30,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
 import org.apache.spark.util.Utils
 
 class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
@@ -103,6 +104,27 @@ class KubernetesClientUtilsSuite extends SparkFunSuite with BeforeAndAfter {
         .addToData(confFileMap.asJava)
         .build()
     assert(outputConfigMap === expectedConfigMap)
+  }
+
+  test("configMapName returns prefix+suffix when within length limit") {
+    val name = KubernetesClientUtils.configMapName("my-app-prefix", "-hadoop-config")
+    assert(name === "my-app-prefix-hadoop-config")
+  }
+
+  test("configMapName falls back to spark-<id><suffix> when prefix+suffix is too long") {
+    val suffix = "-hadoop-config"
+    val longPrefix = "x" * (KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length + 1)
+    val name = KubernetesClientUtils.configMapName(longPrefix, suffix)
+    assert(name.length <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH)
+    assert(name.startsWith("spark-"))
+    assert(name.endsWith(suffix))
+    // The fallback drops the original (too-long) prefix entirely.
+    assert(!name.contains(longPrefix))
+  }
+
+  test("configMapName(prefix) preserves the legacy -conf-map suffix") {
+    val name = KubernetesClientUtils.configMapName("spark-drv-1234")
+    assert(name === "spark-drv-1234-conf-map")
   }
 
   test("SPARK-53832: verify that configmap built as expected va Java-friendly APIs") {

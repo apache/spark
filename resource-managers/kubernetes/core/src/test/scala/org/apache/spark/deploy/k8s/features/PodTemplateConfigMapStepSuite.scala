@@ -23,6 +23,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
 
@@ -86,5 +87,30 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
     assert(systemProperties.get(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE.key).get ===
       (Constants.EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH + "/" +
         Constants.EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME))
+  }
+
+  test("podspec ConfigMap name stays valid and consistent with very long resourceNamePrefix") {
+    val templateFile = Files.createTempFile("pod-template", "yml").toFile
+    templateFile.deleteOnExit()
+    Utils.tryWithResource(new PrintWriter(templateFile)) { writer =>
+      writer.write("pod-template-contents")
+    }
+
+    val sparkConf = new SparkConf(false)
+      .set(Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE, templateFile.getAbsolutePath)
+    val longPrefix = "x" * KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
+    val kubernetesConf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf, resourceNamePrefix = Some(longPrefix))
+    val step = new PodTemplateConfigMapStep(kubernetesConf)
+    val configuredPod = step.configurePod(SparkPod.initialPod())
+
+    val resources = step.getAdditionalKubernetesResources()
+    assert(resources.size === 1)
+    val name = resources.head.getMetadata.getName
+    assert(name.length <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH)
+    // The pod's volume must reference the exact same name as the created ConfigMap;
+    // otherwise the executor would mount a non-existent ConfigMap.
+    val volume = configuredPod.pod.getSpec.getVolumes.get(0)
+    assert(volume.getConfigMap.getName === name)
   }
 }

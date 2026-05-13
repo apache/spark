@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.{Config, Constants, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH, KUBERNETES_NAMESPACE}
 import org.apache.spark.deploy.k8s.Constants.ENV_SPARK_CONF_DIR
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CONFIG, PATH, PATHS}
+import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG_MAP_NAME, MAX_SIZE, PATH, PATHS, SHORTER_CONFIG_MAP_NAME}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -49,9 +49,26 @@ object KubernetesClientUtils extends Logging {
 
   // Config map name can be KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH chars at max.
   @Since("3.3.0")
-  def configMapName(prefix: String): String = {
-    val suffix = "-conf-map"
-    s"${prefix.take(KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH - suffix.length)}$suffix"
+  def configMapName(prefix: String): String = configMapName(prefix, "-conf-map")
+
+  /**
+   * Builds a ConfigMap name of the form `<prefix><suffix>`. If the resulting name would exceed
+   * `KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH`, falls back to `spark-<uniqueID><suffix>` so the
+   * name remains both valid and unique across concurrent applications. Mirrors the fallback
+   * strategy used by [[org.apache.spark.deploy.k8s.KubernetesConf.driverServiceName]].
+   */
+  @Since("5.0.0")
+  def configMapName(prefix: String, suffix: String): String = {
+    val preferred = s"$prefix$suffix"
+    if (preferred.length <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH) {
+      preferred
+    } else {
+      val fallback = s"spark-${KubernetesUtils.uniqueID()}$suffix"
+      logWarning(log"ConfigMap name ${MDC(CONFIG_MAP_NAME, preferred)} is too long " +
+        log"(must be <= ${MDC(MAX_SIZE, KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH)} characters); " +
+        log"falling back to ${MDC(SHORTER_CONFIG_MAP_NAME, fallback)}.")
+      fallback
+    }
   }
 
   @Since("3.1.0")

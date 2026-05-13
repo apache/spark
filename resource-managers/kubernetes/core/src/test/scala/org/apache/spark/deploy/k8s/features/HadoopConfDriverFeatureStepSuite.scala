@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
@@ -58,6 +59,27 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
     val hadoopConfMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
     assert(hadoopConfMap.getData().keySet().asScala === confFiles)
+  }
+
+  test("hadoop ConfigMap name stays valid and consistent with very long resourceNamePrefix") {
+    val confDir = Utils.createTempDir()
+    Files.writeString(new File(confDir, "core-site.xml").toPath, "some data")
+
+    val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
+    val longPrefix = "x" * KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf, resourceNamePrefix = Some(longPrefix))
+    val step = new HadoopConfDriverFeatureStep(conf)
+
+    val hadoopConfMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
+    val name = hadoopConfMap.getMetadata().getName()
+    assert(name.length <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH)
+    // The pod's volume must reference the exact same name as the created ConfigMap;
+    // otherwise the driver/executor would mount a non-existent ConfigMap.
+    val pod = step.configurePod(SparkPod.initialPod())
+    val volume = pod.pod.getSpec().getVolumes().asScala.find(_.getName() == HADOOP_CONF_VOLUME)
+    assert(volume.isDefined)
+    assert(volume.get.getConfigMap().getName() === name)
   }
 
   private def checkPod(pod: SparkPod): Unit = {

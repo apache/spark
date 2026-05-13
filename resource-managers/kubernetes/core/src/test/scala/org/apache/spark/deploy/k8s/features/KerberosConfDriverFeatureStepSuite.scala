@@ -67,6 +67,25 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     assert(step.getAdditionalPodSystemProperties().isEmpty)
   }
 
+  test("krb5.conf ConfigMap name stays valid and consistent with very long resourceNamePrefix") {
+    val krbConf = File.createTempFile("krb5", ".conf", tmpDir)
+    Files.writeString(krbConf.toPath, "some data")
+
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_KERBEROS_KRB5_FILE, krbConf.getAbsolutePath())
+    val longPrefix = "x" * KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf, resourceNamePrefix = Some(longPrefix))
+    val step = new KerberosConfDriverFeatureStep(kconf)
+
+    val confMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
+    val name = confMap.getMetadata().getName()
+    assert(name.length <= KUBERNETES_DNS_SUBDOMAIN_NAME_MAX_LENGTH)
+    // The pod mount must reference the exact same name as the created resource;
+    // otherwise the executor would mount a non-existent ConfigMap.
+    checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), name)
+  }
+
   test("create keytab secret if client keytab file used") {
     val keytab = File.createTempFile("keytab", ".bin", tmpDir)
     Files.writeString(keytab.toPath, "some data")

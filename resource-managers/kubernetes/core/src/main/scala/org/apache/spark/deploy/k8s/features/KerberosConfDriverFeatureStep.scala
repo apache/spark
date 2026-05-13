@@ -30,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -119,7 +120,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
 
   private def hasKerberosConf: Boolean = krb5CMap.isDefined | krb5File.isDefined
 
-  private def newConfigMapName: String = s"${kubernetesConf.resourceNamePrefix}-krb5-file"
+  private lazy val newConfigMapName: String =
+    KubernetesClientUtils.configMapName(kubernetesConf.resourceNamePrefix, "-krb5-file")
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if hasKerberosConf =>

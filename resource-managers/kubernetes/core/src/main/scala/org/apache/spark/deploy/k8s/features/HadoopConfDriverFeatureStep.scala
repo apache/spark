@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -53,7 +54,8 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     }
   }
 
-  private def newConfigMapName: String = s"${conf.resourceNamePrefix}-hadoop-config"
+  private lazy val newConfigMapName: String =
+    KubernetesClientUtils.configMapName(conf.resourceNamePrefix, "-hadoop-config")
 
   private def hasHadoopConf: Boolean = confDir.isDefined || existingConfMap.isDefined
 
