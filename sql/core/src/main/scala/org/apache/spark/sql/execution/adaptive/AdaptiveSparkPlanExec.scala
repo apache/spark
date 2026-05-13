@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -412,7 +413,7 @@ case class AdaptiveSparkPlanExec(
             newStage.id == stage.id || newStage.resultOption.eq(stage.resultOption)) => stage
     }
     obsoleteStages.foreach { stage =>
-      if (!stage.isMaterialized) {
+      if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
         removeStageFromCache(stage)
         try {
           stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
@@ -753,6 +754,7 @@ case class AdaptiveSparkPlanExec(
   private def reuseQueryStage(
       existing: ExchangeQueryStageExec,
       exchange: Exchange): ExchangeQueryStageExec = {
+    context.markSharedStageResult(existing.resultOption)
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
@@ -1008,6 +1010,17 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  private val sharedStageResults =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
+
+  def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
+    sharedStageResults.put(resultOption, true)
+  }
+
+  def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
+    sharedStageResults.containsKey(resultOption)
+  }
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }

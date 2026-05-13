@@ -22,6 +22,7 @@ import java.net.URI
 import java.util.Locale
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
@@ -408,6 +409,32 @@ class AdaptiveQueryExecSuite
 
         checkAnswer(df, testData.collect().toSeq)
       }
+    }
+  }
+
+  test("obsolete stage cancellation preserves shared reused exchange stages") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.sql("SELECT * FROM testData join testData2 ON key = a")
+      val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val replacementPlan = LocalTableScanExec(Nil, Nil, None)
+
+      val sharedStage = TestExchangeQueryStageExec(
+        0, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      adaptivePlan.context.markSharedStageResult(sharedStage.resultOption)
+
+      val sharedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(sharedStage)))
+      assert(sharedCancelledIds == Seq(sharedStage.id))
+      assert(!sharedStage.cancelled)
+
+      val unsharedStage = TestExchangeQueryStageExec(
+        1, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      val unsharedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(unsharedStage)))
+      assert(unsharedCancelledIds == Seq(unsharedStage.id))
+      assert(unsharedStage.cancelled)
     }
   }
 
@@ -3613,6 +3640,31 @@ class AdaptiveQueryExecSuite
         }
       }
     }
+  }
+}
+
+private case class TestExchangeQueryStageExec(
+    override val id: Int,
+    override val plan: SparkPlan,
+    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+  @volatile var cancelled: Boolean = false
+
+  override protected def doMaterialize(): Future[Any] = Future.successful(())
+
+  override def getRuntimeStatistics: org.apache.spark.sql.catalyst.plans.logical.Statistics =
+    org.apache.spark.sql.catalyst.plans.logical.Statistics(sizeInBytes = BigInt(0))
+
+  override protected def doCancel(reason: String): Unit = {
+    cancelled = true
+  }
+
+  override def newReuseInstance(
+      newStageId: Int,
+      newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+    val reuse = copy(id = newStageId)
+    reuse._resultOption = this._resultOption
+    reuse._error = this._error
+    reuse
   }
 }
 
