@@ -75,11 +75,13 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   }
 
   private def withCleanup(session: SparkSession, table: String)(fn: => Unit): Unit = {
-    try { fn } finally { session.sql(s"DROP TABLE IF EXISTS $table").collect() }
+    try { fn } finally {
+      session.sql(s"DROP TABLE IF EXISTS $table").collect()
+      CachingInMemoryTableCatalog.clearCache()
+    }
   }
 
   // Scenario 1: external writes
-
   test("[connect] repeated sql() reflects session write") {
     withSession { session =>
       withCleanup(session, T) {
@@ -103,9 +105,9 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         // external writer adds (2, 200)
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val schema2 = StructType.fromDDL("id INT, salary INT")
+        val newSchema = StructType.fromDDL("id INT, salary INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema2, row = InternalRow(2, 200))
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200))
 
         assertRows(session.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100), Row(2, 200)))
       }
@@ -116,33 +118,28 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: repeated sql() stale after external write") {
     withSession { session =>
       withCleanup(session, CT) {
-        try {
-          session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-          session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
-          val serverSession = getServerSession(session)
-          val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
-          val schema = StructType.fromDDL("id INT, salary INT")
-          externalAppend(
-            cat = cat, ident = ident, schema = schema, row = InternalRow(2, 200))
+        val serverSession = getServerSession(session)
+        val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
+        val newSchema = StructType.fromDDL("id INT, salary INT")
+        externalAppend(
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200))
 
-          // Caching connector returns stale table: external write invisible
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+        // Caching connector returns stale table: external write invisible
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
-          // REFRESH TABLE invalidates the connector cache, external write becomes visible
-          session.sql(s"REFRESH TABLE $CT").collect()
-          assertRows(
-            session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100), Row(2, 200)))
-        } finally {
-          CachingInMemoryTableCatalog.clearCache()
-        }
+        // REFRESH TABLE invalidates the connector cache, external write becomes visible
+        session.sql(s"REFRESH TABLE $CT").collect()
+        assertRows(
+          session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100), Row(2, 200)))
       }
     }
   }
 
   // Scenario 2: external schema changes
-
   test("[connect] repeated sql() reflects session schema change") {
     withSession { session =>
       withCleanup(session, T) {
@@ -172,9 +169,9 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
         cat.alterTable(ident, addCol)
 
-        val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
+        val newSchema = StructType.fromDDL("id INT, salary INT, new_col INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200, -1))
 
         assertRows(
           session.sql(s"SELECT * FROM $T").collect(),
@@ -187,37 +184,32 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: repeated sql() stale after external schema change") {
     withSession { session =>
       withCleanup(session, CT) {
-        try {
-          session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-          session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
-          val serverSession = getServerSession(session)
-          val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
-          val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
-          cat.alterTable(ident, addCol)
+        val serverSession = getServerSession(session)
+        val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
+        val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
+        cat.alterTable(ident, addCol)
 
-          val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
-          externalAppend(
-            cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
+        val newSchema = StructType.fromDDL("id INT, salary INT, new_col INT")
+        externalAppend(
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200, -1))
 
-          // Caching connector returns stale table: external changes invisible
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+        // Caching connector returns stale table: external changes invisible
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
-          // REFRESH TABLE invalidates the connector cache, schema change + data visible
-          session.sql(s"REFRESH TABLE $CT").collect()
-          assertRows(
-            session.sql(s"SELECT * FROM $CT").collect(),
-            Seq(Row(1, 100, null), Row(2, 200, -1)))
-        } finally {
-          CachingInMemoryTableCatalog.clearCache()
-        }
+        // REFRESH TABLE invalidates the connector cache, schema change + data visible
+        session.sql(s"REFRESH TABLE $CT").collect()
+        assertRows(
+          session.sql(s"SELECT * FROM $CT").collect(),
+          Seq(Row(1, 100, null), Row(2, 200, -1)))
       }
     }
   }
 
   // Scenario 3: drop and recreate table
-
   test("[connect] repeated sql() reflects session drop/recreate") {
     withSession { session =>
       withCleanup(session, T) {
@@ -258,29 +250,25 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
   test("[connect] connector w/ cache: repeated sql() stale after external drop/recreate") {
     withSession { session =>
       withCleanup(session, CT) {
-        try {
-          session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-          session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $CT VALUES (1, 100)").collect()
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
-          val serverSession = getServerSession(session)
-          val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
-          cat.dropTable(ident)
-          cat.createTable(
-            ident,
-            Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
-            Array.empty,
-            Collections.emptyMap[String, String])
+        val serverSession = getServerSession(session)
+        val cat = serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat")
+        cat.dropTable(ident)
+        cat.createTable(
+          ident,
+          Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)),
+          Array.empty,
+          Collections.emptyMap[String, String])
 
-          // Caching connector returns stale table: drop/recreate invisible
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
+        // Caching connector returns stale table: drop/recreate invisible
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq(Row(1, 100)))
 
-          // REFRESH TABLE invalidates the connector cache, new empty table visible
-          session.sql(s"REFRESH TABLE $CT").collect()
-          assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq.empty)
-        } finally {
-          CachingInMemoryTableCatalog.clearCache()
-        }
+        // REFRESH TABLE invalidates the connector cache, new empty table visible
+        session.sql(s"REFRESH TABLE $CT").collect()
+        assertRows(session.sql(s"SELECT * FROM $CT").collect(), Seq.empty)
       }
     }
   }
@@ -301,9 +289,9 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         // external write via catalog API
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val schema2 = StructType.fromDDL("id INT, salary INT")
+        val newSchema = StructType.fromDDL("id INT, salary INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema2, row = InternalRow(2, 200))
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200))
 
         // same df object, Connect re-analyzes and sees the new row
         assertRows(df.collect(), Seq(Row(1, 100), Row(2, 200)))
@@ -326,9 +314,9 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
         val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
         cat.alterTable(ident, addCol)
 
-        val schema3 = StructType.fromDDL("id INT, salary INT, new_col INT")
+        val newSchema = StructType.fromDDL("id INT, salary INT, new_col INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema3, row = InternalRow(2, 200, -1))
+          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200, -1))
 
         // same df object, Connect re-analyzes and sees the new schema
         assertRows(df.collect(), Seq(Row(1, 100, null), Row(2, 200, -1)))
@@ -360,5 +348,4 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
       }
     }
   }
-
 }
