@@ -55,7 +55,9 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
     // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
+    // [SPARK-34591][ML] Add pruneTree parameter to Strategy
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
