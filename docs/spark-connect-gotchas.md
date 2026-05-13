@@ -436,9 +436,9 @@ df.withColumn("c", sf.col("c").cast("string")).select(df["c"]).collect()
 * **Spark Classic** has always rejected this query at analysis time with `MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION`, because the original attribute is not present in the operator's child output.
 * **Spark Connect** rejects it with `CANNOT_RESOLVE_DATAFRAME_COLUMN` by default. The plan-id-tagged reference does not match any attribute in the current plan. But when the SQL config `spark.sql.analyzer.strictDataFrameColumnResolution` (added in Spark 4.2.0, default `true`) is set to `false`, the analyzer still tries plan-id-based resolution first, and only when that fails does it fall back to name-based resolution: the tagged `df["c"]` is then resolved by name against the projected `c` from `withColumn`, and the query succeeds.
 
-### Mitigation
+### Recommended way
 
-Prefer fixing the call site: use `sf.col("c")` (an untagged name reference) when you intend to refer to the column produced by the most recent projection or `withColumn`, rather than `df["c"]` (a tagged reference to `df`'s original column):
+If you hit any of the confusing failures mentioned above, it is recommended to switch to `sf.col` first. `sf.col("c")` is an untagged name reference that resolves against the most recent projection or `withColumn`, rather than `df["c"]` which is a tagged reference to `df`'s original column:
 
 ```python
 import pyspark.sql.functions as sf
