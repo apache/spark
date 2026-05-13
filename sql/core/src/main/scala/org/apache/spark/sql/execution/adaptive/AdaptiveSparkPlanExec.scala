@@ -412,9 +412,8 @@ case class AdaptiveSparkPlanExec(
     }
     obsoleteStages.foreach { stage =>
       if (!stage.isMaterialized) {
-        removeStageFromCache(stage)
         try {
-          stage.cancel()
+          stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
         } catch {
           case NonFatal(t) =>
             logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)

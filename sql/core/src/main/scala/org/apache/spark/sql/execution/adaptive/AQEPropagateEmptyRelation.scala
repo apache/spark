@@ -56,6 +56,8 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
     case LogicalQueryStage(_, physicalPlan) =>
       getEstimatedRowCount(physicalPlan)
 
+    case _: EmptyRelation => Some(0)
+
     case _ => None
   }
 
@@ -79,8 +81,6 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
       getEstimatedRowCount(aggregate.child).map { rowCount =>
         if (rowCount == 0) BigInt(1) else rowCount
       }
-
-    case _: EmptyRelation => Some(0)
 
     case aggregate: BaseAggregateExec =>
       getEstimatedRowCount(aggregate.child)
