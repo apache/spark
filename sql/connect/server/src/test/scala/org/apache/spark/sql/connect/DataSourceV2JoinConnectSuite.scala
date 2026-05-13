@@ -23,7 +23,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, TableCatalog, TableChange, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, NullColumnIdInMemoryTableCatalog, TableCatalog, TableChange, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 /**
@@ -39,6 +39,9 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullcolidcat",
+      classOf[NullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
 
   private val T = "testcat.ns1.ns2.tbl"
   private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -270,6 +273,31 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
         assertRows(result.collect(), Seq.empty)
+      }
+    }
+  }
+
+  test("[connect] join after session drop/recreate table succeeds" +
+      " (table without column ID support)") {
+    val NC = "nullcolidcat.ns1.ns2.tbl"
+    withSession { session =>
+      try {
+        session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $NC VALUES (1, 100)").collect()
+
+        val df1 = session.table(NC)
+
+        // session drop and recreate via SQL
+        session.sql(s"DROP TABLE $NC").collect()
+        session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
+
+        val df2 = session.table(NC)
+
+        val result = df1.join(df2, df1("id") === df2("id"))
+        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+        assertRows(result.collect(), Seq.empty)
+      } finally {
+        session.sql(s"DROP TABLE IF EXISTS $NC").collect()
       }
     }
   }
