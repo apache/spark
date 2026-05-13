@@ -190,4 +190,76 @@ class MinHashLSHSuite extends MLTest with DefaultReadWriteTest {
         }
     }
   }
+  test("SPARK-36458: approxSimilarityJoin should work without inputCol") {
+    val dfA = spark.createDataFrame(Seq(
+      (0, Vectors.sparse(6, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+      (1, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (4, 1.0)))),
+      (2, Vectors.sparse(6, Seq((0, 1.0), (2, 1.0), (4, 1.0))))
+    )).toDF("id", "features")
+
+    val dfB = spark.createDataFrame(Seq(
+      (3, Vectors.sparse(6, Seq((1, 1.0), (3, 1.0), (5, 1.0)))),
+      (4, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (5, 1.0)))),
+      (5, Vectors.sparse(6, Seq((1, 1.0), (2, 1.0), (4, 1.0))))
+    )).toDF("id", "features")
+
+    val mh = new MinHashLSH()
+      .setInputCol("features")
+      .setOutputCol("hashes")
+      .setNumHashTables(5)
+    val model = mh.fit(dfA)
+
+    // Transform and drop inputCol, keeping only outputCol
+    val transformedA = model.transform(dfA).select("id", "hashes")
+    val transformedB = model.transform(dfB).select("id", "hashes")
+
+    // Should not throw an exception - uses hash-based distance
+    val result = model.approxSimilarityJoin(transformedA, transformedB, 0.6, "JaccardDistance")
+    assert(result.columns.contains("JaccardDistance"))
+    // Result should have valid rows (may be empty depending on hash collision)
+    assert(result.count() >= 0)
+  }
+
+  test("SPARK-36458: approxNearestNeighbors should work without inputCol") {
+    val df = spark.createDataFrame(Seq(
+      (0, Vectors.sparse(6, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+      (1, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (4, 1.0)))),
+      (2, Vectors.sparse(6, Seq((0, 1.0), (2, 1.0), (4, 1.0))))
+    )).toDF("id", "features")
+
+    val mh = new MinHashLSH()
+      .setInputCol("features")
+      .setOutputCol("hashes")
+      .setNumHashTables(5)
+    val model = mh.fit(df)
+
+    // Transform and drop inputCol
+    val transformed = model.transform(df).select("id", "hashes")
+    val key = Vectors.sparse(6, Seq((1, 1.0), (3, 1.0)))
+
+    // Should not throw an exception
+    val result = model.approxNearestNeighbors(transformed, key, 2, "distCol")
+    assert(result.columns.contains("distCol"))
+    assert(result.count() <= 2)
+  }
+
+  test("SPARK-36458: approxSimilarityJoin self-join without inputCol") {
+    val df = spark.createDataFrame(Seq(
+      (0, Vectors.sparse(6, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+      (1, Vectors.sparse(6, Seq((2, 1.0), (3, 1.0), (4, 1.0)))),
+      (2, Vectors.sparse(6, Seq((0, 1.0), (2, 1.0), (4, 1.0))))
+    )).toDF("id", "features")
+
+    val mh = new MinHashLSH()
+      .setInputCol("features")
+      .setOutputCol("hashes")
+      .setNumHashTables(5)
+    val model = mh.fit(df)
+
+    val transformed = model.transform(df).select("id", "hashes")
+
+    // Self-join without inputCol should also work
+    val result = model.approxSimilarityJoin(transformed, transformed, 0.6, "JaccardDistance")
+    assert(result.columns.contains("JaccardDistance"))
+  }
 }

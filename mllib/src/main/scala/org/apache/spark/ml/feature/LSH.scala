@@ -169,8 +169,15 @@ private[spark] abstract class LSHModel[T <: LSHModel[T]]
     }
 
     // Get the top k nearest neighbor by their distance to the key
-    val keyDistUDF = udf((x: Vector) => keyDistance(x, key))
-    val modelSubsetWithDistCol = modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
+    val modelSubsetWithDistCol = if (modelSubset.columns.contains($(inputCol))) {
+      val keyDistUDF = udf((x: Vector) => keyDistance(x, key))
+      modelSubset.withColumn(distCol, keyDistUDF(col($(inputCol))))
+    } else {
+      logWarning(s"Input column '${$(inputCol)}' is missing. " +
+        s"Using hash-based approximate distance.")
+      val keyHashDistUDF = udf((x: Array[Vector]) => hashDistance(x, keyHash))
+      modelSubset.withColumn(distCol, keyHashDistUDF(col($(outputCol))))
+    }
     modelSubsetWithDistCol.sort(distCol).limit(numNearestNeighbors)
   }
 
@@ -263,38 +270,57 @@ private[spark] abstract class LSHModel[T <: LSHModel[T]]
    *         between each pair.
    */
   def approxSimilarityJoin(
-      datasetA: Dataset[_],
-      datasetB: Dataset[_],
-      threshold: Double,
-      distCol: String): Dataset[_] = {
+    datasetA: Dataset[_],
+    datasetB: Dataset[_],
+    threshold: Double,
+    distCol: String): Dataset[_] = {
 
-    val leftColName = "datasetA"
-    val rightColName = "datasetB"
-    val explodeCols = Seq("entry", "hashValue")
-    val explodedA = processDataset(datasetA, leftColName, explodeCols)
+  val leftColName = "datasetA"
+  val rightColName = "datasetB"
+  val explodeCols = Seq("entry", "hashValue")
+  val explodedA = processDataset(datasetA, leftColName, explodeCols)
 
-    // If this is a self join, we need to recreate the inputCol of datasetB to avoid ambiguity.
-    // TODO: Remove recreateCol logic once SPARK-17154 is resolved.
-    val explodedB = if (datasetA != datasetB) {
-      processDataset(datasetB, rightColName, explodeCols)
-    } else {
-      val recreatedB = recreateCol(datasetB, $(inputCol), Identifiable.randomUID(inputCol.name))
+  // Only recreate inputCol when it exists in the dataset
+  val explodedB = if (datasetA != datasetB) {
+    processDataset(datasetB, rightColName, explodeCols)
+  } else {
+    if (datasetB.columns.contains($(inputCol))) {
+      val recreatedB = recreateCol(datasetB, $(inputCol),
+        Identifiable.randomUID(inputCol.name))
       processDataset(recreatedB, rightColName, explodeCols)
+    } else {
+      // inputCol not present, no need to recreate
+      processDataset(datasetB, rightColName, explodeCols)
     }
-
-    // Do a hash join on where the exploded hash values are equal.
-    val joinedDataset = explodedA.join(explodedB, explodeCols)
-      .drop(explodeCols: _*).distinct()
-
-    // Add a new column to store the distance of the two rows.
-    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y))
-    val joinedDatasetWithDist = joinedDataset.select(col("*"),
-      distUDF(col(s"$leftColName.${$(inputCol)}"), col(s"$rightColName.${$(inputCol)}")).as(distCol)
-    )
-
-    // Filter the joined datasets where the distance are smaller than the threshold.
-    joinedDatasetWithDist.filter(col(distCol) < threshold)
   }
+
+  // Do a hash join on where the exploded hash values are equal.
+  val joinedDataset = explodedA.join(explodedB, explodeCols)
+    .drop(explodeCols: _*).distinct()
+
+  // Choose distance computation based on inputCol availability
+  val inputAvailable = datasetA.columns.contains($(inputCol)) &&
+    datasetB.columns.contains($(inputCol))
+
+  val joinedDatasetWithDist = if (inputAvailable) {
+    // Original: exact distance using inputCol
+    val distUDF = udf((x: Vector, y: Vector) => keyDistance(x, y))
+    joinedDataset.select(col("*"),
+      distUDF(col(s"$leftColName.${$(inputCol)}"),
+        col(s"$rightColName.${$(inputCol)}")).as(distCol))
+  } else {
+    // Fallback: approximate distance using outputCol (hashes)
+    logWarning(s"Input column '${$(inputCol)}' is missing from the datasets. " +
+      s"Falling back to hash-based approximate distance.")
+    val hashDistUDF = udf((x: Array[Vector], y: Array[Vector]) => hashDistance(x, y))
+    joinedDataset.select(col("*"),
+      hashDistUDF(col(s"$leftColName.${$(outputCol)}"),
+        col(s"$rightColName.${$(outputCol)}")).as(distCol))
+  }
+
+  // Filter the joined datasets where the distance are smaller than the threshold.
+  joinedDatasetWithDist.filter(col(distCol) < threshold)
+}
 
   /**
    * Overloaded method for approxSimilarityJoin. Use "distCol" as default distCol.
