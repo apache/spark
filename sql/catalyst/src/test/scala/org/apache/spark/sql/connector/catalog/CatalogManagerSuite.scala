@@ -150,6 +150,41 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       assert(CatalogManager.deserializePathEntries(payload).isEmpty, s"payload=$payload")
     }
   }
+
+  test("serializePathEntries round-trips through deserialize for typical inputs") {
+    val cases = Seq(
+      Seq(Seq("spark_catalog", "default"), Seq("system", "builtin")),
+      Seq(Seq("system", "session")),
+      Seq.empty[Seq[String]])
+    cases.foreach { entries =>
+      val payload = CatalogManager.serializePathEntries(entries)
+      val parsed = CatalogManager.deserializePathEntries(payload)
+        .getOrElse(fail(s"Expected payload to round-trip: $payload"))
+      assert(parsed === entries, s"Round-trip mismatch for $entries; got $parsed")
+    }
+  }
+
+  test("serializePathEntries round-trips multi-level and quoted identifiers") {
+    val entries = Seq(
+      Seq("cat", "ns1", "ns2"),
+      Seq("spark_catalog", "sch.with.dots"),
+      Seq("spark_catalog", "schema with spaces"))
+    val payload = CatalogManager.serializePathEntries(entries)
+    val parsed = CatalogManager.deserializePathEntries(payload)
+      .getOrElse(fail(s"Expected payload to round-trip: $payload"))
+    assert(parsed === entries)
+  }
+
+  test("deserializePathEntriesOrFail raises a clear AnalysisException for bad payloads") {
+    val e = intercept[org.apache.spark.sql.AnalysisException] {
+      CatalogManager.deserializePathEntriesOrFail(
+        storedPathStr = "{bad-json",
+        objectType = "view",
+        objectName = "default.v_broken")
+    }
+    assert(e.getMessage.contains("Invalid stored SQL path metadata for view"))
+    assert(e.getMessage.contains("default.v_broken"))
+  }
 }
 
 class DummyCatalog extends CatalogPlugin {

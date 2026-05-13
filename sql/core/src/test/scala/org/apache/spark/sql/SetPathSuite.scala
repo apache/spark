@@ -503,11 +503,110 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  // TODO: cloneSession() constructs a new CatalogManager per forked session and
-  // explicitly copies only the stored session path via copySessionPathFrom.
-  // Other CatalogManager state propagation (current catalog/namespace, registered
-  // catalogs) on clone is currently incidental -- audit and pin down the intended
-  // semantics in a follow-up.
+  // --- cloneSession() propagation matrix (SPARK-56853) ----------------------
+  // The cloned session is built via `BaseSessionStateBuilder` from a parent
+  // `SessionState`. Per-component hand-offs on clone:
+  //   - `SessionCatalog.copyStateTo` copies `currentDb` and `tempViews`,
+  //   - `CatalogManager.copySessionPathFrom` copies the stored `_sessionPath`,
+  //   - `functionRegistry.clone()` and `tableFunctionRegistry.clone()` copy
+  //     temporary functions.
+  // What is NOT propagated:
+  //   - the temp variable registry (new `TempVariableManager` per session),
+  //   - the `CatalogManager` current-catalog / current-namespace (re-read from
+  //     conf defaults in the child),
+  //   - the registered v2 `catalogs` map (lazy-loaded per session).
+  // The tests below pin this observed behavior so any future change has to
+  // update the assertions.
+
+  test("cloneSession: stored SET PATH propagates to the child session") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val child = spark.cloneSession()
+        val entries = pathEntries(
+          child.sql("SELECT current_path()").collect().head.getString(0))
+        assert(entries === Seq("spark_catalog.default", "system.builtin"),
+          s"Cloned session should inherit stored SET PATH; got: $entries")
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("cloneSession: USE SCHEMA on the parent propagates to the child") {
+    sql("CREATE SCHEMA IF NOT EXISTS path_clone_use")
+    try {
+      sql("USE spark_catalog.path_clone_use")
+      val child = spark.cloneSession()
+      val childDb = child.sql("SELECT current_database()").head().getString(0)
+      assert(childDb == "path_clone_use",
+        s"Cloned session should inherit the parent's current schema; got: $childDb")
+    } finally {
+      sql("USE spark_catalog.default")
+      sql("DROP SCHEMA IF EXISTS path_clone_use")
+    }
+  }
+
+  test("cloneSession: temp views on the parent propagate to the child") {
+    sql("CREATE TEMPORARY VIEW path_clone_view AS SELECT 1 AS c")
+    try {
+      val child = spark.cloneSession()
+      checkAnswer(child.sql("SELECT c FROM path_clone_view"), Row(1))
+    } finally {
+      sql("DROP VIEW IF EXISTS path_clone_view")
+    }
+  }
+
+  test("cloneSession: temp functions on the parent propagate to the child (cloned " +
+      "functionRegistry)") {
+    sql("CREATE TEMPORARY FUNCTION path_clone_fn() RETURNS INT RETURN 42")
+    try {
+      val child = spark.cloneSession()
+      checkAnswer(child.sql("SELECT path_clone_fn()"), Row(42))
+      // Snapshot semantics: dropping in the parent must not affect the already-cloned child.
+      sql("DROP TEMPORARY FUNCTION path_clone_fn")
+      checkAnswer(child.sql("SELECT path_clone_fn()"), Row(42))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS path_clone_fn")
+    }
+  }
+
+  test("cloneSession: temp variables on the parent are NOT propagated to the child") {
+    sql("DECLARE OR REPLACE VARIABLE path_clone_var INT DEFAULT 7")
+    try {
+      val child = spark.cloneSession()
+      val e = intercept[AnalysisException] {
+        child.sql("SELECT path_clone_var").collect()
+      }
+      // Either UNRESOLVED_VARIABLE or UNRESOLVED_COLUMN; both confirm the variable
+      // did not survive the clone.
+      assert(
+        e.getCondition == "UNRESOLVED_VARIABLE" ||
+          e.getCondition.startsWith("UNRESOLVED_COLUMN"),
+        s"Temp variables should NOT propagate to the clone; got: ${e.getCondition}")
+    } finally {
+      sql("DROP TEMPORARY VARIABLE IF EXISTS path_clone_var")
+    }
+  }
+
+  test("cloneSession: child SET PATH does not leak back to the parent") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val child = spark.cloneSession()
+        child.sql("SET PATH = system.session, system.builtin")
+        val parentEntries = pathEntries(currentPath())
+        assert(parentEntries === Seq("spark_catalog.default", "system.builtin"),
+          s"Child SET PATH must not affect the parent; parent got: $parentEntries")
+        val childEntries = pathEntries(
+          child.sql("SELECT current_path()").collect().head.getString(0))
+        assert(childEntries === Seq("system.session", "system.builtin"),
+          s"Child SET PATH should be visible only in the child; child got: $childEntries")
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
 
   // --- Resolution tests: verify SET PATH affects actual table/function lookup ---
 
@@ -783,6 +882,126 @@ class SetPathSuite extends SharedSparkSession {
       } finally {
         sql("DROP SCHEMA IF EXISTS path_user_before_builtin")
       }
+    }
+  }
+
+  test("path-driven COUNT(*) rewrite gate: temp count shadowing builtin under SET PATH " +
+      "(session-first) suppresses the * -> 1 rewrite") {
+    // SPARK-56853: `Analyzer.matchesFunctionName` consults
+    // `FunctionResolution.isSessionBeforeBuiltinInPath` to decide whether COUNT(*) is the
+    // builtin (eligible for the COUNT(*) -> COUNT(1) shortcut) or a user-defined override.
+    // Default `sessionFunctionResolutionOrder` is "second", so creating a temp count while
+    // the default PATH is in effect passes the security check. Once SET PATH puts
+    // `system.session` before `system.builtin`, the rewrite must be suppressed and the
+    // star expansion must reach the temp `count`.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
+      try {
+        // PATH still has builtin first: count(*) rewrites to count(1), which resolves to
+        // the builtin count and returns the row count of the input (1).
+        checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(1))
+
+        // Put session before builtin via SET PATH. The rewrite gate now reports
+        // `isSessionBeforeBuiltinInPath = true` AND a temp count exists, so the
+        // analyzer must NOT collapse `count(*)` to `count(1)`. The `*` then expands
+        // against the table's single column to `count(a)`, which resolves through
+        // the temp under the live path: 1 + 100 = 101.
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(101))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+      }
+    }
+  }
+
+  test("path-driven COUNT(*) rewrite gate: rewrite still applies for unrelated builtins") {
+    // SPARK-56853: the gate fires ONLY when a temp function with the same unqualified
+    // name as the builtin exists. A temp with a different name must not affect the
+    // COUNT(*) -> COUNT(1) shortcut even when session is searched before builtin.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION my_helper(x INT) RETURNS INT RETURN x + 1")
+      try {
+        sql("SET PATH = system.session, system.builtin")
+        // No temp `count` exists; the rewrite still fires and the builtin row counter
+        // returns the row count of the input (3).
+        checkAnswer(sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)"), Row(3))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS my_helper")
+      }
+    }
+  }
+
+  test("PATH enabled: concurrent SET PATH and unqualified lookups do not deadlock") {
+    // SPARK-56853: SessionCatalog.lookupBuiltinOrTempFunction is intentionally NOT
+    // synchronized on SessionCatalog because the path-driven kinds provider acquires
+    // CatalogManager.synchronized, and another thread holding that lock can call back
+    // into SessionCatalog (e.g. via setCurrentNamespace). This test hammers both sides
+    // concurrently: one thread flips SET PATH while another performs unqualified
+    // function lookups that go through the kinds provider. Within the budget we should
+    // observe no deadlock and no spurious analysis failures.
+    withPathEnabled {
+      val budget = 200
+      val iterations = new java.util.concurrent.atomic.AtomicInteger(0)
+      val barrier = new java.util.concurrent.CyclicBarrier(2)
+      val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+      val setterThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            if ((i % 2) == 0) {
+              sql("SET PATH = spark_catalog.default, system.builtin")
+            } else {
+              sql("SET PATH = system.builtin, system.session, spark_catalog.default")
+            }
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SetPathSuite-setter")
+
+      val lookupThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Forces unqualified function resolution against the live PATH and triggers
+            // the session-kinds provider on the catalog-manager side.
+            val n = sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)")
+              .head().getLong(0)
+            assert(n == 3L, s"unexpected count: $n at iteration $i")
+            iterations.incrementAndGet()
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SetPathSuite-lookup")
+
+      setterThread.start()
+      lookupThread.start()
+
+      // Generous join: 30s is plenty for 200 cheap queries on either side and gives a
+      // clear failure signal if the implementation regresses into a deadlock.
+      val joinMillis = 30000L
+      setterThread.join(joinMillis)
+      lookupThread.join(joinMillis)
+
+      assert(!setterThread.isAlive,
+        "SET PATH thread did not finish; potential deadlock between SessionCatalog and " +
+          "CatalogManager synchronized blocks.")
+      assert(!lookupThread.isAlive,
+        "Lookup thread did not finish; potential deadlock between SessionCatalog and " +
+          "CatalogManager synchronized blocks.")
+      assert(errors.isEmpty,
+        s"Concurrent lookups raised unexpected errors: ${errors.toArray.mkString("; ")}")
+      assert(iterations.get() > 0,
+        "Lookup thread never completed a query; suspect contention or deadlock.")
+      sql("SET PATH = DEFAULT_PATH")
     }
   }
 
