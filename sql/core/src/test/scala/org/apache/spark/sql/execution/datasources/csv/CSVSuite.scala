@@ -2488,7 +2488,8 @@ abstract class CSVSuite
       exception = intercept[SparkIllegalArgumentException] {
         spark.read.option("lineSep", "").csv(testFile(carsFile)).collect()
       },
-      condition = "INVALID_LINE_SEPARATOR.EMPTY"
+      condition = "INVALID_LINE_SEPARATOR.EMPTY",
+      parameters = Map.empty
     )
 
     checkError(
