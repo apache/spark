@@ -491,12 +491,29 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
-    val afterRule = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, identity[BaseType])
-    }
-
-    // Check if unchanged and then possibly return old copy to avoid gc churn.
-    if (this fastEquals afterRule) {
+    // CurrentOrigin.withOrigin is only observable when the rule constructs new nodes
+    // (they pick up origin via `override val origin = CurrentOrigin.get`). When the rule
+    // doesn't fire, the wrapping is pure ThreadLocal thrash — profiling shows ~88% of
+    // transform CPU goes to ThreadLocal.set / get on no-match nodes. Skip it.
+    if (rule.isDefinedAt(this)) {
+      val afterRule = CurrentOrigin.withOrigin(origin) {
+        rule.apply(this)
+      }
+      // Check if unchanged and then possibly return old copy to avoid gc churn.
+      if (this fastEquals afterRule) {
+        val rewritten_plan = mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
+        if (this eq rewritten_plan) {
+          markRuleAsIneffective(ruleId)
+          this
+        } else {
+          rewritten_plan
+        }
+      } else {
+        // If the transform function replaces this node with a new one, carry over the tags.
+        afterRule.copyTagsFrom(this)
+        afterRule.mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
+      }
+    } else {
       val rewritten_plan = mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
       if (this eq rewritten_plan) {
         markRuleAsIneffective(ruleId)
@@ -504,10 +521,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       } else {
         rewritten_plan
       }
-    } else {
-      // If the transform function replaces this node with a new one, carry over the tags.
-      afterRule.copyTagsFrom(this)
-      afterRule.mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
     }
   }
 
@@ -544,14 +557,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
       return this
     }
     val afterRuleOnChildren = mapChildren(_.transformUpWithPruning(cond, ruleId)(rule))
-    val newNode = if (this fastEquals afterRuleOnChildren) {
+    // Skip the CurrentOrigin.withOrigin wrap when the rule doesn't match — see
+    // transformDownWithPruning above for the same optimization.
+    val target = if (this fastEquals afterRuleOnChildren) this else afterRuleOnChildren
+    val newNode = if (rule.isDefinedAt(target)) {
       CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(this, identity[BaseType])
+        rule.apply(target)
       }
     } else {
-      CurrentOrigin.withOrigin(origin) {
-        rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
-      }
+      target
     }
     if (this eq newNode) {
       markRuleAsIneffective(ruleId)
@@ -588,8 +602,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     }
     val afterRuleOnChildren =
       mapChildren(_.transformUpWithBeforeAndAfterRuleOnChildren(cond, ruleId)(rule))
-    val newNode = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse((this, afterRuleOnChildren), { t: (BaseType, BaseType) => t._2 })
+    // Skip the CurrentOrigin.withOrigin wrap when the rule doesn't match — see
+    // transformDownWithPruning above. The default would return afterRuleOnChildren anyway.
+    val key = (this, afterRuleOnChildren)
+    val newNode = if (rule.isDefinedAt(key)) {
+      CurrentOrigin.withOrigin(origin) {
+        rule.apply(key)
+      }
+    } else {
+      afterRuleOnChildren
     }
     if (this eq newNode) {
       this.markRuleAsIneffective(ruleId)
@@ -685,12 +706,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
     // alternatives. I.e. the "multiTransformDown is lazy" test case in `TreeNodeSuite` would fail.
     // Please note that this behaviour has a downside as well that we can only mark the rule on the
     // original node ineffective if the rule didn't match.
-    var ruleApplied = true
-    val afterRules = CurrentOrigin.withOrigin(origin) {
-      rule.applyOrElse(this, (_: BaseType) => {
-        ruleApplied = false
-        Seq.empty
-      })
+    // Skip the CurrentOrigin.withOrigin wrap when the rule doesn't match — see
+    // transformDownWithPruning above. Also lets us drop the side-effecting default.
+    val ruleApplied = rule.isDefinedAt(this)
+    val afterRules: Seq[BaseType] = if (ruleApplied) {
+      CurrentOrigin.withOrigin(origin) {
+        rule.apply(this)
+      }
+    } else {
+      Seq.empty
     }
 
     val afterRulesLazyList = if (afterRules.isEmpty) {
