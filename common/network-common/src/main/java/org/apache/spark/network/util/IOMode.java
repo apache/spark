@@ -34,7 +34,13 @@ public enum IOMode {
    */
   KQUEUE,
   /**
-   * Prefer to use native EPOLL on Linux (or KQUEUE on MacOS) if available. Then, fallback to NIO.
+   * Native io_uring via JNI, Linux only. Requires kernel 5.10+.
+   */
+  IO_URING,
+  /**
+   * Prefer to use a native transport when available. On Linux, io_uring is preferred over EPOLL
+   * when the running kernel supports it; otherwise EPOLL is used. On MacOS/BSD, KQUEUE is used.
+   * Falls back to NIO when no native transport is available.
    */
   AUTO
 }

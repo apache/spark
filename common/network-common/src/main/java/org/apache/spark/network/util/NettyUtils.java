@@ -32,12 +32,16 @@ import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.channel.uring.IoUring;
+import io.netty.channel.uring.IoUringIoHandler;
+import io.netty.channel.uring.IoUringServerSocketChannel;
+import io.netty.channel.uring.IoUringSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import io.netty.util.internal.PlatformDependent;
 
 /**
  * Utilities for creating various Netty constructs based on whether we're using NIO, EPOLL,
- * , KQUEUE, or AUTO.
+ * KQUEUE, IO_URING, or AUTO.
  */
 public class NettyUtils {
 
@@ -73,8 +77,11 @@ public class NettyUtils {
       case NIO -> NioIoHandler.newFactory();
       case EPOLL -> EpollIoHandler.newFactory();
       case KQUEUE -> KQueueIoHandler.newFactory();
+      case IO_URING -> IoUringIoHandler.newFactory();
       case AUTO -> {
-        if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && IoUring.isAvailable()) {
+          yield IoUringIoHandler.newFactory();
+        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollIoHandler.newFactory();
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueIoHandler.newFactory();
@@ -92,8 +99,11 @@ public class NettyUtils {
       case NIO -> NioSocketChannel.class;
       case EPOLL -> EpollSocketChannel.class;
       case KQUEUE -> KQueueSocketChannel.class;
+      case IO_URING -> IoUringSocketChannel.class;
       case AUTO -> {
-        if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && IoUring.isAvailable()) {
+          yield IoUringSocketChannel.class;
+        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueSocketChannel.class;
@@ -110,8 +120,11 @@ public class NettyUtils {
       case NIO -> NioServerSocketChannel.class;
       case EPOLL -> EpollServerSocketChannel.class;
       case KQUEUE -> KQueueServerSocketChannel.class;
+      case IO_URING -> IoUringServerSocketChannel.class;
       case AUTO -> {
-        if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && IoUring.isAvailable()) {
+          yield IoUringServerSocketChannel.class;
+        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollServerSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueServerSocketChannel.class;

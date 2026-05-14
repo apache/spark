@@ -281,9 +281,10 @@ object NettyTransportBenchmark extends BenchmarkBase {
   /**
    * Suite 3: IOMode Comparison (NIO vs AUTO).
    * AUTO selects the best native transport via NettyUtils.createEventLoop
-   * (EPOLL on Linux, KQUEUE on macOS, NIO fallback), so comparing NIO vs AUTO
-   * shows the benefit of native transport without needing manual probing.
-   * Uses concurrent load (8 clients) to amplify transport-level differences.
+   * (IO_URING on Linux 5.10+, then EPOLL on Linux, KQUEUE on macOS, NIO fallback),
+   * so comparing NIO vs AUTO shows the benefit of native transport without needing
+   * manual probing. Uses concurrent load (8 clients) to amplify transport-level
+   * differences.
    */
   private def ioModeComparisonBenchmark(): Unit = {
     val payload = new Array[Byte](MEDIUM_PAYLOAD)
@@ -562,8 +563,9 @@ object NettyTransportBenchmark extends BenchmarkBase {
    * and fetches them using client.fetchChunk(). This exercises the DefaultFileRegion
    * zero-copy sendfile/splice path.
    *
-   * Compares NIO vs AUTO to verify that native transports (EPOLL/KQUEUE) use sendfile()
-   * for file-backed transfers. AUTO should be equal to or faster than NIO.
+   * Compares NIO vs AUTO to verify that native transports use the kernel zero-copy
+   * path for file-backed transfers (sendfile() for EPOLL/KQUEUE, splice() via the
+   * io_uring submission queue for IO_URING). AUTO should be equal to or faster than NIO.
    */
   private def fileBackedShuffleBenchmark(): Unit = {
     val numFiles = 100
