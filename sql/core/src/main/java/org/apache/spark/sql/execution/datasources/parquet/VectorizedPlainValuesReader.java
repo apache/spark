@@ -192,18 +192,6 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
-  @Override
-  public final void readLongsAsInts(int total, WritableColumnVector c, int rowId) {
-    int requiredBytes = total * 8;
-    ByteBuffer buffer = getBuffer(requiredBytes);
-    // No `hasArray` bulk-copy path: source (int64, 8 bytes) and target (int32, 4 bytes)
-    // have different widths so a contiguous byte copy is impossible. Matches the pattern
-    // in `readIntegersAsLongs`.
-    for (int i = 0; i < total; i += 1) {
-      c.putInt(rowId + i, (int) buffer.getLong());
-    }
-  }
-
   // A fork of `readIntegers` to rebase the date values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.

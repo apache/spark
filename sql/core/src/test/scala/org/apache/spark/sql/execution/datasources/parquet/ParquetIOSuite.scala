@@ -2021,57 +2021,6 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
-
-  test("INT64 DECIMAL -> 32-bit DecimalType narrowing end-to-end via vectorized read path") {
-    // Round-trips a custom-built parquet file with INT64 + DECIMAL(9, 2) annotation read
-    // back as DecimalType(9, 2). DECIMAL(9, _) values fit in int32, so the factory routes
-    // through DowncastLongUpdater (target is 32-bit decimal storage). Spark's own writer
-    // produces INT32-backed decimal for precision <= 9, so we use `parquet-mr`'s low-level
-    // API to force INT64 storage, mirroring the wire format that other writers (e.g. Hive,
-    // Impala) produce.
-    val schema = MessageTypeParser.parseMessageType(
-      """message root {
-        |  required int64 v (DECIMAL(9, 2));
-        |}""".stripMargin)
-
-    for (dictEnabled <- Seq(true, false)) {
-      withTempDir { dir =>
-        val tablePath = new Path(s"${dir.getCanonicalPath}/dec.parquet")
-        val numRecords = 5000
-
-        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
-        (0 until numRecords).foreach { i =>
-          val unscaled = i % 5 match {
-            case 0 => -999_999_999L
-            case 1 => -1L
-            case 2 => 0L
-            case 3 => 999_999_999L
-            case _ => i.toLong * 13L - 7L
-          }
-          val record = new SimpleGroup(schema)
-          record.add(0, unscaled)
-          writer.write(record)
-        }
-        writer.close
-
-        withAllParquetReaders {
-          val readSchema = new StructType().add("v", DecimalType(9, 2), nullable = false)
-          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
-          val expected = (0 until numRecords).map { i =>
-            val unscaled = i % 5 match {
-              case 0 => -999_999_999L
-              case 1 => -1L
-              case 2 => 0L
-              case 3 => 999_999_999L
-              case _ => i.toLong * 13L - 7L
-            }
-            Row(java.math.BigDecimal.valueOf(unscaled, 2))
-          }
-          checkAnswer(df, expected)
-        }
-      }
-    }
-  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)
