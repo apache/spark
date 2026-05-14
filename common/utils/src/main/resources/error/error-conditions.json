@@ -6039,6 +6039,12 @@
     ],
     "sqlState" : "42836"
   },
+  "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE" : {
+    "message" : [
+      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table)."
+    ],
+    "sqlState" : "0A000"
+  },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 1 to 10. Going beyond 10 levels of recursion is not allowed."
