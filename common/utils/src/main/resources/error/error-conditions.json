@@ -11480,7 +11480,7 @@
       },
       "TOO_LONG" : {
         "message" : [
-          "The 'lineSep' option can contain at most 2 characters, but got <length> character(s)."
+          "The 'lineSep' option can contain at most 2 characters, but got <length> characters."
         ]
       }
     },
