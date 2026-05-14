@@ -158,11 +158,6 @@ case class CounterDiff(override val counter: Expression)
   override lazy val evaluateExpression: Expression =
     withCounterNullAndNegativeChecks(diffWithCounterDecreaseCheck)
 
-  /**
-   * The SQL representation of the single-parameter form of the counter_diff function.
-   */
-  override def sql: String = s"${prettyName}(${counter.sql})"
-
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): CounterDiff =
     copy(counter = newChildren.head)
@@ -273,12 +268,6 @@ case class CounterDiffWithStartTime(
       )
     )
   }
-
-  /**
-   * The SQL representation of the two-parameter form of the counter_diff function.
-   */
-  override def sql: String =
-    s"${prettyName}(${counter.sql}, ${startTime.sql})"
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): CounterDiffWithStartTime =

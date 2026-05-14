@@ -251,6 +251,9 @@ case class DecimalAddNoOverflowCheck(
  * A subtract expression for decimal values which is only used internally.
  *
  * Note that, this expression does not check overflow which is different from `Subtract`.
+ * It is the caller's responsibility to ensure that the result fits in the declared precision and
+ * scale. For example, `counter_diff` only invokes this on operands that have already been validated
+ * to satisfy `left >= right >= 0`, so the result is non-negative and bounded above by `left`.
  */
 case class DecimalSubtractNoOverflowCheck(
     left: Expression,

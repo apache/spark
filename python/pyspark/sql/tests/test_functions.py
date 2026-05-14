@@ -1957,11 +1957,12 @@ class FunctionsTestsMixin:
     def test_counter_diff_window_function(self):
         df = self.spark.createDataFrame(
             [
-                (1, datetime.datetime(2024, 1, 1), 100),
-                (2, datetime.datetime(2024, 1, 1), 200),
-                (3, datetime.datetime(2024, 1, 1), 400),
-                (4, datetime.datetime(2024, 1, 2), 50),
-                (5, datetime.datetime(2024, 1, 2), 150),
+                (1, datetime.datetime(2026, 1, 1, 0, 0, 0), 100),
+                (2, datetime.datetime(2026, 1, 1, 0, 0, 0), 200),
+                (3, datetime.datetime(2026, 1, 1, 0, 0, 0), 50),
+                (4, datetime.datetime(2026, 1, 1, 0, 0, 0), 100),
+                (5, datetime.datetime(2026, 1, 1, 0, 1, 0), 200),
+                (6, datetime.datetime(2026, 1, 1, 0, 1, 0), 300),
             ],
             ["t", "st", "c"],
         )
@@ -1970,7 +1971,7 @@ class FunctionsTestsMixin:
         rows = df.select("t", F.counter_diff("c").over(w).alias("d")).orderBy("t").collect()
         self.assertEqual(
             [(r.t, r.d) for r in rows],
-            [(1, None), (2, 100), (3, 200), (4, None), (5, 100)],
+            [(1, None), (2, 100), (3, None), (4, 50), (5, 100), (6, 100)],
         )
 
         rows = (
@@ -1980,7 +1981,7 @@ class FunctionsTestsMixin:
         )
         self.assertEqual(
             [(r.t, r.d) for r in rows],
-            [(1, None), (2, 100), (3, 200), (4, None), (5, 100)],
+            [(1, None), (2, 100), (3, None), (4, 50), (5, None), (6, 100)],
         )
 
     def test_window_functions_without_partitionBy(self):
