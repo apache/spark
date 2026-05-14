@@ -11462,5 +11462,28 @@
       "<errorMessage>"
     ],
     "sqlState" : "P0001"
+  },
+  "INVALID_LINE_SEPARATOR" : {
+    "message" : [
+      "Invalid line separator configuration."
+    ],
+    "subClass" : {
+      "NULL" : {
+        "message" : [
+          "The 'lineSep' option cannot be a null value."
+        ]
+      },
+      "EMPTY" : {
+        "message" : [
+          "The 'lineSep' option cannot be an empty string."
+        ]
+      },
+      "TOO_LONG" : {
+        "message" : [
+          "The 'lineSep' option can contain at most 2 characters, but got <length> character(s)."
+        ]
+      }
+    },
+    "sqlState" : "22023"
   }
 }
