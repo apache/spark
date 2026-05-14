@@ -69,7 +69,8 @@ test_packages = []
 if "SPARK_TESTING" in os.environ:
     test_packages = [
         "pyspark.errors.tests.connect",
-        "pyspark.tests",  # for Memory profiler parity tests
+        "pyspark.tests",
+        "pyspark.tests.connect",
         "pyspark.resource.tests",
         "pyspark.sql.tests",
         "pyspark.sql.tests.arrow",
@@ -147,6 +148,8 @@ try:
 
     connect_packages = [
         "pyspark",
+        "pyspark.core",
+        "pyspark.core.connect",
         "pyspark.cloudpickle",
         "pyspark.mllib",
         "pyspark.mllib.linalg",

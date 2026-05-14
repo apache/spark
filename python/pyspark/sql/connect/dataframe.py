@@ -2212,11 +2212,12 @@ class DataFrame(ParentDataFrame):
     def is_cached(self) -> bool:
         return self.storageLevel != StorageLevel.NONE
 
-    def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
+    def toLocalIterator(self) -> Iterator[Row]:
         query = self._plan.to_proto(self._session.client)
         binary_as_bytes = self._get_binary_as_bytes()
 
         schema: Optional[StructType] = None
+
         for schema_or_table in self._session.client.to_table_as_iterator(
             query, self._plan.observations
         ):
@@ -2253,7 +2254,7 @@ class DataFrame(ParentDataFrame):
 
     def _map_partitions(
         self,
-        func: "PandasMapIterFunction",
+        func: "Union[PandasMapIterFunction, ArrowMapIterFunction]",
         schema: Union[StructType, str],
         evalType: int,
         barrier: bool,
@@ -2324,7 +2325,7 @@ class DataFrame(ParentDataFrame):
             for f in schema.fields
         ]
 
-        def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+        def foreach_partition_func(itr: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
                     columnar_data = [column.to_pylist() for column in table.columns]

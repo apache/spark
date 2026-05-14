@@ -25,15 +25,11 @@ import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
 from pyspark.testing.sqlutils import SPARK_HOME
-from pyspark.testing.utils import PySparkTestCase, eventually
+from pyspark.testing.utils import PySparkBaseTestCase, eventually
 
 
-class TaskContextTests(PySparkTestCase):
-    def setUp(self):
-        self._old_sys_path = list(sys.path)
-        class_name = self.__class__.__name__
-        # Allow retries even though they are normally disabled in local mode
-        self.sc = SparkContext("local[4, 2]", class_name)
+class TaskContextTestsMixin:
+    """Task context coverage (classic / Spark Connect parity)."""
 
     def test_stage_id(self):
         """Test the stage ids are available and incrementing as expected."""
@@ -216,11 +212,23 @@ class TaskContextTests(PySparkTestCase):
         self.assertTrue(result2 == [0, 1, 2, 3])
 
 
+class TaskContextTests(TaskContextTestsMixin, PySparkBaseTestCase):
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        # Allow retries even though they are normally disabled in local mode
+        self.sc = SparkContext("local[4, 2]", class_name)
+
+    def tearDown(self):
+        self.sc.stop()
+        sys.path = self._old_sys_path
+
+
 @unittest.skipUnless(
     hasattr(socketserver, "UnixStreamServer"),
     "Unix Domain Socket is not supported on this platform.",
 )
-class TaskContextUDSTests(TaskContextTests):
+class TaskContextUDSTests(TaskContextTestsMixin, PySparkBaseTestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
@@ -228,6 +236,10 @@ class TaskContextUDSTests(TaskContextTests):
         conf = SparkConf().set("spark.python.unix.domain.socket.enabled", "true")
         # Allow retries even though they are normally disabled in local mode
         self.sc = SparkContext("local[4, 2]", class_name, conf=conf)
+
+    def tearDown(self):
+        self.sc.stop()
+        sys.path = self._old_sys_path
 
 
 class TaskContextTestsWithWorkerReuse(unittest.TestCase):

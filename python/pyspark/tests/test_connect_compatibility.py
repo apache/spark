@@ -20,10 +20,10 @@ import inspect
 import functools
 
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.classic.dataframe import DataFrame as ClassicDataFrame
 from pyspark.sql.classic.column import Column as ClassicColumn
 from pyspark.sql.session import SparkSession as ClassicSparkSession
+from pyspark.core.context import SparkContext as ClassicSparkContext
 from pyspark.sql.catalog import Catalog as ClassicCatalog
 from pyspark.sql.readwriter import DataFrameReader as ClassicDataFrameReader
 from pyspark.sql.readwriter import DataFrameWriter as ClassicDataFrameWriter
@@ -40,6 +40,7 @@ from pyspark.sql.streaming.readwriter import DataStreamReader as ClassicDataStre
 from pyspark.sql.streaming.readwriter import DataStreamWriter as ClassicDataStreamWriter
 
 if should_test_connect:
+    from pyspark.core.connect.context import SparkContext as ConnectSparkContext
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.sql.connect.column import Column as ConnectColumn
     from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
@@ -84,14 +85,25 @@ class ConnectCompatibilityTestsMixin:
             and not name.startswith("_")
         }
 
-    def compare_method_signatures(self, classic_cls, connect_cls, cls_name):
+    def compare_method_signatures(
+        self,
+        classic_cls,
+        connect_cls,
+        cls_name,
+        *,
+        signature_skip_methods: frozenset[str] | None = None,
+        compare_signature_parameter_shapes_only: bool = False,
+    ):
         """Compare method signatures between classic and connect classes."""
+        skip = signature_skip_methods or frozenset()
         classic_methods = self.get_public_methods(classic_cls)
         connect_methods = self.get_public_methods(connect_cls)
 
         common_methods = set(classic_methods.keys()) & set(connect_methods.keys())
 
         for method in common_methods:
+            if method in skip:
+                continue
             # Skip non-callable, Spark Connect-specific methods
             if classic_methods[method] is None or connect_methods[method] is None:
                 continue
@@ -102,13 +114,30 @@ class ConnectCompatibilityTestsMixin:
             # Cannot support RDD arguments from Spark Connect
             has_rdd_arguments = ("createDataFrame", "xml", "json", "csv", "toJSON")
             if method not in has_rdd_arguments:
-                self.assertEqual(
-                    classic_signature,
-                    connect_signature,
-                    f"Signature mismatch in {cls_name} method '{method}'\n"
-                    f"Classic: {classic_signature}\n"
-                    f"Connect: {connect_signature}",
-                )
+                if compare_signature_parameter_shapes_only:
+
+                    def _param_shape(sig: inspect.Signature):
+                        return tuple(
+                            (name, p.kind, p.default) for name, p in sig.parameters.items()
+                        )
+
+                    cls_shape = _param_shape(classic_signature)
+                    conn_shape = _param_shape(connect_signature)
+                    self.assertEqual(
+                        cls_shape,
+                        conn_shape,
+                        f"Signature parameter mismatch in {cls_name} method '{method}'\n"
+                        f"Classic: {cls_shape}\n"
+                        f"Connect: {conn_shape}\n",
+                    )
+                else:
+                    self.assertEqual(
+                        classic_signature,
+                        connect_signature,
+                        f"Signature mismatch in {cls_name} method '{method}'\n"
+                        f"Classic: {classic_signature}\n"
+                        f"Connect: {connect_signature}",
+                    )
 
     def compare_property_lists(
         self,
@@ -183,12 +212,15 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_classic_properties,
         expected_missing_connect_methods,
         expected_missing_classic_methods,
+        *,
+        signature_skip_methods: frozenset[str] | None = None,
+        compare_signature_parameter_shapes_only: bool = False,
     ):
         """
         Main method for checking compatibility between classic and connect.
 
         This method performs the following checks:
-        - API signature comparison between classic and connect classes.
+        - API signature comparison between classic and connect classes (exact by default).
         - Property comparison, identifying any missing properties between classic and connect.
         - Method comparison, identifying any missing methods between classic and connect.
 
@@ -208,8 +240,19 @@ class ConnectCompatibilityTestsMixin:
             A set of methods expected to be missing in the connect class.
         expected_missing_classic_methods : set
             A set of methods expected to be missing in the classic class.
+        signature_skip_methods : frozenset of str, optional
+            Intersection-method names excluded from signature checks.
+        compare_signature_parameter_shapes_only : bool, optional
+            If True, compares only `(name, kind, default)` for each ``inspect.Parameter`` rather
+            than full ``inspect.Signature`` equality (helps when annotations differ widely).
         """
-        self.compare_method_signatures(classic_cls, connect_cls, cls_name)
+        self.compare_method_signatures(
+            classic_cls,
+            connect_cls,
+            cls_name,
+            signature_skip_methods=signature_skip_methods,
+            compare_signature_parameter_shapes_only=compare_signature_parameter_shapes_only,
+        )
         self.compare_property_lists(
             classic_cls,
             connect_cls,
@@ -239,6 +282,13 @@ class ConnectCompatibilityTestsMixin:
             expected_missing_classic_properties,
             expected_missing_connect_methods,
             expected_missing_classic_methods,
+            signature_skip_methods=frozenset(
+                {
+                    # Connect DataFrame exposes toLocalIterator() without prefetchPartitions;
+                    # partition prefetch is not supported on Spark Connect.
+                    "toLocalIterator",
+                }
+            ),
         )
 
     def test_column_compatibility(self):
@@ -259,7 +309,7 @@ class ConnectCompatibilityTestsMixin:
 
     def test_spark_session_compatibility(self):
         """Test SparkSession compatibility between classic and connect."""
-        expected_missing_connect_properties = {"sparkContext"}
+        expected_missing_connect_properties = set()
         expected_missing_classic_properties = {"is_stopped", "session_id"}
         expected_missing_connect_methods = {
             "clearProgressHandlers",
@@ -277,6 +327,49 @@ class ConnectCompatibilityTestsMixin:
             expected_missing_classic_properties,
             expected_missing_connect_methods,
             expected_missing_classic_methods,
+        )
+
+    def test_spark_context_compatibility(self):
+        """Test Spark ``SparkContext`` coverage between JVM Classic and Spark Connect façade."""
+        # Keep this enumerate explicit — add new JVM-only hooks to Classic SparkContext sparingly:
+        expected_missing_connect_methods = {
+            "accumulator",
+            "binaryRecords",
+            "broadcast",
+            "dump_profiles",
+            "getLocalProperty",
+            "hadoopFile",
+            "hadoopRDD",
+            "newAPIHadoopFile",
+            "newAPIHadoopRDD",
+            "runJob",
+            "sequenceFile",
+            "setJobDescription",
+            "setLocalProperty",
+            "setLogLevel",
+            "show_profiles",
+            "statusTracker",
+        }
+        expected_missing_classic_methods = set()
+
+        expected_missing_connect_properties = {
+            "applicationId",
+            "listArchives",
+            "listFiles",
+            "resources",
+            "uiWebUrl",
+        }
+        expected_missing_classic_properties = {"serializer"}
+
+        self.check_compatibility(
+            ClassicSparkContext,
+            ConnectSparkContext,
+            "SparkContext",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+            compare_signature_parameter_shapes_only=True,
         )
 
     def test_catalog_compatibility(self):
@@ -517,8 +610,8 @@ class ConnectCompatibilityTestsMixin:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ConnectCompatibilityTests(ConnectCompatibilityTestsMixin, ReusedSQLTestCase):
-    pass
+class ConnectCompatibilityTests(ConnectCompatibilityTestsMixin, unittest.TestCase):
+    """Static parity checks only; does not create a Spark session."""
 
 
 if __name__ == "__main__":

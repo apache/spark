@@ -19,7 +19,7 @@ from typing import Dict, Optional, TYPE_CHECKING, Callable
 
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.functions import expr
+from pyspark.sql.connect.functions.builtin import expr
 from pyspark.sql.merge import MergeIntoWriter as PySparkMergeIntoWriter
 
 if TYPE_CHECKING:

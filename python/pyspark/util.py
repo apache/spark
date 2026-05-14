@@ -36,6 +36,7 @@ from typing import (
     Any,
     Callable,
     Generator,
+    Hashable,
     IO,
     Iterator,
     List,
@@ -110,6 +111,42 @@ JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
 
 FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+def portable_hash(x: Hashable) -> int:
+    """
+    Consistent hash for builtin Spark partition keys (notably ``None`` and tuples containing
+    ``None``), aligned with JVM expectations.
+
+    The algorithm mirrors CPython 2.7 hashing for these cases.
+
+    Examples
+    --------
+    >>> portable_hash(None)
+    0
+    >>> portable_hash((None, 1)) & 0xffffffff
+    219750521
+    """
+
+    if "PYTHONHASHSEED" not in os.environ:
+        raise PySparkRuntimeError(
+            errorClass="PYTHON_HASH_SEED_NOT_SET",
+            messageParameters={},
+        )
+
+    if x is None:
+        return 0
+    if isinstance(x, tuple):
+        h = 0x345678
+        for i in x:
+            h ^= portable_hash(i)
+            h *= 1000003
+            h &= sys.maxsize
+        h ^= len(x)
+        if h == -1:
+            h = -2
+        return int(h)
+    return hash(x)
 
 
 def print_exec(stream: TextIO) -> None:

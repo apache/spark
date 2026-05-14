@@ -42,7 +42,7 @@ from pyspark.testing.sqlutils import SPARK_HOME
 global_func = lambda: "Hi"  # noqa: E731
 
 
-class RDDTests(ReusedPySparkTestCase):
+class RDDTestsMixin:
     def test_range(self):
         self.assertEqual(self.sc.range(1, 1).count(), 0)
         self.assertEqual(self.sc.range(1, 0, -1).count(), 1)
@@ -500,6 +500,54 @@ class RDDTests(ReusedPySparkTestCase):
 
         self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
 
+    def test_count_approx(self):
+        rdd = self.sc.parallelize(range(1000), 10)
+        self.assertEqual(1000, rdd.countApprox(1000, 1.0))
+
+    def test_sum_approx(self):
+        rdd = self.sc.parallelize(range(1000), 10)
+        expected = sum(range(1000))
+        self.assertLess(abs(rdd.sumApprox(1000) - expected) / expected, 0.05)
+
+    def test_mean_approx(self):
+        rdd = self.sc.parallelize(range(1000), 10)
+        expected = sum(range(1000)) / 1000.0
+        self.assertLess(abs(rdd.meanApprox(1000) - expected) / expected, 0.05)
+
+    def test_lookup(self):
+        lst = range(1000)
+        rdd = self.sc.parallelize(zip(lst, lst), 10)
+        self.assertEqual([42], rdd.lookup(42))
+        self.assertEqual([], rdd.lookup(1024))
+        sorted_rdd = rdd.sortByKey()
+        self.assertEqual([42], sorted_rdd.lookup(42))
+        rdd2 = self.sc.parallelize([(("a", "b"), "c")]).groupByKey()
+        self.assertEqual(["c"], list(rdd2.lookup(("a", "b"))[0]))
+
+    def test_lookup_after_partition_by(self):
+        data = [(i % 11, i) for i in range(220)]
+        rdd = self.sc.parallelize(data, 14).partitionBy(9)
+        for k in range(11):
+            want = sorted(x for hk, x in data if hk == k)
+            self.assertEqual(want, sorted(rdd.lookup(k)))
+
+    def test_sample_by_key(self):
+        fractions = {"a": 0.2, "b": 0.1}
+        rdd = self.sc.parallelize(fractions.keys()).cartesian(self.sc.parallelize(range(0, 1000)))
+        sample = dict(rdd.sampleByKey(False, fractions, 2).groupByKey().collect())
+        self.assertTrue(100 < len(sample["a"]) < 300 and 50 < len(sample["b"]) < 150)
+        self.assertTrue(max(sample["a"]) <= 999 and min(sample["a"]) >= 0)
+        self.assertTrue(max(sample["b"]) <= 999 and min(sample["b"]) >= 0)
+
+    def test_map_partitions_with_split(self):
+        rdd = self.sc.parallelize([1, 2, 3, 4], 4)
+
+        def f(splitIndex, iterator):
+            yield splitIndex
+
+        with self.assertWarns(FutureWarning):
+            self.assertEqual(6, rdd.mapPartitionsWithSplit(f).sum())
+
     def test_histogram(self):
         # empty
         rdd = self.sc.parallelize([])
@@ -923,6 +971,10 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertFalse(
                 is_job_cancelled[i], "Thread {i}: Job in group B did not succeeded.".format(i=i)
             )
+
+
+class RDDTests(RDDTestsMixin, ReusedPySparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

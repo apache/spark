@@ -20,8 +20,14 @@ from pyspark.loose_version import LooseVersion
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkImportError
 
+_dependencies_checked: bool = False
+
 
 def check_dependencies() -> None:
+    global _dependencies_checked
+    if _dependencies_checked:
+        return
+
     main_module = sys.modules["__main__"]
     if (
         main_module.__spec__ is None
@@ -44,6 +50,7 @@ def check_dependencies() -> None:
     require_minimum_grpcio_status_version()
     require_minimum_googleapis_common_protos_version()
     require_minimum_zstandard_version()
+    _dependencies_checked = True
 
 
 def require_minimum_grpc_version() -> None:

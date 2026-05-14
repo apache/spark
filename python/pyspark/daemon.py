@@ -93,6 +93,9 @@ def worker(sock: socket.socket, authenticated: bool) -> int:
     finally:
         try:
             outfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # The JVM/driver may close the socket after consuming results; flushing is unnecessary.
+            pass
         except Exception:
             if os.environ.get("PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE", False):
                 faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)

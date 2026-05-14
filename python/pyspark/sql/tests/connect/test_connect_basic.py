@@ -127,6 +127,44 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
 
 class SparkConnectBasicTests(SparkConnectSQLTestCase):
+    def test_rdd_toDF_with_schema_string(self):
+        """Reuse assertions from SQLTests.test_toDF_with_schema_string (test_dataframe.py)."""
+
+        data = [Row(key=i, value=str(i)) for i in range(100)]
+        rdd = self.spark.sparkContext.parallelize(data, 5)
+
+        df = rdd.toDF("key: int, value: string")
+        self.assertEqual(df.schema.simpleString(), "struct<key:int,value:string>")
+        self.assertEqual(df.collect(), data)
+
+        df = rdd.toDF("key: string, value: string")
+        self.assertEqual(df.schema.simpleString(), "struct<key:string,value:string>")
+        self.assertEqual(df.collect(), [Row(key=str(i), value=str(i)) for i in range(100)])
+
+        df = rdd.toDF(" a: int, b: string ")
+        self.assertEqual(df.schema.simpleString(), "struct<a:int,b:string>")
+        self.assertEqual(df.collect(), data)
+
+        self.assertRaisesRegex(
+            Exception,
+            "FIELD_STRUCT_LENGTH_MISMATCH",
+            lambda: rdd.coalesce(1).toDF("key: int").collect(),
+        )
+
+        self.assertRaisesRegex(
+            Exception,
+            "FIELD_DATA_TYPE_UNACCEPTABLE",
+            lambda: rdd.coalesce(1).toDF("key: float, value: string").collect(),
+        )
+
+        df = rdd.map(lambda row: row.key).toDF("int")
+        self.assertEqual(df.schema.simpleString(), "struct<value:int>")
+        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+        df = rdd.map(lambda row: row.key).toDF(IntegerType())
+        self.assertEqual(df.schema.simpleString(), "struct<value:int>")
+        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
     def test_toJSON(self):
         sdf = self.spark.range(10).withColumn("s", SF.col("id").cast("string"))
         cdf = self.connect.range(10).withColumn("s", CF.col("id").cast("string"))

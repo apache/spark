@@ -18,7 +18,9 @@ from pyspark.testing.utils import ReusedPySparkTestCase
 from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 
 
-class RDDSamplerTests(ReusedPySparkTestCase):
+class RDDSamplerTestsMixin:
+    """RDD sampler coverage (mixed into classic / Connect suites)."""
+
     def test_rdd_sampler_func(self):
         # SPARK-38879: Test case to improve test coverage for RDDSampler
         # RDDSampler.func
@@ -51,6 +53,10 @@ class RDDSamplerTests(ReusedPySparkTestCase):
         self.assertLess(sample_data["a"], 90)
         self.assertGreater(sample_data["b"], 15)
         self.assertLess(sample_data["b"], 30)
+
+
+class RDDSamplerTests(RDDSamplerTestsMixin, ReusedPySparkTestCase):
+    pass
 
 
 if __name__ == "__main__":

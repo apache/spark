@@ -266,6 +266,8 @@ try:
         packages=[
             "pyspark",
             "pyspark.core",
+            "pyspark.core.classic",
+            "pyspark.core.connect",
             "pyspark.cloudpickle",
             "pyspark.mllib",
             "pyspark.mllib.linalg",

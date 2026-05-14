@@ -159,9 +159,8 @@ class SerializationTestCase(unittest.TestCase):
         hash(FlattenedValuesSerializer(CPickleSerializer()))
 
 
-@unittest.skipIf(not have_scipy, "SciPy not installed")
-class SciPyTests(PySparkTestCase):
-    """General PySpark tests that depend on scipy"""
+class SciPyTestsMixin:
+    """RDD serialization tests that depend on SciPy (mixed into classic / Connect suites)."""
 
     def test_serialize(self):
         from scipy.special import gammaln
@@ -172,9 +171,13 @@ class SciPyTests(PySparkTestCase):
         self.assertEqual(expected, observed)
 
 
-@unittest.skipIf(not have_numpy, "NumPy not installed")
-class NumPyTests(PySparkTestCase):
-    """General PySpark tests that depend on numpy"""
+@unittest.skipIf(not have_scipy, "SciPy not installed")
+class SciPyTests(SciPyTestsMixin, PySparkTestCase):
+    """General PySpark tests that depend on scipy"""
+
+
+class NumPyTestsMixin:
+    """RDD StatCounter tests that depend on NumPy (mixed into classic / Connect suites)."""
 
     def test_statcounter_array(self):
         import numpy as np
@@ -207,6 +210,11 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual(
             [0.6666666666666666, 0.6666666666666666], stats_sample_dict["variance"].tolist()
         )
+
+
+@unittest.skipIf(not have_numpy, "NumPy not installed")
+class NumPyTests(NumPyTestsMixin, PySparkTestCase):
+    """General PySpark tests that depend on numpy"""
 
 
 class SerializersTest(unittest.TestCase):

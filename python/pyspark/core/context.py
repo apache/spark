@@ -42,6 +42,7 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
     Set,
+    Union,
 )
 
 from py4j.java_collections import JavaMap
@@ -538,10 +539,111 @@ class SparkContext:
         <SparkContext ...>
         """
         with SparkContext._lock:
-            if SparkContext._active_spark_context is None:
+            from pyspark.sql.session import SparkSession as PySparkSession
+            from pyspark.util import default_api_mode
+
+            opts = dict(conf.getAll()) if conf is not None else {}
+
+            api_mode = opts.get("spark.api.mode", os.environ.get("SPARK_API_MODE", "")).lower()
+            if api_mode not in ("classic", "connect"):
+                api_mode = default_api_mode()
+            is_api_mode_connect = api_mode == "connect"
+
+            explicit_classic_api = (
+                opts.get("spark.api.mode", "").lower() == "classic"
+                or os.environ.get("SPARK_API_MODE", "").lower() == "classic"
+            )
+
+            # Do not import pyspark.sql.connect unless Spark Connect may be in use; importing it
+            # pulls a large dependency chain (e.g. pandas) that classic PySpark must not require.
+            # Default spark.api.mode=connect alone is not sufficient: callers that only use
+            # SparkSession.builder.getOrCreate() with an empty builder must still get JVM classic
+            # unless they also supplied a cluster master, remote endpoint, or connect env pairing.
+            has_cluster_or_remote = (
+                opts.get("spark.master") is not None
+                or os.environ.get("MASTER") is not None
+                or opts.get("spark.remote") is not None
+                or "spark.remote" in opts
+                or "SPARK_REMOTE" in os.environ
+            )
+            connect_like = not explicit_classic_api and (
+                "SPARK_LOCAL_REMOTE" in os.environ
+                or "SPARK_REMOTE" in os.environ
+                or "spark.remote" in opts
+                or (is_api_mode_connect and has_cluster_or_remote)
+                or ("SPARK_CONNECT_MODE_ENABLED" in os.environ and has_cluster_or_remote)
+            )
+
+            if not connect_like:
+                if SparkContext._active_spark_context is not None:
+                    return SparkContext._active_spark_context
                 SparkContext(conf=conf or SparkConf())
-            assert SparkContext._active_spark_context is not None
-            return SparkContext._active_spark_context
+                assert SparkContext._active_spark_context is not None
+                return SparkContext._active_spark_context
+
+            from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+            remote_session = RemoteSparkSession.getActiveSession()
+            if remote_session is None:
+                remote_session = RemoteSparkSession._get_default_session()
+            if remote_session is not None and not remote_session.is_stopped:
+                return cast(SparkContext, remote_session.sparkContext)
+
+            if SparkContext._active_spark_context is not None:
+                return SparkContext._active_spark_context
+
+            if (
+                SparkContext._active_spark_context is None
+                and PySparkSession._instantiatedSession is None
+            ):
+                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                remote_was_set = url is not None
+                if url is None:
+                    url = opts.get("spark.master", os.environ.get("MASTER"))
+                if url is None:
+                    if "SPARK_CONNECT_MODE_ENABLED" in os.environ:
+                        raise PySparkRuntimeError(
+                            errorClass="CONNECT_URL_NOT_SET",
+                            messageParameters={},
+                        )
+                    url = "local"
+                if (
+                    not remote_was_set
+                    and is_api_mode_connect
+                    and isinstance(url, str)
+                    and url.startswith("sc://")
+                ):
+                    raise PySparkRuntimeError(
+                        errorClass="MASTER_URL_INVALID",
+                        messageParameters={},
+                    )
+
+                if url.startswith("local") or (
+                    is_api_mode_connect and isinstance(url, str) and not url.startswith("sc://")
+                ):
+                    os.environ["SPARK_LOCAL_REMOTE"] = "1"
+                    RemoteSparkSession._start_connect_server(url, opts)
+                    url = "sc://localhost"
+
+                assert isinstance(url, str), "spark connect URL must resolve to a string"
+
+                os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                opts["spark.remote"] = url
+                opts_typed = cast(dict[str, Union[bool, float, int, str, None]], opts)
+                session = RemoteSparkSession.builder.config(map=opts_typed).getOrCreate()
+                return cast(SparkContext, session.sparkContext)
+            if "SPARK_LOCAL_REMOTE" in os.environ:
+                url = "sc://localhost"
+                os.environ["SPARK_CONNECT_MODE_ENABLED"] = "1"
+                opts["spark.remote"] = url
+                opts_typed = cast(dict[str, Union[bool, float, int, str, None]], opts)
+                session = RemoteSparkSession.builder.config(map=opts_typed).getOrCreate()
+                return cast(SparkContext, session.sparkContext)
+
+            raise PySparkRuntimeError(
+                errorClass="SESSION_ALREADY_EXIST",
+                messageParameters={},
+            )
 
     def setLogLevel(self, logLevel: str) -> None:
         """
@@ -2325,8 +2427,8 @@ class SparkContext:
         --------
         >>> sc.addJobTag("job_to_cancel1")
         >>> sc.addJobTag("job_to_cancel2")
-        >>> sc.getJobTags()
-        {'job_to_cancel1', 'job_to_cancel2'}
+        >>> sorted(sc.getJobTags())
+        ['job_to_cancel1', 'job_to_cancel2']
         >>> sc.removeJobTag("job_to_cancel1")
         >>> sc.getJobTags()
         {'job_to_cancel2'}
@@ -2360,7 +2462,12 @@ class SparkContext:
         {'job_to_cancel'}
         >>> sc.clearJobTags()
         """
-        return self._jsc.getJobTags()
+        java_set = self._jsc.getJobTags()
+        python_set: Set[str] = set()
+        java_iterator = java_set.iterator()
+        while java_iterator.hasNext():
+            python_set.add(str(java_iterator.next()))
+        return python_set
 
     def clearJobTags(self) -> None:
         """

@@ -80,6 +80,7 @@ from pyspark.sql.types import (
     _infer_schema,
     _has_nulltype,
     _merge_type,
+    _create_converter,
     Row,
     DataType,
     DayTimeIntervalType,
@@ -88,7 +89,9 @@ from pyspark.sql.types import (
     TimestampType,
     MapType,
     StringType,
+    VariantVal,
 )
+from pyspark.sql.conversion import LocalDataToArrowConversion
 from pyspark.sql.utils import to_str
 from pyspark.errors import (
     AnalysisException,
@@ -99,9 +102,42 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkAssertionError,
 )
+from pyspark.core.connect.rdd import RDD as ConnectRDD, _loads, _PAYLOAD_COL
+
+
+def _is_connect_rdd(obj: Any) -> bool:
+    return isinstance(obj, ConnectRDD)
+
+
+def _materialize_connect_rdd_with_schema(
+    rdd: Any,
+    struct: StructType,
+    prefers_large_types: bool,
+) -> DataFrame:
+    """Decode pickled Connect-RDD rows into a typed SQL DataFrame (distributed ``mapInArrow``)."""
+
+    deduped = cast(StructType, _deduplicate_field_names(struct))
+    converter = _create_converter(deduped)
+
+    def mapper(it: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        rows_py: List[Any] = []
+        for batch in it:
+            for pb in batch.column(0).to_pylist():
+                elem = _loads(pb)
+                if isinstance(elem, VariantVal):
+                    raise PySparkValueError("Rows cannot be of type VariantVal")
+                rows_py.append(converter(elem))
+        if not rows_py:
+            return
+        tbl = LocalDataToArrowConversion.convert(rows_py, deduped, prefers_large_types)
+        yield from tbl.to_batches()
+
+    return cast(DataFrame, rdd._df.select(_PAYLOAD_COL).mapInArrow(mapper, schema=deduped))
+
 
 if TYPE_CHECKING:
     import pyspark.sql.connect.proto as pb2
+    from pyspark.core.connect.context import SparkContext
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
@@ -407,6 +443,22 @@ class SparkSession:
 
     tvf.__doc__ = PySparkSession.tvf.__doc__
 
+    @property
+    def sparkContext(self) -> "SparkContext":
+        """
+        Session-scoped Spark context entry for Connect RDD helpers.
+
+        This returns a :class:`~pyspark.core.connect.context.SparkContext` tied to this
+        Spark session. It does not expose a JVM-wide :class:`~pyspark.core.context.SparkContext`.
+
+        .. versionadded:: 5.0.0
+        """
+        from pyspark.core.connect.context import SparkContext
+
+        if getattr(self, "_connect_spark_context", None) is None:
+            self._connect_spark_context = SparkContext(self)
+        return self._connect_spark_context
+
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         self._client.register_progress_handler(handler)
 
@@ -463,6 +515,122 @@ class SparkSession:
             ),
         )
 
+    def _infer_schema_connect_rdd(
+        self,
+        rdd: Any,
+        samplingRatio: Optional[float],
+        names: Optional[List[str]],
+    ) -> StructType:
+        """Infer schema from a Connect-mode Python :class:`~pyspark.RDD` (mirrors classic ``_inferSchema``)."""
+
+        first = rdd.first()
+        if isinstance(first, Sized) and len(first) == 0:
+            raise PySparkValueError(
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
+            )
+
+        configs = self._client.get_config_dict(
+            "spark.sql.timestampType",
+            "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+            "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
+        )
+        prefer_timestamp_ntz = configs["spark.sql.timestampType"] == "TIMESTAMP_NTZ"
+        infer_dict_as_struct = (
+            configs["spark.sql.pyspark.inferNestedDictAsStruct.enabled"] == "true"
+        )
+        infer_array_from_first_element = (
+            configs["spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled"] == "true"
+        )
+        infer_map_from_first_pair = (
+            configs["spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled"] == "true"
+        )
+
+        if samplingRatio is None:
+            schema = _infer_schema(
+                first,
+                names=names,
+                infer_dict_as_struct=infer_dict_as_struct,
+                prefer_timestamp_ntz=prefer_timestamp_ntz,
+            )
+            if _has_nulltype(schema):
+                for row in rdd.take(100)[1:]:
+                    schema = _merge_type(
+                        schema,
+                        _infer_schema(
+                            row,
+                            names=names,
+                            infer_dict_as_struct=infer_dict_as_struct,
+                            infer_array_from_first_element=infer_array_from_first_element,
+                            infer_map_from_first_pair=infer_map_from_first_pair,
+                            prefer_timestamp_ntz=prefer_timestamp_ntz,
+                        ),
+                    )
+                    if not _has_nulltype(schema):
+                        break
+                else:
+                    raise PySparkValueError(
+                        errorClass="CANNOT_DETERMINE_TYPE",
+                        messageParameters={},
+                    )
+        else:
+            sampled_rdd = rdd.sample(False, float(samplingRatio)) if samplingRatio < 0.99 else rdd
+            schema = sampled_rdd.map(
+                lambda row: _infer_schema(
+                    row,
+                    names,
+                    infer_dict_as_struct=infer_dict_as_struct,
+                    infer_array_from_first_element=infer_array_from_first_element,
+                    infer_map_from_first_pair=infer_map_from_first_pair,
+                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                )
+            ).reduce(_merge_type)
+        return schema
+
+    def _create_dataframe_from_connect_rdd(
+        self,
+        data: Any,
+        _schema: Optional[Union[AtomicType, StructType]],
+        _cols: Optional[List[str]],
+        samplingRatio: Optional[float],
+        prefers_large_types: bool,
+    ) -> ParentDataFrame:
+        """Materialize pickled Connect-RDD rows into a SQL :class:`DataFrame`."""
+
+        if data.isEmpty():
+            if _schema is None:
+                raise PySparkValueError(
+                    errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                    messageParameters={},
+                )
+            if isinstance(_schema, StructType):
+                struct = _schema
+            else:
+                struct = StructType().add("value", _schema)
+            return DataFrame(LocalRelation(table=None, schema=struct.json()), self)
+
+        if _schema is None:
+            names_for_infer: Optional[List[str]] = None
+            if _cols is not None:
+                names_for_infer = [
+                    (n.decode("utf-8") if isinstance(n, bytes) else str(n)) for n in _cols
+                ]
+            struct = self._infer_schema_connect_rdd(data, samplingRatio, names_for_infer)
+            if _cols is not None:
+                for i, name in enumerate(_cols):
+                    decoded = name.decode("utf-8") if isinstance(name, bytes) else name
+                    struct.fields[i].name = decoded
+                    struct.names[i] = decoded
+        elif isinstance(_schema, StructType):
+            struct = _schema
+        else:
+            struct = StructType().add("value", _schema)
+
+        return cast(
+            ParentDataFrame, _materialize_connect_rdd_with_schema(data, struct, prefers_large_types)
+        )
+
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", "pa.Table", Iterable[Any]],
@@ -477,7 +645,7 @@ class SparkSession:
                 messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
             )
 
-        if samplingRatio is not None:
+        if samplingRatio is not None and not _is_connect_rdd(data):
             warnings.warn("'samplingRatio' is ignored. It is not supported with Spark Connect.")
 
         if verifySchema is not None:
@@ -549,6 +717,15 @@ class SparkSession:
         prefers_large_types = configs["spark.sql.execution.arrow.useLargeVarTypes"] == "true"
 
         _table: Optional[pa.Table] = None
+
+        if _is_connect_rdd(data):
+            return self._create_dataframe_from_connect_rdd(
+                data,
+                _schema,
+                _cols,
+                samplingRatio,
+                prefers_large_types,
+            )
 
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
@@ -1004,7 +1181,7 @@ class SparkSession:
     streams.__doc__ = PySparkSession.streams.__doc__
 
     def __getattr__(self, name: str) -> Any:
-        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext", "newSession"]:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "newSession"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -1173,7 +1350,8 @@ class SparkSession:
 
         Returns the authentication token that should be used to connect to this session.
         """
-        from pyspark import SparkContext, SparkConf
+        from pyspark.conf import SparkConf
+        from pyspark.core.context import SparkContext as JVMSparkContext
 
         session = PySparkSession._instantiatedSession
         if session is None or session._sc._jsc is None:
@@ -1188,8 +1366,6 @@ class SparkSession:
             overwrite_conf["spark.master"] = master
             if "spark.remote" in overwrite_conf:
                 del overwrite_conf["spark.remote"]
-            if "spark.api.mode" in overwrite_conf:
-                del overwrite_conf["spark.api.mode"]
 
             # Check for a user provided authentication token, creating a new one if not,
             # and make sure it's set in the environment,
@@ -1211,6 +1387,7 @@ class SparkSession:
                 overwrite_conf["spark.connect.grpc.binding.port"] = "0"
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
+            origin_connect_mode_enabled = os.environ.pop("SPARK_CONNECT_MODE_ENABLED", None)
             try:
                 # So SparkSubmit thinks no remote is set in order to
                 # start the regular PySpark session.
@@ -1221,11 +1398,24 @@ class SparkSession:
                 # so would not be garbage-collected.
                 conf = SparkConf(loadDefaults=True)
                 conf.setAll(list(overwrite_conf.items())).setAll(list(default_conf.items()))
-                PySparkSession(SparkContext.getOrCreate(conf))
+                # Avoid SparkContext.getOrCreate here: Connect RDD API makes getOrCreate return the
+                # session-scoped Connect SparkContext facade when a Spark Connect session exists,
+                # which skips the JVM. Construct the JVM SparkContext exactly like getOrCreate's
+                # classic initialization path instead.
+                with JVMSparkContext._lock:
+                    if JVMSparkContext._active_spark_context is not None:
+                        raise PySparkRuntimeError(
+                            errorClass="SESSION_OR_CONTEXT_EXISTS",
+                            messageParameters={},
+                        )
+                    JVMSparkContext(conf=conf)
+                sc_boot = JVMSparkContext._active_spark_context
+                assert sc_boot is not None
+                PySparkSession(sc_boot)
 
                 # Lastly only keep runtime configurations because other configurations are
                 # disallowed to set in the regular Spark Connect session.
-                utl = SparkContext._jvm.PythonSQLUtils  # type: ignore[union-attr]
+                utl = JVMSparkContext._jvm.PythonSQLUtils
                 runtime_conf_keys = [c._1() for c in utl.listRuntimeSQLConfigs()]
                 new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
                 opts.clear()
@@ -1233,6 +1423,8 @@ class SparkSession:
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
+                if origin_connect_mode_enabled is not None:
+                    os.environ["SPARK_CONNECT_MODE_ENABLED"] = origin_connect_mode_enabled
         else:
             raise PySparkRuntimeError(
                 errorClass="SESSION_OR_CONTEXT_EXISTS",

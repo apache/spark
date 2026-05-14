@@ -37,6 +37,19 @@ class JobCancellationTestsMixin:
         self.assertEqual(self.spark.getTags(), set())
         self.spark.clearTags()
 
+    def test_job_tags_via_spark_context(self):
+        sc = self.spark.sparkContext
+        sc.clearJobTags()
+        sc.addJobTag("a")
+        self.assertEqual(sc.getJobTags(), {"a"})
+        sc.addJobTag("b")
+        sc.removeJobTag("a")
+        self.assertEqual(sc.getJobTags(), {"b"})
+        sc.addJobTag("c")
+        sc.clearJobTags()
+        self.assertEqual(sc.getJobTags(), set())
+        sc.clearJobTags()
+
     def test_tags_multithread(self):
         output1 = None
         output2 = None

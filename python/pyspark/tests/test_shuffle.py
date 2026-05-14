@@ -21,7 +21,7 @@ import os
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import shuffle, CPickleSerializer, SparkConf, SparkContext
+from pyspark import shuffle, CPickleSerializer, SparkConf
 from pyspark.shuffle import (
     Aggregator,
     ExternalMerger,
@@ -30,6 +30,18 @@ from pyspark.shuffle import (
     Merger,
     ExternalGroupBy,
 )
+
+from pyspark.testing.utils import ReusedPySparkTestCase
+
+
+class ShuffleRDDSortTestsMixin:
+    """RDD high-level shuffle / sort assertions (classic / Connect parity)."""
+
+    def test_external_sort_in_rdd(self):
+        lst = list(range(10240))
+        random.shuffle(lst)
+        rdd = self.sc.parallelize(lst, 4)
+        self.assertEqual(sorted(lst), rdd.sortBy(lambda x: x).collect())
 
 
 class MergerTests(unittest.TestCase):
@@ -245,14 +257,17 @@ class SorterTests(unittest.TestCase):
         )
         self.assertGreater(shuffle.DiskBytesSpilled, last)
 
-    def test_external_sort_in_rdd(self):
-        conf = SparkConf().set("spark.python.worker.memory", "1m")
-        sc = SparkContext(conf=conf)
-        lst = list(range(10240))
-        random.shuffle(lst)
-        rdd = sc.parallelize(lst, 4)
-        self.assertEqual(sorted(lst), rdd.sortBy(lambda x: x).collect())
-        sc.stop()
+
+class ShuffleRDDSortClassicTestsWithWorkerMemory(ShuffleRDDSortTestsMixin, ReusedPySparkTestCase):
+    """Exercise external sort under tighter ``spark.python.worker.memory`` (classic JVM)."""
+
+    @classmethod
+    def conf(cls):
+        return SparkConf().set("spark.python.worker.memory", "1m")
+
+
+class ShuffleRDDSortTests(ShuffleRDDSortTestsMixin, ReusedPySparkTestCase):
+    """Default ``spark.python.worker.memory`` (shared with parity coverage)."""
 
 
 if __name__ == "__main__":

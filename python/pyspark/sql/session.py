@@ -494,12 +494,23 @@ class SparkSession(SparkConversionMixin):
                     api_mode = default_api_mode()
                 is_api_mode_connect = api_mode == "connect"
 
-                if (
-                    "SPARK_CONNECT_MODE_ENABLED" in os.environ
+                has_cluster_or_remote = (
+                    opts.get("spark.master") is not None
+                    or os.environ.get("MASTER") is not None
+                    or opts.get("spark.remote") is not None
+                    or "spark.remote" in opts
+                    or "SPARK_REMOTE" in os.environ
+                )
+                wants_connect = (
+                    "SPARK_LOCAL_REMOTE" in os.environ
                     or "SPARK_REMOTE" in os.environ
                     or "spark.remote" in opts
-                    or is_api_mode_connect
-                ):
+                    or opts.get("spark.remote") is not None
+                    or (is_api_mode_connect and has_cluster_or_remote)
+                    or ("SPARK_CONNECT_MODE_ENABLED" in os.environ and has_cluster_or_remote)
+                )
+
+                if wants_connect:
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
@@ -508,18 +519,24 @@ class SparkSession(SparkConversionMixin):
                             and SparkSession._instantiatedSession is None
                         ):
                             url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
-
-                            if url is None and is_api_mode_connect:
-                                url = opts.get("spark.master", os.environ.get("MASTER", "local"))
-                                if url.startswith("sc://"):
+                            remote_was_set = url is not None
+                            if url is None:
+                                url = opts.get("spark.master", os.environ.get("MASTER"))
+                            if url is None:
+                                if "SPARK_CONNECT_MODE_ENABLED" in os.environ:
                                     raise PySparkRuntimeError(
-                                        errorClass="MASTER_URL_INVALID",
+                                        errorClass="CONNECT_URL_NOT_SET",
                                         messageParameters={},
                                     )
-
-                            if url is None:
+                                url = "local"
+                            if (
+                                not remote_was_set
+                                and is_api_mode_connect
+                                and isinstance(url, str)
+                                and url.startswith("sc://")
+                            ):
                                 raise PySparkRuntimeError(
-                                    errorClass="CONNECT_URL_NOT_SET",
+                                    errorClass="MASTER_URL_INVALID",
                                     messageParameters={},
                                 )
 
@@ -550,11 +567,24 @@ class SparkSession(SparkConversionMixin):
                                 messageParameters={},
                             )
 
+                else:
+                    if (
+                        "SPARK_CONNECT_MODE_ENABLED" in os.environ
+                        and opts.get("spark.master") is None
+                        and os.environ.get("MASTER") is None
+                    ):
+                        raise PySparkRuntimeError(
+                            errorClass="CONNECT_URL_NOT_SET",
+                            messageParameters={},
+                        )
+
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
                     sparkConf = SparkConf()
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
+                    if "spark.api.mode" not in self._options:
+                        sparkConf.set("spark.api.mode", "classic")
                     # This SparkContext may be an existing one.
                     sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
@@ -618,6 +648,8 @@ class SparkSession(SparkConversionMixin):
                         sparkConf = SparkConf()
                         for key, value in self._options.items():
                             sparkConf.set(key, value)
+                        if "spark.api.mode" not in self._options:
+                            sparkConf.set("spark.api.mode", "classic")
                         # This SparkContext may be an existing one.
                         sc = SparkContext.getOrCreate(sparkConf)
                     jSparkSessionClass = SparkSession._get_j_spark_session_class(sc._jvm)

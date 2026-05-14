@@ -160,6 +160,12 @@
     ],
     "sqlState": "0A000"
   },
+  "CLASSIC_PYSPARK_NOT_AVAILABLE_IN_CLIENT_PACKAGE": {
+    "message": [
+      "<feature> requires Spark Classic modules under `pyspark.core.classic`, which are not included in the pyspark-client distribution. Install the full `pyspark` package."
+    ],
+    "sqlState": "0A000"
+  },
   "COLLATION_INVALID_PROVIDER": {
     "message": [
       "The value <provider> does not represent a correct collation provider. Supported providers are: [<supportedProviders>]."

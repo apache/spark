@@ -22,7 +22,21 @@ from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
-class InputFormatTests(ReusedPySparkTestCase):
+class BinaryFilesTestsMixin:
+    """Assertions for ``SparkContext.binaryFiles``; requires ``self.sc``."""
+
+    def test_binary_files(self):
+        path = os.path.join(self.tempdir.name, "binaryfiles")
+        os.makedirs(path, exist_ok=True)
+        data = b"short binary data"
+        with open(os.path.join(path, "part-0000"), "wb") as f:
+            f.write(data)
+        [(p, d)] = self.sc.binaryFiles(path).collect()
+        self.assertTrue(str(p).endswith("part-0000"))
+        self.assertEqual(d, data)
+
+
+class InputFormatTests(BinaryFilesTestsMixin, ReusedPySparkTestCase):
     @classmethod
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
@@ -148,16 +162,6 @@ class InputFormatTests(ReusedPySparkTestCase):
         )
         em = [("\x01", []), ("\x01", [3.0]), ("\x02", [1.0]), ("\x02", [1.0]), ("\x03", [2.0])]
         self.assertEqual(maps, em)
-
-    def test_binary_files(self):
-        path = os.path.join(self.tempdir.name, "binaryfiles")
-        os.mkdir(path)
-        data = b"short binary data"
-        with open(os.path.join(path, "part-0000"), "wb") as f:
-            f.write(data)
-        [(p, d)] = self.sc.binaryFiles(path).collect()
-        self.assertTrue(p.endswith("part-0000"))
-        self.assertEqual(d, data)
 
     def test_binary_records(self):
         path = os.path.join(self.tempdir.name, "binaryrecords")

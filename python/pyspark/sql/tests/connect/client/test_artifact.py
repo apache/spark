@@ -19,6 +19,7 @@ import shutil
 import tempfile
 import unittest
 import os
+import uuid
 import zipfile
 import zlib
 
@@ -33,7 +34,99 @@ if should_test_connect:
     from pyspark.errors import SparkRuntimeException
 
 
-class ArtifactTestsMixin:
+class ArtifactViaSparkContextCheckMixin:
+    """Helpers for ``SparkContext.addPyFile`` / ``addFile`` / ``addArchive`` artifact tests."""
+
+    def check_add_pyfile_via_spark_context(self, spark_session):
+        """Same semantics as ``check_add_pyfile`` via :meth:`SparkSession.sparkContext.addPyFile`."""
+
+        with tempfile.TemporaryDirectory(prefix="check_add_pyfile_sc") as d:
+            # Unique module basename so repeated adds on one Connect backend do not collide
+            # on pyfiles/<name>.py (see ``ArtifactTestsMixin`` fixed-path checks).
+            mod_name = f"my_pyfile_{uuid.uuid4().hex}"
+            pyfile_path = os.path.join(d, f"{mod_name}.py")
+            with open(pyfile_path, "w") as f:
+                f.write("my_func = lambda: 10")
+
+            @udf("int")
+            def func(x):
+                mod = __import__(mod_name)
+                return mod.my_func()
+
+            spark_session.sparkContext.addPyFile(pyfile_path)
+            spark_session.range(1).select(assert_true(func("id") == lit(10))).show()
+
+    def check_add_zipped_package_via_spark_context(self, spark_session):
+        """Same semantics as ``check_add_zipped_package`` via ``sparkContext.addPyFile``."""
+
+        with tempfile.TemporaryDirectory(prefix="check_add_zipped_package_sc") as d:
+            # Unique top-level name so repeated addPyFile on the same SparkContext
+            # (e.g. default session + newSession()) does not collide on my_zipfile.zip.
+            pkg_dir = f"my_zipfile_{uuid.uuid4().hex}"
+            package_path = os.path.join(d, pkg_dir)
+            os.mkdir(package_path)
+            pyfile_path = os.path.join(package_path, "__init__.py")
+            with open(pyfile_path, "w") as f:
+                _ = f.write("my_func = lambda: 5")
+            shutil.make_archive(package_path, "zip", d, pkg_dir)
+
+            @udf("long")
+            def func(x):
+                mod = __import__(pkg_dir)
+                return mod.my_func()
+
+            spark_session.sparkContext.addPyFile(f"{package_path}.zip")
+            spark_session.range(1).select(assert_true(func("id") == lit(5))).show()
+
+    def check_add_archive_via_spark_context(self, spark_session):
+        """Same semantics as ``check_add_archive`` via :meth:`SparkSession.sparkContext.addArchive`."""
+
+        with tempfile.TemporaryDirectory(prefix="check_add_archive_sc") as d:
+            archive_dir = f"my_archive_{uuid.uuid4().hex}"
+            archive_path = os.path.join(d, archive_dir)
+            os.mkdir(archive_path)
+            pyfile_path = os.path.join(archive_path, "my_file.txt")
+            with open(pyfile_path, "w") as f:
+                _ = f.write("hello world!")
+            shutil.make_archive(archive_path, "zip", d, archive_dir)
+
+            archive_fragment = f"my_files_{uuid.uuid4().hex}"
+            spark_session.sparkContext.addArchive(f"{archive_path}.zip#{archive_fragment}")
+
+            root = self.root()
+
+            @udf("string")
+            def func(x):
+                with open(
+                    os.path.join(root, archive_fragment, archive_dir, "my_file.txt"),
+                    "r",
+                ) as my_file:
+                    return my_file.read().strip()
+
+            spark_session.range(1).select(assert_true(func("id") == lit("hello world!"))).show()
+
+    def check_add_file_via_spark_context(self, spark_session):
+        """Same semantics as ``check_add_file`` via :meth:`SparkSession.sparkContext.addFile`."""
+
+        with tempfile.TemporaryDirectory(prefix="check_add_file_sc") as d:
+            fname = f"my_file_{uuid.uuid4().hex}.txt"
+            file_path = os.path.join(d, fname)
+            with open(file_path, "w") as f:
+                f.write("Hello world!!")
+
+            spark_session.sparkContext.addFile(file_path)
+
+            root = self.root()
+
+            @udf("string")
+            def func(x):
+                with open(os.path.join(root, fname), "r") as my_file:
+                    return my_file.read().strip()
+
+            spark_session.range(1).select(assert_true(func("id") == lit("Hello world!!"))).show()
+
+
+class ArtifactTestsMixin(ArtifactViaSparkContextCheckMixin):
     def check_add_pyfile(self, spark_session):
         with tempfile.TemporaryDirectory(prefix="check_add_pyfile") as d:
             pyfile_path = os.path.join(d, "my_pyfile.py")

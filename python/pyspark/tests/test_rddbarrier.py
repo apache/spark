@@ -17,7 +17,9 @@
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
-class RDDBarrierTests(ReusedPySparkTestCase):
+class RDDBarrierTestsMixin:
+    """Barrier RDD assertions (classic / Connect parity)."""
+
     def test_map_partitions(self):
         """Test RDDBarrier.mapPartitions"""
         rdd = self.sc.parallelize(range(12), 4)
@@ -37,6 +39,10 @@ class RDDBarrierTests(ReusedPySparkTestCase):
         rdd1 = rdd.barrier().mapPartitionsWithIndex(f)
         self.assertTrue(rdd1._is_barrier())
         self.assertEqual(rdd1.collect(), [0, 1, 2, 3])
+
+
+class RDDBarrierTests(RDDBarrierTestsMixin, ReusedPySparkTestCase):
+    pass
 
 
 if __name__ == "__main__":
