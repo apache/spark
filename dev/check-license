@@ -23,27 +23,47 @@ acquire_rat_jar () {
   URL="${DEFAULT_ARTIFACT_REPOSITORY:-https://repo1.maven.org/maven2/}org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
 
   JAR="$rat_jar"
+  JAR_DL="${JAR}.part"
 
   # Download rat launch jar if it hasn't been downloaded yet
   if [ ! -f "$JAR" ]; then
-    # Download
     printf "Attempting to fetch rat\n"
-    JAR_DL="${JAR}.part"
-    if [ $(command -v curl) ]; then
-      curl -L --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
-    elif [ $(command -v wget) ]; then
-      wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
-    else
-      printf "You do not have curl or wget installed, please install rat manually.\n"
-      exit -1
-    fi
+    local max_attempts=5
+    local attempt=0
+
+    while [ $attempt -lt $max_attempts ]; do
+      if [ $attempt -gt 0 ]; then
+        local backoff=$(( 5 * (1 << (attempt - 1)) ))
+        printf "Download attempt %d/%d failed, retrying in %ds...\n" "$attempt" "$max_attempts" "$backoff"
+        sleep "$backoff"
+      fi
+      attempt=$(( attempt + 1 ))
+
+      if [ $(command -v curl) ]; then
+        curl -L --silent "${URL}" > "$JAR_DL"
+      elif [ $(command -v wget) ]; then
+        wget --quiet "${URL}" -O "$JAR_DL"
+      else
+        printf "You do not have curl or wget installed, please install rat manually.\n"
+        exit -1
+      fi
+
+      if unzip -tq "$JAR_DL" &> /dev/null; then
+        mv "$JAR_DL" "$JAR"
+        return 0
+      fi
+
+      rm -f "$JAR_DL"
+    done
+
+    printf "All %d download attempts for rat failed. Please install rat manually.\n" "$max_attempts"
+    exit -1
   fi
 
   unzip -tq "$JAR" &> /dev/null
-  if [ $? -ne 0 ]; then 
-    # We failed to download
+  if [ $? -ne 0 ]; then
     rm "$JAR"
-    printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
+    printf "Existing rat jar at ${JAR} is corrupt. Please install rat manually.\n"
     exit -1
   fi
 }
