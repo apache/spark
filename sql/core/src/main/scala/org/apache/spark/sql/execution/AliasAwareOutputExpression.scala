@@ -94,6 +94,16 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
       kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
     if (kps.isEmpty) return LazyList.empty
     val numPositions = kps.head.expressions.length
+    // The function assumes all input KPs share the same `partitionKeys`, which implies matching
+    // expression arity. This invariant is asserted by [[GroupPartitionsExec]] and is established
+    // by the constructors of [[PartitioningCollection]] feeding this method (a join's
+    // `PartitioningCollection(left.outputPartitioning, right.outputPartitioning)` combines KPs
+    // that have been aligned by [[EnsureRequirements]] to the same join keys). If the invariant
+    // is ever violated upstream, fail early with a clear message instead of throwing an opaque
+    // `IndexOutOfBoundsException` from `kp.expressions(i)` below.
+    assert(kps.forall(_.expressions.length == numPositions),
+      s"All input KeyedPartitionings must share the same expression arity, " +
+        s"but got: ${kps.map(_.expressions.length).mkString(", ")}.")
 
     val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =
       if (hasAlias) {
