@@ -7450,6 +7450,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Handle Spark types
         include_spark_type = []
         for inc in include_list:
+            if not isinstance(inc, str):
+                continue
             try:
                 include_spark_type.append(self._internal.spark_frame._session._parse_ddl(inc))
             except BaseException:
@@ -7457,6 +7459,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         exclude_spark_type = []
         for exc in exclude_list:
+            if not isinstance(exc, str):
+                continue
             try:
                 exclude_spark_type.append(self._internal.spark_frame._session._parse_ddl(exc))
             except BaseException:
@@ -9885,16 +9889,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     @staticmethod
-    def _describe_top_freq(
-        sdf: PySparkDataFrame, exprs: List[PySparkColumn]
-    ) -> Tuple[List[Any], List[Any]]:
+    def _describe_top_freq(sdf: PySparkDataFrame, names: List[str]) -> Tuple[List[Any], List[Any]]:
         # Negating count makes min(struct(neg_count, value)) pick the highest count,
         # and on ties the lexicographically first value, matching pandas describe().
-        if len(exprs) == 1:
-            top, freq = sdf.groupby(exprs[0]).count().sort("count", ascending=False).first()
+        # Group by column name (resolved against `sdf`) rather than the source
+        # expression, since a cast wrapped in a projection rebinds the attribute id.
+        if len(names) == 1:
+            top, freq = sdf.groupby(names[0]).count().sort("count", ascending=False).first()
             return [str(top)], [str(freq)]
         rows = (
-            sdf.select(F.posexplode(F.array(*exprs)).alias("idx", "str_value"))
+            sdf.select(F.posexplode(F.array(*[F.col(n) for n in names])).alias("idx", "str_value"))
             .groupby("idx", "str_value")
             .agg(F.negative(F.count("*")).alias("neg_count"))
             .groupby("idx")
@@ -9954,15 +9958,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         agg_lookup = {key: agg_row[i] for i, key in enumerate(agg_layout)}
 
         # Job B: top/freq for object and timestamp columns. Cast to string so
-        # posexplode sees a uniform array.
-        top_freq_cols = [
-            internal.spark_column_for(psser._column_label).cast(StringType())
-            for psser in (*psser_timestamp, *psser_object)
-        ]
+        # posexplode sees a uniform array. Alias each cast back to its source name so
+        # we can resolve it by name in `_describe_top_freq` (the cast through a
+        # projection rebinds the underlying attribute id).
         top_freq_names = timestamp_names + object_names
+        top_freq_cols = [
+            internal.spark_column_for(psser._column_label).cast(StringType()).alias(name)
+            for psser, name in zip((*psser_timestamp, *psser_object), top_freq_names)
+        ]
         if top_freq_cols:
             tops, freqs = self._describe_top_freq(
-                internal.spark_frame.select(*top_freq_cols), top_freq_cols
+                internal.spark_frame.select(*top_freq_cols), top_freq_names
             )
             top_lookup = dict(zip(top_freq_names, tops))
             freq_lookup = dict(zip(top_freq_names, freqs))
@@ -10249,9 +10255,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             else:
                 psser_string.append(psser)
 
-        # Default describe() summarizes only numeric/timestamp columns; clear the object
-        # partitions so that promoting bool out of psser_string does not change that.
-        if include is None and exclude is None:
+        # Default describe() (no include/exclude) follows pandas: when any quantitative
+        # column is present, object/bool columns are dropped; otherwise they are kept so
+        # describe() returns count/unique/top/freq for an all-object frame.
+        if (
+            include is None
+            and exclude is None
+            and (len(psser_numeric) > 0 or len(psser_timestamp) > 0)
+        ):
             psser_string = []
             psser_bool = []
 
@@ -10291,11 +10302,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif is_all_object_type:
             # Handling object-type (string and boolean) columns:
             # `count`, `unique`, `top`, `freq`. Bool columns are cast to string so
-            # posexplode can build a uniform array.
+            # posexplode can build a uniform array. Alias each cast back to its source
+            # name so we can resolve it by name downstream.
             internal = self._internal.resolved_copy
             exprs_object = [
-                internal.spark_column_for(psser._column_label).cast(StringType())
-                for psser in psser_object
+                internal.spark_column_for(psser._column_label).cast(StringType()).alias(name)
+                for psser, name in zip(psser_object, column_names)
             ]
             sdf = internal.spark_frame.select(*exprs_object)
 
@@ -10306,11 +10318,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     data[psser.name] = [0, 0, np.nan, np.nan]
                 return DataFrame(data, index=["count", "unique", "top", "freq"])
 
-            tops, freqs = self._describe_top_freq(sdf, exprs_object)
+            tops, freqs = self._describe_top_freq(sdf, column_names)
             stats = [counts, uniques, tops, freqs]
             stats_names = ["count", "unique", "top", "freq"]
 
-            result: DataFrame = DataFrame(
+            result = DataFrame(
                 data=stats,
                 index=stats_names,
                 columns=column_names,
@@ -10414,7 +10426,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             for value in column_name_stats_kv[key]
                         ]
 
-            result: DataFrame = DataFrame(  # type: ignore[no-redef]
+            result = DataFrame(
                 data=column_name_stats_kv,
                 index=stats_names,
                 columns=column_names,
