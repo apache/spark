@@ -57,7 +57,7 @@ class ShuffleNettyKQueueSuite extends ShuffleNettySuite {
 }
 
 class ShuffleNettyIoUringSuite extends ShuffleNettySuite {
-  override def shouldRunTests: Boolean = Utils.isLinux && NettyUtils.isIoUringAvailable
+  override def shouldRunTests: Boolean = Utils.isLinux && NettyUtils.isIoUringUsable
   override def ioMode: IOMode = IOMode.IO_URING
 }
 
