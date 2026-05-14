@@ -25,9 +25,12 @@
 # absorb work for the next minors on major M. Maintenance branches branch-M.N are cut from
 # branch-M.x. Cherry-pick prompts sort by semver via semver_branch_rank (branch-M.x before branch-M.N).
 #
-# Fix Version defaults when resolving JIRA: master contributes the largest unreleased N.0.0.
-# Master + branch-M.x also defaults per listed integration branch to that major's unreleased Spark
-# minor line versions (multiple branch-M.x entries each add one; e.g. 6.0.0 + 5.2.0 + 4.3.0).
+# Fix Version defaults when resolving JIRA: master contributes the largest unreleased N.0.0,
+# unless a branch-M.x integration dev branch is also being merged. branch-M.x -> master is a
+# merge-forward chain, so master's next release inherits anything on branch-M.x and master's
+# N.0.0 is omitted as redundant. Master + branch-M.x also defaults per listed integration
+# branch to that major's unreleased Spark minor line version (e.g. master + branch-5.x +
+# branch-4.x -> 5.2.0 + 4.3.0).
 # This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
@@ -151,27 +154,6 @@ def _sort_version_names_lex_desc(names):
     return sorted(names, reverse=True)
 
 
-def _dedupe_fix_versions_adjacent_major_zero(default_fix_versions):
-    """Preserve order; drop duplicate names, then drop V when V is M.minor.0 and
-    predecessor (minor-1).0.0 exists in the list.
-
-    >>> _dedupe_fix_versions_adjacent_major_zero(["6.0.0", "4.3.0", "4.3.0"])
-    ['6.0.0', '4.3.0']
-    >>> _dedupe_fix_versions_adjacent_major_zero(["2.0.0", "1.1.0", "1.0.0"])
-    ['2.0.0', '1.0.0']
-    >>> _dedupe_fix_versions_adjacent_major_zero(["1.0.0", "2.0.0"])
-    ['1.0.0', '2.0.0']
-    """
-    out = list(dict.fromkeys(default_fix_versions))
-    for v in list(out):
-        major, minor, patch = v.split(".")
-        if patch == "0":
-            previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
-            if previous in out:
-                out = list(filter(lambda x: x != v, out))
-    return out
-
-
 def _append_max_fix_or_warn(defaults, warnings, candidates, warn_if_none):
     """Append _semver_max_version(candidates) when defined; else optionally append warn_if_none."""
     chosen = _semver_max_version(candidates)
@@ -189,22 +171,25 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
 
     Returns (default_version_names, warning_messages).
 
-    Master always suggests the greatest unreleased N.0.0. Each branch-M.x with master also adds the
-    greatest unreleased Spark M.*.* Fix Version for that major (multiple branch-M.x entries each
-    contribute). Patch merges on branch-M.N use unreleased versions starting with M.N.
+    Master suggests the greatest unreleased N.0.0, unless a branch-M.x integration dev branch is
+    also being merged: branch-M.x -> master is a merge-forward chain, so master's next release
+    inherits anything that lands on branch-M.x and master's N.0.0 is omitted as redundant.
+    Each branch-M.x with master also adds the greatest unreleased Spark M.*.* Fix Version for that
+    major (multiple branch-M.x entries each contribute). Patch merges on branch-M.N use unreleased
+    versions starting with M.N.
 
     >>> compute_merge_default_fix_versions(["master"], ["4.3.0", "5.0.0", "6.0.0"])[0]
     ['6.0.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-4.x"], ["6.0.0", "5.0.0", "4.3.0", "4.2.1"])[0]
-    ['6.0.0', '4.3.0']
+    ['4.3.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-5.x"],
     ...     ["7.0.0", "6.0.0", "5.2.0", "5.1.2", "5.1.1", "5.0.1"],
     ... )[0]
-    ['7.0.0', '5.2.0']
+    ['5.2.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-3.5"],
@@ -232,21 +217,34 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-5.x", "branch-4.x"], ["5.2.0", "4.3.0", "6.0.0"]
     ... )[0]
-    ['6.0.0', '5.2.0', '4.3.0']
+    ['5.2.0', '4.3.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-4.x", "branch-4.x"], ["6.0.0", "4.3.0"]
     ... )[0]
-    ['6.0.0', '4.3.0']
+    ['4.3.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.0"]
+    ... )[0]
+    ['4.3.0', '4.2.0']
     """
     names = _sort_version_names_lex_desc(list(unreleased_version_names))
     merged_set = set(merge_branches)
+    has_integration_branch = any(
+        _integration_major_from_branch(b) is not None for b in merge_branches
+    )
 
     defaults = []
     warnings = []
 
     for b in merge_branches:
         if b == "master":
+            # When any branch-M.x dev branch is also being merged, branch-M.x -> master is a
+            # merge-forward chain, so master's N.0.0 entry is redundant and Spark committers
+            # conventionally omit it.
+            if has_integration_branch:
+                continue
             majors = [n for n in names if re.match(r"^\d+\.0\.0$", n)]
             _append_max_fix_or_warn(
                 defaults,
@@ -283,7 +281,8 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
             ),
         )
 
-    return _dedupe_fix_versions_adjacent_major_zero(defaults), warnings
+    # Remove exact duplicates while preserving order (e.g. duplicate branch-M.x entries).
+    return list(dict.fromkeys(defaults)), warnings
 
 
 def print_error(msg):
