@@ -280,6 +280,14 @@ true
 
 
 -- !query
+SELECT time_trunc('HOUR', '12:34:56') FROM t
+-- !query schema
+struct<time_trunc(HOUR, 12:34:56):time(6)>
+-- !query output
+12:00:00
+
+
+-- !query
 SELECT year( '1996-01-10') FROM t
 -- !query schema
 struct<year(1996-01-10):int>

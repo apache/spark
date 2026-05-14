@@ -219,7 +219,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
   test("SPARK-56152: implicit type cast - TimeType") {
     val checkedType = TimeType()
-    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType))
     shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
@@ -532,6 +532,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
     shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
     shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
+    shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
     shouldNotCast(checkedType, IntegralType)
   }
 
@@ -1815,7 +1816,7 @@ object TypeCoercionSuite {
   val fractionalTypes: Seq[DataType] =
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
-  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType, TimeType())
+  val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType)
   val intervalTypes: Seq[DataType] = Seq(CalendarIntervalType,
     DayTimeIntervalType.defaultConcreteType, YearMonthIntervalType.defaultConcreteType)
   val atomicTypes: Seq[DataType] =
