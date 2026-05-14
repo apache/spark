@@ -119,6 +119,43 @@ abstract class DockerJDBCIntegrationSuite
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
+  // Number of retry attempts for transient Docker registry / daemon errors
+  // (e.g. 5xx responses from Docker Hub, which can be flaky in CI).
+  private val dockerOpMaxAttempts =
+    sys.props.getOrElse("spark.test.docker.retryAttempts", "5").toInt
+  private val dockerOpInitialBackoffMs =
+    sys.props.getOrElse("spark.test.docker.retryInitialBackoffMs", "2000").toLong
+
+  /**
+   * Retry a Docker operation that may transiently fail due to registry / daemon
+   * availability issues (HTTP 5xx, network glitches, etc.). Uses exponential backoff.
+   */
+  private def retryOnDockerError[T](description: String)(op: => T): T = {
+    var attempt = 1
+    var backoff = dockerOpInitialBackoffMs
+    var lastError: Throwable = null
+    while (attempt <= dockerOpMaxAttempts) {
+      try {
+        return op
+      } catch {
+        case NonFatal(e) =>
+          lastError = e
+          if (attempt == dockerOpMaxAttempts) {
+            log.error(
+              s"Docker operation '$description' failed after $attempt attempt(s); giving up.", e)
+          } else {
+            log.warn(
+              s"Docker operation '$description' failed on attempt $attempt of " +
+                s"$dockerOpMaxAttempts; retrying in ${backoff}ms.", e)
+            Thread.sleep(backoff)
+            backoff = math.min(backoff * 2, 30000L)
+          }
+      }
+      attempt += 1
+    }
+    throw lastError
+  }
+
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
@@ -140,17 +177,23 @@ abstract class DockerJDBCIntegrationSuite
         // Ensure that the Docker image is installed:
         docker.inspectImageCmd(db.imageName).exec()
       } catch {
-        case e: NotFoundException =>
+        case _: NotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
-          docker.pullImageCmd(db.imageName)
-            .start()
-            .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
+          retryOnDockerError(s"pull image ${db.imageName}") {
+            docker.pullImageCmd(db.imageName)
+              .start()
+              .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
+          }
           pulled = true
       }
 
-      docker.pullImageCmd(db.imageName)
-        .start()
-        .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
+      // Re-pull to ensure we have the latest version of the image. The registry
+      // (e.g. Docker Hub) is occasionally flaky in CI with 5xx responses, so retry.
+      retryOnDockerError(s"pull image ${db.imageName}") {
+        docker.pullImageCmd(db.imageName)
+          .start()
+          .awaitCompletion(connectionTimeout.value.toSeconds, TimeUnit.SECONDS)
+      }
 
       val hostConfig = HostConfig
         .newHostConfig()

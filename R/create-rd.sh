@@ -34,4 +34,31 @@ pushd "$FWDIR" > /dev/null
 . "$FWDIR/find-r.sh"
 
 # Generate Rd files if roxygen2 is installed
-"$R_SCRIPT_PATH/Rscript" -e ' if(requireNamespace("roxygen2", quietly=TRUE)) { setwd("'$FWDIR'"); roxygen2::roxygenize(package.dir="./pkg", roclets=c("rd")) }'
+#
+# Workaround for a roxygen2 bug where `add_s3_metadata` (called transitively
+# from `topics_process_family` -> `find_object` -> `object_from_name`) tries
+# to set `class(val) <- c("s3generic", "function")` on base R primitives such
+# as `dim`, `nrow`, `ncol`, `ifelse`, etc. that SparkR registers S4 methods
+# for. R does not allow setting attributes on builtins, so the call aborts
+# with "cannot set an attribute on a 'builtin'". We override the function to
+# return the primitive unchanged when class<- fails.
+"$R_SCRIPT_PATH/Rscript" -e '
+  if (requireNamespace("roxygen2", quietly = TRUE)) {
+    if (exists("add_s3_metadata", envir = asNamespace("roxygen2"), inherits = FALSE)) {
+      orig_add_s3_metadata <- get("add_s3_metadata", envir = asNamespace("roxygen2"))
+      patched_add_s3_metadata <- function(val, ...) {
+        tryCatch(orig_add_s3_metadata(val, ...),
+                 error = function(e) {
+                   if (grepl("cannot set an attribute on a .builtin.", conditionMessage(e))) {
+                     val
+                   } else {
+                     stop(e)
+                   }
+                 })
+      }
+      assignInNamespace("add_s3_metadata", patched_add_s3_metadata, ns = "roxygen2")
+    }
+    setwd("'$FWDIR'")
+    roxygen2::roxygenize(package.dir = "./pkg", roclets = c("rd"))
+  }
+'
