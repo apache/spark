@@ -73,7 +73,7 @@ Unlike query execution, Spark Classic and Spark Connect differ in when schema an
 
 # Common Gotchas (with Mitigations)
 
-If you are not careful about the difference between lazy vs. eager analysis, there are five key gotchas to be aware of: 1) overwriting temporary view names, 2) capturing external variables in UDFs, 3) delayed error detection, 4) excessive schema access on new DataFrames, and 5) DataFrame column references after a column is shadowed.
+If you are not careful about the difference between lazy vs. eager analysis, there are several key gotchas to be aware of.
 
 ## 1. Reusing temporary view names
 
@@ -438,7 +438,7 @@ df.withColumn("c", sf.col("c").cast("string")).select(df["c"]).collect()
 
 ### Recommended way
 
-If you hit any of the confusing failures mentioned above, it is recommended to switch to `sf.col` first. `sf.col("c")` is an untagged name reference that resolves against the most recent projection or `withColumn`, rather than `df["c"]` which is a tagged reference to `df`'s original column:
+If you hit any of the confusing failures mentioned above, it is recommended to switch to `col` from `pyspark.sql.functions` first. `col("c")` is an untagged name reference that resolves against the most recent projection or `withColumn`, rather than `df["c"]` which is a tagged reference to `df`'s original column:
 
 ```python
 import pyspark.sql.functions as sf
