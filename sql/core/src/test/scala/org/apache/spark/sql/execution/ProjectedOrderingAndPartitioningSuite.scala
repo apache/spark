@@ -507,7 +507,7 @@ class ProjectedOrderingAndPartitioningSuite
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr),
               "bucket function and numBuckets must be preserved after alias substitution")
-            assert(te.children.head.asInstanceOf[Attribute].name === "pk",
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "pk",
               "bucket's column argument must be rewritten to the aliased attribute")
           case other => fail(s"Expected TransformExpression, got $other")
         }
@@ -539,7 +539,7 @@ class ProjectedOrderingAndPartitioningSuite
         kp.expressions.head match {
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr), "bucket must be the surviving expression")
-            assert(te.children.head.asInstanceOf[Attribute].name === "id")
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "id")
           case other => fail(s"Expected TransformExpression, got $other")
         }
         assert(kp.isNarrowed, "dropping years(ts) position must mark the KP as narrowed")
@@ -569,14 +569,14 @@ class ProjectedOrderingAndPartitioningSuite
         kp.expressions(0) match {
           case te: TransformExpression =>
             assert(te.isSameFunction(bucketExpr))
-            assert(te.children.head.asInstanceOf[Attribute].name === "id",
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "id",
               "bucket's argument must remain id (no alias for id in this projection)")
           case other => fail(s"Expected TransformExpression at pos 0, got $other")
         }
         kp.expressions(1) match {
           case te: TransformExpression =>
             assert(te.isSameFunction(yearsExpr))
-            assert(te.children.head.asInstanceOf[Attribute].name === "ts_alias",
+            assert(te.children.collectFirst { case a: Attribute => a }.get.name === "ts_alias",
               "years() argument must be rewritten to ts_alias")
           case other => fail(s"Expected TransformExpression at pos 1, got $other")
         }

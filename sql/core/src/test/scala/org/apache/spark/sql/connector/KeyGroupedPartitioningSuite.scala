@@ -4210,25 +4210,71 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "(5, 10, 'bbb')")
 
     withSQLConf(
-      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
       SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
 
       val df = sql(
-        selectWithMergeJoinHint("trunc_cross1", "trunc_cross2") +
-        "trunc_cross1.id, trunc_cross2.store_id " +
-        "FROM testcat.ns.trunc_cross1 JOIN testcat.ns.trunc_cross2 " +
-        "ON trunc_cross1.data = trunc_cross2.data " +
-        "ORDER BY trunc_cross1.id")
+        s"""
+           |${selectWithMergeJoinHint("trunc_cross1", "trunc_cross2")}
+           |trunc_cross1.id, trunc_cross2.store_id
+           |FROM testcat.ns.trunc_cross1 JOIN testcat.ns.trunc_cross2
+           |ON trunc_cross1.data = trunc_cross2.data
+           |ORDER BY trunc_cross1.id
+           |""".stripMargin)
 
-      // Different functions (truncate vs bucket) should NEVER enable SPJ
+      // Different functions (truncate vs bucket) are not mutually reducible, so a shuffle
+      // must still be planned.
       val shuffles = collectShuffles(df.queryExecution.executedPlan)
       assert(shuffles.nonEmpty,
-        "truncate vs bucket should not trigger SPJ, but no shuffles found")
+        "truncate vs bucket are not compatible - a shuffle should be present, " +
+          "but none was planned")
+      checkAnswer(df, Seq(Row(0, 1), Row(1, 5)))
     }
   }
 
+  test("SPARK-50593: truncate(3) vs truncate(5) triggers SPJ via width reducer") {
+    // Exercises the ReducibleParameters-based reducer path end-to-end: truncate widths 3 and 5
+    // are mutually reducible (reduce the larger to the smaller), so SPJ must avoid the shuffle.
+    val table1 = "trunc_three"
+    val table2 = "trunc_five"
+
+    val partitions1 = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(3)))
+    val partitions2 = Array(
+      Expressions.apply("truncate", Expressions.column("data"), Expressions.literal(5)))
+
+    createTable(table1, columns, partitions1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'apple', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'grape', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'orange', CAST('2020-01-01' AS timestamp))")
+
+    createTable(table2, columns, partitions2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(10, 'apple', CAST('2022-01-01' AS timestamp)), " +
+      "(20, 'grape', CAST('2021-01-01' AS timestamp)), " +
+      "(30, 'orange', CAST('2020-01-01' AS timestamp))")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint(table1, table2)}
+           |$table1.id AS left_id, $table2.id AS right_id
+           |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+           |ON $table1.data = $table2.data
+           |ORDER BY $table1.id
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "truncate(3) vs truncate(5) should avoid shuffle via the width reducer, " +
+          "but a shuffle was planned")
+      checkAnswer(df, Seq(Row(0, 10), Row(1, 20), Row(2, 30)))
+    }
+  }
   test("SPARK-50593: TransformExpression.collectLeaves filters out literals") {
     // bucket(4, col) has children = [Literal(4), col] but collectLeaves should return [col]
     val col = attr("data")
@@ -4254,14 +4300,14 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-50593: existing bucket SPJ still works with ReducibleParameters API") {
-    // This test verifies that the migration from reducer(int, func, int)
-    // to reducer(ReducibleParameters, func, ReducibleParameters) is backward compatible.
-    // BucketFunction now implements the new API but bucket SPJ should still work.
+    // Exercises the new ReducibleParameters-based reducer path end-to-end: bucket(4) and
+    // bucket(2) differ, so SPJ can only avoid the shuffle if BucketFunction's reducer
+    // (now implemented via ReducibleParameters) correctly returns a GCD-based Reducer.
     val table1 = "bucket_compat1"
     val table2 = "bucket_compat2"
 
     val partitions1 = Array(Expressions.bucket(4, "id"))
-    val partitions2 = Array(Expressions.bucket(4, "store_id"))
+    val partitions2 = Array(Expressions.bucket(2, "store_id"))
 
     createTable(table1, columns, partitions1)
     sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
@@ -4278,34 +4324,40 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "(3, 20, 'ddd')")
 
     withSQLConf(
-      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true") {
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
-        selectWithMergeJoinHint(table1, table2) +
-        s"$table1.id, $table2.store_id " +
-        s"FROM testcat.ns.$table1 JOIN testcat.ns.$table2 " +
-        s"ON $table1.id = $table2.store_id " +
-        s"ORDER BY $table1.id")
+        s"""
+           |${selectWithMergeJoinHint(table1, table2)}
+           |$table1.id, $table2.store_id
+           |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+           |ON $table1.id = $table2.store_id
+           |ORDER BY $table1.id
+           |""".stripMargin)
 
       val shuffles = collectShuffles(df.queryExecution.executedPlan)
       assert(shuffles.isEmpty,
-        "Bucket SPJ should still work after ReducibleParameters migration")
+        "bucket(4) vs bucket(2) should avoid shuffle via the GCD reducer, " +
+          "but a shuffle was planned")
       checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
     }
   }
 
   test("SPARK-50593: ReducibleParameters backward compat - old int API still works via default") {
-    // The new reducer(ReducibleParameters, func, ReducibleParameters) default implementation
-    // delegates to the old reducer(int, func, int) for single-int params.
-    // This verifies bucket(4) vs bucket(2) still produces a reducer via the fallback path.
-    val bucketExpr4 = TransformExpression(BucketFunction, Seq(Literal(4), attr("id")))
-    val bucketExpr2 = TransformExpression(BucketFunction, Seq(Literal(2), attr("id")))
+    // Verifies the default reducer(ReducibleParameters, ...) implementation correctly
+    // delegates to the deprecated reducer(int, func, int) when a ReducibleFunction only
+    // overrides the old API. This mirrors how Iceberg 1.10.0 (and earlier) ship without
+    // knowledge of ReducibleParameters.
+    val bucketExpr4 = TransformExpression(LegacyBucketFunction, Seq(Literal(4), attr("id")))
+    val bucketExpr2 = TransformExpression(LegacyBucketFunction, Seq(Literal(2), attr("id")))
 
-    // isCompatible should return true (4 and 2 share GCD > 1)
-    assert(bucketExpr4.isCompatible(bucketExpr2),
-      "bucket(4) and bucket(2) should be compatible via reducer")
-
-    // reducers() should return a Reducer
     val reducer = bucketExpr4.reducers(bucketExpr2)
-    assert(reducer.isDefined, "Expected a reducer for bucket(4) on bucket(2)")
+    assert(reducer.isDefined, "Expected a reducer for legacy_bucket(4) on legacy_bucket(2)")
+
+    // Verify the returned Reducer actually reduces bucket 4 -> bucket 2 (GCD = 2).
+    // bucket(4, x) produces values in [0, 4); reducing by GCD=2 gives v % 2.
+    val r = reducer.get.asInstanceOf[Reducer[Integer, Integer]]
+    assert(r.reduce(3) == 1, s"Expected reduce(3) == 1, got ${r.reduce(3)}")
+    assert(r.reduce(2) == 0, s"Expected reduce(2) == 0, got ${r.reduce(2)}")
   }
 }

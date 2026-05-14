@@ -238,6 +238,37 @@ case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
   override def displayName(): String = toString
 }
 
+/**
+ * A bucket function that only overrides the deprecated `reducer(int, func, int)` method,
+ * not the new `reducer(ReducibleParameters, func, ReducibleParameters)` method.
+ *
+ * Used to verify that the default implementation of the new method correctly falls back
+ * to the deprecated int-based API, so legacy implementations continue to work.
+ */
+object LegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "legacy_bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    if (otherFunc == LegacyBucketFunction) {
+      val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+      if (gcd > 1 && gcd != thisNumBuckets) {
+        return BucketReducer(gcd)
+      }
+    }
+    null
+  }
+}
+
 object UnboundStringSelfFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = StringSelfFunction
   override def description(): String = name()
