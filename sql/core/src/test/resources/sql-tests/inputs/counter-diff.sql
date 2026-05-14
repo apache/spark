@@ -228,7 +228,7 @@ ORDER BY m, t;
 -- start_time parameter
 ------------------------------------------------------------
 
--- start_time advance triggers a reset even with the counter increased.
+-- start_time advance triggers a reset even when the counter increases.
 SELECT t, c,
   counter_diff(c, st) OVER (ORDER BY t) AS diff
 FROM VALUES
@@ -247,12 +247,13 @@ FROM VALUES
 AS tab(t, st, c)
 ORDER BY t;
 
--- NULL start_time skips the start time reset check on that row.
+-- NULL start_time skips the start time reset check on that row and the next row.
 SELECT t, c,
   counter_diff(c, st) OVER (ORDER BY t) AS diff
 FROM VALUES
   (1, TIMESTAMP '2026-01-01 00:00:00', 100),
-  (2, CAST(NULL AS TIMESTAMP), 200)
+  (2, CAST(NULL AS TIMESTAMP),         200),
+  (3, TIMESTAMP '2026-01-01 00:01:00', 300)
 AS tab(t, st, c)
 ORDER BY t;
 

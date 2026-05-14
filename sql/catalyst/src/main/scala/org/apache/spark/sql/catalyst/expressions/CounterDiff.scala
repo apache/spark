@@ -314,11 +314,13 @@ case class CounterDiffWithStartTime(
     in ascending order.
 
     The following special cases are handled:
-    1. If the counter value is NULL, NULL is returned for that row, and the row's counter is
-       excluded from the baseline used by subsequent rows.
+    1. If the counter value is NULL, NULL is returned for that row, and the row is excluded from
+       difference calculations and comparisons for subsequent rows.
     2. If the value is negative, or the start time decreases, an error is raised.
     3. In the case of a counter reset, NULL is returned.
     4. NULL is returned for the first row.
+    5. If either the current or the previous start time is NULL, the start time reset check is
+       skipped.
 
     Counter resets are detected when:
     1. The current counter value is less than the previous counter value.
