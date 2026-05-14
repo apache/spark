@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Objects
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, SinglePartition}
-import org.apache.spark.sql.catalyst.util.{truncatedString, InternalRowComparableWrapper}
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.util.ArrayImplicits._
@@ -60,64 +59,14 @@ case class BatchScanExec(
     batch.planInputPartitions().toImmutableArraySeq
 
   // Visible for testing
-  @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] = {
-    val originalPartitioning = outputPartitioning
-
-    val filtered = PushDownUtils.pushRuntimeFilters(scan, runtimeFilters, table, output)
-    if (filtered) {
-      // call toBatch again to get filtered partitions
-      val newPartitions = scan.toBatch.planInputPartitions()
-
-      originalPartitioning match {
-        case k: KeyedPartitioning =>
-          if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
-            throw new SparkException("Data source must have preserved the original partitioning " +
-                "during runtime filtering: not all partitions implement HasPartitionKey after " +
-                "filtering")
-          }
-
-          val inputMap = k.partitionKeys.groupBy(identity).view.mapValues(_.size)
-          val comparableKeyWrapperFactory = InternalRowComparableWrapper
-            .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
-          val filteredMap = newPartitions.groupBy(
-            p => comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
-          )
-
-          if (!filteredMap.keySet.subsetOf(inputMap.keySet)) {
-            throw new SparkException("During runtime filtering, data source must not report new " +
-                "partition keys that are not present in the original partitioning.")
-          }
-
-          inputMap.toSeq
-            .sortBy(_._1)(k.keyOrdering)
-            .flatMap { case (key, size) =>
-              // We require the new number of partitions to be equal or less than the old number of
-              // partitions for a given key. In the case of less than, empty partitions are added.
-              val fps = filteredMap.getOrElse(key, Array.empty)
-
-              if (fps.size > size) {
-                throw new SparkException("During runtime filtering, data source must not report " +
-                  s"new partitions for a given key. Before: $size partitions. " +
-                  s"After: ${fps.size} partitions")
-              }
-
-              fps.map(Some).padTo(size, None)
-            }
-
-        case _ =>
-          // no validation is needed as the data source did not report any specific partitioning
-          newPartitions.toSeq.map(Some)
-      }
-
-    } else {
-      (originalPartitioning match {
-        case k: KeyedPartitioning =>
-          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyRowOrdering)
-
-        case _ => inputPartitions
-      }).map(Some)
-    }
-  }
+  @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
+    PushDownUtils.filterAndPlanPartitions(
+      scan,
+      runtimeFilters,
+      PushDownUtils.getPartitionPredicateSchema(table, output),
+      output,
+      outputPartitioning,
+      inputPartitions)
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
