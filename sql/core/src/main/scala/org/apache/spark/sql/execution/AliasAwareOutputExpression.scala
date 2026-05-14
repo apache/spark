@@ -101,7 +101,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // that have been aligned by [[EnsureRequirements]] to the same join keys). If the invariant
     // is ever violated upstream, fail early with a clear message instead of throwing an opaque
     // `IndexOutOfBoundsException` from `kp.expressions(i)` below.
-    assert(kps.forall(_.expressions.length == numPositions),
+    assert(kps.tail.forall(_.expressions.length == numPositions),
       s"All input KeyedPartitionings must share the same expression arity, " +
         s"but got: ${kps.map(_.expressions.length).mkString(", ")}.")
 
