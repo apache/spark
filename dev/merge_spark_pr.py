@@ -25,12 +25,14 @@
 # absorb work for the next minors on major M. Maintenance branches branch-M.N are cut from
 # branch-M.x. Cherry-pick prompts sort by semver via semver_branch_rank (branch-M.x before branch-M.N).
 #
-# Fix Version defaults when resolving JIRA: master contributes the largest unreleased N.0.0,
-# unless a branch-M.x integration dev branch is also being merged. branch-M.x -> master is a
-# merge-forward chain, so master's next release inherits anything on branch-M.x and master's
-# N.0.0 is omitted as redundant. Master + branch-M.x also defaults per listed integration
-# branch to that major's unreleased Spark minor line version (e.g. master + branch-5.x +
-# branch-4.x -> 5.2.0 + 4.3.0).
+# Fix Version defaults when resolving JIRA aim for the minimal set of versions that tells users
+# which Spark releases will contain the commit, leveraging the Upstream-First backporting policy
+# (cherry-picks flow master -> branch-M.x -> branch-M.N). master contributes the greatest
+# unreleased N.0.0, but is omitted when any branch-M.x is in the merge set (a cherry-pick to
+# branch-M.x has already landed on master). Each branch-M.x contributes that major's greatest
+# unreleased minor.0, but is omitted when a sibling branch-M.N contributes M.N.0 (M.N.0 still
+# unreleased means branch-M.N is still a subset of branch-M.x). Patch merges on branch-M.N use
+# unreleased versions starting with M.N.
 # This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
@@ -154,15 +156,6 @@ def _sort_version_names_lex_desc(names):
     return sorted(names, reverse=True)
 
 
-def _append_max_fix_or_warn(defaults, warnings, candidates, warn_if_none):
-    """Append _semver_max_version(candidates) when defined; else optionally append warn_if_none."""
-    chosen = _semver_max_version(candidates)
-    if chosen:
-        defaults.append(chosen)
-    elif warn_if_none is not None:
-        warnings.append(warn_if_none)
-
-
 def compute_merge_default_fix_versions(merge_branches, unreleased_version_names):
     """
     Build suggested SPARK Fix Version names from merged git refs (no JIRA I/O).
@@ -171,12 +164,16 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
 
     Returns (default_version_names, warning_messages).
 
-    Master suggests the greatest unreleased N.0.0, unless a branch-M.x integration dev branch is
-    also being merged: branch-M.x -> master is a merge-forward chain, so master's next release
-    inherits anything that lands on branch-M.x and master's N.0.0 is omitted as redundant.
-    Each branch-M.x with master also adds the greatest unreleased Spark M.*.* Fix Version for that
-    major (multiple branch-M.x entries each contribute). Patch merges on branch-M.N use unreleased
-    versions starting with M.N.
+    The output is the minimal set of Fix Versions that tells users which Spark releases will
+    contain the commit, leveraging the Upstream-First backporting policy (cherry-picks flow
+    master -> branch-M.x -> branch-M.N):
+      - master contributes the greatest unreleased N.0.0;
+      - branch-M.x with master contributes that major's greatest unreleased minor.0;
+      - branch-M.N contributes its greatest unreleased M.N.patch.
+    Redundant entries are then suppressed: master's N.0.0 is dropped when any branch-M.x is in
+    the merge set (a cherry-pick to branch-M.x has already landed on master); branch-M.x's
+    minor.0 is dropped when a branch-M.N for the same major contributes M.N.0 (M.N.0 still
+    unreleased means branch-M.N is still a subset of branch-M.x).
 
     >>> compute_merge_default_fix_versions(["master"], ["4.3.0", "5.0.0", "6.0.0"])[0]
     ['6.0.0']
@@ -227,62 +224,93 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.0"]
     ... )[0]
-    ['4.3.0', '4.2.0']
+    ['4.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.1"]
+    ... )[0]
+    ['4.3.0', '4.2.1']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.2"], ["5.0.0", "4.2.0"]
+    ... )[0]
+    ['5.0.0', '4.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.2"], ["5.0.0", "4.2.1"]
+    ... )[0]
+    ['5.0.0', '4.2.1']
     """
     names = _sort_version_names_lex_desc(list(unreleased_version_names))
-    merged_set = set(merge_branches)
     has_integration_branch = any(
         _integration_major_from_branch(b) is not None for b in merge_branches
     )
 
-    defaults = []
+    # Collect each merge branch's candidate Fix Version. We track (branch, version) so we can
+    # later suppress redundant entries (master, branch-M.x) based on which branches contributed.
+    contributions = []
     warnings = []
 
     for b in merge_branches:
         if b == "master":
-            # When any branch-M.x dev branch is also being merged, branch-M.x -> master is a
-            # merge-forward chain, so master's N.0.0 entry is redundant and Spark committers
-            # conventionally omit it.
-            if has_integration_branch:
-                continue
             majors = [n for n in names if re.match(r"^\d+\.0\.0$", n)]
-            _append_max_fix_or_warn(
-                defaults,
-                warnings,
-                majors,
-                "No unreleased N.0.0 Fix Version found in JIRA for master; "
-                "enter comma-separated Fix Version(s) manually when prompted.",
-            )
+            chosen = _semver_max_version(majors)
+            if chosen:
+                contributions.append((b, chosen))
+            else:
+                warnings.append(
+                    "No unreleased N.0.0 Fix Version found in JIRA for master; "
+                    "enter comma-separated Fix Version(s) manually when prompted."
+                )
             continue
         line_major = _integration_major_from_branch(b)
         if line_major is not None:
-            if "master" in merged_set:
-                line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
-                _append_max_fix_or_warn(
-                    defaults,
-                    warnings,
-                    line_versions,
-                    (
-                        "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
-                        "for branch-%s.x + master merge; enter version(s) manually when prompted."
-                        % (line_major, line_major)
-                    ),
+            if "master" not in merge_branches:
+                continue
+            line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
+            chosen = _semver_max_version(line_versions)
+            if chosen:
+                contributions.append((b, chosen))
+            else:
+                warnings.append(
+                    "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
+                    "for branch-%s.x + master merge; enter version(s) manually when prompted."
+                    % (line_major, line_major)
                 )
             continue
         prefix = b.replace("branch-", "")
         found_versions = [n for n in names if n.startswith(prefix)]
-        _append_max_fix_or_warn(
-            defaults,
-            warnings,
-            found_versions,
-            (
+        chosen = _semver_max_version(found_versions)
+        if chosen:
+            contributions.append((b, chosen))
+        else:
+            warnings.append(
                 "Target version for %s is not found on JIRA, it may be archived or "
                 "not created. Skipping it." % b
-            ),
-        )
+            )
 
-    # Remove exact duplicates while preserving order (e.g. duplicate branch-M.x entries).
-    return list(dict.fromkeys(defaults)), warnings
+    # Majors where a release branch's M.N.0 contribution makes the sibling branch-M.x's
+    # minor.0 redundant: an unreleased M.N.0 means branch-M.N has not diverged from branch-M.x
+    # yet, so anything that's on branch-M.N is also on branch-M.x.
+    suppress_integration_majors = set()
+    for b, v in contributions:
+        if b == "master" or _integration_major_from_branch(b) is not None:
+            continue
+        m = re.match(r"^(\d+)\.\d+\.0$", v)
+        if m:
+            suppress_integration_majors.add(int(m.group(1)))
+
+    def keep(item):
+        b, _ = item
+        if b == "master":
+            return not has_integration_branch
+        major = _integration_major_from_branch(b)
+        if major is not None:
+            return major not in suppress_integration_majors
+        return True
+
+    filtered = [item for item in contributions if keep(item)]
+    return list(dict.fromkeys(v for _, v in filtered)), warnings
 
 
 def print_error(msg):
