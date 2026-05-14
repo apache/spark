@@ -189,6 +189,10 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
       run: |
+        # Raise RLIMIT_MEMLOCK so the Netty io_uring transport (used by AUTO
+        # on Linux 5.10+) can allocate its submission/completion queue rings.
+        # Without this, NettyTransportBenchmark silently falls back to EPOLL.
+        sudo prlimit --pid $$ --memlock=unlimited:unlimited 2>/dev/null || true
         ./build/sbt -Pscala-${{ inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
