@@ -191,22 +191,16 @@
     ],
     "sqlState" : "0A000"
   },
-  "AUTOCDC_INVALID_COLUMN_SELECTION" : {
+  "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
-      "Invalid column selection."
+      "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>. Matching was <matching>."
     ],
-    "subClass" : {
-      "COLUMNS_NOT_FOUND" : {
-        "message" : [
-          "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>."
-        ]
-      },
-      "MULTIPART_COLUMN_IDENTIFIER" : {
-        "message" : [
-          "Column selection entries must be a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
-        ]
-      }
-    },
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+    ],
     "sqlState" : "42703"
   },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {

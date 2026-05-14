@@ -17,25 +17,40 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types.StructType
 
 /**
- * A column reference that must be a single, unqualified identifier (no nested field path and
- * no table/alias qualifier). The constructor parses [[name]] with the Spark SQL parser and
- * throws an [[AnalysisException]] if it does not resolve to exactly one name part.
+ * A single, unqualified column identifier (no nested path or table/alias qualifier). Backticks
+ * are consumed: "`a.b`" is stored as "a.b" in [[name]]. Use [[name]] for direct schema-fieldName
+ * comparison and [[quoted]] for APIs that re-parse identifier strings.
+ *
+ * Declared `final class` so the smart constructor is the only path to construction (no synthesized
+ * `copy` can bypass it).
  */
-case class UnqualifiedColumnName(name: String) {
-  UnqualifiedColumnName.validate(name)
+final class UnqualifiedColumnName private (val name: String) extends Serializable {
+
+  def quoted: String = QuotingUtils.quoteIdentifier(name)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: UnqualifiedColumnName => name == that.name
+    case _ => false
+  }
+
+  override def hashCode(): Int = name.hashCode
 }
 
 object UnqualifiedColumnName {
-  private def validate(columnName: String): Unit = {
-    val nameParts = CatalystSqlParser.parseMultipartIdentifier(columnName)
+  def apply(input: String): UnqualifiedColumnName = {
+    val nameParts = CatalystSqlParser.parseMultipartIdentifier(input)
     if (nameParts.length != 1) {
-      throw multipartColumnIdentifierError(columnName, nameParts)
+      throw multipartColumnIdentifierError(input, nameParts)
     }
+    new UnqualifiedColumnName(nameParts.head)
   }
 
   private def multipartColumnIdentifierError(
@@ -43,7 +58,7 @@ object UnqualifiedColumnName {
       nameParts: Seq[String]
   ): AnalysisException =
     new AnalysisException(
-      errorClass = "AUTOCDC_INVALID_COLUMN_SELECTION.MULTIPART_COLUMN_IDENTIFIER",
+      errorClass = "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER",
       messageParameters = Map(
         "columnName" -> columnName,
         "nameParts" -> nameParts.mkString(", ")
@@ -53,42 +68,82 @@ object UnqualifiedColumnName {
 
 sealed trait ColumnSelection
 object ColumnSelection {
-  type ColumnList = Seq[UnqualifiedColumnName]
 
-  case class IncludeColumns(columns: ColumnList) extends ColumnSelection
-  case class ExcludeColumns(columns: ColumnList) extends ColumnSelection
+  case class IncludeColumns(columns: Seq[UnqualifiedColumnName]) extends ColumnSelection
+  case class ExcludeColumns(columns: Seq[UnqualifiedColumnName])
+      extends ColumnSelection
 
   /**
-   * Applies [[ColumnSelection]] to a [[StructType]] and returns the filtered schema.
-   * Field names are matched exactly. Field order follows the original schema (filtered in place).
+   * Applies [[ColumnSelection]] to a [[StructType]] and returns the filtered schema. Field
+   * order follows the original schema; filtering happens in place.
    */
-  def applyToSchema(schema: StructType, columnSelection: Option[ColumnSelection]): StructType =
-    columnSelection match {
-      case None =>
-        // A none column selection is interpreted as a no-op.
-        schema
-      case Some(IncludeColumns(includeColumns)) =>
-        validateColumnsExistInSchema(includeColumns, schema)
+  def applyToSchema(
+      schema: StructType,
+      columnSelection: Option[ColumnSelection],
+      ignoreCase: Boolean): StructType = columnSelection match {
+    case None =>
+      // A none column selection is interpreted as a no-op.
+      schema
+    case Some(IncludeColumns(cols)) =>
+      val includeColumnNames = cols.map(_.name)
+      validateColumnsExistInSchema(includeColumnNames, schema, ignoreCase)
 
-        val includeColumnSet = includeColumns.map(_.name).toSet
-        StructType(schema.fields.filter(f => includeColumnSet.contains(f.name)))
-      case Some(ExcludeColumns(excludeColumns)) =>
-        validateColumnsExistInSchema(excludeColumns, schema)
+      val caseNormalizedIncludeColumnNames =
+        includeColumnNames.map(normalizeCase(_, ignoreCase)).toSet
 
-        val excludeColumnSet = excludeColumns.map(_.name).toSet
-        StructType(schema.fields.filterNot(f => excludeColumnSet.contains(f.name)))
-    }
+      StructType(
+        schema.fields.filter(schemaField =>
+          caseNormalizedIncludeColumnNames.contains(normalizeCase(schemaField.name, ignoreCase))
+        )
+      )
+    case Some(ExcludeColumns(cols)) =>
+      val excludeColumnNames = cols.map(_.name)
+      validateColumnsExistInSchema(excludeColumnNames, schema, ignoreCase)
 
-  private def validateColumnsExistInSchema(columns: ColumnList, schema: StructType): Unit = {
-    val schemaColumns = schema.fieldNames.toSet
-    val missingColumns = columns.map(_.name).filterNot(schemaColumns.contains).distinct
-    if (missingColumns.nonEmpty) {
+      val caseNormalizedExcludeColumnNames =
+        excludeColumnNames.map(normalizeCase(_, ignoreCase)).toSet
+
+      StructType(
+        schema.fields.filterNot(schemaField =>
+          caseNormalizedExcludeColumnNames.contains(normalizeCase(schemaField.name, ignoreCase))
+        )
+      )
+  }
+
+  private def validateColumnsExistInSchema(
+      columnNames: Seq[String],
+      schema: StructType,
+      ignoreCase: Boolean): Unit = {
+    val caseNormalizedSchemaColumns =
+      schema.fieldNames.map(normalizeCase(_, ignoreCase)).toSet
+
+    // Compare folded forms but report the missing and available columns using their original
+    // casing so error messages reflect what the user actually wrote and what the schema holds.
+    val columnsMissingInSchema = columnNames
+      .filterNot(columnName =>
+        caseNormalizedSchemaColumns.contains(normalizeCase(columnName, ignoreCase))
+      )
+      .distinct
+
+    if (columnsMissingInSchema.nonEmpty) {
       throw new AnalysisException(
-        errorClass = "AUTOCDC_INVALID_COLUMN_SELECTION.COLUMNS_NOT_FOUND",
+        errorClass = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
         messageParameters = Map(
-          "missingColumns" -> missingColumns.mkString(", "),
-          "availableColumns" -> schema.fieldNames.mkString(", ")
+          "missingColumns" -> columnsMissingInSchema.mkString(", "),
+          "availableColumns" -> schema.fieldNames.mkString(", "),
+          "matching" -> (if (ignoreCase) "case-insensitive" else "case-sensitive")
         ))
+    }
+  }
+
+  /**
+   * If ignoreCase, normalize all strings to lowercase for stable comparison.
+   */
+  private def normalizeCase(name: String, ignoreCase: Boolean): String = {
+    if (ignoreCase) {
+      name.toLowerCase(Locale.ROOT)
+    } else {
+      name
     }
   }
 }
@@ -116,7 +171,7 @@ object ScdType {
  *                        all columns.
  */
 case class ChangeArgs(
-    keys: Seq[String],
+    keys: Seq[UnqualifiedColumnName],
     sequencing: Column,
     storedAsScdType: ScdType,
     deleteCondition: Option[Column] = None,
