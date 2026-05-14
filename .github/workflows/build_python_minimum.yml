@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Minimum dependencies of PySpark)"
+name: "Build / Python-only (master, Minimum dependencies of PySpark and Pandas API on Spark)"
 
 on:
   schedule:
@@ -42,5 +42,6 @@ jobs:
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }
