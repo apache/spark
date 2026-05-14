@@ -154,7 +154,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("NullIf accepts unresolved nested fields during inlined function construction") {
+  test("SPARK-56840: NullIf accepts unresolved nested fields during inlined function construction") {
     withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
       val nullIf = FunctionRegistry.builtin.lookupFunction(
         FunctionIdentifier("nullif"),
