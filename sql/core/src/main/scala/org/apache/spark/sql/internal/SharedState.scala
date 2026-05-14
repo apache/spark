@@ -192,8 +192,20 @@ private[sql] class SharedState(
   /**
    * A classloader used to load all user-added jar.
    */
-  val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+  val jarClassLoader = {
+    val loader = new NonClosableMutableURLClassLoader(
+      org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+    // SPARK-56764: Add spark.jars to jarClassLoader so persistent UDF classes
+    // are loadable after restart without relying on parent classloader delegation
+    sparkContext.jars.foreach { jarUri =>
+      try {
+        loader.addURL(new java.net.URI(jarUri).toURL)
+      } catch {
+        case _: Exception => // skip jars with invalid URLs
+      }
+    }
+    loader
+  }
 
 }
 

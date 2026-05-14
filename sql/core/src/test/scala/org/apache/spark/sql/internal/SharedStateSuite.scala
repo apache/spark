@@ -22,9 +22,11 @@ import java.net.URL
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 /**
  * Tests for [[org.apache.spark.sql.internal.SharedState]].
@@ -67,5 +69,32 @@ class SharedStateSuite extends SharedSparkSession {
 
     SQLConf.get.setConfString("spark.sql.catalog.spark_catalog.defaultDatabase",
       SessionCatalog.DEFAULT_DATABASE)
+  }
+
+  test("SPARK-56764: jarClassLoader should contain spark.jars") {
+    val tempJar = Utils.createTempDir().toPath.resolve("fake.jar")
+    java.nio.file.Files.createFile(tempJar)
+    val jarPath = tempJar.toUri.toString
+
+    // Stop the existing session so we can create a new SparkContext with spark.jars
+    spark.stop()
+
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("SPARK-56764-test")
+      .set("spark.jars", jarPath)
+      .set("spark.ui.enabled", "false")
+
+    val sc = new SparkContext(conf)
+    try {
+      val session = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val urls = session.sharedState.jarClassLoader.getURLs.map(_.toString)
+      assert(urls.exists(_.contains("fake.jar")),
+        s"jarClassLoader should contain spark.jars, but URLs were: ${urls.mkString(", ")}")
+    } finally {
+      sc.stop()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
   }
 }
