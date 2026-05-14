@@ -1453,7 +1453,7 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
-  test("stored view path is ignored when PATH is disabled at read time") {
+  test("SPARK-56853: stored view path is ignored when PATH is disabled at read time") {
     // A view created with PATH enabled persists two things in metadata: the frozen
     // resolution path AND the creator session's current catalog+namespace at CREATE
     // VIEW time (the view's `viewCatalogAndNamespace` property). If the reader's
@@ -1513,7 +1513,7 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
-  test("stored view path with no fallback target fails clearly when PATH is off") {
+  test("SPARK-56853: stored view path with no fallback target fails clearly when PATH is off") {
     // Same shape as the previous test, but the captured `viewCatalogAndNamespace`
     // (the creator's USE state at CREATE VIEW time -- set here via
     // `USE spark_catalog.compat_home_only`) does NOT contain the unqualified name.

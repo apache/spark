@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**
  * Tests for SET PATH command and session path management.
@@ -929,6 +930,49 @@ class SetPathSuite extends SharedSparkSession {
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS my_helper")
+      }
+    }
+  }
+
+  test("path-driven COUNT(*) rewrite gate: single-pass resolver suppresses the rewrite " +
+      "under SET PATH (session-first)") {
+    // The single-pass resolver mirrors the fixed-point gate via
+    // `FunctionResolverUtils.isUnqualifiedCountShadowedByTemp`, which is wired into
+    // `isNonDistinctCount` and consulted by `handleStarInArguments`.
+    //
+    // Setup (`CREATE TEMPORARY FUNCTION`, `SET PATH`) and execution (Dataset collect via
+    // checkAnswer, which inserts a `DeserializeToObject` node the single-pass analyzer
+    // does not yet support) are run under the fixed-point analyzer; only the actual
+    // count(*) analysis is run under the single-pass analyzer, and we assert against the
+    // analyzed plan's output schema. The builtin count returns BIGINT (rewrite applied);
+    // the temp count(INT) returns INT (rewrite suppressed and the star expansion routes
+    // through the temp), so the schema's first-field dataType tells us which branch fired.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
+      try {
+        val countStarSql = "SELECT count(*) FROM VALUES (1) AS t(a)"
+
+        // PATH builtin-first: the single-pass gate reports
+        // `isUnqualifiedCountShadowedByTemp = false`, the shortcut fires, and the analyzed
+        // output is the BIGINT builtin count.
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+          val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
+          assert(tpe == LongType,
+            s"Expected BIGINT (builtin count rewrite); got: $tpe")
+        }
+
+        sql("SET PATH = system.session, system.builtin")
+
+        // PATH session-first: the gate reports true, the rewrite is suppressed, the star
+        // expands against `a`, and the temp count(INT) wins; analyzed output is INT.
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+          val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
+          assert(tpe == IntegerType,
+            s"Expected INT (temp count; rewrite suppressed); got: $tpe")
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
       }
     }
   }

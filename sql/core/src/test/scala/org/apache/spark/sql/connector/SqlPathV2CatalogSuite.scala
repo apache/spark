@@ -20,10 +20,12 @@ package org.apache.spark.sql.connector
 import java.util.Collections
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, SupportsNamespaces}
-import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 
 /**
  * End-to-end coverage of [[SQLConf.PATH_ENABLED]] resolution through non-session V2 catalogs.
@@ -119,19 +121,20 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
 
   test("V2 catalogs on SET PATH: unqualified function follows first match") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
-      // Two V2 catalogs each register a `strlen` function; resolution must follow path order.
+      // Two V2 catalogs each register a `strlen` function under the same name but with
+      // distinguishable return values: pathcat returns the true length, pathcat2 returns
+      // the length times 100. The result distinguishes which catalog supplied the
+      // function for the same argument, so swapping the path order must change the row.
       createV2Namespace("pathcat", "fns")
       createV2Namespace("pathcat2", "fns")
       addV2Function("pathcat", "fns", "strlen", StrLen(StrLenDefault))
-      addV2Function("pathcat2", "fns", "strlen", StrLen(StrLenMagic))
+      addV2Function("pathcat2", "fns", "strlen", StrLen(StrLenTimes100))
       try {
         sql("SET PATH = pathcat.fns, pathcat2.fns, system.builtin")
-        // Both backing impls return the same numeric length, so a correct result here
-        // also implies neither catalog raised "not found" -- the path drove resolution.
         checkAnswer(sql("SELECT strlen('abc')"), Row(3))
 
         sql("SET PATH = pathcat2.fns, pathcat.fns, system.builtin")
-        checkAnswer(sql("SELECT strlen('hello')"), Row(5))
+        checkAnswer(sql("SELECT strlen('abc')"), Row(300))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         v2Catalog("pathcat").clearFunctions()
@@ -139,4 +142,16 @@ class SqlPathV2CatalogSuite extends SharedSparkSession {
       }
     }
   }
+}
+
+/**
+ * A small distinguishable companion to `StrLenDefault` (in `DataSourceV2FunctionSuite.scala`):
+ * returns `s.length * 100` so V2-function resolution tests across catalogs can verify which
+ * catalog supplied the function from the result row alone.
+ */
+case object StrLenTimes100 extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_times_100"
+  override def produceResult(input: InternalRow): Int = input.getString(0).length * 100
 }
