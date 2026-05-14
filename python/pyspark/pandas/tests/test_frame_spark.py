@@ -142,9 +142,7 @@ class SparkFrameMethodsTestsMixin:
         self.assert_eq(psdf, new_psdf)
 
 
-class SparkFrameMethodsTests(
-    SparkFrameMethodsTestsMixin, PandasOnSparkTestCase, TestUtils
-):
+class SparkFrameMethodsTests(SparkFrameMethodsTestsMixin, PandasOnSparkTestCase, TestUtils):
     pass
 
 

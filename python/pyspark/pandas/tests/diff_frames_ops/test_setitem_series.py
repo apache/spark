@@ -162,9 +162,7 @@ class DiffFramesSetItemSeriesMixin:
             psser1.iloc[[1, 2]] = -psser_another
 
 
-class DiffFramesSetItemSeriesTests(
-    DiffFramesSetItemSeriesMixin, PandasOnSparkTestCase
-):
+class DiffFramesSetItemSeriesTests(DiffFramesSetItemSeriesMixin, PandasOnSparkTestCase):
     pass
 
 

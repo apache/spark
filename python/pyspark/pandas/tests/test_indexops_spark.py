@@ -62,9 +62,7 @@ class SparkIndexOpsMethodsTestsMixin:
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
 
-class SparkIndexOpsMethodsTests(
-    SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase
-):
+class SparkIndexOpsMethodsTests(SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase):
     pass
 
 
