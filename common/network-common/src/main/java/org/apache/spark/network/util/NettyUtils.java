@@ -64,6 +64,11 @@ public class NettyUtils {
     return PlatformDependent.maxDirectMemory() - PlatformDependent.usedDirectMemory();
   }
 
+  /** Returns true if the io_uring native transport is available on the running JVM. */
+  public static boolean isIoUringAvailable() {
+    return IoUring.isAvailable();
+  }
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
