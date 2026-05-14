@@ -57,7 +57,7 @@ object MimaExcludes {
     // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-56700][SS] Make DataStreamReader.name public
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
     // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin")
   )
