@@ -20,7 +20,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class PivotTableMixin:
@@ -75,7 +74,6 @@ class PivotTableMixin:
 class PivotTableTests(
     PivotTableMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
