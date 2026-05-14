@@ -2484,15 +2484,20 @@ abstract class CSVSuite
   // scalastyle:on nonascii
 
   test("lineSep restrictions") {
-    val errMsg1 = intercept[IllegalArgumentException] {
-      spark.read.option("lineSep", "").csv(testFile(carsFile)).collect()
-    }.getMessage
-    assert(errMsg1.contains("'lineSep' cannot be an empty string"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.option("lineSep", "").csv(testFile(carsFile)).collect()
+      },
+      condition = "INVALID_LINE_SEPARATOR.EMPTY"
+    )
 
-    val errMsg2 = intercept[IllegalArgumentException] {
-      spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect()
-    }.getMessage
-    assert(errMsg2.contains("'lineSep' can contain only 1 character"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect()
+      },
+      condition = "INVALID_LINE_SEPARATOR.TOO_LONG",
+      parameters = Map("length" -> "3")
+    )
   }
 
   Seq(true, false).foreach { multiLine =>
