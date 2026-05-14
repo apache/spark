@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 class AlterViewSchemaBindingSuite
   extends command.AlterViewSchemaBindingSuiteBase with ViewCommandSuiteBase {
 
-  test("SPARK-56853: ALTER VIEW ... WITH SCHEMA preserves the frozen SQL path") {
+  test("ALTER VIEW ... WITH SCHEMA preserves the frozen SQL path") {
     // `generateViewProperties(captureNewPath = false)` is the documented behavior for
     // ALTER VIEW WITH SCHEMA: the view's body resolution path must stay pinned to the
     // create-time PATH, not the caller's current PATH. This test creates the view under

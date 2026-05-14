@@ -20,6 +20,38 @@ Project [current_path() AS current_path()#x]
 
 
 -- !query
+SET PATH = Spark_Catalog.Default, System.Builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(Spark_Catalog, Default)), SchemaInPath(List(System, Builtin))]
+
+
+-- !query
+SELECT current_path()
+-- !query analysis
+Project [current_path() AS current_path()#x]
++- OneRowRelation
+
+
+-- !query
+SET PATH = spark_catalog.`sch.b`, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sch.b)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT current_path()
+-- !query analysis
+Project [current_path() AS current_path()#x]
++- OneRowRelation
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
 SET PATH = DEFAULT_PATH
 -- !query analysis
 SetPathCommand [DefaultPath]
@@ -65,6 +97,13 @@ Project [current_path() AS current_path()#x]
 
 
 -- !query
+USE spark_catalog.default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
 SET PATH = current_schema, system.builtin
 -- !query analysis
 SetPathCommand [CurrentSchema, SchemaInPath(List(system, builtin))]
@@ -91,16 +130,129 @@ Project [current_path() AS current_path()#x]
 
 
 -- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
 SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
 
 
 -- !query
-SELECT CURRENT_PATH = current_path() AS same
+SELECT CURRENT_PATH = current_path() AS ansi_form_matches
 -- !query analysis
-Project [(current_path() = current_path()) AS same#x]
+Project [(current_path() = current_path()) AS ansi_form_matches#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT current_path(1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "0",
+    "functionName" : "`current_path`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "current_path(1)"
+  } ]
+}
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+SET PATH = spark_catalog.default, spark_catalog.default
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
+  "sqlState" : "42732",
+  "messageParameters" : {
+    "pathEntry" : "spark_catalog.default"
+  }
+}
+
+
+-- !query
+SET PATH = spark_catalog.DEFAULT, spark_catalog.default
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
+  "sqlState" : "42732",
+  "messageParameters" : {
+    "pathEntry" : "spark_catalog.default"
+  }
+}
+
+
+-- !query
+SET PATH = DEFAULT_PATH, system.builtin
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
+  "sqlState" : "42732",
+  "messageParameters" : {
+    "pathEntry" : "system.builtin"
+  }
+}
+
+
+-- !query
+SET PATH = SYSTEM_PATH, SYSTEM_PATH
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
+  "sqlState" : "42732",
+  "messageParameters" : {
+    "pathEntry" : "system.builtin"
+  }
+}
+
+
+-- !query
+SET PATH = current_database, current_schema
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
+  "sqlState" : "42732",
+  "messageParameters" : {
+    "pathEntry" : "current_schema"
+  }
+}
+
+
+-- !query
+SET PATH = my_schema_no_catalog
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_PATH_SCHEMA_REFERENCE",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "qualifiedName" : "my_schema_no_catalog"
+  }
+}
 
 
 -- !query
@@ -137,9 +289,132 @@ SetPathCommand [DefaultPath]
 
 
 -- !query
+CREATE FUNCTION sql_path_routines.pick_tvf()
+RETURNS TABLE(val INT)
+RETURN SELECT 7 AS val
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.sql_path_routines.pick_tvf, val INT, SELECT 7 AS val, true, false, false, false
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_routines, spark_catalog.default, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT * FROM pick_tvf()
+-- !query analysis
+Project [val#x]
++- SQLFunctionNode spark_catalog.sql_path_routines.pick_tvf
+   +- SubqueryAlias pick_tvf
+      +- Project [cast(val#x as int) AS val#x]
+         +- Project [7 AS val#x]
+            +- OneRowRelation
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+CREATE SCHEMA sql_path_routines_b
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_routines_b]
+
+
+-- !query
+CREATE FUNCTION sql_path_routines_b.pick() RETURNS INT RETURN 11
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.sql_path_routines_b.pick, INT, 11, false, false, false, false
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_routines, spark_catalog.sql_path_routines_b, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(spark_catalog, sql_path_routines_b)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT pick() AS from_first_schema
+-- !query analysis
+Project [spark_catalog.sql_path_routines.pick() AS from_first_schema#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_routines_b, spark_catalog.sql_path_routines, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_routines_b)), SchemaInPath(List(spark_catalog, sql_path_routines)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT pick() AS from_first_schema
+-- !query analysis
+Project [spark_catalog.sql_path_routines_b.pick() AS from_first_schema#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+SET PATH = spark_catalog.default, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT pick()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`pick`",
+    "searchPath" : "[`spark_catalog`.`default`, `system`.`builtin`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 13,
+    "fragment" : "pick()"
+  } ]
+}
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
 DROP FUNCTION sql_path_routines.pick
 -- !query analysis
 DropFunctionCommand spark_catalog.sql_path_routines.pick, false, false
+
+
+-- !query
+DROP FUNCTION sql_path_routines.pick_tvf
+-- !query analysis
+DropFunctionCommand spark_catalog.sql_path_routines.pick_tvf, false, false
+
+
+-- !query
+DROP FUNCTION sql_path_routines_b.pick
+-- !query analysis
+DropFunctionCommand spark_catalog.sql_path_routines_b.pick, false, false
 
 
 -- !query
@@ -150,32 +425,97 @@ DropNamespace false, false
 
 
 -- !query
-CREATE SCHEMA sql_path_relations
+DROP SCHEMA sql_path_routines_b
 -- !query analysis
-CreateNamespace false
-+- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_relations]
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_routines_b]
 
 
 -- !query
-CREATE TABLE sql_path_relations.tbl USING parquet AS SELECT 42 AS id
+CREATE SCHEMA sql_path_relations_a
 -- !query analysis
-CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_relations`.`tbl`, ErrorIfExists, [id]
-   +- Project [42 AS id#x]
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_relations_a]
+
+
+-- !query
+CREATE SCHEMA sql_path_relations_b
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_relations_b]
+
+
+-- !query
+CREATE TABLE sql_path_relations_a.tbl USING parquet AS SELECT 1 AS id
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_relations_a`.`tbl`, ErrorIfExists, [id]
+   +- Project [1 AS id#x]
       +- OneRowRelation
 
 
 -- !query
-SET PATH = spark_catalog.sql_path_relations, spark_catalog.default, system.builtin
+CREATE TABLE sql_path_relations_b.tbl USING parquet AS SELECT 2 AS id
 -- !query analysis
-SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_relations)), SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_relations_b`.`tbl`, ErrorIfExists, [id]
+   +- Project [2 AS id#x]
+      +- OneRowRelation
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_relations_a, spark_catalog.sql_path_relations_b, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_relations_a)), SchemaInPath(List(spark_catalog, sql_path_relations_b)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT id FROM tbl AS from_first_schema
+-- !query analysis
+Project [id#x]
++- SubqueryAlias from_first_schema
+   +- SubqueryAlias spark_catalog.sql_path_relations_a.tbl
+      +- Relation spark_catalog.sql_path_relations_a.tbl[id#x] parquet
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_relations_b, spark_catalog.sql_path_relations_a, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_relations_b)), SchemaInPath(List(spark_catalog, sql_path_relations_a)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT id FROM tbl AS from_first_schema
+-- !query analysis
+Project [id#x]
++- SubqueryAlias from_first_schema
+   +- SubqueryAlias spark_catalog.sql_path_relations_b.tbl
+      +- Relation spark_catalog.sql_path_relations_b.tbl[id#x] parquet
+
+
+-- !query
+SET PATH = spark_catalog.default, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]
 
 
 -- !query
 SELECT id FROM tbl
 -- !query analysis
-Project [id#x]
-+- SubqueryAlias spark_catalog.sql_path_relations.tbl
-   +- Relation spark_catalog.sql_path_relations.tbl[id#x] parquet
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`tbl`",
+    "searchPath" : "[`spark_catalog`.`default`, `system`.`builtin`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 18,
+    "fragment" : "tbl"
+  } ]
+}
 
 
 -- !query
@@ -185,83 +525,498 @@ SetPathCommand [DefaultPath]
 
 
 -- !query
-DROP TABLE sql_path_relations.tbl
+DROP TABLE sql_path_relations_a.tbl
 -- !query analysis
 DropTable false, false
-+- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_relations.tbl
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_relations_a.tbl
 
 
 -- !query
-DROP SCHEMA sql_path_relations
+DROP TABLE sql_path_relations_b.tbl
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_relations_b.tbl
+
+
+-- !query
+DROP SCHEMA sql_path_relations_a
 -- !query analysis
 DropNamespace false, false
-+- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_relations]
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_relations_a]
 
 
 -- !query
-SET PATH = spark_catalog.default, spark_catalog.default
+DROP SCHEMA sql_path_relations_b
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_relations_b]
+
+
+-- !query
+CREATE SCHEMA sql_path_views_a
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_views_a]
+
+
+-- !query
+CREATE SCHEMA sql_path_views_b
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_views_b]
+
+
+-- !query
+CREATE TABLE sql_path_views_a.frozen_t USING parquet AS SELECT 1 AS id
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_views_a`.`frozen_t`, ErrorIfExists, [id]
+   +- Project [1 AS id#x]
+      +- OneRowRelation
+
+
+-- !query
+CREATE TABLE sql_path_views_b.frozen_t USING parquet AS SELECT 2 AS id
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_views_b`.`frozen_t`, ErrorIfExists, [id]
+   +- Project [2 AS id#x]
+      +- OneRowRelation
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_views_a, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_views_a)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+CREATE VIEW default.v_path_frozen AS SELECT id FROM frozen_t
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`v_path_frozen`, SELECT id FROM frozen_t, false, false, PersistedView, COMPENSATION, true
+   +- Project [id#x]
+      +- SubqueryAlias spark_catalog.sql_path_views_a.frozen_t
+         +- Relation spark_catalog.sql_path_views_a.frozen_t[id#x] parquet
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_views_b, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_views_b)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT id FROM frozen_t AS bare_lookup_uses_live_path
+-- !query analysis
+Project [id#x]
++- SubqueryAlias bare_lookup_uses_live_path
+   +- SubqueryAlias spark_catalog.sql_path_views_b.frozen_t
+      +- Relation spark_catalog.sql_path_views_b.frozen_t[id#x] parquet
+
+
+-- !query
+SELECT id FROM default.v_path_frozen AS view_body_uses_frozen_path
+-- !query analysis
+Project [id#x]
++- SubqueryAlias view_body_uses_frozen_path
+   +- SubqueryAlias spark_catalog.default.v_path_frozen
+      +- View (`spark_catalog`.`default`.`v_path_frozen`, [id#x])
+         +- Project [cast(id#x as int) AS id#x]
+            +- Project [id#x]
+               +- SubqueryAlias spark_catalog.sql_path_views_a.frozen_t
+                  +- Relation spark_catalog.sql_path_views_a.frozen_t[id#x] parquet
+
+
+-- !query
+USE spark_catalog.sql_path_views_a
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_views_a]
+
+
+-- !query
+CREATE VIEW sql_path_views_a.v_ctx AS
+SELECT current_schema() AS cs, current_path() AS cp
+-- !query analysis
+CreateViewCommand `spark_catalog`.`sql_path_views_a`.`v_ctx`, SELECT current_schema() AS cs, current_path() AS cp, false, false, PersistedView, COMPENSATION, true
+   +- Project [current_schema() AS cs#x, current_path() AS cp#x]
+      +- OneRowRelation
+
+
+-- !query
+USE spark_catalog.sql_path_views_b
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_views_b]
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+SELECT cs, cp FROM sql_path_views_a.v_ctx
+-- !query analysis
+Project [cs#x, cp#x]
++- SubqueryAlias spark_catalog.sql_path_views_a.v_ctx
+   +- View (`spark_catalog`.`sql_path_views_a`.`v_ctx`, [cs#x, cp#x])
+      +- Project [cast(cs#x as string) AS cs#x, cast(cp#x as string) AS cp#x]
+         +- Project [current_schema() AS cs#x, current_path() AS cp#x]
+            +- OneRowRelation
+
+
+-- !query
+USE spark_catalog.default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+DROP VIEW default.v_path_frozen
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`v_path_frozen`, false, true, false
+
+
+-- !query
+DROP VIEW sql_path_views_a.v_ctx
+-- !query analysis
+DropTableCommand `spark_catalog`.`sql_path_views_a`.`v_ctx`, false, true, false
+
+
+-- !query
+DROP TABLE sql_path_views_a.frozen_t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_views_a.frozen_t
+
+
+-- !query
+DROP TABLE sql_path_views_b.frozen_t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_views_b.frozen_t
+
+
+-- !query
+DROP SCHEMA sql_path_views_a
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_views_a]
+
+
+-- !query
+DROP SCHEMA sql_path_views_b
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_views_b]
+
+
+-- !query
+CREATE SCHEMA sql_path_fn_a
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_fn_a]
+
+
+-- !query
+CREATE SCHEMA sql_path_fn_b
+-- !query analysis
+CreateNamespace false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_fn_b]
+
+
+-- !query
+CREATE TABLE sql_path_fn_a.frozen_t USING parquet AS SELECT 10 AS id
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_fn_a`.`frozen_t`, ErrorIfExists, [id]
+   +- Project [10 AS id#x]
+      +- OneRowRelation
+
+
+-- !query
+CREATE TABLE sql_path_fn_b.frozen_t USING parquet AS SELECT 20 AS id
+-- !query analysis
+CreateDataSourceTableAsSelectCommand `spark_catalog`.`sql_path_fn_b`.`frozen_t`, ErrorIfExists, [id]
+   +- Project [20 AS id#x]
+      +- OneRowRelation
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_fn_a, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_a)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+CREATE FUNCTION default.frozen_fn()
+RETURNS INT
+RETURN (SELECT MAX(id) FROM frozen_t)
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.frozen_fn, INT, (SELECT MAX(id) FROM frozen_t), false, false, false, false
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_fn_b, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_b)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT MAX(id) FROM frozen_t AS bare_lookup_uses_live_path
+-- !query analysis
+Aggregate [max(id#x) AS max(id)#x]
++- SubqueryAlias bare_lookup_uses_live_path
+   +- SubqueryAlias spark_catalog.sql_path_fn_b.frozen_t
+      +- Relation spark_catalog.sql_path_fn_b.frozen_t[id#x] parquet
+
+
+-- !query
+SELECT default.frozen_fn() AS scalar_body_uses_frozen_path
+-- !query analysis
+Project [spark_catalog.default.frozen_fn() AS scalar_body_uses_frozen_path#x]
+:  +- Aggregate [max(id#x) AS max(id)#x]
+:     +- SubqueryAlias spark_catalog.sql_path_fn_a.frozen_t
+:        +- Relation spark_catalog.sql_path_fn_a.frozen_t[id#x] parquet
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_fn_a, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_a)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+CREATE FUNCTION default.frozen_tvf()
+RETURNS TABLE(id INT)
+RETURN SELECT MAX(id) AS id FROM frozen_t
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.default.frozen_tvf, id INT, SELECT MAX(id) AS id FROM frozen_t, true, false, false, false
+
+
+-- !query
+SET PATH = spark_catalog.sql_path_fn_b, system.builtin
+-- !query analysis
+SetPathCommand [SchemaInPath(List(spark_catalog, sql_path_fn_b)), SchemaInPath(List(system, builtin))]
+
+
+-- !query
+SELECT * FROM default.frozen_tvf() AS table_body_uses_frozen_path
+-- !query analysis
+Project [id#x]
++- SubqueryAlias table_body_uses_frozen_path
+   +- SQLFunctionNode spark_catalog.default.frozen_tvf
+      +- SubqueryAlias frozen_tvf
+         +- Project [cast(id#x as int) AS id#x]
+            +- Aggregate [max(id#x) AS id#x]
+               +- SubqueryAlias spark_catalog.sql_path_fn_a.frozen_t
+                  +- Relation spark_catalog.sql_path_fn_a.frozen_t[id#x] parquet
+
+
+-- !query
+USE spark_catalog.sql_path_fn_a
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_fn_a]
+
+
+-- !query
+CREATE FUNCTION sql_path_fn_a.f_ctx()
+RETURNS STRING
+RETURN concat(current_schema(), '::', current_path())
+-- !query analysis
+CreateSQLFunctionCommand spark_catalog.sql_path_fn_a.f_ctx, STRING, concat(current_schema(), '::', current_path()), false, false, false, false
+
+
+-- !query
+USE spark_catalog.sql_path_fn_b
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_fn_b]
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+SELECT sql_path_fn_a.f_ctx() AS invoker_context
+-- !query analysis
+Project [spark_catalog.sql_path_fn_a.f_ctx() AS invoker_context#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+USE spark_catalog.default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+DROP FUNCTION default.frozen_fn
+-- !query analysis
+DropFunctionCommand spark_catalog.default.frozen_fn, false, false
+
+
+-- !query
+DROP FUNCTION default.frozen_tvf
+-- !query analysis
+DropFunctionCommand spark_catalog.default.frozen_tvf, false, false
+
+
+-- !query
+DROP FUNCTION sql_path_fn_a.f_ctx
+-- !query analysis
+DropFunctionCommand spark_catalog.sql_path_fn_a.f_ctx, false, false
+
+
+-- !query
+DROP TABLE sql_path_fn_a.frozen_t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_fn_a.frozen_t
+
+
+-- !query
+DROP TABLE sql_path_fn_b.frozen_t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), sql_path_fn_b.frozen_t
+
+
+-- !query
+DROP SCHEMA sql_path_fn_a
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_fn_a]
+
+
+-- !query
+DROP SCHEMA sql_path_fn_b
+-- !query analysis
+DropNamespace false, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [sql_path_fn_b]
+
+
+-- !query
+SET spark.sql.defaultPath = system.session, system.builtin
+-- !query analysis
+SetCommand (spark.sql.defaultPath,Some(system.session, system.builtin))
+
+
+-- !query
+SET PATH = system.builtin, system.session
+-- !query analysis
+SetPathCommand [SchemaInPath(List(system, builtin)), SchemaInPath(List(system, session))]
+
+
+-- !query
+SELECT current_path() AS explicit_set_path_wins_over_conf
+-- !query analysis
+Project [current_path() AS explicit_set_path_wins_over_conf#x]
++- OneRowRelation
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+RESET spark.sql.defaultPath
+-- !query analysis
+ResetCommand spark.sql.defaultPath
+
+
+-- !query
+SET spark.sql.defaultPath = system.session, system.builtin, current_schema
+-- !query analysis
+SetCommand (spark.sql.defaultPath,Some(system.session, system.builtin, current_schema))
+
+
+-- !query
+USE spark_catalog.default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+SELECT current_path() AS default_path_expands_to_conf
+-- !query analysis
+Project [current_path() AS default_path_expands_to_conf#x]
++- OneRowRelation
+
+
+-- !query
+RESET spark.sql.defaultPath
+-- !query analysis
+ResetCommand spark.sql.defaultPath
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
+SET spark.sql.defaultPath = this is not a path
+-- !query analysis
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
-  "sqlState" : "42732",
+  "errorClass" : "INVALID_CONF_VALUE.REQUIREMENT",
+  "sqlState" : "22022",
   "messageParameters" : {
-    "pathEntry" : "spark_catalog.default"
+    "confName" : "spark.sql.defaultPath",
+    "confRequirement" : "The value must be empty or a comma-separated SET PATH element list (same grammar as SET PATH, except PATH is not allowed).",
+    "confValue" : "this is not a path"
   }
 }
 
 
 -- !query
-SET PATH = DEFAULT_PATH, system.builtin
+SET spark.sql.defaultPath = PATH, system.builtin
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "DUPLICATE_SQL_PATH_ENTRY",
-  "sqlState" : "42732",
+  "errorClass" : "INVALID_CONF_VALUE.REQUIREMENT",
+  "sqlState" : "22022",
   "messageParameters" : {
-    "pathEntry" : "system.builtin"
+    "confName" : "spark.sql.defaultPath",
+    "confRequirement" : "The value must be empty or a comma-separated SET PATH element list (same grammar as SET PATH, except PATH is not allowed).",
+    "confValue" : "PATH, system.builtin"
   }
 }
 
 
 -- !query
-SET PATH = my_schema_no_catalog
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_PATH_SCHEMA_REFERENCE",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "qualifiedName" : "my_schema_no_catalog"
-  }
-}
-
-
--- !query
-SELECT current_path(1)
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
-  "sqlState" : "42605",
-  "messageParameters" : {
-    "actualNum" : "1",
-    "docroot" : "https://spark.apache.org/docs/latest",
-    "expectedNum" : "0",
-    "functionName" : "`current_path`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "current_path(1)"
-  } ]
-}
-
-
--- !query
-SET spark.sql.path.enabled=false
+SET spark.sql.path.enabled = false
 -- !query analysis
 SetCommand (spark.sql.path.enabled,Some(false))
 

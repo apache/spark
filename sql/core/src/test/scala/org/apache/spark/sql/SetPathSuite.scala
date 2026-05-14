@@ -503,7 +503,7 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  // --- cloneSession() propagation matrix (SPARK-56853) ----------------------
+  // --- cloneSession() propagation matrix --------------------------------------
   // The cloned session is built via `BaseSessionStateBuilder` from a parent
   // `SessionState`. Per-component hand-offs on clone:
   //   - `SessionCatalog.copyStateTo` copies `currentDb` and `tempViews`,
@@ -887,7 +887,7 @@ class SetPathSuite extends SharedSparkSession {
 
   test("path-driven COUNT(*) rewrite gate: temp count shadowing builtin under SET PATH " +
       "(session-first) suppresses the * -> 1 rewrite") {
-    // SPARK-56853: `Analyzer.matchesFunctionName` consults
+    // `Analyzer.matchesFunctionName` consults
     // `FunctionResolution.isSessionBeforeBuiltinInPath` to decide whether COUNT(*) is the
     // builtin (eligible for the COUNT(*) -> COUNT(1) shortcut) or a user-defined override.
     // Default `sessionFunctionResolutionOrder` is "second", so creating a temp count while
@@ -916,7 +916,7 @@ class SetPathSuite extends SharedSparkSession {
   }
 
   test("path-driven COUNT(*) rewrite gate: rewrite still applies for unrelated builtins") {
-    // SPARK-56853: the gate fires ONLY when a temp function with the same unqualified
+    // The gate fires ONLY when a temp function with the same unqualified
     // name as the builtin exists. A temp with a different name must not affect the
     // COUNT(*) -> COUNT(1) shortcut even when session is searched before builtin.
     withPathEnabled {
@@ -934,7 +934,7 @@ class SetPathSuite extends SharedSparkSession {
   }
 
   test("PATH enabled: concurrent SET PATH and unqualified lookups do not deadlock") {
-    // SPARK-56853: SessionCatalog.lookupBuiltinOrTempFunction is intentionally NOT
+    // SessionCatalog.lookupBuiltinOrTempFunction is intentionally NOT
     // synchronized on SessionCatalog because the path-driven kinds provider acquires
     // CatalogManager.synchronized, and another thread holding that lock can call back
     // into SessionCatalog (e.g. via setCurrentNamespace). This test hammers both sides

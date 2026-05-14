@@ -26,8 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * SPARK-56853: end-to-end coverage of [[SQLConf.PATH_ENABLED]] resolution through
- * non-session V2 catalogs.
+ * End-to-end coverage of [[SQLConf.PATH_ENABLED]] resolution through non-session V2 catalogs.
  *
  * Other path tests live in `SetPathSuite` (session catalog) and `ProcedureSuite`
  * (procedures via CALL). This suite specifically exercises:

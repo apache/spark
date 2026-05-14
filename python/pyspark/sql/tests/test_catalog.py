@@ -589,7 +589,7 @@ class CatalogTestsMixin:
             spark.catalog.analyzeTable(t, noScan=True)
 
     def test_path_current_path_disabled(self):
-        # SPARK-56853: current_path() is a regular builtin and resolves even when
+        # current_path() is a regular builtin and resolves even when
         # spark.sql.path.enabled is false. The DataFrame and SQL surfaces must agree.
         from pyspark.sql.functions import current_path
 
@@ -602,7 +602,7 @@ class CatalogTestsMixin:
             self.assertEqual(sql_form, api_form)
 
     def test_path_set_path_and_current_path(self):
-        # SPARK-56853: SET PATH is parsed and applied; current_path() reflects it
+        # SET PATH is parsed and applied; current_path() reflects it
         # over both the SQL and DataFrame surfaces. Restores DEFAULT_PATH on exit.
         from pyspark.sql.functions import current_path
 
@@ -618,7 +618,7 @@ class CatalogTestsMixin:
                 spark.sql("SET PATH = DEFAULT_PATH")
 
     def test_path_set_path_rejected_when_disabled(self):
-        # SPARK-56853: SET PATH must raise UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED
+        # SET PATH must raise UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED
         # when the feature flag is off (covers both classic and Connect error paths).
         spark = self.spark
         with self.sql_conf({"spark.sql.path.enabled": False}):

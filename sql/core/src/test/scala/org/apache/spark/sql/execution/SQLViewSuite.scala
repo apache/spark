@@ -1453,14 +1453,19 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
-  test("SPARK-56853: stored view path is ignored when PATH is disabled at read time") {
-    // A view created with PATH enabled persists its frozen resolution path in metadata.
-    // If the reader's session has `spark.sql.path.enabled=false`, the pinned entries are
-    // intentionally dropped (`CatalogManager.resolutionPathEntriesForAnalysis`); the view
-    // body falls back to its catalog/namespace. Verify both directions:
+  test("stored view path is ignored when PATH is disabled at read time") {
+    // A view created with PATH enabled persists two things in metadata: the frozen
+    // resolution path AND the creator session's current catalog+namespace at CREATE
+    // VIEW time (the view's `viewCatalogAndNamespace` property). If the reader's
+    // session has `spark.sql.path.enabled=false`, the pinned entries are intentionally
+    // dropped (`CatalogManager.resolutionPathEntriesForAnalysis`); the view body's
+    // unqualified references fall back to that captured catalog+namespace, which is
+    // the creator's USE state at CREATE time -- NOT the schema the view physically
+    // lives in (the two coincide below only because the test runs
+    // `USE spark_catalog.compat_view_b` before CREATE VIEW). Verify both directions:
     //   - fully-qualified bodies keep working (qualification doesn't depend on PATH),
-    //   - unqualified bodies that relied on the frozen path now resolve through the
-    //     view's home schema (and fail when the unqualified name isn't there).
+    //   - unqualified bodies that relied on the frozen path now resolve via the
+    //     captured viewCatalogAndNamespace.
     withDatabase("compat_view_a", "compat_view_b") {
       sql("CREATE DATABASE compat_view_a")
       sql("CREATE DATABASE compat_view_b")
@@ -1508,10 +1513,12 @@ abstract class SQLViewSuite extends QueryTest {
     }
   }
 
-  test("SPARK-56853: stored view path with no fallback target fails clearly when PATH is off") {
-    // Same setup as above but the view's home schema does NOT contain the unqualified
-    // name; under PATH disabled the analyzer cannot fall back anywhere, so the lookup
-    // must raise TABLE_OR_VIEW_NOT_FOUND against the view's catalog/namespace.
+  test("stored view path with no fallback target fails clearly when PATH is off") {
+    // Same shape as the previous test, but the captured `viewCatalogAndNamespace`
+    // (the creator's USE state at CREATE VIEW time -- set here via
+    // `USE spark_catalog.compat_home_only`) does NOT contain the unqualified name.
+    // Under PATH disabled the analyzer cannot fall back anywhere, so the lookup
+    // must raise TABLE_OR_VIEW_NOT_FOUND against that captured catalog+namespace.
     withDatabase("compat_home_only", "compat_referenced") {
       sql("CREATE DATABASE compat_home_only")
       sql("CREATE DATABASE compat_referenced")
