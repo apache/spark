@@ -57,7 +57,9 @@ object MimaExcludes {
     // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-34591][ML] Add pruneTree parameter to Strategy
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
+    // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
