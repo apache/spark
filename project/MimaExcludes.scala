@@ -58,6 +58,8 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-56700][SS] Make DataStreamReader.name public
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name")
+    // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
