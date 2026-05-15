@@ -72,6 +72,9 @@ case class Scd1BatchProcessor(
 
   /**
    * Project the CDC metadata column onto the microbatch.
+   * 
+   * The returned dataframe has all of the columns in the input microbatch + the CDC metadata
+   * column.
    */
   def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
     // Proactively validate the reserved CDC metadata column does not exist in the microbatch.
