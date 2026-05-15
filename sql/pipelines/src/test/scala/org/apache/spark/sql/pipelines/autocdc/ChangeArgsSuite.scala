@@ -215,6 +215,12 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     assert(UnqualifiedColumnName("`a.b`").name == "a.b")
   }
 
+  test("UnqualifiedColumnName accepts redundant backticks around a single-part name") {
+    // Backticks around an already-single-part identifier are decorative; the parser strips them
+    // so the stored name has no surrounding back-ticks.
+    assert(UnqualifiedColumnName("`col`").name == "col")
+  }
+
   test("UnqualifiedColumnName.quoted is safe to pass to functions.col for literal-dot names") {
     val schema = new StructType()
       .add("a.b", IntegerType)
