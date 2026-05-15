@@ -569,7 +569,7 @@ class ResolverGuard(
         true
       // Decimal
       case _: UnscaledValue | _: MakeDecimal | _: CheckOverflow | _: CheckOverflowInSum |
-          _: DecimalAddNoOverflowCheck |
+          _: DecimalAddNoOverflowCheck | _: DecimalSubtractNoOverflowCheck |
           _: DecimalDivideWithOverflowCheck =>
         true
       // Interval

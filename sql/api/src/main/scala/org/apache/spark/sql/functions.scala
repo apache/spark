@@ -2558,8 +2558,8 @@ object functions {
   def counter_diff(value: Column): Column = Column.fn("counter_diff", value)
 
   /**
-   * Window function: returns the difference between consecutive cumulative counter values in a
-   * time series. With this operation, the counter is converted from cumulative to delta format.
+   * Window function: computes the differences between consecutive cumulative counter values in a
+   * time series, thereby converting the counter from the cumulative to the delta format.
    *
    * Gracefully handles counter resets by returning NULL. Counter resets are detected when the
    * counter value decreases, or when the start time advances between rows.
