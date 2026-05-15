@@ -173,6 +173,21 @@ private[joins] class SortMergeAsOfJoinScanner(
   private val distanceOrdering =
     TypeUtils.getInterpretedOrdering(orderExpression.dataType)
 
+  // Determine scan direction based on the as-of condition.
+  // Backward (left >= right): best match is at end of sorted buffer → right-to-left
+  // Forward (left <= right): best match is at start → left-to-right
+  // Nearest / unknown: left-to-right (works correctly, just no early termination
+  // guarantee for the "as-of not satisfied" shortcut)
+  private val scanRightToLeft: Boolean = {
+    def isBackward(expr: Expression): Boolean = expr match {
+      case GreaterThanOrEqual(_, _) => true
+      case GreaterThan(_, _) => true
+      case And(l, _) => isBackward(l)
+      case _ => false
+    }
+    isBackward(asOfCondition)
+  }
+
   // Null row for LeftOuter when no match is found
   private val nullRightRow = new GenericInternalRow(rightOutput.length)
 
@@ -318,27 +333,33 @@ private[joins] class SortMergeAsOfJoinScanner(
    * Find the best matching right row for the given left row within the
    * current group buffer.
    *
-   * The buffer is sorted by as-of key ascending. We scan right-to-left
-   * (from largest as-of key to smallest). For backward joins, the first
-   * row satisfying the as-of condition is the best match (closest in
-   * time), so we can stop early. For forward/nearest, we still need to
-   * find the minimum distance but can stop once the distance starts
-   * increasing (since the buffer is sorted).
+   * The buffer is sorted by as-of key ascending. The scan direction is
+   * chosen based on where the best match is expected:
+   * - Backward (left >= right): best match near the end → right-to-left
+   * - Forward (left <= right): best match near the start → left-to-right
+   * - Nearest: full scan needed (left-to-right, stop when distance
+   *   increases after finding a match)
    */
   private def findBestInGroup(leftRow: InternalRow): InternalRow = {
+    if (scanRightToLeft) {
+      findBestRightToLeft(leftRow)
+    } else {
+      findBestLeftToRight(leftRow)
+    }
+  }
+
+  /** Scan from end to start (optimal for Backward joins). */
+  private def findBestRightToLeft(leftRow: InternalRow): InternalRow = {
     var bestMatch: InternalRow = null
     var bestDistance: Any = null
 
-    // Scan right-to-left to exploit sort order for early termination
     var i = rightGroupBuffer.size - 1
     while (i >= 0) {
       val rightRow = rightGroupBuffer(i)
       joinedRow.withLeft(leftRow).withRight(rightRow)
 
-      // Check as-of condition
       val asOfSatisfied = boundAsOfCond.eval(joinedRow)
       if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
-        // Check residual condition (non-equi predicates only)
         val residualSatisfied = boundResidualCond.forall { cond =>
           val result = cond.eval(joinedRow)
           result != null && result.asInstanceOf[Boolean]
@@ -353,19 +374,52 @@ private[joins] class SortMergeAsOfJoinScanner(
               bestMatch = rightRow
               bestDistance = distance
             } else {
-              // Distance is increasing (buffer is sorted), so we can
-              // stop: no subsequent row will be closer.
               return bestMatch
             }
           }
         }
       } else if (bestMatch != null) {
-        // As-of condition no longer satisfied and we already have a
-        // match. Since buffer is sorted, earlier rows are further away,
-        // so stop.
         return bestMatch
       }
       i -= 1
+    }
+    bestMatch
+  }
+
+  /** Scan from start to end (optimal for Forward/Nearest joins). */
+  private def findBestLeftToRight(leftRow: InternalRow): InternalRow = {
+    var bestMatch: InternalRow = null
+    var bestDistance: Any = null
+
+    var i = 0
+    while (i < rightGroupBuffer.size) {
+      val rightRow = rightGroupBuffer(i)
+      joinedRow.withLeft(leftRow).withRight(rightRow)
+
+      val asOfSatisfied = boundAsOfCond.eval(joinedRow)
+      if (asOfSatisfied != null && asOfSatisfied.asInstanceOf[Boolean]) {
+        val residualSatisfied = boundResidualCond.forall { cond =>
+          val result = cond.eval(joinedRow)
+          result != null && result.asInstanceOf[Boolean]
+        }
+        if (residualSatisfied) {
+          val distance = boundOrderExpr.eval(joinedRow)
+          if (distance != null) {
+            if (bestMatch == null) {
+              bestMatch = rightRow
+              bestDistance = distance
+            } else if (distanceOrdering.lt(distance, bestDistance)) {
+              bestMatch = rightRow
+              bestDistance = distance
+            } else {
+              return bestMatch
+            }
+          }
+        }
+      } else if (bestMatch != null) {
+        return bestMatch
+      }
+      i += 1
     }
     bestMatch
   }

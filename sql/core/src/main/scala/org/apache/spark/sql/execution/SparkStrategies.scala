@@ -265,6 +265,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case GreaterThan(l, r)
             if l.references.subsetOf(rightAttrs) && r.references.subsetOf(leftAttrs) =>
           Some((r, l))
+        case LessThanOrEqual(l, r)
+            if l.references.subsetOf(rightAttrs) && r.references.subsetOf(leftAttrs) =>
+          Some((r, l))
+        case LessThan(l, r)
+            if l.references.subsetOf(rightAttrs) && r.references.subsetOf(leftAttrs) =>
+          Some((r, l))
         case And(l, r) => find(l).orElse(find(r))
         case _ => None
       }

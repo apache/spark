@@ -4274,7 +4274,7 @@ object SQLConf {
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.size.threshold")
       .internal()
       .doc("Threshold for size of rows to be spilled by sort merge join operator")
-      .version("4.1.0")
+      .version("4.3.0")
       .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
