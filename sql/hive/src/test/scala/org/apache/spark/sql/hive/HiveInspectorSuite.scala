@@ -253,7 +253,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         toInspector(Literal.create(d, dt))))
   }
 
-  test("SPARK-50610: toInspector should preserve decimal precision and scale") {
+  test("SPARK-50610: toInspector(dataType) should preserve decimal precision and scale") {
     val dt = DecimalType(18, 10)
     val oi = toInspector(dt).asInstanceOf[PrimitiveObjectInspector]
     val typeInfo = oi.getTypeInfo.asInstanceOf[DecimalTypeInfo]
@@ -273,5 +273,22 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val typeInfo3 = oi3.getTypeInfo.asInstanceOf[DecimalTypeInfo]
     assert(typeInfo3.precision() === DecimalType.MAX_PRECISION)
     assert(typeInfo3.scale() === DecimalType.DEFAULT_SCALE)
+  }
+
+  test("SPARK-50610: toInspector(expr) should preserve decimal precision and scale for literals") {
+    val decimal = Decimal(BigDecimal("123.45"))
+    val dt = DecimalType(10, 2)
+    val literal = Literal.create(decimal, dt)
+    val oi = toInspector(literal).asInstanceOf[PrimitiveObjectInspector]
+    val typeInfo = oi.getTypeInfo.asInstanceOf[DecimalTypeInfo]
+    assert(typeInfo.precision() === 10)
+    assert(typeInfo.scale() === 2)
+
+    // Null literal should still preserve type info
+    val nullLiteral = Literal.create(null, DecimalType(18, 10))
+    val oi2 = toInspector(nullLiteral).asInstanceOf[PrimitiveObjectInspector]
+    val typeInfo2 = oi2.getTypeInfo.asInstanceOf[DecimalTypeInfo]
+    assert(typeInfo2.precision() === 18)
+    assert(typeInfo2.scale() === 10)
   }
 }
