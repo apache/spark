@@ -520,6 +520,7 @@ Window Functions
 .. autosummary::
     :toctree: api/
 
+    counter_diff
     cume_dist
     dense_rank
     lag

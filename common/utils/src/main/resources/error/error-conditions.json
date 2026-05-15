@@ -1386,6 +1386,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "COUNTER_DIFF_NEGATIVE_COUNTER_VALUE" : {
+    "message" : [
+      "A negative counter value <value> was provided to function <function>. Negative counter values are not allowed."
+    ],
+    "sqlState" : "22003"
+  },
+  "COUNTER_DIFF_START_TIME_DECREASED" : {
+    "message" : [
+      "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
+    ],
+    "sqlState" : "22023"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
