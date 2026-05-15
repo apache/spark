@@ -27,6 +27,20 @@ import org.apache.spark.sql.types._
 
 class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
+  /**
+   * Test Schema for a microbatch that already has the SCD1 CDC metadata column projected.
+   */
+  private val microbatchWithCdcMetadataSchema: StructType = new StructType()
+    .add("id", IntegerType)
+    .add("name", StringType)
+    .add("age", IntegerType)
+    .add(
+      Scd1BatchProcessor.cdcMetadataColName,
+      new StructType()
+        .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
+        .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+    )
+
   /** Build a microbatch [[DataFrame]] from explicit rows and an explicit schema. */
   private def microbatchOf(schema: StructType)(rows: Row*): DataFrame =
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
@@ -714,5 +728,173 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         )
       )
     }
+  }
+
+  test("projectTargetColumnsOntoMicrobatch keeps every user column and the CDC metadata column " +
+    "when columnSelection is None") {
+    val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
+      Row(1, "alice", 30, Row(null, 10L)),
+      Row(2, "bob", 25, Row(20L, null))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        columnSelection = None
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+
+    // None selection is no-op on the user columns, and the CDC metadata column is unconditionally
+    // re-projected last, so the output shape exactly matches the input.
+    assert(result.schema.fieldNames.toSeq == microbatchWithCdcMetadataSchema.fieldNames.toSeq)
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 30, Row(null, 10L)),
+        Row(2, "bob", 25, Row(20L, null))
+      )
+    )
+  }
+
+  test("projectTargetColumnsOntoMicrobatch retains the CDC metadata column even when " +
+    "IncludeColumns does not contain it") {
+    val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
+      Row(1, "alice", 30, Row(null, 10L))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        columnSelection = Some(
+          ColumnSelection.IncludeColumns(
+            Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("age"))
+          )
+        )
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+
+    assert(result.schema.fieldNames.toSeq ==
+      Seq("id", "age", Scd1BatchProcessor.cdcMetadataColName))
+    checkAnswer(
+      df = result,
+      expectedAnswer = Row(1, 30, Row(null, 10L))
+    )
+  }
+
+  test("projectTargetColumnsOntoMicrobatch respects exclude column") {
+    val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
+      Row(1, "alice", 30, Row(null, 10L))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        columnSelection = Some(
+          ColumnSelection.ExcludeColumns(
+            Seq(UnqualifiedColumnName("age"))
+          )
+        )
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+
+    assert(
+      result.schema.fieldNames.toSeq ==
+        Seq("id", "name", Scd1BatchProcessor.cdcMetadataColName)
+    )
+    checkAnswer(
+      df = result,
+      expectedAnswer = Row(1, "alice", Row(null, 10L))
+    )
+  }
+
+  test("projectTargetColumnsOntoMicrobatch preserves the microbatch schema order") {
+    val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
+      Row(1, "alice", 30, Row(null, 10L))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        // User specifies (age, id) -- intentionally different from the schema order (id, age).
+        columnSelection = Some(ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("age"), UnqualifiedColumnName("id"))
+        ))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+
+    // Output column order follows the original microbatch schema (id before age), not the order
+    // in which the user listed columns in IncludeColumns. The CDC metadata column is appended
+    // last as always.
+    assert(result.schema.fieldNames.toSeq ==
+      Seq("id", "age", Scd1BatchProcessor.cdcMetadataColName))
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Row(1, 30, Row(null, 10L))
+    )
+  }
+
+  test("projectTargetColumnsOntoMicrobatch handles backticked column names containing a " +
+    "literal dot") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      // Even if a column is created with backticks via DDL, those backticks are consumed by Spark
+      // before resolving the schema; they won't show up in the schema field.
+      .add("user.id", StringType)
+      .add(
+        Scd1BatchProcessor.cdcMetadataColName,
+        new StructType()
+          .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
+          .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType))
+
+    val batch = microbatchOf(schema)(
+      Row(1, "u-100", Row(null, 10L))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        columnSelection = Some(
+          ColumnSelection.IncludeColumns(
+            Seq(
+              UnqualifiedColumnName("id"),
+              UnqualifiedColumnName("`user.id`")
+            )
+          )
+        )
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+
+    assert(result.schema.fieldNames.toSeq ==
+      Seq("id", "user.id", Scd1BatchProcessor.cdcMetadataColName))
+    checkAnswer(
+      df = result,
+      expectedAnswer = Row(1, "u-100", Row(null, 10L))
+    )
   }
 }

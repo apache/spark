@@ -114,6 +114,56 @@ case class Scd1BatchProcessor(
     )
   }
 
+  /**
+   * Project the user-defined column selection onto the microbatch. By this point the input
+   * microbatch should already have projected its CDC metadata, because it's possible that the
+   * user-defined column selection drops columns that are otherwise necessary to compute the
+   * CDC metadata.
+   *
+   * Returned dataframe's schema is: all of the user-selected columns in the input dataframe as per
+   * [[ChangeArgs.columnSelection]] + the CDC metadata column.
+   */
+  def projectTargetColumnsOntoMicrobatch(microbatchWithCdcMetadataDf: DataFrame): DataFrame = {
+    val ignoreColumnNameCase =
+      !microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.caseSensitiveAnalysis
+
+    // The schema of the microbatch less the system-projected CDC metadata column, i.e. the
+    // original microbatch schema.
+    val userColumnsInMicrobatchSchema =
+      StructType(
+        microbatchWithCdcMetadataDf.schema.fields.filterNot { field =>
+          if (ignoreColumnNameCase) {
+            field.name.equalsIgnoreCase(Scd1BatchProcessor.cdcMetadataColName)
+          } else {
+            field.name.equals(Scd1BatchProcessor.cdcMetadataColName)
+          }
+        }
+      )
+
+    val userSelectedColumnsInMicrobatchSchema =
+      ColumnSelection.applyToSchema(
+        schemaName = "microbatch",
+        schema = userColumnsInMicrobatchSchema,
+        columnSelection = changeArgs.columnSelection,
+        ignoreCase = ignoreColumnNameCase
+      )
+
+    // In addition to the explicit user-selected columns, re-project the operational CDC metadata
+    // column as the last column.
+    val finalColumnsInMicrobatchToSelect =
+      userSelectedColumnsInMicrobatchSchema.fieldNames.map(colName => {
+        // Spark drops backticks in the schema, quote all identifiers for safety before executing
+        // select. Identifiers could have special characters such as '.'.
+        F.col(QuotingUtils.quoteIdentifier(colName))
+      }) :+ F.col(
+        Scd1BatchProcessor.cdcMetadataColName
+      )
+
+    microbatchWithCdcMetadataDf.select(
+      finalColumnsInMicrobatchToSelect.toImmutableArraySeq: _*
+    )
+  }
+
   private def validateCdcMetadataColumnNotPresent(microbatch: DataFrame): Unit = {
     val microbatchSqlConf = microbatch.sparkSession.sessionState.conf
     val resolver = microbatchSqlConf.resolver
