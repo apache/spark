@@ -41,7 +41,7 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
   def deduplicateMicrobatch(microbatchDf: DataFrame): DataFrame = {
     // The `max_by` API can only return a single column, so pack/unpack the entire row into a
     // temporary column before and after the `max_by` operation.
-    val WinningRowCol = OutOfOrderCdcMergeUtils.tempColName("__winning_row")
+    val winningRowCol = OutOfOrderCdcMergeUtils.tempColName("__winning_row")
 
     val allMicrobatchColumns =
       microbatchDf.columns
@@ -52,8 +52,8 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
       .groupBy(changeArgs.keys.map(k => F.col(k.quoted)): _*)
       .agg(
         F.max_by(F.struct(allMicrobatchColumns: _*), changeArgs.sequencing)
-          .as(WinningRowCol)
+          .as(winningRowCol)
       )
-      .select(F.col(s"$WinningRowCol.*"))
+      .select(F.col(s"$winningRowCol.*"))
   }
 }
