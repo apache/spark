@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SimpleAnalyzer, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
@@ -143,13 +144,26 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(analyze(new Nvl(floatLit, doubleLit)).dataType == DoubleType)
   }
 
-  test("NullIf replacement preserves its data type before type coercion") {
+  test("SPARK-56840: NullIf replacement preserves its data type before type coercion") {
     Seq(true, false).foreach { alwaysInlineCommonExpr =>
       withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
         val nullIf = new NullIf(Literal(1), Literal(1))
         assert(nullIf.dataType == IntegerType)
         assert(nullIf.replacement.dataType == IntegerType)
       }
+    }
+  }
+
+  test(
+    "SPARK-56840: NullIf accepts unresolved nested fields during inlined function construction") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
+      val nullIf = FunctionRegistry.builtin.lookupFunction(
+        FunctionIdentifier("nullif"),
+        Seq(
+          UnresolvedAttribute(Seq("c", "provider")),
+          Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
+
+      assert(nullIf.isInstanceOf[NullIf])
     }
   }
 
