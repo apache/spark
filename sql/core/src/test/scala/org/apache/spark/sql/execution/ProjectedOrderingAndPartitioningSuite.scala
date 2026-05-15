@@ -586,6 +586,29 @@ class ProjectedOrderingAndPartitioningSuite
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
   }
+
+  test("SPARK-46367: mixed-arity KeyedPartitionings in input fail with a clear assertion") {
+    // The function assumes all input KPs share the same arity (the invariant asserted by
+    // `GroupPartitionsExec`). Without the assert below, indexing `kp.expressions(i)` for
+    // `i >= kp.expressions.length` would throw an opaque `IndexOutOfBoundsException`. The assert
+    // surfaces the real cause -- an upstream node violated the invariant -- so the bug can be
+    // fixed at the producer.
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
+    val keys1d = Seq(InternalRow(1), InternalRow(2))
+    val child = DummyLeafExecWithPartitioning(
+      output = Seq(x, y),
+      partitioning = PartitioningCollection(Seq(
+        KeyedPartitioning(Seq(x, y), keys2d),
+        KeyedPartitioning(Seq(x), keys1d))))
+    val project = ProjectExec(Seq(x), child)
+    val e = intercept[AssertionError] {
+      project.outputPartitioning
+    }
+    assert(e.getMessage.contains("All input KeyedPartitionings must share the same expression " +
+      "arity"))
+  }
 }
 
 private case class DummyLeafExecWithPartitioning(
