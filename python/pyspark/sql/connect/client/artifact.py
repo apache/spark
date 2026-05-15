@@ -251,16 +251,28 @@ class ArtifactManager:
 
     def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:
         abs_path: Path = Path(local_path).absolute()
-        # TODO: Support directory path.
-        assert abs_path.is_file(), "local path must be a file path."
-        storage = LocalFile(str(abs_path))
-
         assert Path(dest_path).is_absolute(), "destination FS path must be an absolute path."
+
+        if abs_path.is_file():
+            return [self._new_forward_to_fs_artifact(abs_path, dest_path)]
+        elif abs_path.is_dir():
+            artifacts = []
+            for child in sorted(abs_path.rglob("*")):
+                if child.is_file():
+                    relative_path = child.relative_to(abs_path)
+                    child_dest_path = Path(dest_path, relative_path.as_posix()).as_posix()
+                    artifacts.append(self._new_forward_to_fs_artifact(child, child_dest_path))
+            return artifacts
+        else:
+            raise FileNotFoundError(local_path)
+
+    def _new_forward_to_fs_artifact(self, local_path: Path, dest_path: str) -> Artifact:
+        storage = LocalFile(str(local_path))
 
         # The `dest_path` is an absolute path, to add the FORWARD_TO_FS_PREFIX,
         # we cannot use `os.path.join`
         artifact_path = FORWARD_TO_FS_PREFIX + dest_path
-        return [Artifact(artifact_path, storage)]
+        return Artifact(artifact_path, storage)
 
     def _create_requests(
         self, *path: str, pyfile: bool, archive: bool, file: bool
