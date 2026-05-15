@@ -187,6 +187,9 @@ case class SQLFunction(
 
 object SQLFunction {
 
+  val SCALAR = "SCALAR"
+  val TABLE = "TABLE"
+
   /**
    * Persisted frozen PATH for SQL function bodies when created with [[SQLConf.PATH_ENABLED]].
    * Serialized as a JSON array of path entries (same format as
@@ -249,6 +252,40 @@ object SQLFunction {
           messageParameters = Map(
             "identifier" -> s"${function.identifier}",
             "className" -> s"${function.className}"), cause = Some(e)
+        )
+    }
+  }
+
+  /**
+   * Convert an [[ExpressionInfo]] into a SQL function.
+   */
+  def fromExpressionInfo(info: ExpressionInfo, parser: ParserInterface): SQLFunction = {
+    try {
+      val props = mapper.readValue(info.getUsage, classOf[Map[String, String]])
+      val isTableFunc = props(IS_TABLE_FUNC).toBoolean
+      val collation = props.get(COLLATION)
+      val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser, collation)
+      SQLFunction(
+        name = FunctionIdentifier(info.getName, Option(info.getDb)),
+        inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser, collation)),
+        returnType = returnType.get,
+        exprText = props.get(EXPRESSION),
+        queryText = props.get(QUERY),
+        comment = props.get(COMMENT),
+        collation = collation,
+        deterministic = props.get(DETERMINISTIC).map(_.toBoolean),
+        containsSQL = props.get(CONTAINS_SQL).map(_.toBoolean),
+        isTableFunc = isTableFunc,
+        properties = props.filterNot(_._1.startsWith(SQL_FUNCTION_PREFIX)),
+        owner = props.get(OWNER),
+        createTimeMs = props(CREATE_TIME).toLong)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          errorClass = "CORRUPTED_CATALOG_FUNCTION",
+          messageParameters = Map(
+            "identifier" -> s"${info.getDb}.${info.getName}",
+            "className" -> s"${info.getClassName}"), cause = Some(e)
         )
     }
   }

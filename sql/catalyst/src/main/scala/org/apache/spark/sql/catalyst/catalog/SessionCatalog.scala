@@ -2146,7 +2146,15 @@ class SessionCatalog(
     if (registry.functionExists(identToRegister) && !overrideIfExists) {
       throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
-    val info = makeExprInfoForHiveFunction(funcDefinition)
+    val info = if (funcDefinition.isUserDefinedFunction) {
+      // For SQL UDFs we need the structured ExpressionInfo (with the serialized
+      // function metadata as the `usage` blob) so that DESCRIBE FUNCTION can
+      // later reconstruct the function from the registry cache. The hive-style
+      // ExpressionInfo has a null usage which would break DESCRIBE.
+      UserDefinedFunction.fromCatalogFunction(funcDefinition, parser).toExpressionInfo
+    } else {
+      makeExprInfoForHiveFunction(funcDefinition)
+    }
     registry.registerFunction(identToRegister, info, functionBuilder)
   }
 
