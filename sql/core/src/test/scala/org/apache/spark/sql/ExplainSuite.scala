@@ -251,6 +251,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     checkKeywordsExistsInExplain(df,
       "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
         "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
+    checkKeywordsNotExistsInExplain(df, ExtendedMode, "typednullliteral")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
