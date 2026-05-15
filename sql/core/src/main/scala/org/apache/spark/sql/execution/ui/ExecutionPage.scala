@@ -54,6 +54,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         Seq.empty
       }
 
+      // Headers and row data are rendered client-side by DataTables from the
+      // column definitions in static/sql-execution-detail.js -- intentionally
+      // no <thead>/<tbody> in the Scala template below. Adding markup headers
+      // here causes DataTables to double-render and breaks layout (SPARK-56259).
       val summary =
         <div class="mb-3">
           <table id="sql-execution-table" class="table table-striped compact cell-border"
