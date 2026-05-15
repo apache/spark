@@ -35,6 +35,8 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
    * For SCD1 we only care about the most recent (by sequence value) event per key. When
    * multiple events share the same key and the same sequence value, the row selected is
    * non-deterministic and undefined.
+   * 
+   * The schema of the returned dataframe matches the schema of the microbatch exactly.
    */
   def deduplicateMicrobatch(microbatchDf: DataFrame): DataFrame = {
     // The `max_by` API can only return a single column, so pack/unpack the entire row into a
