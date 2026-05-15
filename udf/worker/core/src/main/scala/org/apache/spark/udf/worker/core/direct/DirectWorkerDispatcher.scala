@@ -28,7 +28,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.{ProcessCallable, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.{ProcessCallable, UDFProtoCommunicationPattern,
+  UDFWorkerDataFormat, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher,
   WorkerLogger, WorkerSecurityScope, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableResult,
@@ -68,6 +69,7 @@ abstract class DirectWorkerDispatcher(
   // TODO: Connection pooling -- reuse idle workers across sessions.
   // TODO: Security scope isolation -- partition pool by WorkerSecurityScope.
 
+  validateWorkerSpec()
   validateTransportSupport()
   validateEnvironmentCallables()
 
@@ -466,6 +468,41 @@ abstract class DirectWorkerDispatcher(
     val env = workerSpec.getEnvironment
     require(!env.hasEnvironmentVerification || env.hasInstallation,
       "WorkerEnvironment.environment_verification requires installation to be set")
+  }
+
+  private def validateWorkerSpec(): Unit = {
+    require(workerSpec.hasDirect,
+      "UDFWorkerSpecification.worker must be set")
+
+    val direct = workerSpec.getDirect
+    require(direct.hasRunner,
+      "DirectWorker.runner must be set")
+
+    val capabilities = workerSpec.getCapabilities
+    require(
+      capabilities.getSupportedDataFormatsCount > 0,
+      "WorkerCapabilities.supported_data_formats must contain at least ARROW")
+    require(
+      !capabilities.getSupportedDataFormatsList.asScala.contains(
+        UDFWorkerDataFormat.UDF_WORKER_DATA_FORMAT_UNSPECIFIED),
+      "WorkerCapabilities.supported_data_formats must not contain UNSPECIFIED")
+    require(
+      capabilities.getSupportedDataFormatsList.asScala.contains(UDFWorkerDataFormat.ARROW),
+      "WorkerCapabilities.supported_data_formats must contain ARROW")
+
+    require(
+      capabilities.getSupportedCommunicationPatternsCount > 0,
+      "WorkerCapabilities.supported_communication_patterns must contain " +
+        "BIDIRECTIONAL_STREAMING")
+    require(
+      !capabilities.getSupportedCommunicationPatternsList.asScala.contains(
+        UDFProtoCommunicationPattern.UDF_PROTO_COMMUNICATION_PATTERN_UNSPECIFIED),
+      "WorkerCapabilities.supported_communication_patterns must not contain UNSPECIFIED")
+    require(
+      capabilities.getSupportedCommunicationPatternsList.asScala.contains(
+        UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING),
+      "WorkerCapabilities.supported_communication_patterns must contain " +
+        "BIDIRECTIONAL_STREAMING")
   }
 }
 
