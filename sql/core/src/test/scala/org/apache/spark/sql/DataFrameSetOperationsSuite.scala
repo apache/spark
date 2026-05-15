@@ -1660,16 +1660,27 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     // exceptAll should work without INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND
     val result = deduped.exceptAll(df2)
     assert(result.columns === Array("id", "name", "value"))
-    assert(result.count() === 1)
-    assert(result.collect().head.getInt(0) === 2)
+    val rows = result.collect()
+    assert(rows.length === 1)
+    assert(rows.head.getInt(0) === 2)
+    assert(rows.head.getString(1) === "b")
+    assert(rows.head.getInt(2) === 300)
 
-    // Also verify except (non-all) works
+    // Also verify except (non-all) works and returns correct values
     val result2 = deduped.except(df2)
-    assert(result2.count() === 1)
+    val rows2 = result2.collect()
+    assert(rows2.length === 1)
+    assert(rows2.head.getInt(0) === 2)
+    assert(rows2.head.getString(1) === "b")
+    assert(rows2.head.getInt(2) === 300)
 
-    // intersectAll should also work
+    // intersectAll should also work and return the matching row
     val result3 = deduped.intersectAll(df2)
-    assert(result3.count() <= 1)
+    val rows3 = result3.collect()
+    assert(rows3.length === 1)
+    assert(rows3.head.getInt(0) === 1)
+    assert(rows3.head.getString(1) === "a")
+    assert(rows3.head.getInt(2) === 100)
   }
 }
 
