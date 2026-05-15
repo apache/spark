@@ -60,10 +60,10 @@ case class BatchScanExec(
 
   // Visible for testing
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
-    PushDownUtils.filterAndPlanPartitions(
+    PushDownUtils.replanWithRuntimeFilters(
       scan,
       runtimeFilters,
-      PushDownUtils.getPartitionPredicateSchema(table, output),
+      table,
       output,
       outputPartitioning,
       inputPartitions)

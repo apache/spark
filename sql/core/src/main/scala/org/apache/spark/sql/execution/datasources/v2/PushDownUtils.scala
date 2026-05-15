@@ -141,16 +141,12 @@ object PushDownUtils extends Logging {
    * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
    * pushdown.
    *
-   * The partition-predicate schema is passed by-name so callers that cannot supply one (no
-   * partition transforms available) or whose scan does not opt into iterative pushdown pay no
-   * derivation cost.
-   *
    * @return true if any filters were pushed to the data source
    */
   def pushRuntimeFilters(
       scan: Scan,
       runtimeFilters: Seq[Expression],
-      partitionPredicateSchema: => Option[Seq[PartitionPredicateField]],
+      table: Table,
       output: Seq[AttributeReference]): Boolean = {
     scan match {
       case filterableScan: SupportsRuntimeV2Filtering if runtimeFilters.nonEmpty =>
@@ -178,7 +174,7 @@ object PushDownUtils extends Logging {
             !filtersToTranslated.get(f).exists(pushed.contains) &&
               f.references.subsetOf(filterAttrs)
           }
-          val partPredicates = partitionPredicateSchema
+          val partPredicates = getPartitionPredicateSchema(table, output)
             .map(createRuntimePartitionPredicates(candidates, _))
             .getOrElse(Seq.empty)
           if (partPredicates.nonEmpty) {
@@ -201,27 +197,31 @@ object PushDownUtils extends Logging {
    *
    * Must be called at execute time: runtime filters carry [[DynamicPruningExpression]] and
    * scalar-subquery references whose values are only resolved after their broadcast/subquery
-   * side completes. Callers should wrap the result in a `lazy val` so the mutating
-   * [[pushRuntimeFilters]] call runs at most once per scan instance.
+   * side completes. The mutating [[pushRuntimeFilters]] call must run at most once per scan
+   * instance; callers are responsible for caching the result.
    *
-   * @param scan                      the V2 scan to push filters into
-   * @param runtimeFilters            runtime filters to translate and push
-   * @param partitionPredicateSchema  by-name schema for iterative [[PartitionPredicate]] pushdown
-   * @param output                    scan output attributes
-   * @param outputPartitioning        Spark-side output partitioning (used for SPJ validation)
-   * @param inputPartitions           by-name original (unfiltered) partitions; consulted only when
-   *                                  no runtime filters fire, so callers can compute it lazily
+   * Precondition: when `outputPartitioning` is a [[KeyedPartitioning]], every element of
+   * `originalPartitions` (and every partition re-planned by the data source) must implement
+   * [[HasPartitionKey]].
+   *
+   * @param scan                the V2 scan to push filters into
+   * @param runtimeFilters      runtime filters to translate and push
+   * @param table               the table backing the scan, used to derive the partition-predicate
+   *                            schema for iterative [[PartitionPredicate]] pushdown
+   * @param output              scan output attributes
+   * @param outputPartitioning  Spark-side output partitioning (used for SPJ validation)
+   * @param originalPartitions  unfiltered partitions, consulted only when no runtime filters fire
    * @return one entry per original input partition: `Some(part)` for surviving partitions and
    *         `None` for partition keys whose splits were entirely pruned (SPJ alignment)
    */
-  def filterAndPlanPartitions(
+  def replanWithRuntimeFilters(
       scan: Scan,
       runtimeFilters: Seq[Expression],
-      partitionPredicateSchema: => Option[Seq[PartitionPredicateField]],
+      table: Table,
       output: Seq[AttributeReference],
       outputPartitioning: Partitioning,
-      inputPartitions: => Seq[InputPartition]): Seq[Option[InputPartition]] = {
-    val filtered = pushRuntimeFilters(scan, runtimeFilters, partitionPredicateSchema, output)
+      originalPartitions: => Seq[InputPartition]): Seq[Option[InputPartition]] = {
+    val filtered = pushRuntimeFilters(scan, runtimeFilters, table, output)
     if (filtered) {
       // call toBatch again to get filtered partitions
       val newPartitions = scan.toBatch.planInputPartitions()
@@ -246,6 +246,8 @@ object PushDownUtils extends Logging {
                 "partition keys that are not present in the original partitioning.")
           }
 
+          // Pad the post-filter partitions with `None` per original key so SPJ key alignment with
+          // the other side of the join is preserved when splits are entirely pruned.
           inputMap.toSeq
             .sortBy(_._1)(k.keyOrdering)
             .flatMap { case (key, size) =>
@@ -268,11 +270,16 @@ object PushDownUtils extends Logging {
       }
 
     } else {
+      val parts = originalPartitions
       (outputPartitioning match {
         case k: KeyedPartitioning =>
-          inputPartitions.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyRowOrdering)
+          if (parts.exists(!_.isInstanceOf[HasPartitionKey])) {
+            throw new SparkException("Original partitions must implement HasPartitionKey when " +
+                "outputPartitioning is KeyedPartitioning.")
+          }
+          parts.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyRowOrdering)
 
-        case _ => inputPartitions
+        case _ => parts
       }).map(Some)
     }
   }
