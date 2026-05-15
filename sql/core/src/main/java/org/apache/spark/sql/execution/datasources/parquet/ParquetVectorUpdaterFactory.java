@@ -706,12 +706,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      // Target is a 32-bit decimal column vector (precision <= 9); narrow the dictionary's
-      // long value to int via the same `(int) longValue` cast used by `readValue` and
-      // `readValues`. The pre-existing `putLong` here was a latent bug that did not surface
-      // until the dictionary-decode path was exercised by the new end-to-end test, because
-      // a 32-bit decimal vector stores values in `intData` and `putLong` would NPE on the
-      // unallocated `longData`.
+      // 32-bit Decimal target (precision <= 9) is stored in `intData`; `longData` is
+      // unallocated, so use `putInt` with the same narrowing cast as `readValue`/`readValues`.
       values.putInt(offset, (int) dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
     }
   }
