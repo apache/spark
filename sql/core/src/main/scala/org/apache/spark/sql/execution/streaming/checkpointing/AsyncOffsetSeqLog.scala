@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.runtime.ErrorNotifier
 import org.apache.spark.util.{Clock, SystemClock}
 
 /**
@@ -36,7 +37,8 @@ class AsyncOffsetSeqLog(
     path: String,
     executorService: ThreadPoolExecutor,
     offsetCommitIntervalMs: Long,
-    clock: Clock = new SystemClock())
+    clock: Clock = new SystemClock(),
+    errorNotifier: ErrorNotifier = new ErrorNotifier())
   extends OffsetSeqLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage
@@ -143,6 +145,14 @@ class AsyncOffsetSeqLog(
       executorService.submit(new Runnable {
         override def run(): Unit = {
           try {
+            val priorError = errorNotifier.getError().orNull
+            if (priorError != null) {
+              logWarning(log"Skipping async offset write for batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} because a previous async " +
+                log"write task already failed", priorError)
+              future.completeExceptionally(priorError)
+              return
+            }
             if (fileManager.exists(batchMetadataFile)) {
               future.complete(false)
             } else {
