@@ -708,7 +708,9 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      values.putLong(offset, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+      // 32-bit Decimal target (precision <= 9) is stored in `intData`; `longData` is
+      // unallocated, so use `putInt` with the same narrowing cast as `readValue`/`readValues`.
+      values.putInt(offset, (int) dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
     }
   }
 
