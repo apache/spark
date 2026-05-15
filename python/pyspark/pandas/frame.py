@@ -19,7 +19,7 @@
 A wrapper class for Spark DataFrame to behave like pandas DataFrame.
 """
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict, deque, namedtuple
 from collections.abc import Mapping
 import re
 import warnings
@@ -35,6 +35,7 @@ from typing import (
     Callable,
     ClassVar,
     Dict,
+    Deque,
     Generic,
     IO,
     Iterable,
@@ -77,6 +78,7 @@ from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.utils import is_remote
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -4848,10 +4850,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Calculates the difference of a DataFrame element compared with another element in the
         DataFrame (default is the element in the same column of the previous row).
 
-        .. note:: the current implementation of diff uses Spark's Window without
-            specifying partition specification. This leads to moving all data into
-            a single partition in a single machine and could cause serious
-            performance degradation. Avoid this method with very large datasets.
+        .. versionchanged:: 4.1.0
+            The implementation was optimized to use partition-local computation
+            instead of an unpartitioned Spark Window. This avoids
+            moving all data into a single partition and enables scalable processing
+            of large datasets.
 
         Parameters
         ----------
@@ -4913,7 +4916,127 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
-        return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
+        if not isinstance(periods, int):
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
+
+        if is_remote():
+            return self._apply_series_op(lambda psser: psser._diff(periods), should_resolve=True)
+
+        internal = self._internal.resolved_copy
+        sdf = internal.spark_frame
+
+        index_column_names = internal.index_spark_column_names
+        data_column_names = internal.data_spark_column_names
+        selected_column_names = index_column_names + data_column_names + [NATURAL_ORDER_COLUMN_NAME]
+        abs_periods = abs(periods)
+
+        output_schema = StructType(
+            [
+                *[
+                    StructField(field.name, field.dataType, field.nullable, field.metadata)
+                    for field in sdf.select(*index_column_names).schema.fields
+                ],
+                *[
+                    StructField(field.name, DoubleType(), True, field.metadata)
+                    for field in sdf.select(*data_column_names).schema.fields
+                ],
+                sdf.schema[NATURAL_ORDER_COLUMN_NAME],
+            ]
+        )
+
+        sdf_ordered = (
+            sdf.select(*selected_column_names)
+            .repartitionByRange(F.col(NATURAL_ORDER_COLUMN_NAME))
+            .sortWithinPartitions(NATURAL_ORDER_COLUMN_NAME)
+        )
+
+        def to_pdf(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+            return pd.DataFrame(rows, columns=selected_column_names)
+
+        def summarize_partition(
+            pid: int, iterator: Iterator[Row]
+        ) -> Iterator[Tuple[int, List[Dict[str, Any]], List[Dict[str, Any]]]]:
+            if abs_periods == 0:
+                yield pid, [], []
+            else:
+                head: List[Dict[str, Any]] = []
+                tail: Deque[Dict[str, Any]] = deque(maxlen=abs_periods)
+                for row in iterator:
+                    row_dict = row.asDict(recursive=False)
+                    if len(head) < abs_periods:
+                        head.append(row_dict)
+                    tail.append(row_dict)
+                yield pid, head, list(tail)
+
+        summaries = {
+            pid: (head, tail)
+            for pid, head, tail in sdf_ordered.rdd.mapPartitionsWithIndex(
+                summarize_partition
+            ).collect()
+        }
+        ordered_pids = sorted(summaries)
+
+        def take_previous(pid: int) -> List[Dict[str, Any]]:
+            rows: List[Dict[str, Any]] = []
+            for previous_pid in reversed(
+                [candidate for candidate in ordered_pids if candidate < pid]
+            ):
+                rows = summaries[previous_pid][1] + rows
+                if len(rows) >= abs_periods:
+                    return rows[-abs_periods:]
+            return rows
+
+        def take_next(pid: int) -> List[Dict[str, Any]]:
+            rows: List[Dict[str, Any]] = []
+            for next_pid in [candidate for candidate in ordered_pids if candidate > pid]:
+                rows.extend(summaries[next_pid][0])
+                if len(rows) >= abs_periods:
+                    return rows[:abs_periods]
+            return rows
+
+        contexts = {
+            pid: (take_previous(pid) if periods > 0 else take_next(pid))
+            for pid in ordered_pids
+        }
+        contexts_bc = default_session().sparkContext.broadcast(contexts)
+
+        def diff_partition(pid: int, iterator: Iterator[Row]) -> Iterator[Row]:
+            rows = [row.asDict(recursive=False) for row in iterator]
+            if len(rows) == 0:
+                return
+
+            context = contexts_bc.value.get(pid, [])
+            if periods > 0:
+                pdf = to_pdf(context + rows)
+                diffed = pdf[data_column_names].diff(periods=periods).iloc[len(context):]
+            else:
+                pdf = to_pdf(rows + context)
+                diffed = pdf[data_column_names].diff(periods=periods).iloc[:len(rows)]
+            diffed = diffed.astype(object).where(pd.notna(diffed), None)
+
+            current = to_pdf(rows)
+            result = pd.concat(
+                [
+                    current[index_column_names].reset_index(drop=True),
+                    diffed.reset_index(drop=True),
+                    current[[NATURAL_ORDER_COLUMN_NAME]].reset_index(drop=True),
+                ],
+                axis=1,
+            )
+            for record in result.to_dict("records"):
+                yield Row(**record)
+
+        result_sdf = default_session().createDataFrame(
+            sdf_ordered.rdd.mapPartitionsWithIndex(diff_partition), schema=output_schema
+        )
+
+        new_internal = internal.copy(
+            spark_frame=result_sdf,
+            index_spark_columns=[scol_for(result_sdf, c) for c in index_column_names],
+            data_spark_columns=[scol_for(result_sdf, c) for c in data_column_names],
+            data_fields=None,
+        )
+        return DataFrame(new_internal)
 
     def nunique(
         self,

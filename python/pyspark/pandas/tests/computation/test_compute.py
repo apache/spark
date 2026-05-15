@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pyspark.sql import functions as sf
+from pyspark.sql.utils import is_remote
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -194,7 +195,53 @@ class FrameComputeMixin:
 
         self.assert_eq(pdf.diff(), psdf.diff())
         self.assert_eq(pdf.diff().diff(-1), psdf.diff().diff(-1))
-        self.assert_eq(pdf.diff().sum().astype(int), psdf.diff().sum())
+        self.assert_eq(pdf.diff().sum(), psdf.diff().sum())
+        if not is_remote():
+            self.assertNotIn(
+                "Window",
+                psdf.diff()._internal.spark_frame._jdf.queryExecution().analyzed().toString(),
+            )
+
+        # Test multi-index
+        pdf_multi = pdf.copy()
+        pdf_multi.index = pd.MultiIndex.from_tuples(
+            [("A", 1), ("A", 2), ("B", 1), ("B", 2), ("C", 1), ("C", 2)]
+        )
+        psdf_multi = ps.from_pandas(pdf_multi)
+        self.assert_eq(pdf_multi.diff(), psdf_multi.diff())
+
+        # Test empty
+        pdf_empty = pd.DataFrame({"a": []}, dtype=int)
+        psdf_empty = ps.from_pandas(pdf_empty)
+        self.assert_eq(pdf_empty.diff(), psdf_empty.diff())
+
+        # Test single partition
+        self.assert_eq(pdf.diff(), psdf.spark.repartition(1).diff())
+
+        # Test with nulls
+        pdf_nulls = pd.DataFrame({"a": [1, None, 3, 4, None, 6]}, index=np.random.rand(6))
+        psdf_nulls = ps.from_pandas(pdf_nulls)
+        self.assert_eq(pdf_nulls.diff(), psdf_nulls.diff())
+
+        # Test negative and large periods
+        self.assert_eq(pdf.diff(periods=0), psdf.diff(periods=0))
+        self.assert_eq(pdf.diff(periods=-2), psdf.diff(periods=-2))
+        self.assert_eq(pdf.diff(periods=10), psdf.diff(periods=10))
+
+        # Test cross-partition boundary rows after physical repartitioning.
+        pdf_boundary = pd.DataFrame(
+            {"a": list(range(20)), "b": [value * value for value in range(20)]},
+            index=np.random.rand(20),
+        )
+        psdf_boundary = ps.from_pandas(pdf_boundary).spark.repartition(4)
+        expected_boundary = psdf_boundary.to_pandas()
+        self.assert_eq(expected_boundary.diff(periods=4), psdf_boundary.diff(periods=4))
+        self.assert_eq(expected_boundary.diff(periods=-4), psdf_boundary.diff(periods=-4))
+
+        # Test Series.diff
+        self.assert_eq(pdf["a"].diff(), psdf["a"].diff())
+        self.assert_eq(pdf["a"].diff(-1), psdf["a"].diff(-1))
+        self.assert_eq(pdf["a"].diff(3), psdf["a"].diff(3))
 
         msg = "should be an int"
         with self.assertRaisesRegex(TypeError, msg):

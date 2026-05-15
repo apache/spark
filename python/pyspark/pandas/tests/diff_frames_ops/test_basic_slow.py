@@ -156,11 +156,9 @@ class DiffFramesBasicSlowMixin:
         )
         psdf = ps.from_pandas(pdf)
 
+        self.assert_eq(pdf.diff().loc[pdf["Col1"] == 20], psdf.diff().loc[psdf["Col1"] == 20])
         self.assert_eq(
-            pdf.diff().loc[pdf["Col1"] == 20].astype(int), psdf.diff().loc[psdf["Col1"] == 20]
-        )
-        self.assert_eq(
-            pdf["Col2"].diff().loc[pdf["Col1"] == 20].astype(int),
+            pdf["Col2"].diff().loc[pdf["Col1"] == 20],
             psdf["Col2"].diff().loc[psdf["Col1"] == 20],
         )
 

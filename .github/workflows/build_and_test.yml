@@ -203,32 +203,36 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        IMG_URL="ghcr.io/$REPO_OWNER/$REPO_NAME/$IMG_NAME"
         echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (Documentation)
       id: infra-image-docs-outputs
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        IMG_URL="ghcr.io/$REPO_OWNER/$REPO_NAME/$IMG_NAME"
         echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (Linter)
       id: infra-image-lint-outputs
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image-lint:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        IMG_URL="ghcr.io/$REPO_OWNER/$REPO_NAME/$IMG_NAME"
         echo "image_lint_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (SparkR)
       id: infra-image-sparkr-outputs
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image-sparkr:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        IMG_URL="ghcr.io/$REPO_OWNER/$REPO_NAME/$IMG_NAME"
         echo "image_sparkr_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Generate infra image URL (PySpark ${{ env.PYSPARK_IMAGE_TO_TEST }})
       id: infra-image-pyspark-outputs
@@ -237,8 +241,9 @@ jobs:
       run: |
         # Convert to lowercase to meet Docker repo name requirement
         REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
         IMG_NAME="apache-spark-ci-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}:${{ inputs.branch }}-${{ github.run_id }}"
-        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        IMG_URL="ghcr.io/$REPO_OWNER/$REPO_NAME/$IMG_NAME"
         echo "image_pyspark_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Link the docker images
       id: infra-image-link
