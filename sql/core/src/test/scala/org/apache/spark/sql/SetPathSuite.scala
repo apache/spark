@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**
  * Tests for SET PATH command and session path management.
@@ -505,11 +506,110 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  // TODO: cloneSession() constructs a new CatalogManager per forked session and
-  // explicitly copies only the stored session path via copySessionPathFrom.
-  // Other CatalogManager state propagation (current catalog/namespace, registered
-  // catalogs) on clone is currently incidental -- audit and pin down the intended
-  // semantics in a follow-up.
+  // --- cloneSession() propagation matrix --------------------------------------
+  // The cloned session is built via `BaseSessionStateBuilder` from a parent
+  // `SessionState`. Per-component hand-offs on clone:
+  //   - `SessionCatalog.copyStateTo` copies `currentDb` and `tempViews`,
+  //   - `CatalogManager.copySessionPathFrom` copies the stored `_sessionPath`,
+  //   - `functionRegistry.clone()` and `tableFunctionRegistry.clone()` copy
+  //     temporary functions.
+  // What is NOT propagated:
+  //   - the temp variable registry (new `TempVariableManager` per session),
+  //   - the `CatalogManager` current-catalog / current-namespace (re-read from
+  //     conf defaults in the child),
+  //   - the registered v2 `catalogs` map (lazy-loaded per session).
+  // The tests below pin this observed behavior so any future change has to
+  // update the assertions.
+
+  test("cloneSession: stored SET PATH propagates to the child session") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val child = spark.cloneSession()
+        val entries = pathEntries(
+          child.sql("SELECT current_path()").collect().head.getString(0))
+        assert(entries === Seq("spark_catalog.default", "system.builtin"),
+          s"Cloned session should inherit stored SET PATH; got: $entries")
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("cloneSession: USE SCHEMA on the parent propagates to the child") {
+    sql("CREATE SCHEMA IF NOT EXISTS path_clone_use")
+    try {
+      sql("USE spark_catalog.path_clone_use")
+      val child = spark.cloneSession()
+      val childDb = child.sql("SELECT current_database()").head().getString(0)
+      assert(childDb == "path_clone_use",
+        s"Cloned session should inherit the parent's current schema; got: $childDb")
+    } finally {
+      sql("USE spark_catalog.default")
+      sql("DROP SCHEMA IF EXISTS path_clone_use")
+    }
+  }
+
+  test("cloneSession: temp views on the parent propagate to the child") {
+    sql("CREATE TEMPORARY VIEW path_clone_view AS SELECT 1 AS c")
+    try {
+      val child = spark.cloneSession()
+      checkAnswer(child.sql("SELECT c FROM path_clone_view"), Row(1))
+    } finally {
+      sql("DROP VIEW IF EXISTS path_clone_view")
+    }
+  }
+
+  test("cloneSession: temp functions on the parent propagate to the child (cloned " +
+      "functionRegistry)") {
+    sql("CREATE TEMPORARY FUNCTION path_clone_fn() RETURNS INT RETURN 42")
+    try {
+      val child = spark.cloneSession()
+      checkAnswer(child.sql("SELECT path_clone_fn()"), Row(42))
+      // Snapshot semantics: dropping in the parent must not affect the already-cloned child.
+      sql("DROP TEMPORARY FUNCTION path_clone_fn")
+      checkAnswer(child.sql("SELECT path_clone_fn()"), Row(42))
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS path_clone_fn")
+    }
+  }
+
+  test("cloneSession: temp variables on the parent are NOT propagated to the child") {
+    sql("DECLARE OR REPLACE VARIABLE path_clone_var INT DEFAULT 7")
+    try {
+      val child = spark.cloneSession()
+      val e = intercept[AnalysisException] {
+        child.sql("SELECT path_clone_var").collect()
+      }
+      // Either UNRESOLVED_VARIABLE or UNRESOLVED_COLUMN; both confirm the variable
+      // did not survive the clone.
+      assert(
+        e.getCondition == "UNRESOLVED_VARIABLE" ||
+          e.getCondition.startsWith("UNRESOLVED_COLUMN"),
+        s"Temp variables should NOT propagate to the clone; got: ${e.getCondition}")
+    } finally {
+      sql("DROP TEMPORARY VARIABLE IF EXISTS path_clone_var")
+    }
+  }
+
+  test("cloneSession: child SET PATH does not leak back to the parent") {
+    withPathEnabled {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val child = spark.cloneSession()
+        child.sql("SET PATH = system.session, system.builtin")
+        val parentEntries = pathEntries(currentPath())
+        assert(parentEntries === Seq("spark_catalog.default", "system.builtin"),
+          s"Child SET PATH must not affect the parent; parent got: $parentEntries")
+        val childEntries = pathEntries(
+          child.sql("SELECT current_path()").collect().head.getString(0))
+        assert(childEntries === Seq("system.session", "system.builtin"),
+          s"Child SET PATH should be visible only in the child; child got: $childEntries")
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
 
   // --- Resolution tests: verify SET PATH affects actual table/function lookup ---
 
