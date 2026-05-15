@@ -207,18 +207,24 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
 
   test("UnqualifiedColumnName accepts a simple single-part identifier") {
     assert(UnqualifiedColumnName("col").name == "col")
+    // .quoted always wraps in back-ticks, even when the input had none.
+    assert(UnqualifiedColumnName("col").quoted == "`col`")
   }
 
   test("UnqualifiedColumnName accepts a backtick-quoted name containing a literal dot") {
     // Backticks make the dot part of a single name part, so this passes validation. The
     // stored name is the parsed (unquoted) form so it matches the actual schema field name.
     assert(UnqualifiedColumnName("`a.b`").name == "a.b")
+    // .quoted re-wraps the parsed name in back-ticks, round-tripping back to the input form.
+    assert(UnqualifiedColumnName("`a.b`").quoted == "`a.b`")
   }
 
   test("UnqualifiedColumnName accepts redundant backticks around a single-part name") {
     // Backticks around an already-single-part identifier are decorative; the parser strips them
     // so the stored name has no surrounding back-ticks.
     assert(UnqualifiedColumnName("`col`").name == "col")
+    // .quoted re-wraps the parsed name in back-ticks, round-tripping back to the input form.
+    assert(UnqualifiedColumnName("`col`").quoted == "`col`")
   }
 
   test("UnqualifiedColumnName.quoted is safe to pass to functions.col for literal-dot names") {
