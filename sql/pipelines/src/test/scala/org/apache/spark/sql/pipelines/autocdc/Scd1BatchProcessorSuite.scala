@@ -50,7 +50,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     )
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
@@ -78,7 +78,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     )
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
@@ -108,7 +108,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     )
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
@@ -140,7 +140,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     )
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("customer_id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
@@ -169,7 +169,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     )
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("`user.id`")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
@@ -196,7 +196,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     )
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
@@ -218,7 +218,7 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     val batch = microbatchOf(schema)()
 
     val processor = Scd1BatchProcessor(
-      ChangeArgs(
+      changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
