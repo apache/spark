@@ -67,15 +67,18 @@ public class NettyUtils {
       new PooledByteBufAllocator[2];
 
   /**
-   * Cached result of probing whether io_uring can actually allocate a ring on this JVM.
-   * `null` means not yet probed; non-null is the probed value.
+   * Cached result of probing whether io_uring can actually allocate the rings Spark needs on
+   * this JVM. `null` means not yet probed; non-null is the probed value.
    *
    * <p>{@link IoUring#isAvailable()} only checks that the JNI library loaded and basic syscalls
    * work; it does not detect environments where the kernel allows io_uring but
    * {@code RLIMIT_MEMLOCK} is too low for the submission/completion queue rings (common in
    * containers, GitHub Actions runners, and other restricted environments). The probe creates
-   * a one-thread {@link MultiThreadIoEventLoopGroup} and shuts it down to verify ring
-   * allocation actually succeeds.
+   * a {@link MultiThreadIoEventLoopGroup} sized to {@link #MAX_DEFAULT_NETTY_THREADS} -- which
+   * is the worst case Spark allocates by default for a single event loop group -- and shuts it
+   * down to verify ring allocation actually succeeds. Probing with one thread is insufficient
+   * because some restricted environments allow a single ring to fit in memlock but not the eight
+   * rings Spark needs in practice.
    */
   private static volatile Boolean ioUringUsable = null;
 
@@ -108,10 +111,12 @@ public class NettyUtils {
       }
       MultiThreadIoEventLoopGroup probe = null;
       try {
-        probe = new MultiThreadIoEventLoopGroup(1, IoUringIoHandler.newFactory());
+        probe = new MultiThreadIoEventLoopGroup(
+            MAX_DEFAULT_NETTY_THREADS, IoUringIoHandler.newFactory());
         ioUringUsable = true;
       } catch (Throwable t) {
-        logger.warn("io_uring is reported as available but ring allocation failed; " +
+        logger.warn("io_uring is reported as available but allocation of " +
+            MAX_DEFAULT_NETTY_THREADS + " rings failed; " +
             "AUTO will fall back to EPOLL on this JVM. " +
             "Common cause: RLIMIT_MEMLOCK too low (containers, restricted environments). " +
             "To force io_uring, set spark.shuffle.io.mode=IO_URING explicitly.", t);
