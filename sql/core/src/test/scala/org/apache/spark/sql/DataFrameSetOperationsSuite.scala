@@ -1642,6 +1642,35 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
       }
     }
   }
+
+  test("SPARK-51262: exceptAll after dropDuplicates with subset should not throw") {
+    val df1 = spark.createDataFrame(Seq(
+      (1, "a", 100),
+      (1, "a", 200),
+      (2, "b", 300)
+    )).toDF("id", "name", "value")
+
+    val df2 = spark.createDataFrame(Seq(
+      (1, "a", 100)
+    )).toDF("id", "name", "value")
+
+    // dropDuplicates with subset keeps one row per (id, name) group
+    val deduped = df1.dropDuplicates("id", "name")
+
+    // exceptAll should work without INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND
+    val result = deduped.exceptAll(df2)
+    assert(result.columns === Array("id", "name", "value"))
+    assert(result.count() === 1)
+    assert(result.collect().head.getInt(0) === 2)
+
+    // Also verify except (non-all) works
+    val result2 = deduped.except(df2)
+    assert(result2.count() === 1)
+
+    // intersectAll should also work
+    val result3 = deduped.intersectAll(df2)
+    assert(result3.count() <= 1)
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
