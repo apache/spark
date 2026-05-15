@@ -3260,9 +3260,11 @@ class Analyzer(
       // The star will be expanded differently if we insert `Generate` under `Project` too early.
       case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
         val (resolvedGenerator, newProjectList) = projectList
-          .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
-            e match {
+            // SPARK-48091: Only trim aliases on the generator expression itself. Trimming
+            // non-generator expressions strips aliases inside lambda functions (e.g.,
+            // struct(x.as("data"))) before they can be resolved into struct field names.
+            trimNonTopLevelAliases(e) match {
               // If there are more than one generator, we only rewrite the first one and wait for
               // the next analyzer iteration to rewrite the next one.
               case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
@@ -3275,8 +3277,8 @@ class Analyzer(
                   generatorOutput = GeneratorResolution.makeGeneratorOutput(generator, names),
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
-              case other =>
-                (res._1, res._2 :+ other)
+              case _ =>
+                (res._1, res._2 :+ e)
             }
           }
 

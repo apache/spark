@@ -765,6 +765,37 @@ class GeneratorFunctionSuite extends SharedSparkSession {
       Seq(Row(0, 10, 0, 10), Row(1, 20, 1, 20))
     )
   }
+
+  test("SPARK-48091: explode with transform should preserve struct field aliases") {
+    val df = spark.createDataFrame(Seq((1, Array(1, 2, 3), Array(4, 5, 6))))
+      .toDF("id", "my_array", "my_array2")
+
+    // Without explode - aliases should work (baseline)
+    val good = df.select(
+      transform(col("my_array2"), x => struct(x.as("data"))).as("my_struct")
+    )
+    assert(good.schema("my_struct").dataType.asInstanceOf[types.ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames.toSeq === Seq("data"))
+
+    // With explode in same select - aliases should still be preserved
+    val result = df.select(
+      explode(col("my_array")).as("exploded"),
+      transform(col("my_array2"), x => struct(x.as("data"))).as("my_struct")
+    )
+    assert(result.schema("my_struct").dataType.asInstanceOf[types.ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames.toSeq === Seq("data"))
+
+    // Multiple aliases inside struct
+    val result2 = df.select(
+      explode(col("my_array")).as("exploded"),
+      transform(col("my_array2"),
+        x => struct(x.as("value"), col("id").as("key"))
+      ).as("my_struct")
+    )
+    val fields2 = result2.schema("my_struct").dataType.asInstanceOf[types.ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames.toSeq
+    assert(fields2 === Seq("value", "key"))
+  }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {
