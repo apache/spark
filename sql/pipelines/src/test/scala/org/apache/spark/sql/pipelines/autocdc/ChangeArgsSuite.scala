@@ -33,6 +33,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
   test("ColumnSelection None leaves schema unchanged") {
     assert(
       ColumnSelection.applyToSchema(
+        schemaName = "test",
         schema = sourceSchema,
         columnSelection = None,
         ignoreCase = false
@@ -41,6 +42,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
 
   test("ColumnSelection IncludeColumns filters by exact name in schema order") {
     val filteredSchema = ColumnSelection.applyToSchema(
+      schemaName = "test",
       schema = sourceSchema,
       columnSelection = Some(
         ColumnSelection.IncludeColumns(
@@ -57,6 +59,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
 
   test("ColumnSelection ExcludeColumns filters by exact name") {
     val filteredSchema = ColumnSelection.applyToSchema(
+      schemaName = "test",
       schema = sourceSchema,
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("id")))
@@ -73,6 +76,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException] {
         ColumnSelection.applyToSchema(
+          schemaName = "test",
           schema = sourceSchema,
           // Under ignoreCase = false, "name" will not match the schema field "Name".
           columnSelection = Some(
@@ -86,9 +90,10 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
       sqlState = "42703",
       parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
+        "schemaName" -> "test",
         "missingColumns" -> "name, missing",
-        "availableColumns" -> "id, Name, age",
-        "matching" -> "case-sensitive"
+        "availableColumns" -> "id, Name, age"
       )
     )
   }
@@ -97,6 +102,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException] {
         ColumnSelection.applyToSchema(
+          schemaName = "test",
           schema = sourceSchema,
           // Under ignoreCase = false, "NAME" will not match the schema field "Name".
           columnSelection = Some(
@@ -110,9 +116,10 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
       sqlState = "42703",
       parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
+        "schemaName" -> "test",
         "missingColumns" -> "NAME, missing",
-        "availableColumns" -> "id, Name, age",
-        "matching" -> "case-sensitive"
+        "availableColumns" -> "id, Name, age"
       )
     )
   }
@@ -121,6 +128,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     // "NAME" and "AGE" do not exactly match the schema fields "Name" and "age", but
     // ignoreCase = true folds both sides to lowercase before comparing.
     val filteredSchema = ColumnSelection.applyToSchema(
+      schemaName = "test",
       schema = sourceSchema,
       columnSelection = Some(
         ColumnSelection.IncludeColumns(
@@ -141,6 +149,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     // schema field. The returned schema must include "Name" once, not twice. Output ordering
     // and casing follow the schema, not the user's input.
     val filteredSchema = ColumnSelection.applyToSchema(
+      schemaName = "test",
       schema = sourceSchema,
       columnSelection = Some(
         ColumnSelection.IncludeColumns(
@@ -155,6 +164,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
 
   test("ColumnSelection ExcludeColumns matches case-insensitively under ignoreCase=true") {
     val filteredSchema = ColumnSelection.applyToSchema(
+      schemaName = "test",
       schema = sourceSchema,
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
@@ -171,6 +181,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     checkError(
       exception = intercept[AnalysisException] {
         ColumnSelection.applyToSchema(
+          schemaName = "test",
           schema = sourceSchema,
           // "NAME" matches "Name" under ignoreCase=true, but "Missing" has no schema match.
           // The error message reports the user's original casing for the missing column and
@@ -186,9 +197,10 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       condition = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
       sqlState = "42703",
       parameters = Map(
+        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+        "schemaName" -> "test",
         "missingColumns" -> "Missing",
-        "availableColumns" -> "id, Name, age",
-        "matching" -> "case-insensitive"
+        "availableColumns" -> "id, Name, age"
       )
     )
   }
@@ -248,6 +260,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     // construction, the [[UnqualifiedColumnName]] holds "a.b", which matches the field name
     // exactly and the column is included in the filtered schema.
     val filteredSchema = ColumnSelection.applyToSchema(
+      schemaName = "test",
       schema = schema,
       columnSelection = Some(
         ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`a.b`")))

@@ -193,7 +193,7 @@
   },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
-      "The following columns are not present in the schema: <missingColumns>. Available columns: <availableColumns>. Matching was <matching>."
+      "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
     ],
     "sqlState" : "42703"
   },

@@ -28,20 +28,9 @@ import org.apache.spark.sql.types.StructType
  * A single, unqualified column identifier (no nested path or table/alias qualifier). Backticks
  * are consumed: "`a.b`" is stored as "a.b" in [[name]]. Use [[name]] for direct schema-fieldName
  * comparison and [[quoted]] for APIs that re-parse identifier strings.
- *
- * Declared `final class` so the smart constructor is the only path to construction (no synthesized
- * `copy` can bypass it).
  */
-final class UnqualifiedColumnName private (val name: String) extends Serializable {
-
+case class UnqualifiedColumnName private (name: String) {
   def quoted: String = QuotingUtils.quoteIdentifier(name)
-
-  override def equals(other: Any): Boolean = other match {
-    case that: UnqualifiedColumnName => name == that.name
-    case _ => false
-  }
-
-  override def hashCode(): Int = name.hashCode
 }
 
 object UnqualifiedColumnName {
@@ -78,6 +67,7 @@ object ColumnSelection {
    * order follows the original schema; filtering happens in place.
    */
   def applyToSchema(
+      schemaName: String,
       schema: StructType,
       columnSelection: Option[ColumnSelection],
       ignoreCase: Boolean): StructType = columnSelection match {
@@ -86,7 +76,7 @@ object ColumnSelection {
       schema
     case Some(IncludeColumns(cols)) =>
       val includeColumnNames = cols.map(_.name)
-      validateColumnsExistInSchema(includeColumnNames, schema, ignoreCase)
+      validateColumnsExistInSchema(schemaName, schema, includeColumnNames, ignoreCase)
 
       val caseNormalizedIncludeColumnNames =
         includeColumnNames.map(normalizeCase(_, ignoreCase)).toSet
@@ -98,7 +88,7 @@ object ColumnSelection {
       )
     case Some(ExcludeColumns(cols)) =>
       val excludeColumnNames = cols.map(_.name)
-      validateColumnsExistInSchema(excludeColumnNames, schema, ignoreCase)
+      validateColumnsExistInSchema(schemaName, schema, excludeColumnNames, ignoreCase)
 
       val caseNormalizedExcludeColumnNames =
         excludeColumnNames.map(normalizeCase(_, ignoreCase)).toSet
@@ -111,8 +101,9 @@ object ColumnSelection {
   }
 
   private def validateColumnsExistInSchema(
-      columnNames: Seq[String],
+      schemaName: String,
       schema: StructType,
+      columnNames: Seq[String],
       ignoreCase: Boolean): Unit = {
     val caseNormalizedSchemaColumns =
       schema.fieldNames.map(normalizeCase(_, ignoreCase)).toSet
@@ -129,9 +120,10 @@ object ColumnSelection {
       throw new AnalysisException(
         errorClass = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
         messageParameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.of(ignoreCase),
+          "schemaName" -> schemaName,
           "missingColumns" -> columnsMissingInSchema.mkString(", "),
-          "availableColumns" -> schema.fieldNames.mkString(", "),
-          "matching" -> (if (ignoreCase) "case-insensitive" else "case-sensitive")
+          "availableColumns" -> schema.fieldNames.mkString(", ")
         ))
     }
   }
@@ -146,6 +138,15 @@ object ColumnSelection {
       name
     }
   }
+}
+
+/** User-facing case-sensitivity labels surfaced in AutoCDC error messages. */
+private[autocdc] object CaseSensitivityLabels {
+  val CaseSensitive: String = "case-sensitive"
+  val CaseInsensitive: String = "case-insensitive"
+
+  def of(ignoreCase: Boolean): String =
+    if (ignoreCase) CaseInsensitive else CaseSensitive
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
