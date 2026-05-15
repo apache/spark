@@ -143,6 +143,16 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(analyze(new Nvl(floatLit, doubleLit)).dataType == DoubleType)
   }
 
+  test("NullIf replacement preserves its data type before type coercion") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
+        val nullIf = new NullIf(Literal(1), Literal(1))
+        assert(nullIf.dataType == IntegerType)
+        assert(nullIf.replacement.dataType == IntegerType)
+      }
+    }
+  }
+
   test("AtLeastNNonNulls") {
     val mix = Seq(Literal("x"),
       Literal.create(null, StringType),
