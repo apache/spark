@@ -2997,6 +2997,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED" : {
+    "message" : [
+      "Table alias is not allowed with INSERT INTO ... REPLACE WHERE because the WHERE condition is evaluated against the target table directly.",
+      "Use INSERT INTO ... REPLACE ON if you need to reference the target table via an alias."
+    ],
+    "sqlState" : "42000"
+  },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
       "Can't find table property:"
