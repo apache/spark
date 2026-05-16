@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import ammonite.compiler.CodeClassWrapper
 import ammonite.compiler.iface.CodeWrapper
+import ammonite.runtime.Storage
 import ammonite.util.{Bind, Imports, Name, Util}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -95,6 +96,7 @@ object ConnectRepl {
     val main = ammonite.Main(
       welcomeBanner = Option(splash),
       predefCode = predefCode,
+      storageBackend = new Storage.InMemory(),
       replCodeWrapper = ExtendedCodeClassWrapper,
       scriptCodeWrapper = ExtendedCodeClassWrapper,
       inputStream = inputStream,
