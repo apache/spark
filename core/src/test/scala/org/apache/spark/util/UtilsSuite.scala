@@ -527,18 +527,24 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val scenario4 = new File(testDir, "scenario4")
     assert(testDir.canWrite)
     assert(testDir.setWritable(false))
-    assert(!Utils.createDirectory(scenario4))
-    assert(!scenario4.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario4"))
+    // Skip when write permission cannot actually be revoked (e.g., running as root).
+    if (!testDir.canWrite) {
+      assert(!Utils.createDirectory(scenario4))
+      assert(!scenario4.exists())
+      assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario4"))
+    }
     assert(testDir.setWritable(true))
 
     // 5. The parent directory cannot execute
     val scenario5 = new File(testDir, "scenario5")
     assert(testDir.canExecute)
     assert(testDir.setExecutable(false))
-    assert(!Utils.createDirectory(scenario5))
-    assert(!scenario5.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario5"))
+    // Skip when execute permission cannot actually be revoked (e.g., running as root).
+    if (!testDir.canExecute) {
+      assert(!Utils.createDirectory(scenario5))
+      assert(!scenario5.exists())
+      assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario5"))
+    }
     assert(testDir.setExecutable(true))
 
     // The following 3 scenarios are only for the method: createDirectory(File)
