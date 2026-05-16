@@ -899,7 +899,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-7</version>
+        <version>1.5.7-8</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

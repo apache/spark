@@ -6465,6 +6465,84 @@ def rank() -> Column:
 
 
 @_try_remote_functions
+def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Window function: computes the differences between consecutive cumulative counter values in a
+    time series, thereby converting the counter from the cumulative to the delta format.
+
+    Gracefully handles counter resets by returning NULL. Counter resets are detected when the
+    counter value decreases, or when the start time advances between rows.
+
+    Use the PARTITION BY clause of the window to separate independent counters. This is done by
+    specifying all columns which uniquely identify a time series. These are typically the counter
+    name and any attributes tied to the counter.
+
+    Use the ORDER BY clause of the window to order the observations by the associated timestamp
+    in ascending order.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    value : :class:`~pyspark.sql.Column` or column name
+        A cumulative counter. Must be a numeric data type. Must be non-negative.
+    startTime : :class:`~pyspark.sql.Column` or column name, optional
+        An optional timestamp parameter which indicates when the counter was last set to zero.
+        Used to signal counter resets.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between the current and previous counter value within the window partition.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> from datetime import datetime
+    >>> df = spark.createDataFrame(
+    ...     [('http_requests', datetime(2026, 1, 1, 0, 0), 100),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 1), 200),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 2), 400),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 3), 50),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 4), 100)],
+    ...     "m STRING, t TIMESTAMP_NTZ, c INT")
+    >>> w = Window.partitionBy("m").orderBy("t")
+    >>> df.select("m", "t", "c", sf.counter_diff("c").over(w).alias("diff")).show()
+    +-------------+-------------------+---+----+
+    |            m|                  t|  c|diff|
+    +-------------+-------------------+---+----+
+    |http_requests|2026-01-01 00:00:00|100|NULL|
+    |http_requests|2026-01-01 00:01:00|200| 100|
+    |http_requests|2026-01-01 00:02:00|400| 200|
+    |http_requests|2026-01-01 00:03:00| 50|NULL|
+    |http_requests|2026-01-01 00:04:00|100|  50|
+    +-------------+-------------------+---+----+
+
+    >>> df2 = spark.createDataFrame(
+    ...     [('http_requests', datetime(2026, 1, 1, 0, 0), 100, datetime(2026, 1, 1, 0, 0)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 1), 200, datetime(2026, 1, 1, 0, 0)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 2), 400, datetime(2026, 1, 1, 0, 0)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 3), 500, datetime(2026, 1, 1, 0, 2, 15)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 4), 600, datetime(2026, 1, 1, 0, 2, 15))],
+    ...     "m STRING, t TIMESTAMP_NTZ, c INT, s TIMESTAMP_NTZ")
+    >>> df2.select("m", "t", "s", "c", sf.counter_diff("c", "s").over(w).alias("diff")).show()
+    +-------------+-------------------+-------------------+---+----+
+    |            m|                  t|                  s|  c|diff|
+    +-------------+-------------------+-------------------+---+----+
+    |http_requests|2026-01-01 00:00:00|2026-01-01 00:00:00|100|NULL|
+    |http_requests|2026-01-01 00:01:00|2026-01-01 00:00:00|200| 100|
+    |http_requests|2026-01-01 00:02:00|2026-01-01 00:00:00|400| 200|
+    |http_requests|2026-01-01 00:03:00|2026-01-01 00:02:15|500|NULL|
+    |http_requests|2026-01-01 00:04:00|2026-01-01 00:02:15|600| 100|
+    +-------------+-------------------+-------------------+---+----+
+    """
+    if startTime is None:
+        return _invoke_function_over_columns("counter_diff", value)
+    return _invoke_function_over_columns("counter_diff", value, startTime)
+
+
+@_try_remote_functions
 def cume_dist() -> Column:
     """
     Window function: returns the cumulative distribution of values within a window partition,

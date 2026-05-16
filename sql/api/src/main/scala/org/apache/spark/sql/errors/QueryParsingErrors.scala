@@ -72,6 +72,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def insertReplaceWhereTableAliasNotAllowed(ctx: TableAliasContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
       errorClass = "COLUMN_ALIASES_NOT_ALLOWED",

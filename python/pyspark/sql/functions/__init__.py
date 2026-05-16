@@ -434,6 +434,7 @@ __all__ = [  # noqa: F405
     "var_samp",
     "variance",
     # Window Functions
+    "counter_diff",
     "cume_dist",
     "dense_rank",
     "lag",
