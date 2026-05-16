@@ -44,10 +44,13 @@ public final class ShuffleChecksum {
             throw new IllegalArgumentException(
                 "dataLength must be non-negative: " + dataLength);
         }
-        if (startIndex + dataLength > message.capacity()) {
+        // Bound the range against writerIndex() rather than capacity(): the checksum must
+        // cover actual written data only, never bytes in [writerIndex, capacity) which
+        // may be uninitialized.
+        if (startIndex + dataLength > message.writerIndex()) {
             throw new IllegalArgumentException(
-                "startIndex + dataLength exceeds buffer capacity: " +
-                    startIndex + " + " + dataLength + " > " + message.capacity());
+                "startIndex + dataLength exceeds writerIndex: " +
+                    startIndex + " + " + dataLength + " > " + message.writerIndex());
         }
         if (message.hasArray()) {
             // heap-based ByteBuf

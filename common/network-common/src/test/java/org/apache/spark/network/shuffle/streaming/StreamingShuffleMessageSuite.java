@@ -282,6 +282,90 @@ public class StreamingShuffleMessageSuite {
   }
 
   @Test
+  public void testShuffleChecksumNonZeroStartIndex() {
+    // Verify that startIndex correctly offsets where the checksum begins, and that the
+    // result matches an independent reference computation. Cover heap and direct buffers.
+    byte[] data = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    int startIndex = 3;
+    int dataLength = 5; // bytes 3..7 inclusive
+
+    // Reference CRC32C computed over the same sub-range.
+    java.util.zip.CRC32C reference = new java.util.zip.CRC32C();
+    reference.update(data, startIndex, dataLength);
+    long expected = reference.getValue();
+
+    ByteBuf heap = Unpooled.wrappedBuffer(data);
+    ShuffleChecksum csHeap = new ShuffleChecksum();
+    csHeap.updateChecksum(heap, startIndex, dataLength);
+    assertEquals(expected, csHeap.getValue(),
+        "Heap buffer checksum should match reference for sub-range");
+    heap.release();
+
+    ByteBuf direct = Unpooled.directBuffer(data.length);
+    direct.writeBytes(data);
+    ShuffleChecksum csDirect = new ShuffleChecksum();
+    csDirect.updateChecksum(direct, startIndex, dataLength);
+    assertEquals(expected, csDirect.getValue(),
+        "Direct buffer checksum should match reference for sub-range");
+    direct.release();
+  }
+
+  @Test
+  public void testShuffleChecksumRejectsOutOfBoundsRange() {
+    // 5 bytes written, but the test asks for bytes [3..8). Should fail because
+    // startIndex (3) + dataLength (5) = 8 > writerIndex (5).
+    byte[] data = {1, 2, 3, 4, 5};
+    ByteBuf buf = Unpooled.wrappedBuffer(data);
+    try {
+      ShuffleChecksum cs = new ShuffleChecksum();
+      assertThrows(IllegalArgumentException.class,
+          () -> cs.updateChecksum(buf, 3, 5));
+    } finally {
+      buf.release();
+    }
+  }
+
+  @Test
+  public void testShuffleChecksumRejectsRangeBeyondWriterIndexButWithinCapacity() {
+    // capacity = 10 but only 5 bytes written. Requesting [0..8) should fail because
+    // 8 > writerIndex (5), even though 8 <= capacity (10). Guards against checksumming
+    // uninitialized bytes.
+    ByteBuf buf = Unpooled.buffer(10);
+    buf.writeBytes(new byte[]{1, 2, 3, 4, 5});
+    try {
+      ShuffleChecksum cs = new ShuffleChecksum();
+      assertThrows(IllegalArgumentException.class,
+          () -> cs.updateChecksum(buf, 0, 8));
+    } finally {
+      buf.release();
+    }
+  }
+
+  @Test
+  public void testShuffleChecksumRejectsNegativeStartIndex() {
+    ByteBuf buf = Unpooled.wrappedBuffer(new byte[]{1, 2, 3});
+    try {
+      ShuffleChecksum cs = new ShuffleChecksum();
+      assertThrows(IllegalArgumentException.class,
+          () -> cs.updateChecksum(buf, -1, 2));
+    } finally {
+      buf.release();
+    }
+  }
+
+  @Test
+  public void testShuffleChecksumRejectsNegativeDataLength() {
+    ByteBuf buf = Unpooled.wrappedBuffer(new byte[]{1, 2, 3});
+    try {
+      ShuffleChecksum cs = new ShuffleChecksum();
+      assertThrows(IllegalArgumentException.class,
+          () -> cs.updateChecksum(buf, 0, -1));
+    } finally {
+      buf.release();
+    }
+  }
+
+  @Test
   public void testInvalidMessageTypeThrows() {
     ByteBuf buf = Unpooled.buffer(12);
     buf.writeInt(999); // unknown type
