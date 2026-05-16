@@ -164,6 +164,7 @@ class PipelineTestsMixin:
         assert lorv2.getOrDefault(lorv2.maxIter) == 200
 
 
+@unittest.skipIf(not have_torch, "torch is required")
 class PipelineTests(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

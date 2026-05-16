@@ -218,6 +218,7 @@ class ClassificationTestsMixin:
             loaded_model.transform(eval_df1.toPandas())
 
 
+@unittest.skipIf(not have_torch, "torch is required")
 class ClassificationTests(ClassificationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()
