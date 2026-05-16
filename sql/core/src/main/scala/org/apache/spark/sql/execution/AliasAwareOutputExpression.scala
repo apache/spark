@@ -40,7 +40,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     (projectedKPs ++ projectedOthers).take(aliasCandidateLimit) match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(p) => p
-      case ps => PartitioningCollection(ps)
+      case ps => PartitioningCollection.fromPartitionings(ps)
     }
   }
 

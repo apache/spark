@@ -705,7 +705,9 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
     partitionings.map(_.numPartitions).distinct.length == 1,
     s"PartitioningCollection requires all of its partitionings have the same numPartitions.")
 
-  {
+  checkKeyedPartitioningInvariant()
+
+  private def checkKeyedPartitioningInvariant(): Unit = {
     var first: KeyedPartitioning = null
     foreach {
       case k: KeyedPartitioning =>
