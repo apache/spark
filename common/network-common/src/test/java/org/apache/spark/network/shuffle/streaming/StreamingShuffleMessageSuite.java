@@ -150,6 +150,99 @@ public class StreamingShuffleMessageSuite {
     }
   }
 
+  @Test
+  public void testDataMessageRejectsDataSizeLargerThanReadableBytes() {
+    byte[] payload = "hello".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    try {
+      // dataSize (10) > data.readableBytes() (5)
+      assertThrows(IllegalArgumentException.class,
+          () -> new DataMessage(0, 0, payload.length + 5, payloadBuf, 0L));
+    } finally {
+      payloadBuf.release();
+    }
+  }
+
+  @Test
+  public void testDataMessageRejectsDataSizeSmallerThanReadableBytes() {
+    byte[] payload = "hello".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    try {
+      // dataSize (3) < data.readableBytes() (5)
+      assertThrows(IllegalArgumentException.class,
+          () -> new DataMessage(0, 0, payload.length - 2, payloadBuf, 0L));
+    } finally {
+      payloadBuf.release();
+    }
+  }
+
+  @Test
+  public void testDataMessageRejectsNegativeDataSize() {
+    byte[] payload = "hello".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    try {
+      assertThrows(IllegalArgumentException.class,
+          () -> new DataMessage(0, 0, -1, payloadBuf, 0L));
+    } finally {
+      payloadBuf.release();
+    }
+  }
+
+  @Test
+  public void testDataMessageDecodeRejectsTrailingBytes() {
+    // Encode a valid DataMessage, then append junk bytes to the encoded buffer.
+    // decode() should reject because dataSize != message.readableBytes() after the header.
+    byte[] payload = "hello".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    DataMessage original = new DataMessage(1, 2, payload.length, payloadBuf, 0L);
+    original.setSeqNum(SEQ_NUM);
+    CompositeByteBuf buf = Unpooled.compositeBuffer();
+    buf.capacity(original.headerLength());
+    original.encode(buf);
+    original.release();
+    payloadBuf.release();
+
+    // Copy encoded bytes then append 3 extra junk bytes.
+    ByteBuf corrupted = Unpooled.buffer(buf.readableBytes() + 3);
+    corrupted.writeBytes(buf);
+    buf.release();
+    corrupted.writeBytes(new byte[]{0x7f, 0x7f, 0x7f});
+
+    try {
+      assertThrows(IllegalArgumentException.class,
+          () -> StreamingShuffleMessage.decode(corrupted));
+    } finally {
+      corrupted.release();
+    }
+  }
+
+  @Test
+  public void testDataMessageDecodeRejectsTruncatedFrame() {
+    // Encode a valid DataMessage, then strip a trailing byte from the encoded buffer.
+    // decode() should reject because dataSize > message.readableBytes() after the header.
+    byte[] payload = "hello".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    DataMessage original = new DataMessage(1, 2, payload.length, payloadBuf, 0L);
+    original.setSeqNum(SEQ_NUM);
+    CompositeByteBuf buf = Unpooled.compositeBuffer();
+    buf.capacity(original.headerLength());
+    original.encode(buf);
+    original.release();
+    payloadBuf.release();
+
+    int truncatedSize = buf.readableBytes() - 1;
+    ByteBuf truncated = Unpooled.buffer(truncatedSize);
+    truncated.writeBytes(buf, truncatedSize);
+    buf.release();
+
+    try {
+      assertThrows(IllegalArgumentException.class,
+          () -> StreamingShuffleMessage.decode(truncated));
+    } finally {
+      truncated.release();
+    }
+  }
+
   // ---- ShuffleChecksum -------------------------------------------------------
 
   @Test

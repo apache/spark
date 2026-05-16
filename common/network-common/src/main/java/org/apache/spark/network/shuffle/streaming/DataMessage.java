@@ -30,6 +30,15 @@ public final class DataMessage extends StreamingShuffleMessage {
 
     public DataMessage(int shuffleWriterId, int shuffleReaderId, int dataSize, ByteBuf data,
                        long checksum) {
+        if (dataSize < 0) {
+            throw new IllegalArgumentException(
+                "dataSize must be non-negative: " + dataSize);
+        }
+        if (dataSize != data.readableBytes()) {
+            throw new IllegalArgumentException(
+                "dataSize must equal data.readableBytes(): " +
+                    dataSize + " != " + data.readableBytes());
+        }
         this.shuffleWriterId = shuffleWriterId;
         this.shuffleReaderId = shuffleReaderId;
         this.dataSize = dataSize;
@@ -58,9 +67,11 @@ public final class DataMessage extends StreamingShuffleMessage {
         buf.writeInt(dataSize);
         buf.writeLong(checksum);
 
-        // Adding data as a component to buf transfers ownership of data to buf. However,
-        // this DataMessage still has a reference to data, so we need to retain it here.
-        buf.addComponent(true, data.retain());
+        // Only encode exactly `dataSize` bytes of `data`, so the wire payload matches the
+        // header's dataSize even if the underlying ByteBuf has additional readable bytes.
+        // retainedSlice() also bumps the refcount, so this DataMessage's ownedBuf reference
+        // remains valid for later release().
+        buf.addComponent(true, data.retainedSlice(data.readerIndex(), dataSize));
     }
 
     public static DataMessage decode(ByteBuf message) {
@@ -68,9 +79,11 @@ public final class DataMessage extends StreamingShuffleMessage {
         int shuffleReaderId = message.readInt();
         int dataSize = message.readInt();
         long checksum = message.readLong();
-        // Validate dataSize at decode time so malformed frames fail at the wire boundary
-        // with a clear message, rather than later inside getRecordData().
-        if (dataSize < 0 || dataSize > message.readableBytes()) {
+        // Each streaming-shuffle frame carries exactly one DataMessage, so after reading the
+        // header the remaining readable bytes must equal `dataSize`. Strict equality catches
+        // both undersized frames (truncation) and oversized frames (trailing garbage) at the
+        // wire boundary rather than letting them propagate to getRecordData() later.
+        if (dataSize < 0 || dataSize != message.readableBytes()) {
             throw new IllegalArgumentException(
                 "Invalid DataMessage dataSize=" + dataSize +
                     ", readable bytes after header=" + message.readableBytes());
