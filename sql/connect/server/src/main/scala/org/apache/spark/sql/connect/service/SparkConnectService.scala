@@ -314,6 +314,8 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  */
 object SparkConnectService extends Logging {
 
+  private[connect] val SPARK_CONNECT_SESSION_USER_KEY: String = "spark.connect.session.user"
+
   private[connect] var server: Server = _
   private[connect] var bindingAddress: InetSocketAddress = _
 
