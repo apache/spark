@@ -1606,10 +1606,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         |  required int64 v (DECIMAL(9, 2));
         |}""".stripMargin)
     def unscaledAt(i: Int): Long = i % 5 match {
-      case 0 => -999_999_999L
+      case 0 => -999999999L
       case 1 => -1L
       case 2 => 0L
-      case 3 => 999_999_999L
+      case 3 => 999999999L
       case _ => i.toLong * 13L - 7L
     }
     withTempDir { dir =>
