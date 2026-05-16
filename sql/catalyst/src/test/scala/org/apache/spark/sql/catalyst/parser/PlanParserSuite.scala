@@ -1997,13 +1997,8 @@ class PlanParserSuite extends AnalysisTest {
         val sql8 = s"select * from my_tvf(arg1 => $sql8tableArg $sql8partition)"
         checkError(
           exception = parseException(sql8),
-          condition = "_LEGACY_ERROR_TEMP_0064",
-          parameters = Map(
-            "msg" ->
-              ("The table function call includes a table argument with an invalid " +
-              "partitioning/ordering specification: the PARTITION BY clause included multiple " +
-              "expressions without parentheses surrounding them; please add parentheses around " +
-              "these expressions and then retry the query again")),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "PARTITION BY"),
           context = ExpectedContext(
             fragment = s"$sql8tableArg $sql8partition",
             start = 29,
