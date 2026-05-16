@@ -57,7 +57,7 @@ class GroupByDiffMixin:
             pdf.groupby(pkey)[["a"]].diff().sort_index(),
         )
 
-        self.assert_eq(psdf.groupby(kkey).diff().sum(), pdf.groupby(pkey).diff().sum().astype(int))
+        self.assert_eq(psdf.groupby(kkey).diff().sum(), pdf.groupby(pkey).diff().sum())
         self.assert_eq(psdf.groupby(kkey)["a"].diff().sum(), pdf.groupby(pkey)["a"].diff().sum())
 
 

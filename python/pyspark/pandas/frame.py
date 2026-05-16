@@ -4995,8 +4995,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return rows
 
         contexts = {
-            pid: (take_previous(pid) if periods > 0 else take_next(pid))
-            for pid in ordered_pids
+            pid: (take_previous(pid) if periods > 0 else take_next(pid)) for pid in ordered_pids
         }
         contexts_bc = default_session().sparkContext.broadcast(contexts)
 
@@ -5008,10 +5007,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             context = contexts_bc.value.get(pid, [])
             if periods > 0:
                 pdf = to_pdf(context + rows)
-                diffed = pdf[data_column_names].diff(periods=periods).iloc[len(context):]
+                diffed = pdf[data_column_names].diff(periods=periods).iloc[len(context) :]
             else:
                 pdf = to_pdf(rows + context)
-                diffed = pdf[data_column_names].diff(periods=periods).iloc[:len(rows)]
+                diffed = pdf[data_column_names].diff(periods=periods).iloc[: len(rows)]
             diffed = diffed.astype(object).where(pd.notna(diffed), None)
 
             current = to_pdf(rows)

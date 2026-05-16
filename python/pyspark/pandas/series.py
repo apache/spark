@@ -4439,11 +4439,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def _diff(self, periods: int, *, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
-        window = (
-            Window.partitionBy(*part_cols)
-            .orderBy(NATURAL_ORDER_COLUMN_NAME)
-            .rowsBetween(-periods, -periods)
-        )
+        window = Window.partitionBy(*part_cols).orderBy(NATURAL_ORDER_COLUMN_NAME)
         scol = (self.spark.column - F.lag(self.spark.column, periods).over(window)).cast(
             DoubleType()
         )
