@@ -174,8 +174,8 @@ private[joins] class SortMergeAsOfJoinScanner(
     TypeUtils.getInterpretedOrdering(orderExpression.dataType)
 
   // Determine scan direction based on the as-of condition.
-  // Backward (left >= right): best match is at end of sorted buffer → right-to-left
-  // Forward (left <= right): best match is at start → left-to-right
+  // Backward (left >= right): best match is at end of sorted buffer -> right-to-left
+  // Forward (left <= right): best match is at start -> left-to-right
   // Nearest / unknown: left-to-right (works correctly, just no early termination
   // guarantee for the "as-of not satisfied" shortcut)
   private val scanRightToLeft: Boolean = {
@@ -335,8 +335,8 @@ private[joins] class SortMergeAsOfJoinScanner(
    *
    * The buffer is sorted by as-of key ascending. The scan direction is
    * chosen based on where the best match is expected:
-   * - Backward (left >= right): best match near the end → right-to-left
-   * - Forward (left <= right): best match near the start → left-to-right
+   * - Backward (left >= right): best match near the end -> right-to-left
+   * - Forward (left <= right): best match near the start -> left-to-right
    * - Nearest: full scan needed (left-to-right, stop when distance
    *   increases after finding a match)
    */

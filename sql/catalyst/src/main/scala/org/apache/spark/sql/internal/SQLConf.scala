@@ -876,7 +876,8 @@ object SQLConf {
         "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
         "in a single pass.")
-      .version("4.1.0")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -4274,7 +4275,7 @@ object SQLConf {
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.size.threshold")
       .internal()
       .doc("Threshold for size of rows to be spilled by sort merge join operator")
-      .version("4.3.0")
+      .version("4.1.0")
       .fallbackConf(SHUFFLE_SPILL_MAX_SIZE_FORCE_SPILL_THRESHOLD)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
