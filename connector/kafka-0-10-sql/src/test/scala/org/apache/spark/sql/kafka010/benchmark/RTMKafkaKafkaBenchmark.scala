@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 
 import org.apache.kafka.clients.producer.{Callback, KafkaProducer, Producer, ProducerRecord, RecordMetadata}
 
-import org.apache.spark.benchmark.BenchmarkBase
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
@@ -55,16 +55,7 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
  *      "connector/kafka-0-10-sql/benchmarks/RTMKafkaKafkaBenchmark-results.txt".
  * }}}
  *
- * Example output from a recent run (Linux x86_64, OpenJDK 17):
- * {{{
- *   Kafka to kafka query e2e_latency in milliseconds is
- *   p0:   45
- *   p50:  70
- *   p90:  78
- *   p95:  81
- *   p99:  85
- *   p100: 331
- * }}}
+ * See `benchmarks/RTMKafkaKafkaBenchmark-results.txt` for a recorded run.
  */
 object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
@@ -74,7 +65,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     // BenchmarkBase.main does not wrap this call in try/finally, so we must own
-    // teardown ourselves — partial setup, a timeout, or a getLatencies failure
+    // teardown ourselves: partial setup, a timeout, or a getLatencies failure
     // would otherwise leak the embedded Kafka broker and local-cluster workers.
     testUtils = new KafkaTestUtils(Map.empty)
     try {
@@ -296,8 +287,12 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
       .map(pair => pair._1 + ": " + pair._2)
       .mkString("\n")
 
+    // Include JVM/OS/processor info so result files are comparable across runs, matching
+    // the header that org.apache.spark.benchmark.Benchmark.run() emits.
+    val envHeader =
+      s"${Benchmark.getJVMOSInfo()}\n${Benchmark.getProcessorName()}\n"
     val message =
-      s"Kafka to kafka query ${colName} in milliseconds is\n" + latenciesTable + "\n"
+      envHeader + s"Kafka to kafka query ${colName} in milliseconds is\n" + latenciesTable + "\n"
 
     output match {
       case Some(out) => out.write(message.getBytes)
