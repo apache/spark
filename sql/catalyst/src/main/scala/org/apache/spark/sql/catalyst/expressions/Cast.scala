@@ -897,6 +897,10 @@ case class Cast(
       buildCast[Long](_, t => timestampToLong(t))
     case _: TimeType =>
       buildCast[Long](_, t => timeToLong(t))
+    case FloatType if ansiEnabled =>
+      b => CastUtils.floatToLongExact(b.asInstanceOf[Float])
+    case DoubleType if ansiEnabled =>
+      b => CastUtils.doubleToLongExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toLong(b)
@@ -939,6 +943,12 @@ case class Cast(
       })
     case _: TimeType =>
       buildCast[Long](_, t => timeToLong(t).toInt)
+    case LongType if ansiEnabled =>
+      b => CastUtils.longToIntExact(b.asInstanceOf[Long])
+    case FloatType if ansiEnabled =>
+      b => CastUtils.floatToIntExact(b.asInstanceOf[Float])
+    case DoubleType if ansiEnabled =>
+      b => CastUtils.doubleToIntExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toInt(b)
@@ -1982,22 +1992,40 @@ case class Cast(
     }
   }
 
+  private[this] def integralPrefix(from: DataType): String = from match {
+    case ShortType => "short"
+    case IntegerType => "int"
+    case LongType => "long"
+  }
+
+  private[this] def fractionalPrefix(from: DataType): String = from match {
+    case FloatType => "float"
+    case DoubleType => "double"
+  }
+
   private[this] def castIntegralTypeToIntegralTypeExactCode(
       ctx: CodegenContext,
       integralType: String,
       from: DataType,
       to: DataType): CastFunction = {
     assert(ansiEnabled)
-    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
-    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
-    (c, evPrim, _) =>
-      code"""
-        if ($c == ($integralType) $c) {
-          $evPrim = ($integralType) $c;
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
-        }
-      """
+    if (integralType == "int") {
+      val castUtils = classOf[CastUtils].getName
+      val method = s"${integralPrefix(from)}ToIntExact"
+      (c, evPrim, _) => code"$evPrim = $castUtils.$method($c);"
+    } else {
+      // Byte/short narrowing remains inline; refactored in a follow-up PR.
+      val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+      val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
+      (c, evPrim, _) =>
+        code"""
+          if ($c == ($integralType) $c) {
+            $evPrim = ($integralType) $c;
+          } else {
+            throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
+          }
+        """
+    }
   }
 
 
@@ -2017,23 +2045,30 @@ case class Cast(
       from: DataType,
       to: DataType): CastFunction = {
     assert(ansiEnabled)
-    val (min, max) = lowerAndUpperBound(integralType)
-    val mathClass = classOf[Math].getName
-    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
-    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
-    // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
-    // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
-    // for negative floating values, it is equivalent to `Math.ceil`.
-    // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
-    // to check if the floating value x is in the range of an integral type after rounding.
-    (c, evPrim, _) =>
-      code"""
-        if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
-          $evPrim = ($integralType) $c;
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
-        }
-      """
+    if (integralType == "int" || integralType == "long") {
+      val castUtils = classOf[CastUtils].getName
+      val method = s"${fractionalPrefix(from)}To${integralType.capitalize}Exact"
+      (c, evPrim, _) => code"$evPrim = $castUtils.$method($c);"
+    } else {
+      // Byte/short narrowing remains inline; refactored in a follow-up PR.
+      val (min, max) = lowerAndUpperBound(integralType)
+      val mathClass = classOf[Math].getName
+      val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+      val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
+      // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
+      // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to
+      // `Math.floor`; for negative floating values, it is equivalent to `Math.ceil`.
+      // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
+      // to check if the floating value x is in the range of an integral type after rounding.
+      (c, evPrim, _) =>
+        code"""
+          if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
+            $evPrim = ($integralType) $c;
+          } else {
+            throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
+          }
+        """
+    }
   }
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
