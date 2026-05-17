@@ -54,17 +54,26 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    ByteBuffer buffer;
-    ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
-    int length;
+    // Compute total data length across all values so we can read everything in a single
+    // bulk slice instead of allocating one ByteBuffer per value.
+    int totalDataLen = 0;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(currentRow + i);
-      try {
-        buffer = in.slice(length);
-      } catch (EOFException e) {
-        throw new ParquetDecodingException("Failed to read " + length + " bytes");
-      }
-      outputWriter.write(c, rowId + i, buffer, length);
+      totalDataLen += lengthsVector.getInt(currentRow + i);
+    }
+
+    ByteBuffer allData;
+    try {
+      allData = in.slice(totalDataLen);
+    } catch (EOFException e) {
+      throw new ParquetDecodingException("Failed to read " + totalDataLen + " bytes");
+    }
+    byte[] dataArray = allData.array();
+    int dataPos = allData.arrayOffset() + allData.position();
+
+    for (int i = 0; i < total; i++) {
+      int length = lengthsVector.getInt(currentRow + i);
+      c.putByteArray(rowId + i, dataArray, dataPos, length);
+      dataPos += length;
     }
     currentRow += total;
   }
@@ -85,10 +94,8 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   private void readGeoData(int total, WritableColumnVector c, int rowId, int srid,
      WKBConverterStrategy converter) {
-    ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
-    int length;
     for (int i = 0; i < total; i++) {
-      length = lengthsVector.getInt(currentRow + i);
+      int length = lengthsVector.getInt(currentRow + i);
       byte[] physicalValue;
       try {
         // Converts WKB into a physical representation of geometry/geography.
@@ -96,8 +103,7 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
       } catch (IOException e) {
         throw new ParquetDecodingException("Failed to read " + length + " bytes");
       }
-
-      outputWriter.write(c, rowId + i, ByteBuffer.wrap(physicalValue), physicalValue.length);
+      c.putByteArray(rowId + i, physicalValue, 0, physicalValue.length);
     }
     currentRow += total;
   }
@@ -113,11 +119,12 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void skipBinary(int total) {
+    long totalSkip = 0;
     for (int i = 0; i < total; i++) {
-      int remaining = lengthsVector.getInt(currentRow + i);
-      while (remaining > 0) {
-        remaining -= in.skip(remaining);
-      }
+      totalSkip += lengthsVector.getInt(currentRow + i);
+    }
+    while (totalSkip > 0) {
+      totalSkip -= in.skip(totalSkip);
     }
     currentRow += total;
   }
