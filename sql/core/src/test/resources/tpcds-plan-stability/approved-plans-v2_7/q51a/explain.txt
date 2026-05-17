@@ -179,7 +179,7 @@ Results [3]: [item_sk#10, d_date#6, sum(sumws#15)#22 AS cume_sales#23]
 
 (24) Exchange
 Input [3]: [item_sk#10, d_date#6, cume_sales#23]
-Arguments: hashpartitioning(item_sk#10, d_date#6, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+Arguments: nullawarehashpartitioning(item_sk#10, d_date#6, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (25) Sort [codegen id : 12]
 Input [3]: [item_sk#10, d_date#6, cume_sales#23]
@@ -296,7 +296,7 @@ Results [3]: [item_sk#32, d_date#28, sum(sumss#37)#44 AS cume_sales#45]
 
 (49) Exchange
 Input [3]: [item_sk#32, d_date#28, cume_sales#45]
-Arguments: hashpartitioning(item_sk#32, d_date#28, 5), ENSURE_REQUIREMENTS, [plan_id=10]
+Arguments: nullawarehashpartitioning(item_sk#32, d_date#28, 5), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (50) Sort [codegen id : 24]
 Input [3]: [item_sk#32, d_date#28, cume_sales#45]

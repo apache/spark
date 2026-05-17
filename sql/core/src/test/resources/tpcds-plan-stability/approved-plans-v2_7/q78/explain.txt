@@ -88,7 +88,7 @@ Condition : (isnotnull(ss_item_sk#1) AND isnotnull(ss_customer_sk#2))
 
 (4) Exchange
 Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_wholesale_cost#5, ss_sales_price#6, ss_sold_date_sk#7]
-Arguments: hashpartitioning(ss_ticket_number#3, ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
+Arguments: nullawarehashpartitioning(ss_ticket_number#3, ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=1]
 
 (5) Sort [codegen id : 2]
 Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_ticket_number#3, ss_quantity#4, ss_wholesale_cost#5, ss_sales_price#6, ss_sold_date_sk#7]
@@ -114,7 +114,7 @@ Input [3]: [sr_item_sk#9, sr_ticket_number#10, sr_returned_date_sk#11]
 
 (10) Exchange
 Input [2]: [sr_item_sk#9, sr_ticket_number#10]
-Arguments: hashpartitioning(sr_ticket_number#10, sr_item_sk#9, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+Arguments: nullawarehashpartitioning(sr_ticket_number#10, sr_item_sk#9, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (11) Sort [codegen id : 4]
 Input [2]: [sr_item_sk#9, sr_ticket_number#10]
@@ -186,7 +186,7 @@ Condition : (isnotnull(ws_item_sk#27) AND isnotnull(ws_bill_customer_sk#28))
 
 (25) Exchange
 Input [7]: [ws_item_sk#27, ws_bill_customer_sk#28, ws_order_number#29, ws_quantity#30, ws_wholesale_cost#31, ws_sales_price#32, ws_sold_date_sk#33]
-Arguments: hashpartitioning(ws_order_number#29, ws_item_sk#27, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+Arguments: nullawarehashpartitioning(ws_order_number#29, ws_item_sk#27, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (26) Sort [codegen id : 9]
 Input [7]: [ws_item_sk#27, ws_bill_customer_sk#28, ws_order_number#29, ws_quantity#30, ws_wholesale_cost#31, ws_sales_price#32, ws_sold_date_sk#33]
@@ -212,7 +212,7 @@ Input [3]: [wr_item_sk#34, wr_order_number#35, wr_returned_date_sk#36]
 
 (31) Exchange
 Input [2]: [wr_item_sk#34, wr_order_number#35]
-Arguments: hashpartitioning(wr_order_number#35, wr_item_sk#34, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+Arguments: nullawarehashpartitioning(wr_order_number#35, wr_item_sk#34, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (32) Sort [codegen id : 11]
 Input [2]: [wr_item_sk#34, wr_order_number#35]
@@ -298,7 +298,7 @@ Condition : (isnotnull(cs_item_sk#54) AND isnotnull(cs_bill_customer_sk#53))
 
 (49) Exchange
 Input [7]: [cs_bill_customer_sk#53, cs_item_sk#54, cs_order_number#55, cs_quantity#56, cs_wholesale_cost#57, cs_sales_price#58, cs_sold_date_sk#59]
-Arguments: hashpartitioning(cs_order_number#55, cs_item_sk#54, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+Arguments: nullawarehashpartitioning(cs_order_number#55, cs_item_sk#54, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (50) Sort [codegen id : 17]
 Input [7]: [cs_bill_customer_sk#53, cs_item_sk#54, cs_order_number#55, cs_quantity#56, cs_wholesale_cost#57, cs_sales_price#58, cs_sold_date_sk#59]
@@ -324,7 +324,7 @@ Input [3]: [cr_item_sk#60, cr_order_number#61, cr_returned_date_sk#62]
 
 (55) Exchange
 Input [2]: [cr_item_sk#60, cr_order_number#61]
-Arguments: hashpartitioning(cr_order_number#61, cr_item_sk#60, 5), ENSURE_REQUIREMENTS, [plan_id=8]
+Arguments: nullawarehashpartitioning(cr_order_number#61, cr_item_sk#60, 5), ENSURE_REQUIREMENTS, [plan_id=8]
 
 (56) Sort [codegen id : 19]
 Input [2]: [cr_item_sk#60, cr_order_number#61]

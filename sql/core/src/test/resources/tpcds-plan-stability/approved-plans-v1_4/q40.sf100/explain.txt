@@ -51,7 +51,7 @@ Condition : ((isnotnull(cs_warehouse_sk#1) AND isnotnull(cs_item_sk#2)) AND migh
 
 (4) Exchange
 Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
-Arguments: hashpartitioning(cs_order_number#3, cs_item_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+Arguments: nullawarehashpartitioning(cs_order_number#3, cs_item_sk#2, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (5) Sort [codegen id : 2]
 Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
@@ -77,7 +77,7 @@ Input [4]: [cr_item_sk#8, cr_order_number#9, cr_refunded_cash#10, cr_returned_da
 
 (10) Exchange
 Input [3]: [cr_item_sk#8, cr_order_number#9, cr_refunded_cash#10]
-Arguments: hashpartitioning(cr_order_number#9, cr_item_sk#8, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+Arguments: nullawarehashpartitioning(cr_order_number#9, cr_item_sk#8, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (11) Sort [codegen id : 4]
 Input [3]: [cr_item_sk#8, cr_order_number#9, cr_refunded_cash#10]
