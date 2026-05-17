@@ -301,31 +301,22 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
       val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
+    case ByteType | ShortType if failOnError =>
+      val opName = symbol match {
+        case "+" => "Add"
+        case "-" => "Subtract"
+        case "*" => "Multiply"
+        case _ =>
+          throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
+            s"genCode for Byte/Short with symbol '$symbol'", "genCode")
+      }
+      val typeName = if (dataType == ByteType) "byte" else "short"
+      val arithmeticUtils = classOf[ArithmeticUtils].getName
+      defineCodeGen(ctx, ev, (eval1, eval2) =>
+        s"$arithmeticUtils.$typeName${opName}Exact($eval1, $eval2)")
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val tmpResult = ctx.freshName("tmpResult")
-        val try_suggestion = symbol match {
-          case "+" => "try_add"
-          case "-" => "try_subtract"
-          case "*" => "try_multiply"
-          case _ => "unknown_function"
-        }
-        val overflowCheck = if (failOnError) {
-          val javaType = CodeGenerator.boxedType(dataType)
-          s"""
-             |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
-             |  $eval1, "$symbol", $eval2, "$try_suggestion");
-             |}
-           """.stripMargin
-        } else {
-          ""
-        }
-        s"""
-           |${CodeGenerator.JAVA_INT} $tmpResult = $eval1 $symbol $eval2;
-           |$overflowCheck
-           |${ev.value} = (${CodeGenerator.javaType(dataType)})($tmpResult);
-         """.stripMargin
+        s"${ev.value} = (${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2);"
       })
     case IntegerType | LongType if failOnError && exactMathMethod.isDefined =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -458,6 +449,10 @@ case class Add(
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], getContextOrNull())
     case _: LongType if failOnError =>
       MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], getContextOrNull())
+    case _: ByteType if failOnError =>
+      ArithmeticUtils.byteAddExact(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
+    case _: ShortType if failOnError =>
+      ArithmeticUtils.shortAddExact(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
     case _ => numeric.plus(input1, input2)
   }
 
@@ -555,6 +550,10 @@ case class Subtract(
         input1.asInstanceOf[Long],
         input2.asInstanceOf[Long],
         getContextOrNull())
+    case _: ByteType if failOnError =>
+      ArithmeticUtils.byteSubtractExact(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
+    case _: ShortType if failOnError =>
+      ArithmeticUtils.shortSubtractExact(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
     case _ => numeric.minus(input1, input2)
   }
 
@@ -625,6 +624,10 @@ case class Multiply(
         input1.asInstanceOf[Long],
         input2.asInstanceOf[Long],
         getContextOrNull())
+    case _: ByteType if failOnError =>
+      ArithmeticUtils.byteMultiplyExact(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
+    case _: ShortType if failOnError =>
+      ArithmeticUtils.shortMultiplyExact(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
     case _ => numeric.times(input1, input2)
   }
 
