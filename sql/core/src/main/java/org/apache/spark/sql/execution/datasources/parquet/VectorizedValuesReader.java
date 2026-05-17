@@ -115,6 +115,27 @@ public interface VectorizedValuesReader {
     }
   }
 
+  /**
+   * Reads {@code total} INT64 values, narrows each to an int via Java's primitive
+   * long-to-int cast (the high 32 bits are discarded), and writes them into {@code c}
+   * starting at {@code c[rowId]}. Used by the type-converting updater that reads parquet
+   * INT64 DECIMAL columns whose Spark target is a 32-bit decimal (precision <= 9); such
+   * values are guaranteed by Parquet's decimal encoding to fit in int32, so the
+   * narrowing is non-lossy in practice.
+   *
+   * <p>The default implementation falls back to a per-row read+narrow+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readLong()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readLongsAsInts(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putInt(rowId + i, (int) readLong());
+    }
+  }
+
   void readBinary(int total, WritableColumnVector c, int rowId);
   void readGeometry(int total, WritableColumnVector c, int rowId);
   void readGeography(int total, WritableColumnVector c, int rowId);

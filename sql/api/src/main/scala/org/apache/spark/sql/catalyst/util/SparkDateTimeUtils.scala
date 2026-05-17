@@ -228,11 +228,16 @@ trait SparkDateTimeUtils {
 
   /**
    * Converts days since 1970-01-01 at the given zone ID to microseconds since 1970-01-01
-   * 00:00:00Z.
+   * 00:00:00Z. When `zoneId eq ZoneOffset.UTC`, takes a direct-multiply fast path that skips the
+   * `LocalDate`/`ZonedDateTime`/`Instant` chain.
    */
   def daysToMicros(days: Int, zoneId: ZoneId): Long = {
-    val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
-    instantToMicros(instant)
+    if (zoneId eq ZoneOffset.UTC) {
+      Math.multiplyExact(days.toLong, MICROS_PER_DAY)
+    } else {
+      val instant = daysToLocalDate(days).atStartOfDay(zoneId).toInstant
+      instantToMicros(instant)
+    }
   }
 
   /**
