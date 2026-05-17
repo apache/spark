@@ -260,4 +260,74 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
       }
     }
   }
+
+  test("BYTE_STREAM_SPLIT encoding for float and double columns") {
+    val extraOptions = Map[String, String](
+      ParquetOutputFormat.ENABLE_BYTE_STREAM_SPLIT -> "true",
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false"
+    )
+
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+    withSQLConf(
+      // Use non-vectorized reader for the read-back since the vectorized reader
+      // does not yet support BYTE_STREAM_SPLIT decoding on this branch.
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+      ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/test.parquet"
+        val size = 8193
+        val data = (1 to size).map { i =>
+          Row(i, i.toLong, i.toFloat, i.toDouble,
+            if (i % 3 == 0) null else (i * 0.1f),
+            if (i % 5 == 0) null else (i * 0.01))
+        }
+        val schema = new org.apache.spark.sql.types.StructType()
+          .add("i", org.apache.spark.sql.types.IntegerType)
+          .add("l", org.apache.spark.sql.types.LongType)
+          .add("f", org.apache.spark.sql.types.FloatType)
+          .add("d", org.apache.spark.sql.types.DoubleType)
+          .add("f_nullable", org.apache.spark.sql.types.FloatType, nullable = true)
+          .add("d_nullable", org.apache.spark.sql.types.DoubleType, nullable = true)
+
+        spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
+          .write.options(extraOptions).mode("overwrite").parquet(path)
+
+        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+        val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+        assert(columnChunkMetadataList.length === 6)
+        // INT32 and INT64 columns should NOT use BYTE_STREAM_SPLIT (boolean flag
+        // only enables it for FLOAT/DOUBLE, not the extended INT32/INT64 mode)
+        assert(!columnChunkMetadataList(0).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+        assert(!columnChunkMetadataList(1).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+        // FLOAT and DOUBLE columns (including nullable ones) should use BYTE_STREAM_SPLIT
+        assert(columnChunkMetadataList(2).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+        assert(columnChunkMetadataList(3).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+        assert(columnChunkMetadataList(4).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+        assert(columnChunkMetadataList(5).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+
+        // Verify round-trip data correctness
+        val actual = spark.read.parquet(path).collect()
+        assert(actual.length === size)
+        val sorted = actual.sortBy(_.getInt(0))
+        (1 to size).foreach { i =>
+          val row = sorted(i - 1)
+          assert(row.getInt(0) === i)
+          assert(row.getLong(1) === i.toLong)
+          assert(row.getFloat(2) === i.toFloat)
+          assert(row.getDouble(3) === i.toDouble)
+          if (i % 3 == 0) {
+            assert(row.isNullAt(4))
+          } else {
+            assert(row.getFloat(4) === i * 0.1f)
+          }
+          if (i % 5 == 0) {
+            assert(row.isNullAt(5))
+          } else {
+            assert(row.getDouble(5) === i * 0.01)
+          }
+        }
+      }
+    }
+  }
 }
