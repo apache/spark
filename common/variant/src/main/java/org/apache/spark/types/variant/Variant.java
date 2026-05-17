@@ -146,9 +146,12 @@ public final class Variant {
   public Variant getFieldByKey(String key) {
     return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
       // Use linear search for a short list. Switch to binary search when the length reaches
-      // `BINARY_SEARCH_THRESHOLD`.
+      // `BINARY_SEARCH_THRESHOLD` and the object fields are sorted by key name (indicated by
+      // bit 5 of the type info in the header byte).
       final int BINARY_SEARCH_THRESHOLD = 32;
-      if (size < BINARY_SEARCH_THRESHOLD) {
+      int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+      boolean sorted = (typeInfo & 0x20) != 0;
+      if (size < BINARY_SEARCH_THRESHOLD || !sorted) {
         for (int i = 0; i < size; ++i) {
           int id = readUnsigned(value, idStart + idSize * i, idSize);
           if (key.equals(getMetadataKey(metadata, id))) {
