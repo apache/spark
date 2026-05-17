@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.datasketches.common.{Family, SketchesArgumentException}
-import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
+import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.theta.CompactSketch
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -82,7 +82,7 @@ object ThetaSketchUtils {
       try {
         Memory.wrap(bytes)
       } catch {
-        case _: NullPointerException | _: MemoryBoundsException =>
+        case _: NullPointerException | _: IllegalArgumentException =>
           throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
       }
 
@@ -105,7 +105,7 @@ object ThetaSketchUtils {
     try {
       CompactSketch.wrap(memory)
     } catch {
-      case _: SketchesArgumentException | _: MemoryBoundsException =>
+      case _: SketchesArgumentException | _: IllegalArgumentException =>
         throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
   }

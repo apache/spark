@@ -70,6 +70,4 @@
       files="src/test/java/org/apache/spark/util/collection/TestTimSort.java" />
     <suppress checks=".*"
               files="src/main/java/org/apache/spark/sql/execution/streaming/state/StateMessage.java"/>
-    <suppress checks=".*"
-              files="src/main/java/org/apache/datasketches/memory/internal/ResourceImpl.java"/>
 </suppressions>

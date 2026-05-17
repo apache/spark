@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.util.Locale
 
 import org.apache.datasketches.common.Family
-import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
+import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, SummaryDeserializer, TupleSketchIterator}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
@@ -234,7 +234,7 @@ object TupleSketchUtils {
       try {
         Memory.wrap(bytes)
       } catch {
-        case _: NullPointerException | _: MemoryBoundsException =>
+        case _: NullPointerException | _: IllegalArgumentException =>
           throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
       }
 
