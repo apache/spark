@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, NullAwareHashPartitioning}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestData}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
@@ -344,5 +345,138 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val df1 = join("SHUFFLE_HASH(t1)")
     val df2 = join("SHUFFLE_MERGE(t1)")
     checkAnswer(df1, identity, df2.collect().toSeq)
+  }
+
+  test("ordinary outer equi-join spreads NULL keys in shuffle partitioning") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (null.asInstanceOf[Integer], "left-null-1"),
+      (null.asInstanceOf[Integer], "left-null-2")).toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+          val plan = EnsureRequirements.apply(
+            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+          val partitionings = plan.collect {
+            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+          }
+          assert(partitionings.size == 2)
+          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
+            Seq(
+              Row(1, "left-1", 1, "right-1"),
+              Row(null, "left-null-1", null, null),
+              Row(null, "left-null-2", null, null)),
+            sortAnswers = true)
+        }
+    }
+  }
+
+  test("ordinary full outer equi-join keeps NULL keys unmatched while spreading them") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (null.asInstanceOf[Integer], "left-null-1"),
+      (null.asInstanceOf[Integer], "left-null-2")).toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null-1"),
+      (null.asInstanceOf[Integer], "right-null-2")).toDF("k", "rv")
+    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      FullOuter, Some(joinCondition), JoinHint.NONE)
+
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+          val plan = EnsureRequirements.apply(
+            SortMergeJoinExec(leftKeys, rightKeys, FullOuter, boundCondition,
+              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+          val partitionings = plan.collect {
+            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+          }
+          assert(partitionings.size == 2)
+          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              SortMergeJoinExec(leftKeys, rightKeys, FullOuter, boundCondition, left, right)),
+            Seq(
+              Row(1, "left-1", 1, "right-1"),
+              Row(null, "left-null-1", null, null),
+              Row(null, "left-null-2", null, null),
+              Row(null, null, null, "right-null-1"),
+              Row(null, null, null, "right-null-2")),
+            sortAnswers = true)
+        }
+    }
+  }
+
+  test("ordinary outer equi-join preserves null-aware shuffle beside existing hash partitioning") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (null.asInstanceOf[Integer], "left-null")).toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+          val existingLeftShuffle = ShuffleExchangeExec(
+            HashPartitioning(leftKeys, 4),
+            nullableLeft.queryExecution.sparkPlan)
+          val plan = EnsureRequirements.apply(
+            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+              existingLeftShuffle, nullableRight.queryExecution.sparkPlan))
+          val partitionings = plan.collect {
+            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+          }
+
+          assert(partitionings.size == 2)
+          assert(partitionings.count(_.isInstanceOf[HashPartitioning]) == 1)
+          assert(partitionings.count(_.isInstanceOf[NullAwareHashPartitioning]) == 1)
+        }
+    }
+  }
+
+  test("null-safe outer equi-join keeps clustered NULL keys") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (null.asInstanceOf[Integer], "left-null"))
+      .toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+    val joinCondition = nullableLeft("k").eqNullSafe(nullableRight("k")).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+          val plan = EnsureRequirements.apply(
+            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+          val partitionings = plan.collect {
+            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+          }
+          assert(partitionings.size == 2)
+          assert(partitionings.forall(_.isInstanceOf[HashPartitioning]))
+        }
+    }
   }
 }

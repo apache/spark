@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, IsNull}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 
@@ -27,6 +27,21 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
  */
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
+
+  private def containsNullSafeJoinMarker(keys: Seq[Expression]): Boolean = {
+    keys.exists(_.exists(_.isInstanceOf[IsNull]))
+  }
+
+  private lazy val canSpreadNullJoinKeys: Boolean = {
+    val isOuterJoin = joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter
+    val canSpread = isOuterJoin &&
+      !containsNullSafeJoinMarker(leftKeys) &&
+      !containsNullSafeJoinMarker(rightKeys)
+    if (canSpread) {
+      logWarning(s"Using null-aware shuffle distribution for $joinType equi-join keys.")
+    }
+    canSpread
+  }
 
   override def nodeName: String = {
     if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
@@ -39,6 +54,9 @@ trait ShuffledJoin extends JoinCodegenSupport {
       // We re-arrange the shuffle partitions to deal with skew join, and the new children
       // partitioning doesn't satisfy `ClusteredDistribution`.
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+    } else if (canSpreadNullJoinKeys) {
+      ClusteredDistribution(leftKeys, allowNullKeySpreading = true) ::
+        ClusteredDistribution(rightKeys, allowNullKeySpreading = true) :: Nil
     } else {
       ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
     }

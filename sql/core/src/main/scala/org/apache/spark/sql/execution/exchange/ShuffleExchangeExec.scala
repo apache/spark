@@ -241,6 +241,11 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
+    outputPartitioning match {
+      case h: NullAwareHashPartitioning =>
+        logWarning(s"Materializing null-aware hash shuffle with ${h.numPartitions} partitions.")
+      case _ =>
+    }
     // Wrap in the exchange's RDD scope so that any wrapper RDDs created during shuffle dependency
     // preparation (e.g. by prepareShuffleDependency's mapPartitionsInternal calls) get this
     // exchange's scope ID.
@@ -349,6 +354,8 @@ object ShuffleExchangeExec {
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
+      case NullAwareHashPartitioning(_, n) =>
+        new PartitionIdPassthrough(n)
       case ShufflePartitionIdPassThrough(_, n) =>
         // For ShufflePartitionIdPassThrough, the DirectShufflePartitionID expression directly
         // produces partition IDs, so we use PartitionIdPassthrough to pass them through directly.
@@ -403,6 +410,24 @@ object ShuffleExchangeExec {
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
+      case h: NullAwareHashPartitioning =>
+        val partitionIdProjection =
+          UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
+        val joinKeyProjection = UnsafeProjection.create(h.expressions, outputAttributes)
+        var nullKeyPartition =
+          new XORShiftRandom(TaskContext.get().partitionId()).nextInt(h.numPartitions)
+        row => {
+          val joinKeys = joinKeyProjection(row)
+          if (joinKeys.anyNull()) {
+            // NULL join keys cannot match under ordinary equi-join semantics. Spread them
+            // round-robin within each map task so identical rows do not collapse to one reducer.
+            val partition = nullKeyPartition
+            nullKeyPartition = (nullKeyPartition + 1) % h.numPartitions
+            partition
+          } else {
+            partitionIdProjection(row).getInt(0)
+          }
+        }
       case RangePartitioning(sortingExpressions, _) =>
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
@@ -419,9 +444,14 @@ object ShuffleExchangeExec {
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
       newPartitioning.numPartitions > 1
+    val isNullAwareRoundRobin =
+      newPartitioning.isInstanceOf[NullAwareHashPartitioning] &&
+        newPartitioning.numPartitions > 1
+    val needsDeterministicLocalSort =
+      (isRoundRobin || isNullAwareRoundRobin) && SQLConf.get.sortBeforeRepartition
 
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
-      // [SPARK-23207] Have to make sure the generated RoundRobinPartitioning is deterministic,
+      // [SPARK-23207] Have to make sure stateful row-to-partition assignment is deterministic,
       // otherwise a retry task may output different rows and thus lead to data loss.
       //
       // Currently we following the most straight-forward way that perform a local sort before
@@ -429,7 +459,7 @@ object ShuffleExchangeExec {
       //
       // Note that we don't perform local sort if the new partitioning has only 1 partition, under
       // that case all output rows go to the same partition.
-      val newRdd = if (isRoundRobin && SQLConf.get.sortBeforeRepartition) {
+      val newRdd = if (needsDeterministicLocalSort) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {
             override def get: RecordComparator = new RecordBinaryComparator()
@@ -468,7 +498,9 @@ object ShuffleExchangeExec {
       }
 
       // round-robin function is order sensitive if we don't sort the input.
-      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
+      // Stateful partition assignment is order-sensitive when it depends on row visitation order.
+      val isOrderSensitive =
+        (isRoundRobin || isNullAwareRoundRobin) && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()
