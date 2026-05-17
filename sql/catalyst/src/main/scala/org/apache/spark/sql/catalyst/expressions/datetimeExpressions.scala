@@ -2572,30 +2572,35 @@ case class MakeDate(
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
-    try {
-      val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
-      localDateToDays(ld)
-    } catch {
-      case e: java.time.DateTimeException =>
-        if (failOnError) throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e) else null
+    if (failOnError) {
+      DateTimeExpressionUtils.makeDateExact(
+        year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
+    } else {
+      try {
+        val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
+        localDateToDays(ld)
+      } catch {
+        case _: java.time.DateTimeException => null
+      }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val failOnErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
+    if (failOnError) {
+      val utils = classOf[DateTimeExpressionUtils].getName
+      defineCodeGen(ctx, ev, (year, month, day) =>
+        s"$utils.makeDateExact($year, $month, $day)")
     } else {
-      s"${ev.isNull} = true;"
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, (year, month, day) => {
+        s"""
+        try {
+          ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
+        } catch (java.time.DateTimeException e) {
+          ${ev.isNull} = true;
+        }"""
+      })
     }
-    nullSafeCodeGen(ctx, ev, (year, month, day) => {
-      s"""
-      try {
-        ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
-      } catch (java.time.DateTimeException e) {
-        $failOnErrorBranch
-      }"""
-    })
   }
 
   override def prettyName: String = "make_date"
