@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, IntegerLiteral, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, IntegerLiteral, Literal, NullIf, RuntimeReplaceable}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * A dummy optimizer rule for testing that decrements integer literals until 0.
@@ -69,6 +70,25 @@ class OptimizerSuite extends PlanTest {
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
         s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
+  }
+  test("NullIf typed null branch is replaced with a null literal") {
+    val optimizer = new SimpleTestOptimizer() {
+      override def defaultBatches: Seq[Batch] =
+        Batch("test", fixedPoint,
+          ReplaceExpressions) :: Nil
+    }
+
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
+      val nullIf = new NullIf(Literal(true), Literal(true))
+      val plan = Project(Alias(nullIf, "out")() :: Nil, OneRowRelation()).analyze
+      val optimized = optimizer.execute(plan)
+
+      assert(optimized.expressions.exists(_.exists {
+        case Literal(null, BooleanType) => true
+        case _ => false
+      }))
+      assert(optimized.expressions.forall(!_.exists(_.isInstanceOf[RuntimeReplaceable])))
     }
   }
 }

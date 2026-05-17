@@ -309,6 +309,51 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(isnotnull(col("a"))), Seq(Row(false)))
   }
 
+  test("nullif function") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
+        Seq(
+          "SELECT NULLIF(1, 1)" -> Seq(Row(null)),
+          "SELECT NULLIF(1, 2)" -> Seq(Row(1)),
+          "SELECT NULLIF(NULL, 1)" -> Seq(Row(null)),
+          "SELECT NULLIF(1, NULL)" -> Seq(Row(1)),
+          "SELECT NULLIF(NULL, NULL)" -> Seq(Row(null)),
+          "SELECT NULLIF('abc', 'abc')" -> Seq(Row(null)),
+          "SELECT NULLIF('abc', 'xyz')" -> Seq(Row("abc")),
+          "SELECT NULLIF(id, 1) " +
+            "FROM range(10) " +
+            "GROUP BY NULLIF(id, 1)" -> Seq(Row(null), Row(2), Row(3), Row(4), Row(5), Row(6),
+            Row(7), Row(8), Row(9), Row(0)),
+          "SELECT NULLIF(id, 1), COUNT(*)" +
+            "FROM range(10) " +
+            "GROUP BY NULLIF(id, 1) " +
+            "HAVING COUNT(*) > 1" -> Seq.empty[Row]
+        ).foreach {
+          case (sqlText, expected) => checkAnswer(sql(sqlText), expected)
+        }
+
+        checkError(
+         exception = intercept[AnalysisException] {
+           sql("SELECT NULLIF(id, 1), COUNT(*) " +
+             "FROM range(10) " +
+             "GROUP BY NULLIF(id, 2)")
+         },
+         condition = "MISSING_AGGREGATION",
+         parameters = Map(
+           "expression" -> "\"id\"",
+           "expressionAnyValue" -> "\"any_value(id)\"")
+        )
+
+        val nestedDf = Seq("error_multiple_providers", "openai")
+          .toDF("provider")
+          .select(struct(col("provider")).as("c"))
+        checkAnswer(
+          nestedDf.select(nullif(col("c.provider"), lower(lit("ERROR_MULTIPLE_PROVIDERS")))),
+          Seq(Row(null), Row("openai")))
+      }
+    }
+  }
+
   test("equal_null function") {
     val df = Seq[(Integer, Integer)]((null, 8)).toDF("a", "b")
     checkAnswer(df.selectExpr("equal_null(a, b)"), Seq(Row(false)))
