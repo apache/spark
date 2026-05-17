@@ -825,7 +825,13 @@ private[execution] final class LongToUnsafeRowMap(
         throw QueryExecutionErrors.cannotBuildHashedRelationLargerThan8GError()
       }
       val newNumWords = math.max(neededNumWords, math.min(page.size() / 8 * 2, 1 << 30))
-      val newPage = allocatePage(newNumWords.toInt * 8)
+      // newNumWords is a Long up to 1 << 30. Multiplying by 8 must stay in Long
+      // arithmetic; `newNumWords.toInt * 8` (Int * Int) overflows to 0 at the
+      // upper bound, causing `allocatePage(0)` to fall back to the default page
+      // size while subsequent writes still advance `cursor` past the new page's
+      // end (heap corruption observed as a `forward_copy_longs` SEGV during
+      // BHJ build on aarch64).
+      val newPage = allocatePage(newNumWords * 8L)
       Platform.copyMemory(page.getBaseObject, page.getBaseOffset, newPage.getBaseObject,
         newPage.getBaseOffset, usedBytes)
       freePage(page)
@@ -966,10 +972,13 @@ private[execution] final class LongToUnsafeRowMap(
     readData(readBuffer, array.memoryBlock.getBaseObject, array.memoryBlock.getBaseOffset, length)
     val pageLength = readLong().toInt
     freePage(page)
-    page = allocatePage(pageLength * 8)
+    // Use Long multiplication: pageLength can be up to 1 << 30 (8 GiB page / 8),
+    // and `Int * Int` overflows at that bound, leading to a 0-byte allocatePage
+    // and a subsequent cursor that runs past the page's end.
+    page = allocatePage(pageLength * 8L)
     readData(readBuffer, page.getBaseObject, page.getBaseOffset, pageLength)
     // Restore cursor variable to make this map able to be serialized again on executors.
-    cursor = pageLength * 8 + page.getBaseOffset
+    cursor = pageLength * 8L + page.getBaseOffset
   }
 
   override def readExternal(in: ObjectInput): Unit = {
