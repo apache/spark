@@ -1386,6 +1386,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "COUNTER_DIFF_NEGATIVE_COUNTER_VALUE" : {
+    "message" : [
+      "A negative counter value <value> was provided to function <function>. Negative counter values are not allowed."
+    ],
+    "sqlState" : "22003"
+  },
+  "COUNTER_DIFF_START_TIME_DECREASED" : {
+    "message" : [
+      "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
+    ],
+    "sqlState" : "22023"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -2996,6 +3008,13 @@
       "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
     ],
     "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED" : {
+    "message" : [
+      "Table alias is not allowed with INSERT INTO ... REPLACE WHERE because the WHERE condition is evaluated against the target table directly.",
+      "Use INSERT INTO ... REPLACE ON if you need to reference the target table via an alias."
+    ],
+    "sqlState" : "42000"
   },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
@@ -6038,6 +6057,12 @@
       "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
+  },
+  "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE" : {
+    "message" : [
+      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table)."
+    ],
+    "sqlState" : "0A000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [

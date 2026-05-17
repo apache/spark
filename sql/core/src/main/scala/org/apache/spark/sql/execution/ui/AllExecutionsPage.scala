@@ -43,6 +43,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") {
           {spinner}
         </div>
         <script src={UIUtils.prependBaseUri(
+          request, "/static/sql/sql-table-utils.js")}></script>
+        <script src={UIUtils.prependBaseUri(
           request, "/static/sql/allexecutionspage.js")}></script>
       </span>
 

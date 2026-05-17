@@ -335,7 +335,7 @@ class OptimizerSuite extends PlanTest {
       StructType(StructField("map", MapType(IntegerType, IntegerType, false), false) :: Nil))
   }
 
-  test("NullIf typed null branch is replaced with a null literal") {
+  test("SPARK-56840: NullIf typed null branch is replaced with a null literal") {
     val optimizer = new SimpleTestOptimizer() {
       override def defaultBatches: Seq[Batch] =
         Batch("test", fixedPoint,
