@@ -142,25 +142,19 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("NullIf replacement preserves its data type before type coercion") {
-    Seq(true, false).foreach { alwaysInlineCommonExpr =>
-      withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString) {
-        val nullIf = new NullIf(Literal(1), Literal(1))
-        assert(nullIf.dataType == IntegerType)
-        assert(nullIf.replacement.dataType == IntegerType)
-      }
-    }
+    val nullIf = new NullIf(Literal(1), Literal(1))
+    assert(nullIf.dataType == IntegerType)
+    assert(nullIf.replacement.dataType == IntegerType)
   }
 
-  test("NullIf accepts unresolved nested fields during inlined function construction") {
-    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
-      val nullIf = FunctionRegistry.builtin.lookupFunction(
-        FunctionIdentifier("nullif"),
-        Seq(
-          UnresolvedAttribute(Seq("c", "provider")),
-          Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
+  test("NullIf accepts unresolved nested fields during function construction") {
+    val nullIf = FunctionRegistry.builtin.lookupFunction(
+      FunctionIdentifier("nullif"),
+      Seq(
+        UnresolvedAttribute(Seq("c", "provider")),
+        Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
 
-      assert(nullIf.isInstanceOf[NullIf])
-    }
+    assert(nullIf.isInstanceOf[NullIf])
   }
 
   test("AtLeastNNonNulls") {

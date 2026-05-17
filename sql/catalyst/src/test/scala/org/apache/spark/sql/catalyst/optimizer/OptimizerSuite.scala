@@ -79,16 +79,14 @@ class OptimizerSuite extends PlanTest {
           ReplaceExpressions) :: Nil
     }
 
-    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "true") {
-      val nullIf = new NullIf(Literal(true), Literal(true))
-      val plan = Project(Alias(nullIf, "out")() :: Nil, OneRowRelation()).analyze
-      val optimized = optimizer.execute(plan)
+    val nullIf = new NullIf(Literal(true), Literal(true))
+    val plan = Project(Alias(nullIf, "out")() :: Nil, OneRowRelation()).analyze
+    val optimized = optimizer.execute(plan)
 
-      assert(optimized.expressions.exists(_.exists {
-        case Literal(null, BooleanType) => true
-        case _ => false
-      }))
-      assert(optimized.expressions.forall(!_.exists(_.isInstanceOf[RuntimeReplaceable])))
-    }
+    assert(optimized.expressions.exists(_.exists {
+      case Literal(null, BooleanType) => true
+      case _ => false
+    }))
+    assert(optimized.expressions.forall(!_.exists(_.isInstanceOf[RuntimeReplaceable])))
   }
 }
