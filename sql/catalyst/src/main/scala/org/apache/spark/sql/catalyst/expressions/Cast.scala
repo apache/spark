@@ -695,6 +695,8 @@ case class Cast(
 
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
+    case _: StringType if ansiEnabled =>
+      buildCast[UTF8String](_, s => CastUtils.stringToBooleanExact(s, getContextOrNull()))
     case _: StringType =>
       buildCast[UTF8String](_, s => {
         if (StringUtils.isTrueString(s)) {
@@ -702,11 +704,7 @@ case class Cast(
         } else if (StringUtils.isFalseString(s)) {
           false
         } else {
-          if (ansiEnabled) {
-            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, getContextOrNull())
-          } else {
-            null
-          }
+          null
         }
       })
     case TimestampType =>
@@ -1881,22 +1879,20 @@ case class Cast(
   private[this] def castToBooleanCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
+    case _: StringType if ansiEnabled =>
+      val castUtils = classOf[CastUtils].getName
+      val errorContext = getContextOrNullCode(ctx)
+      (c, evPrim, _) => code"$evPrim = $castUtils.stringToBooleanExact($c, $errorContext);"
     case _: StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
-        val castFailureCode = if (ansiEnabled) {
-          val errorContext = getContextOrNullCode(ctx)
-          s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c, $errorContext);"
-        } else {
-          s"$evNull = true;"
-        }
         code"""
           if ($stringUtils.isTrueString($c)) {
             $evPrim = true;
           } else if ($stringUtils.isFalseString($c)) {
             $evPrim = false;
           } else {
-            $castFailureCode
+            $evNull = true;
           }
         """
     case TimestampType =>
