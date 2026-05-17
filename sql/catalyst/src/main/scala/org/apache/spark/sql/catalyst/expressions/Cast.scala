@@ -1097,15 +1097,11 @@ case class Cast(
       value: Decimal,
       decimalType: DecimalType,
       nullOnOverflow: Boolean): Decimal = {
-    if (value.changePrecision(decimalType.precision, decimalType.scale)) {
-      value
+    if (nullOnOverflow) {
+      CastUtils.changePrecisionOrNull(value, decimalType.precision, decimalType.scale)
     } else {
-      if (nullOnOverflow) {
-        null
-      } else {
-        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-          value, decimalType.precision, decimalType.scale, getContextOrNull())
-      }
+      CastUtils.changePrecisionExact(
+        value, decimalType.precision, decimalType.scale, getContextOrNull())
     }
   }
 
@@ -1558,22 +1554,20 @@ case class Cast(
          |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
          |$evPrim = $d;
        """.stripMargin
-    } else {
-      val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
-      val overflowCode = if (nullOnOverflow) {
-        s"$evNull = true;"
-      } else {
-        s"""
-           |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-           |  $d, ${decimalType.precision}, ${decimalType.scale}, $errorContextCode);
-         """.stripMargin
-      }
+    } else if (nullOnOverflow) {
       code"""
          |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
          |  $evPrim = $d;
          |} else {
-         |  $overflowCode
+         |  $evNull = true;
          |}
+       """.stripMargin
+    } else {
+      val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
+      val castUtils = classOf[CastUtils].getName
+      code"""
+         |$evPrim = $castUtils.changePrecisionExact(
+         |  $d, ${decimalType.precision}, ${decimalType.scale}, $errorContextCode);
        """.stripMargin
     }
   }

@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.QueryContext;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Decimal;
 
 /**
  * Static helpers used by {@code Cast.doGenCode} (and corresponding eval
@@ -94,5 +96,20 @@ public final class CastUtils {
   public static short doubleToShortExact(double v) {
     if (Math.floor(v) <= Short.MAX_VALUE && Math.ceil(v) >= Short.MIN_VALUE) return (short) v;
     throw QueryExecutionErrors.castingCauseOverflowError(v, DOUBLE, SHORT);
+  }
+
+  // ----- decimal precision adjustment -----
+  // Mutates the input Decimal in place. Used by Cast.changePrecision (and by
+  // BinaryArithmetic / DivModLike in follow-up PRs) to apply the target
+  // precision/scale on the per-row hot path.
+
+  public static Decimal changePrecisionExact(
+      Decimal d, int precision, int scale, QueryContext context) {
+    if (d.changePrecision(precision, scale)) return d;
+    throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(d, precision, scale, context);
+  }
+
+  public static Decimal changePrecisionOrNull(Decimal d, int precision, int scale) {
+    return d.changePrecision(precision, scale) ? d : null;
   }
 }
