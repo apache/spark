@@ -21042,6 +21042,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
 
+
 @_try_remote_functions
 def from_json(
     col: "ColumnOrName",
