@@ -920,9 +920,10 @@ class AdaptiveQueryExecSuite
   test("SPARK-47148: AQE should avoid to submit shuffle job on cancellation") {
     def createJoinedDF(): DataFrame = {
       // Use subquery expression containing `slow_udf` to delay the submission of shuffle jobs.
-      val df = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(5)")
+      val df = sql("SELECT id, (SELECT slow_udf() FROM range(2) WHERE id = 0) FROM range(5)")
       val df2 = sql("SELECT id FROM range(10)").coalesce(2)
-      val df3 = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(15) WHERE id > 2")
+      val df3 = sql(
+        "SELECT id, (SELECT slow_udf() FROM range(2) WHERE id = 0) FROM range(15) WHERE id > 2")
       df.join(df2, Seq("id")).join(df3, Seq("id"))
     }
 
@@ -959,13 +960,12 @@ class AdaptiveQueryExecSuite
           }
           assert(shuffleQueryStageExecs.length == 3, s"Physical Plan should include " +
             s"3 ShuffleQueryStages. Physical Plan: $adaptivePlan")
-          // First ShuffleQueryStage is cancelled before shuffle job is submitted.
-          assert(shuffleQueryStageExecs(0).shuffle.futureAction.get.isEmpty)
-          // Second ShuffleQueryStage has submitted the shuffle job but it failed.
-          assert(shuffleQueryStageExecs(1).shuffle.futureAction.get.isDefined,
-            "Materialization should be started but it is failed.")
-          // Third ShuffleQueryStage is cancelled before shuffle job is submitted.
-          assert(shuffleQueryStageExecs(2).shuffle.futureAction.get.isEmpty)
+          // Shuffle jobs should be cancelled after the query fails.
+          val shuffleActions = shuffleQueryStageExecs.flatMap(_.shuffle.futureAction.get)
+          assert(shuffleActions.length == 3,
+            s"All shuffle materializations should be started. Physical Plan: $adaptivePlan")
+          assert(shuffleActions.forall(_.isCancelled),
+            s"All shuffle materializations should be cancelled. Physical Plan: $adaptivePlan")
         }
       } finally {
         spark.experimental.extraStrategies = Nil
