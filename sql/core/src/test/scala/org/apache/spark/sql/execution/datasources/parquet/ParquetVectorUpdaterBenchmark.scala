@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  *      `DowncastLong`.
  *   C. Rebase Updaters -- date/timestamp legacy-calendar rebase variants.
  *      `IntegerWithRebase` (DATE), `LongWithRebase` (TIMESTAMP_MICROS),
- *      `LongAsMicros`.
+ *      `LongAsMicros`, `DateToTimestampNTZWithRebase`, `LongAsMicrosRebase`.
  *   D. Unsigned Updaters -- `UnsignedInteger`, `UnsignedLong`.
  *   E. Decimal Updaters -- `IntegerToDecimal`, `LongToDecimal`,
  *      `BinaryToDecimal`, `FixedLenByteArrayToDecimal`.
@@ -264,6 +264,10 @@ object ParquetVectorUpdaterBenchmark extends BenchmarkBase {
       TimestampNTZType,
       descriptor(PrimitiveTypeName.INT32, LogicalTypeAnnotation.dateType()),
       longVec, intBytes)
+    addReadValuesCase(benchmark, "LongAsNanosUpdater (TimeType)",
+      TimeType(),
+      descriptor(PrimitiveTypeName.INT64),
+      longVec, longBytes)
     // 32-bit-decimal target with INT64 source routes via canReadAsLongDecimal +
     // is32BitDecimalType, both TRUE here, hence DowncastLongUpdater.
     addReadValuesCase(benchmark, "DowncastLongUpdater (INT64 -> Decimal(9,2))",
@@ -303,6 +307,17 @@ object ParquetVectorUpdaterBenchmark extends BenchmarkBase {
       descriptor(PrimitiveTypeName.INT64,
         LogicalTypeAnnotation.timestampType(true, LogicalTypeAnnotation.TimeUnit.MILLIS)),
       longVec, longBytes)
+    addReadValuesCase(benchmark, "DateToTimestampNTZWithRebaseUpdater (DATE legacy)",
+      TimestampNTZType,
+      descriptor(PrimitiveTypeName.INT32, LogicalTypeAnnotation.dateType()),
+      longVec, intBytes,
+      datetimeRebaseMode = "LEGACY")
+    addReadValuesCase(benchmark, "LongAsMicrosRebaseUpdater (TIMESTAMP_MILLIS legacy)",
+      TimestampType,
+      descriptor(PrimitiveTypeName.INT64,
+        LogicalTypeAnnotation.timestampType(true, LogicalTypeAnnotation.TimeUnit.MILLIS)),
+      longVec, longBytes,
+      datetimeRebaseMode = "LEGACY")
 
     benchmark.run()
   }
