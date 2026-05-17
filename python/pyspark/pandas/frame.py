@@ -5023,7 +5023,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 axis=1,
             )
             for record in result.to_dict("records"):
-                yield Row(**record)
+                yield Row(*[record[column_name] for column_name in selected_column_names])
 
         result_sdf = default_session().createDataFrame(
             sdf_ordered.rdd.mapPartitionsWithIndex(diff_partition), schema=output_schema
