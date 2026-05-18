@@ -797,6 +797,11 @@ jobs:
         cd ..
         git clone --single-branch --branch branch-4.0 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY spark-4.0
         cd spark-4.0
+        # Merge in apache/spark's branch-4.0 so CI runs against the latest upstream tests,
+        # while still incorporating any changes the contributor made on their fork's branch-4.0.
+        git fetch https://github.com/apache/spark.git branch-4.0
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' \
+            merge --no-edit FETCH_HEAD
 
         # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
         # Run branch-4.0 tests
