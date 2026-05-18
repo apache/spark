@@ -102,10 +102,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   test("[S1] cached table pinned against external data write") {
     withSession { connectSession =>
       withCachedTable(
-          connectSession = connectSession,
-          tableName = T,
-          tableSchema = "id INT, salary INT",
-          insertValues = "(1, 100)") { serverSession =>
+        connectSession = connectSession,
+        tableName = T,
+        tableSchema = "id INT, salary INT",
+        insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
@@ -137,10 +137,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   test("[S2] session write invalidates cache, then external write invisible") {
     withSession { connectSession =>
       withCachedTable(
-          connectSession = connectSession,
-          tableName = T,
-          tableSchema = "id INT, salary INT",
-          insertValues = "(1, 100)") { serverSession =>
+        connectSession = connectSession,
+        tableName = T,
+        tableSchema = "id INT, salary INT",
+        insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
@@ -180,10 +180,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   test("[S3] cached table pinned against external schema change") {
     withSession { connectSession =>
       withCachedTable(
-          connectSession = connectSession,
-          tableName = T,
-          tableSchema = "id INT, salary INT",
-          insertValues = "(1, 100)") { serverSession =>
+        connectSession = connectSession,
+        tableName = T,
+        tableSchema = "id INT, salary INT",
+        insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
@@ -215,10 +215,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   test("[S4] session schema change invalidates cache, external write invisible") {
     withSession { connectSession =>
       withCachedTable(
-          connectSession = connectSession,
-          tableName = T,
-          tableSchema = "id INT, salary INT",
-          insertValues = "(1, 100)") { serverSession =>
+        connectSession = connectSession,
+        tableName = T,
+        tableSchema = "id INT, salary INT",
+        insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
@@ -250,10 +250,10 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   test("[S5] cached table after external drop and recreate sees empty table") {
     withSession { connectSession =>
       withCachedTable(
-          connectSession = connectSession,
-          tableName = T,
-          tableSchema = "id INT, salary INT",
-          insertValues = "(1, 100)") { serverSession =>
+        connectSession = connectSession,
+        tableName = T,
+        tableSchema = "id INT, salary INT",
+        insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
