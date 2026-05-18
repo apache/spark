@@ -63,10 +63,11 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * Extends `CTEInChildren` so when the placeholder wraps an entire CTEInChildren command (e.g.
- * `CacheTableAsSelect`), `CTESubstitution.withCTEDefs` pushes the surrounding `WithCTE` into the
- * placeholder's children at substitution time -- the cteDefs land in the materialized command's
- * children by construction, with no post-hoc collapse required.
+ * Extends `CTEInChildren` so that if the placeholder is ever the substitution root of a
+ * `WITH ... <command>` subtree, `CTESubstitution` dispatches to the placeholder's own
+ * `withCTEDefs` and pushes `WithCTE` into the placeholder's single child. After materialization,
+ * the `WithCTE` lands inside the eventual command's body slot -- the same shape the command's
+ * own `withCTEDefs` would produce. See that override for the single-child safety argument.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
@@ -83,19 +84,22 @@ case class PlanWithUnresolvedIdentifier(
   override def name: String = identifierExpr.sql
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    // `CTESubstitution.withCTEDefs` invokes this override only when the placeholder is the
-    // substituted root of a `WITH ... <command>` subtree -- i.e. when the parse tree has the
-    // shape `UnresolvedWith(this, _)`. Under the current grammar, `WITH` only precedes
+    // Safe to extend `CTEInChildren` because with exactly one child the placeholder is a
+    // transparent stand-in for its eventual command: wrapping the single child with `WithCTE`
+    // places the cteDefs in the same slot the materialized command's own `withCTEDefs` would.
+    // E.g. for `CacheTableAsSelect`, the single child is the AS-query and the result matches
+    // `CacheTableAsSelect.withCTEDefs(cteDefs) = copy(plan = WithCTE(plan, cteDefs))`.
+    //
+    // The single-child invariant matters: with 0 children the cteDefs would vanish, and with
+    // 2+ children they would be duplicated across slots that may not all be CTE-scope bodies.
+    //
+    // Under the current grammar this path is not actually reached -- `WITH` only precedes
     // `query` or `dmlStatementNoWith`, and the parser places the placeholder inside the
-    // command's identifier slot rather than at that root, so this path is not reached in
-    // practice. The override remains as a safety net: if it does fire, `children` must be
-    // non-empty so `WithCTE` can be pushed inside the wrapped command. Falling back to
-    // `WithCTE(this, cteDefs)` with empty children would re-introduce the structurally
-    // invalid `WithCTE(<command>, _)` shape this placement is designed to avoid.
-    assert(children.nonEmpty,
-      "PlanWithUnresolvedIdentifier.withCTEDefs requires an inner plan to wrap; " +
-        "callers using the single-arg withIdentClause form must place the placeholder in a " +
-        "slot that is not the substitution root.")
+    // command's identifier slot rather than at the substitution root -- but the override stays
+    // as a safety net for future wrap-whole-command callers.
+    assert(children.length == 1,
+      "PlanWithUnresolvedIdentifier.withCTEDefs requires exactly one child so that the " +
+        "surrounding WithCTE lands in the materialized command's body slot.")
     withNewChildren(children.map(WithCTE(_, cteDefs)))
   }
 
