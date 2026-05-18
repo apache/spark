@@ -62,8 +62,8 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   /** Get a catalog from the server-side session by name. */
   private def serverCatalog[T <: TableCatalog](
       serverSession: classic.SparkSession,
-      name: String): T =
-    serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
+      catalogName: String): T =
+    serverSession.sessionState.catalogManager.catalog(catalogName).asInstanceOf[T]
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   private def externalAppend(
@@ -77,78 +77,96 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
     extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
   }
 
-  /** Drop tables in `finally` so cleanup runs even when a test fails. */
-  private def withTable(session: SparkSession, tableNames: String*)(f: => Unit): Unit = {
-    try f
-    finally {
-      tableNames.foreach { name =>
-        session.sql(s"UNCACHE TABLE IF EXISTS $name").collect()
-        session.sql(s"DROP TABLE IF EXISTS $name").collect()
-      }
+  /**
+   * Creates a table, inserts initial data, caches it, and provides the server session to the test
+   * body. Cleans up (UNCACHE + DROP) in `finally` so cleanup runs even when a test fails.
+   */
+  private def withCachedTable(
+      connectSession: SparkSession,
+      tableName: String,
+      tableSchema: String,
+      insertValues: String)(f: classic.SparkSession => Unit): Unit = {
+    try {
+      connectSession.sql(s"CREATE TABLE $tableName ($tableSchema) USING foo").collect()
+      connectSession.sql(s"INSERT INTO $tableName VALUES $insertValues").collect()
+      connectSession.sql(s"CACHE TABLE $tableName").collect()
+      val serverSession = getServerSession(connectSession)
+      f(serverSession)
+    } finally {
+      connectSession.sql(s"UNCACHE TABLE IF EXISTS $tableName").collect()
+      connectSession.sql(s"DROP TABLE IF EXISTS $tableName").collect()
     }
   }
 
-  /**
-   * Creates a table, inserts initial data, caches it, and returns the server session. This avoids
-   * repeating the common setup in each test.
-   */
-  private def setupCachedTable(
-      connectSession: SparkSession,
-      tableName: String,
-      ddl: String,
-      insertValues: String): classic.SparkSession = {
-    connectSession.sql(s"CREATE TABLE $tableName ($ddl) USING foo").collect()
-    connectSession.sql(s"INSERT INTO $tableName VALUES $insertValues").collect()
-    connectSession.sql(s"CACHE TABLE $tableName").collect()
-    // get server session after first RPC establishes it
-    getServerSession(connectSession)
-  }
-
   // Scenario 1: external write after CACHE TABLE is invisible (cache pinned).
-  // Scenario 2: session write invalidates cache; subsequent external write
-  // is again invisible.
-  // Note: Connect does not support INSERT to invalidate a CACHE TABLE entry, so
-  // we use UNCACHE + re-CACHE to transition from S1 to S2.
-  test("[S1+S2] CACHE TABLE pins state; session write invalidates, external does not") {
+  test("[S1] cached table pinned against external data write") {
     withSession { connectSession =>
-      withTable(connectSession, T) {
-        val serverSession = setupCachedTable(
+      withCachedTable(
           connectSession = connectSession,
           tableName = T,
-          ddl = "id INT, salary INT",
-          insertValues = "(1, 100)")
+          tableSchema = "id INT, salary INT",
+          insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
-        // S1: external writer adds (2, 200) via direct catalog API
+        // external writer adds (2, 200) via direct catalog API
         // (bypasses this session's CacheManager)
-        val schema = StructType.fromDDL("id INT, salary INT")
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        externalAppend(cat = cat, ident = ident, schema = schema, row = InternalRow(2, 200))
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
         // cache is pinned, external write invisible
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
-        // S2: UNCACHE + re-CACHE to start over, then session write invalidates
-        // and recaches; subsequent external write is again invisible.
-        connectSession.sql(s"UNCACHE TABLE $T").collect()
-        connectSession.sql(s"CACHE TABLE $T").collect()
+        // REFRESH TABLE picks up external write
+        connectSession.sql(s"REFRESH TABLE $T").collect()
+        assertCached(serverSession.table(T))
+        assertRows(
+          connectSession.sql(s"SELECT * FROM $T").collect(),
+          Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  // Scenario 2: session write invalidates cache; subsequent external write
+  // is again invisible.
+  test("[S2] session write invalidates cache, then external write invisible") {
+    withSession { connectSession =>
+      withCachedTable(
+          connectSession = connectSession,
+          tableName = T,
+          tableSchema = "id INT, salary INT",
+          insertValues = "(1, 100)") { serverSession =>
+        assertCached(serverSession.table(T))
+        assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
+
+        // session write invalidates the cache entry
+        connectSession.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
         assertCached(serverSession.table(T))
         assertRows(
           connectSession.sql(s"SELECT * FROM $T").collect(),
           Seq(Row(1, 100), Row(2, 200)))
 
-        connectSession.sql(s"INSERT INTO $T VALUES (3, 300)").collect()
+        // external writer adds (3, 300) via direct catalog API
+        val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(3, 300))
+
+        // cache still pinned, external write invisible
         assertCached(serverSession.table(T))
         assertRows(
           connectSession.sql(s"SELECT * FROM $T").collect(),
-          Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
+          Seq(Row(1, 100), Row(2, 200)))
 
-        // external writer adds (4, 400) via direct catalog API
-        externalAppend(cat = cat, ident = ident, schema = schema, row = InternalRow(4, 400))
-
-        // cache still pinned, external write invisible
+        // REFRESH TABLE picks up external write
+        connectSession.sql(s"REFRESH TABLE $T").collect()
         assertCached(serverSession.table(T))
         assertRows(
           connectSession.sql(s"SELECT * FROM $T").collect(),
@@ -161,12 +179,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   // Cache stays pinned at original 2-column schema.
   test("[S3] cached table pinned against external schema change") {
     withSession { connectSession =>
-      withTable(connectSession, T) {
-        val serverSession = setupCachedTable(
+      withCachedTable(
           connectSession = connectSession,
           tableName = T,
-          ddl = "id INT, salary INT",
-          insertValues = "(1, 100)")
+          tableSchema = "id INT, salary INT",
+          insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
@@ -197,12 +214,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   // write is invisible.
   test("[S4] session schema change invalidates cache, external write invisible") {
     withSession { connectSession =>
-      withTable(connectSession, T) {
-        val serverSession = setupCachedTable(
+      withCachedTable(
           connectSession = connectSession,
           tableName = T,
-          ddl = "id INT, salary INT",
-          insertValues = "(1, 100)")
+          tableSchema = "id INT, salary INT",
+          insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
@@ -233,12 +249,11 @@ class DataSourceV2CacheConnectSuite extends SparkConnectServerTest {
   // Scenario 5: external drop and recreate with same schema.
   test("[S5] cached table after external drop and recreate sees empty table") {
     withSession { connectSession =>
-      withTable(connectSession, T) {
-        val serverSession = setupCachedTable(
+      withCachedTable(
           connectSession = connectSession,
           tableName = T,
-          ddl = "id INT, salary INT",
-          insertValues = "(1, 100)")
+          tableSchema = "id INT, salary INT",
+          insertValues = "(1, 100)") { serverSession =>
         assertCached(serverSession.table(T))
         assertRows(connectSession.sql(s"SELECT * FROM $T").collect(), Seq(Row(1, 100)))
 
