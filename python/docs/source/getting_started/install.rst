@@ -290,7 +290,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.22            Required for MLlib DataFrame-based API
+`numpy` >=1.23.2          Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -310,7 +310,7 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.22            Required for MLlib
+`numpy` >=1.23.2          Required for MLlib
 ======= ================= ==================
 
 Declarative Pipelines
