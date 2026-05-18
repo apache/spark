@@ -543,7 +543,7 @@ object SQLConf {
         "Transpilation also requires ANSI mode (spark.sql.ansi.enabled=true) -- " +
         "the rewritten expressions target ANSI semantics, so with ANSI off the " +
         "transpiler falls back to interpreted Python and a warning is logged at " +
-        "UDF construction." +
+        "UDF construction. " +
         "This initial version only works in regular Spark with Spark Connect to follow"
     )
     .version("4.3.0")
