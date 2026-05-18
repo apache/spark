@@ -891,6 +891,7 @@ public class UnsafeExternalSorterSuite {
     assertNotNull(ctx.inMemIter,
         "readingIterator should be published when inMemSorter has data");
     final int snapshotSizeBefore = ctx.snapshot.size();
+    final int liveSizeBefore = sorter.getSpillWritersCount();
 
     // Phase 2: external-trigger spill. Routes through readingIterator.spill():
     // appends a writer to the live spillWriters AND rebinds readingIterator.upstream.
@@ -904,6 +905,9 @@ public class UnsafeExternalSorterSuite {
     long bytesSpilled = sorter.spill(Long.MAX_VALUE, externalTrigger);
     assertTrue(bytesSpilled > 0L,
         "external-trigger spill must fire to exercise the seam contract");
+    // The routing actually mutated the live spillWriters list: one new writer appended.
+    assertEquals(liveSizeBefore + 1, sorter.getSpillWritersCount(),
+        "external spill should append exactly one writer to the live spillWriters list");
     // Defensive-copy invariant: the post-spill snapshot is unchanged. A future
     // refactor that aliases ctx.snapshot to the live spillWriters field instead of
     // copying it would fail this assertion.

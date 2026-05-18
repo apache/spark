@@ -678,6 +678,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     return boundedMerger == null ? 0 : boundedMerger.getIntermediateRoundsCompleted();
   }
 
+  @VisibleForTesting
+  int getSpillWritersCount() {
+    return spillWriters.size();
+  }
+
   private static void spillIterator(UnsafeSorterIterator inMemIterator,
       UnsafeSorterSpillWriter spillWriter) throws IOException {
     while (inMemIterator.hasNext()) {
