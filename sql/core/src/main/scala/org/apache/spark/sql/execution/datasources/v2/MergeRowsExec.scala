@@ -518,6 +518,19 @@ case class MergeRowsExec(
       private val notMatchedBySourceInstructions: Seq[InstructionExec])
     extends Iterator[InternalRow] {
 
+    private val numTargetRowsCopied = MergeRowsExec.this.longMetric("numTargetRowsCopied")
+    private val numTargetRowsInserted = MergeRowsExec.this.longMetric("numTargetRowsInserted")
+    private val numTargetRowsDeleted = MergeRowsExec.this.longMetric("numTargetRowsDeleted")
+    private val numTargetRowsUpdated = MergeRowsExec.this.longMetric("numTargetRowsUpdated")
+    private val numTargetRowsMatchedUpdated =
+      MergeRowsExec.this.longMetric("numTargetRowsMatchedUpdated")
+    private val numTargetRowsMatchedDeleted =
+      MergeRowsExec.this.longMetric("numTargetRowsMatchedDeleted")
+    private val numTargetRowsNotMatchedBySourceUpdated =
+      MergeRowsExec.this.longMetric("numTargetRowsNotMatchedBySourceUpdated")
+    private val numTargetRowsNotMatchedBySourceDeleted =
+      MergeRowsExec.this.longMetric("numTargetRowsNotMatchedBySourceDeleted")
+
     var cachedExtraRow: InternalRow = _
 
     override def hasNext: Boolean = cachedExtraRow != null || rowIterator.hasNext
@@ -579,28 +592,27 @@ case class MergeRowsExec(
 
       null
     }
-  }
 
-  // For group based merge, copy is inserted if row matches no other case
-  private def incrementCopyMetric(): Unit = longMetric("numTargetRowsCopied") += 1
+    private def incrementCopyMetric(): Unit = numTargetRowsCopied += 1
 
-  private def incrementInsertMetric(): Unit = longMetric("numTargetRowsInserted") += 1
+    private def incrementInsertMetric(): Unit = numTargetRowsInserted += 1
 
-  private def incrementDeleteMetric(sourcePresent: Boolean): Unit = {
-    longMetric("numTargetRowsDeleted") += 1
-    if (sourcePresent) {
-      longMetric("numTargetRowsMatchedDeleted") += 1
-    } else {
-      longMetric("numTargetRowsNotMatchedBySourceDeleted") += 1
+    private def incrementDeleteMetric(sourcePresent: Boolean): Unit = {
+      numTargetRowsDeleted += 1
+      if (sourcePresent) {
+        numTargetRowsMatchedDeleted += 1
+      } else {
+        numTargetRowsNotMatchedBySourceDeleted += 1
+      }
     }
-  }
 
-  private def incrementUpdateMetric(sourcePresent: Boolean): Unit = {
-    longMetric("numTargetRowsUpdated") += 1
-    if (sourcePresent) {
-      longMetric("numTargetRowsMatchedUpdated") += 1
-    } else {
-      longMetric("numTargetRowsNotMatchedBySourceUpdated") += 1
+    private def incrementUpdateMetric(sourcePresent: Boolean): Unit = {
+      numTargetRowsUpdated += 1
+      if (sourcePresent) {
+        numTargetRowsMatchedUpdated += 1
+      } else {
+        numTargetRowsNotMatchedBySourceUpdated += 1
+      }
     }
   }
 }
