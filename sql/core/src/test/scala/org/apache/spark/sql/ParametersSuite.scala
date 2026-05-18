@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -2584,6 +2584,30 @@ class ParametersSuite extends SharedSparkSession {
       fail(s"Expected OverwriteByExpression in bound plan:\n$bound"))
     assert(!boundOverwrite.table.containsPattern(PARAMETER),
       s"Expected :tname inside OverwriteByExpression.table to be bound, got:\n$boundOverwrite")
+  }
+
+  // SPARK-46625: `CacheTableAsSelect.tempViewName` is an `Expression` slot, so an
+  // `IDENTIFIER(<non-literal>)` produces an `ExpressionWithUnresolvedIdentifier` there instead of
+  // wrapping the entire command in a `PlanWithUnresolvedIdentifier`. Verify on the parsed plan
+  // that the name slot holds the expression placeholder and no `WithCTE(CTEInChildren, _)` shape
+  // survives `CTESubstitution` (running the cache through full analysis would require the temp
+  // view machinery, so this is a parser-level test).
+  test("SPARK-46625: CACHE TABLE IDENTIFIER(...) AS WITH ... SELECT ... parser") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """CACHE TABLE IDENTIFIER('some' || '_view') AS
+        |WITH transformation AS (SELECT 4 AS a)
+        |SELECT * FROM transformation""".stripMargin)
+    val ctas = parsedPlan.collectFirst { case c: CacheTableAsSelect => c }.getOrElse(
+      fail(s"Expected CacheTableAsSelect in parsed plan:\n$parsedPlan"))
+    assert(ctas.tempViewName.isInstanceOf[ExpressionWithUnresolvedIdentifier],
+      s"Expected CacheTableAsSelect.tempViewName to be ExpressionWithUnresolvedIdentifier, " +
+        s"got ${ctas.tempViewName.getClass.getSimpleName}:\n$parsedPlan")
+    val substituted = CTESubstitution.apply(parsedPlan)
+    substituted.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
+      case _ =>
+    }
   }
 
   // SPARK-46625: RTAS mirrors CTAS -- the placeholder goes into `ReplaceTableAsSelect.name`

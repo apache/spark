@@ -6569,35 +6569,74 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    val query = Option(ctx.query).map(plan)
-    withIdentClause(ctx.identifierReference, query.toSeq, (ident, children) => {
-      if (query.isDefined && ident.length > 1) {
-        val catalogAndNamespace = ident.init
-        throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
-          catalogAndNamespace.quoted, ctx)
-      }
-      val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-      val isLazy = ctx.LAZY != null
-      if (query.isDefined) {
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val isLazy = ctx.LAZY != null
+    Option(ctx.query).map(plan) match {
+      case Some(query) =>
         // Disallow parameter markers in the query of the cache.
         // We need this limitation because we store the original query text, pre substitution.
-        // To lift this we would need to reconstitute the query with parameter markers replaced with
-        // the values given at CACHE TABLE time, or we would need to store the parameter values
-        // alongside the text.
-        // The same rule can be found in CREATE VIEW builder.
-        checkInvalidParameter(query.get, "the query of CACHE TABLE")
-        CacheTableAsSelect(ident.head, children.head, source(ctx.query()), isLazy, options)
-      } else {
-        CacheTable(
-          createUnresolvedRelation(
-            ctx.identifierReference,
-            ident,
-            None,
-            writePrivileges = Set.empty,
-            isStreaming = false),
-          ident, isLazy, options)
+        // To lift this we would need to reconstitute the query with parameter markers replaced
+        // with the values given at CACHE TABLE time, or we would need to store the parameter
+        // values alongside the text. The same rule can be found in CREATE VIEW builder.
+        checkInvalidParameter(query, "the query of CACHE TABLE")
+        // `CacheTableAsSelect.name` is an `Expression` slot: a `Literal` for direct identifiers
+        // and `IDENTIFIER('literal-string')`, or an `ExpressionWithUnresolvedIdentifier` for
+        // `IDENTIFIER(<non-literal>)`. Building the name as an expression avoids the
+        // wrap-the-whole-command form (where the `PlanWithUnresolvedIdentifier` would wrap the
+        // entire `CacheTableAsSelect`), which is the last shape that motivated the
+        // `WithCTE(<command>, _)` workaround chain in SPARK-46625.
+        val nameExpr = buildCacheTableAsSelectName(ctx.identifierReference, ctx)
+        CacheTableAsSelect(nameExpr, query, source(ctx.query()), isLazy, options)
+      case None =>
+        withIdentClause(ctx.identifierReference, ident => {
+          CacheTable(
+            createUnresolvedRelation(
+              ctx.identifierReference,
+              ident,
+              None,
+              writePrivileges = Set.empty,
+              isStreaming = false),
+            ident, isLazy, options)
+        })
+    }
+  }
+
+  /**
+   * Build the `name` expression for a `CACHE TABLE ... AS SELECT` command from an
+   * `identifierReference` context.
+   *
+   * `CacheTableAsSelect` requires a single-part temp view name (no catalog/namespace). For direct
+   * identifiers and `IDENTIFIER('literal-string')` we validate this at parse time and produce a
+   * non-null string `Literal`. For `IDENTIFIER(<non-literal>)` we emit an
+   * `ExpressionWithUnresolvedIdentifier` whose builder validates the single-part invariant when
+   * the identifier expression is resolved.
+   */
+  private def buildCacheTableAsSelectName(
+      ctx: IdentifierReferenceContext,
+      parentCtx: CacheTableContext): Expression = {
+    // Use the outer `parentCtx` for the multi-part error so the query context points at the
+    // whole `CACHE TABLE ... AS ...` statement, not just the identifier reference. The caller
+    // (`visitCacheTable`) already has `withOrigin(parentCtx)` in scope.
+    def singlePart(parts: Seq[String]): String = {
+      if (parts.length > 1) {
+        throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
+          parts.init.quoted, parentCtx)
       }
-    })
+      parts.head
+    }
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      expression(exprCtx) match {
+        case Literal(value, _: StringType) if value != null =>
+          Literal(singlePart(parseMultipartIdentifier(value.toString)))
+        case expr =>
+          new ExpressionWithUnresolvedIdentifier(
+            withOrigin(exprCtx) { expr },
+            parts => Literal(singlePart(parts)))
+      }
+    } else {
+      Literal(singlePart(visitMultipartIdentifier(ctx.multipartIdentifier)))
+    }
   }
 
   /**

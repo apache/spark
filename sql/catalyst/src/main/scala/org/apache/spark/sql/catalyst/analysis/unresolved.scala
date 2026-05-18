@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -63,17 +63,18 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
  * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
  *
- * Extends `CTEInChildren` so that if the placeholder is ever the substitution root of a
- * `WITH ... <command>` subtree, `CTESubstitution` dispatches to the placeholder's own
- * `withCTEDefs` and pushes `WithCTE` into the placeholder's single child. After materialization,
- * the `WithCTE` lands inside the eventual command's body slot -- the same shape the command's
- * own `withCTEDefs` would produce. See that override for the single-child safety argument.
+ * The parser always places this node inside the command's identifier slot (a child slot for
+ * DELETE/UPDATE/MERGE/CTAS/RTAS, or a non-child slot for `InsertIntoStatement.table` and
+ * `OverwriteByExpression.table` -- handled via explicit cases in `ResolveIdentifierClause` and
+ * `BindParameters`). It is never the substitution root of a `WITH ... <command>` subtree, so
+ * `CTEInChildren` semantics are not needed: any surrounding `WithCTE` produced by
+ * `CTESubstitution` targets the inner command directly.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
     children: Seq[LogicalPlan],
     planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
-  extends UnresolvedNode with NamedRelation with CTEInChildren {
+  extends UnresolvedNode with NamedRelation {
 
   def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
@@ -82,26 +83,6 @@ case class PlanWithUnresolvedIdentifier(
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_WITH_UNRESOLVED_IDENTIFIER)
 
   override def name: String = identifierExpr.sql
-
-  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    // Safe to extend `CTEInChildren` because with exactly one child the placeholder is a
-    // transparent stand-in for its eventual command: wrapping the single child with `WithCTE`
-    // places the cteDefs in the same slot the materialized command's own `withCTEDefs` would.
-    // E.g. for `CacheTableAsSelect`, the single child is the AS-query and the result matches
-    // `CacheTableAsSelect.withCTEDefs(cteDefs) = copy(plan = WithCTE(plan, cteDefs))`.
-    //
-    // The single-child invariant matters: with 0 children the cteDefs would vanish, and with
-    // 2+ children they would be duplicated across slots that may not all be CTE-scope bodies.
-    //
-    // Under the current grammar this path is not actually reached -- `WITH` only precedes
-    // `query` or `dmlStatementNoWith`, and the parser places the placeholder inside the
-    // command's identifier slot rather than at the substitution root -- but the override stays
-    // as a safety net for future wrap-whole-command callers.
-    assert(children.length == 1,
-      "PlanWithUnresolvedIdentifier.withCTEDefs requires exactly one child so that the " +
-        "surrounding WithCTE lands in the materialized command's body slot.")
-    withNewChildren(children.map(WithCTE(_, cteDefs)))
-  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =

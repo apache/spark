@@ -1968,7 +1968,7 @@ case class CacheTable(
  * The logical plan of the CACHE TABLE ... AS SELECT command.
  */
 case class CacheTableAsSelect(
-    tempViewName: String,
+    tempViewName: Expression,
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
@@ -1976,6 +1976,19 @@ case class CacheTableAsSelect(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
   extends AnalysisOnlyCommand with CTEInChildren {
+
+  /**
+   * Returns the temp view name string. Must only be called after analysis, when `tempViewName`
+   * has been resolved to a non-null string `Literal`. `CheckAnalysis` enforces this invariant.
+   */
+  def tempViewNameString: String = tempViewName match {
+    case Literal(value, _: StringType) if value != null => value.toString
+    case other =>
+      throw SparkException.internalError(
+        "CacheTableAsSelect.tempViewName must be a non-null string literal after analysis, " +
+          s"but got: ${other.sql}")
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)

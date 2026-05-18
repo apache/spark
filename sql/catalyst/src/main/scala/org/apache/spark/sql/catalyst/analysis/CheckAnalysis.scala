@@ -459,6 +459,20 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
         )
 
+      case c: CacheTableAsSelect =>
+        // The parser builds `tempViewName` as either a `Literal[StringType]` (for direct
+        // identifiers and `IDENTIFIER('literal')`) or an `ExpressionWithUnresolvedIdentifier`
+        // that resolves to such a Literal. Validate the post-analysis shape so any future
+        // construction path that violates the invariant fails loudly here, not deep inside
+        // execution via `tempViewNameString`.
+        c.tempViewName match {
+          case Literal(value, _: StringType) if value != null => // OK
+          case other =>
+            throw SparkException.internalError(
+              "CacheTableAsSelect.tempViewName must be a non-null string literal after " +
+                s"analysis, but got: ${other.sql}")
+        }
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           case hof: HigherOrderFunction if hof.arguments.exists {
