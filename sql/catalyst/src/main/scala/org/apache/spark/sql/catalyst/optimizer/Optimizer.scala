@@ -1060,7 +1060,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // Upgrade the types here since Python duct-typing means that
               // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
               val catalystExprUpgraded = UDFTypeCoercesExpressionTypes.runCoercionTransformations(
-                withTranspiledChildren, false)
+                withTranspiledChildren, true)
               catalystExprUpgraded
           }
         } else {
