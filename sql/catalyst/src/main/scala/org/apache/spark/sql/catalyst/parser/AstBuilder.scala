@@ -972,8 +972,7 @@ class AstBuilder extends DataTypeAstBuilder
           // `PlanWithUnresolvedIdentifier` is a `NamedRelation`, so it can occupy
           // `OverwriteByExpression.table` directly; the materialization happens in
           // `ResolveIdentifierClause` via its `OverwriteByExpression` special-case.
-          val table = buildWriteTableSlotNamedRelation(
-            ctx.identifierReference, options, privileges)
+          val table = buildWriteTableSlot(ctx.identifierReference, options, privileges)
           val deleteExpr = expression(ctx.replaceCondition)
           val isByName = ctx.NAME() != null
           if (isByName) {
@@ -1167,7 +1166,9 @@ class AstBuilder extends DataTypeAstBuilder
    * Build the `table` slot of a write command. If the identifier reference is a constant string,
    * returns an [[UnresolvedRelation]] directly; otherwise returns a
    * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
-   * identifier expression is resolved.
+   * identifier expression is resolved. Both branches produce a [[NamedRelation]], so the result
+   * fits `NamedRelation`-typed slots (e.g. `OverwriteByExpression.table`) as well as the more
+   * general `LogicalPlan` slot of `InsertIntoStatement.table`.
    *
    * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
    * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
@@ -1176,21 +1177,10 @@ class AstBuilder extends DataTypeAstBuilder
   private def buildWriteTableSlot(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Set[TableWritePrivilege]): LogicalPlan = {
+      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
     withIdentClause(ctx, parts =>
       createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
-  }
-
-  /**
-   * Variant of `buildWriteTableSlot` returning a `NamedRelation`, for slots typed as
-   * `NamedRelation` (e.g. `OverwriteByExpression.table`). `PlanWithUnresolvedIdentifier` is a
-   * `NamedRelation`, so the placeholder fits the slot type directly.
-   */
-  private def buildWriteTableSlotNamedRelation(
-      ctx: IdentifierReferenceContext,
-      optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
-    buildWriteTableSlot(ctx, optionsClause, writePrivileges).asInstanceOf[NamedRelation]
+      .asInstanceOf[NamedRelation]
   }
 
   /**
@@ -6579,12 +6569,12 @@ class AstBuilder extends DataTypeAstBuilder
         // with the values given at CACHE TABLE time, or we would need to store the parameter
         // values alongside the text. The same rule can be found in CREATE VIEW builder.
         checkInvalidParameter(query, "the query of CACHE TABLE")
-        // `CacheTableAsSelect.name` is an `Expression` slot: a `Literal` for direct identifiers
-        // and `IDENTIFIER('literal-string')`, or an `ExpressionWithUnresolvedIdentifier` for
-        // `IDENTIFIER(<non-literal>)`. Building the name as an expression avoids the
-        // wrap-the-whole-command form (where the `PlanWithUnresolvedIdentifier` would wrap the
-        // entire `CacheTableAsSelect`), which is the last shape that motivated the
-        // `WithCTE(<command>, _)` workaround chain in SPARK-46625.
+        // `CacheTableAsSelect.tempViewName` is an `Expression` slot: a `Literal` for direct
+        // identifiers and `IDENTIFIER('literal-string')`, or an
+        // `ExpressionWithUnresolvedIdentifier` for `IDENTIFIER(<non-literal>)`. Building the name
+        // as an expression avoids the wrap-the-whole-command form (where the
+        // `PlanWithUnresolvedIdentifier` would wrap the entire `CacheTableAsSelect`), which is the
+        // last shape that motivated the `WithCTE(<command>, _)` workaround chain in SPARK-46625.
         val nameExpr = buildCacheTableAsSelectName(ctx.identifierReference, ctx)
         CacheTableAsSelect(nameExpr, query, source(ctx.query()), isLazy, options)
       case None =>
@@ -6602,7 +6592,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Build the `name` expression for a `CACHE TABLE ... AS SELECT` command from an
+   * Build the `tempViewName` expression for a `CACHE TABLE ... AS SELECT` command from an
    * `identifierReference` context.
    *
    * `CacheTableAsSelect` requires a single-part temp view name (no catalog/namespace). For direct

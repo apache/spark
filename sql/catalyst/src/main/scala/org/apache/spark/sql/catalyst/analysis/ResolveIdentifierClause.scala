@@ -76,8 +76,11 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
       // placeholders inside them. Materialize them explicitly. Only `InsertIntoStatement` and
       // `OverwriteByExpression` carry a parse-time placeholder today, but matching the
       // `V2WriteCommand` trait keeps the rule consistent across the family.
-      case i @ InsertIntoStatement(p: PlanWithUnresolvedIdentifier, _, _, _, _, _, _, _, _)
-          if p.identifierExpr.resolved && p.childrenResolved =>
+      case i: InsertIntoStatement if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] && {
+        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+        p.identifierExpr.resolved && p.childrenResolved
+      } =>
+        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
         if (referredTempVars.isDefined) {
           referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
         }

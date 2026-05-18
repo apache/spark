@@ -182,7 +182,7 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
         // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child LogicalPlan
         // slots, so the standard `resolveOperatorsDown` traversal never visits parameter
         // markers inside them. Recurse explicitly so `INSERT ... IDENTIFIER(:p)` and
-        // `INSERT INTO REPLACE WHERE ... IDENTIFIER(:p)` resolve under the legacy
+        // `INSERT INTO IDENTIFIER(:p) REPLACE WHERE ...` resolve under the legacy
         // parameter-substitution mode (SPARK-46625). Today only the `OverwriteByExpression`
         // variant of `V2WriteCommand` is parser-built with a placeholder in `table`; the trait
         // match keeps the rule consistent for any future analyzer-built node in the same shape.
