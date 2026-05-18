@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.CoalescedNullAwareHashPartitioning
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -2612,6 +2613,39 @@ class AdaptiveQueryExecSuite
       assert(coalesceRead.length == 1)
       // RANGE(10) is a very small dataset and AQE coalescing should produce one partition.
       assert(coalesceRead.head.partitionSpecs.length == 1)
+    }
+  }
+
+  test("AQE preserves coalesced null-aware partitioning for outer equi-join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "8",
+      SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576") {
+      val nullableLeft = Seq(
+        (Integer.valueOf(1), "left-1"),
+        (null.asInstanceOf[Integer], "left-null-1"),
+        (null.asInstanceOf[Integer], "left-null-2")).toDF("k", "lv")
+      val nullableRight = Seq(
+        (Integer.valueOf(1), "right-1"),
+        (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+      val df = nullableLeft.join(
+        nullableRight, nullableLeft("k") === nullableRight("k"), "left_outer")
+
+      checkAnswer(df, Seq(
+        Row(1, "left-1", 1, "right-1"),
+        Row(null, "left-null-1", null, null),
+        Row(null, "left-null-2", null, null)))
+
+      val coalescedNullAwareReads = collect(df.queryExecution.executedPlan) {
+        case read: AQEShuffleReadExec
+            if read.hasCoalescedPartition &&
+              read.outputPartitioning.isInstanceOf[CoalescedNullAwareHashPartitioning] =>
+          read
+      }
+      assert(coalescedNullAwareReads.nonEmpty)
     }
   }
 

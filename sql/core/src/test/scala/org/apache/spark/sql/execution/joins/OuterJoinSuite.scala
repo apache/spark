@@ -411,6 +411,44 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     }
   }
 
+  test("ordinary right outer equi-join spreads NULL keys in shuffle partitioning") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (null.asInstanceOf[Integer], "left-null")).toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null-1"),
+      (null.asInstanceOf[Integer], "right-null-2")).toDF("k", "rv")
+    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      RightOuter, Some(joinCondition), JoinHint.NONE)
+
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(
+            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+          val plan = EnsureRequirements.apply(
+            SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition,
+              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+          val partitionings = plan.collect {
+            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+          }
+          assert(partitionings.size == 2)
+          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition, left, right)),
+            Seq(
+              Row(1, "left-1", 1, "right-1"),
+              Row(null, null, null, "right-null-1"),
+              Row(null, null, null, "right-null-2")),
+            sortAnswers = true)
+        }
+    }
+  }
+
   test("ordinary full outer equi-join keeps NULL keys unmatched while spreading them") {
     val nullableLeft = Seq(
       (Integer.valueOf(1), "left-1"),
@@ -481,6 +519,46 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
           assert(partitionings.size == 2)
           assert(partitionings.count(_.isInstanceOf[HashPartitioning]) == 1)
           assert(partitionings.count(_.isInstanceOf[NullAwareHashPartitioning]) == 1)
+        }
+    }
+  }
+
+  test("mixed ordinary and null-safe outer equi-join can use null-aware shuffle partitioning") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), null.asInstanceOf[Integer], "left-match"),
+      (Integer.valueOf(2), null.asInstanceOf[Integer], "left-no-match"))
+      .toDF("k1", "k2", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), null.asInstanceOf[Integer], "right-match"),
+      (Integer.valueOf(2), Integer.valueOf(3), "right-no-match"))
+      .toDF("k1", "k2", "rv")
+    val joinCondition = (
+      nullableLeft("k1") === nullableRight("k1") &&
+        nullableLeft("k2").eqNullSafe(nullableRight("k2"))).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(
+            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+          val plan = EnsureRequirements.apply(
+            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+          val partitionings = plan.collect {
+            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+          }
+          assert(partitionings.size == 2)
+          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
+            Seq(
+              Row(1, null, "left-match", 1, null, "right-match"),
+              Row(2, null, "left-no-match", null, null, null)),
+            sortAnswers = true)
         }
     }
   }
