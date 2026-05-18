@@ -387,7 +387,7 @@ class ProjectedOrderingAndPartitioningSuite
     val y = AttributeReference("y", IntegerType)()
     val yAlias = AttributeReference("y_alias", IntegerType)()
     val keys2d = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1), InternalRow(2, 2))
-    val childPartitioning = PartitioningCollection(Seq(
+    val childPartitioning = PartitioningCollection.fromPartitionings(Seq(
       KeyedPartitioning(Seq(x, y), keys2d),
       KeyedPartitioning(Seq(x, yAlias), keys2d)))
     val child = DummyLeafExecWithPartitioning(
@@ -587,27 +587,20 @@ class ProjectedOrderingAndPartitioningSuite
     }
   }
 
-  test("SPARK-46367: mixed-arity KeyedPartitionings in input fail with a clear assertion") {
-    // The function assumes all input KPs share the same arity (the invariant asserted by
-    // `GroupPartitionsExec`). Without the assert below, indexing `kp.expressions(i)` for
-    // `i >= kp.expressions.length` would throw an opaque `IndexOutOfBoundsException`. The assert
-    // surfaces the real cause -- an upstream node violated the invariant -- so the bug can be
-    // fixed at the producer.
+  test("SPARK-46367: mixed-arity KeyedPartitionings rejected by PartitioningCollection") {
+    // PartitioningCollection enforces matching expression arity (and shared partitionKeys
+    // references) across all its KeyedPartitionings, so the invariant required by
+    // `AliasAwareOutputExpression` cannot be violated by the input.
     val x = AttributeReference("x", IntegerType)()
     val y = AttributeReference("y", IntegerType)()
     val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
     val keys1d = Seq(InternalRow(1), InternalRow(2))
-    val child = DummyLeafExecWithPartitioning(
-      output = Seq(x, y),
-      partitioning = PartitioningCollection(Seq(
+    val e = intercept[IllegalArgumentException] {
+      PartitioningCollection.fromPartitionings(Seq(
         KeyedPartitioning(Seq(x, y), keys2d),
-        KeyedPartitioning(Seq(x), keys1d))))
-    val project = ProjectExec(Seq(x), child)
-    val e = intercept[AssertionError] {
-      project.outputPartitioning
+        KeyedPartitioning(Seq(x), keys1d)))
     }
-    assert(e.getMessage.contains("All input KeyedPartitionings must share the same expression " +
-      "arity"))
+    assert(e.getMessage.contains("partitionKeys"))
   }
 }
 
