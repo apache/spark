@@ -512,6 +512,30 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0s")
 
+  private[spark] val MANAGED_CONSUMER_ENABLED =
+    ConfigBuilder("spark.memory.managedConsumer.enabled")
+      .doc("If true, UnifiedMemoryManager will consult registered ManagedConsumer " +
+        "instances (via their shrink() method) before falling back to evicting " +
+        "internal cached blocks or shrinking the storage pool for execution. This " +
+        "ordering protects user-explicit persist() blocks from being dropped before " +
+        "best-effort external caches (e.g. native columnar caches like Velox " +
+        "AsyncDataCache exposed through Gluten).")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val MANAGED_CONSUMER_SHRINK_WARN_THRESHOLD_MS =
+    ConfigBuilder("spark.memory.managedConsumer.shrinkWarnThresholdMs")
+      .doc("If a ManagedConsumer.shrink() call takes longer than this many " +
+        "milliseconds, log a warning. Because shrink() runs inside the MemoryManager " +
+        "monitor, long shrink calls block other acquisition requests; this threshold " +
+        "helps surface slow implementations.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("100ms")
+
   private[spark] val STORAGE_UNROLL_MEMORY_THRESHOLD =
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")

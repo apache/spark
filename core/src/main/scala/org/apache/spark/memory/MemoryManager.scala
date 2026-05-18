@@ -19,8 +19,11 @@ package org.apache.spark.memory
 
 import javax.annotation.concurrent.GuardedBy
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.storage.BlockId
 import org.apache.spark.storage.memory.MemoryStore
@@ -65,6 +68,9 @@ private[spark] abstract class MemoryManager(
   offHeapExecutionMemoryPool.incrementPoolSize(maxOffHeapMemory - offHeapStorageMemory)
   offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
 
+  private val managedConsumerEnabled = conf.get(MANAGED_CONSUMER_ENABLED)
+  private val shrinkWarnThresholdMs = conf.get(MANAGED_CONSUMER_SHRINK_WARN_THRESHOLD_MS)
+
   /**
    * Total available on heap memory for storage, in bytes. This amount can vary over time,
    * depending on the MemoryManager implementation.
@@ -104,6 +110,76 @@ private[spark] abstract class MemoryManager(
    * @return whether all N bytes were successfully granted.
    */
   def acquireUnrollMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
+
+  /**
+   * Acquire `numBytes` of storage memory on behalf of `self`. Bytes are added to the storage
+   * pool but never enter [[MemoryStore]]'s `entries` map. `self` is excluded by reference
+   * equality from its own shrink-candidate round.
+   */
+  def acquireStorageMemory(
+      self: ManagedConsumer,
+      numBytes: Long,
+      memoryMode: MemoryMode): Boolean
+
+  /**
+   * Snapshot of [[ManagedConsumer]]s able to free `memoryMode` memory, filtered to those
+   * reporting positive shrinkable bytes and ordered largest-first. Caller MUST hold the
+   * [[MemoryManager]] monitor while invoking `shrink` on the result. Default: empty (so
+   * non-[[UnifiedMemoryManager]] backends disable the integration).
+   */
+  private[spark] def getShrinkableConsumers(
+      memoryMode: MemoryMode): Iterable[ManagedConsumer] = Iterable.empty
+
+  /**
+   * Ask registered [[ManagedConsumer]]s to release up to `requested` bytes of `memoryMode`
+   * storage; returns the growth in `pool.memoryFree` over the call. The framework deducts
+   * each `shrink` return value from the storage pool, so consumers MUST NOT call
+   * [[releaseStorageMemory]] from inside `shrink`. Caller MUST hold `this` monitor.
+   * Returns 0 if the SPI is disabled or `requested <= 0`.
+   *
+   * @param exclude caller's own consumer, if any, to skip (compared by `eq`).
+   */
+  private[memory] final def shrinkExternal(
+      requested: Long,
+      memoryMode: MemoryMode,
+      exclude: Option[ManagedConsumer] = None): Long = {
+    if (!managedConsumerEnabled || requested <= 0L) return 0L
+    val pool = memoryMode match {
+      case MemoryMode.ON_HEAP => onHeapStorageMemoryPool
+      case MemoryMode.OFF_HEAP => offHeapStorageMemoryPool
+    }
+    val freedAtStart = pool.memoryFree
+    val candidates = getShrinkableConsumers(memoryMode).iterator
+      .filterNot(c => exclude.exists(_ eq c))
+    var stillNeeded = requested
+    while (candidates.hasNext && stillNeeded > 0L) {
+      val c = candidates.next()
+      val (released, elapsedMs) = Utils.timeTakenMs {
+        try {
+          c.shrink(stillNeeded)
+        } catch {
+          case NonFatal(t) =>
+            logWarning(log"ManagedConsumer ${MDC(OBJECT_ID, MemoryManager.consumerLogName(c))}" +
+              log" threw from shrink(); treating as 0 release: ${MDC(ERROR, t.getMessage)}", t)
+            0L
+        }
+      }
+      require(released >= 0L,
+        s"ManagedConsumer ${MemoryManager.consumerLogName(c)} returned negative bytes from " +
+          s"shrink(): $released")
+      if (released > 0L) {
+        pool.releaseMemory(released)
+      }
+      if (elapsedMs > shrinkWarnThresholdMs) {
+        logWarning(log"ManagedConsumer ${MDC(OBJECT_ID, MemoryManager.consumerLogName(c))} took" +
+          log" ${MDC(TIME, elapsedMs)}ms to shrink (warn threshold " +
+          log"${MDC(THRESHOLD, shrinkWarnThresholdMs)}ms); MemoryManager monitor was " +
+          log"held throughout - consider smaller shrink requests or async preparation")
+      }
+      stillNeeded -= released
+    }
+    math.max(0L, pool.memoryFree - freedAtStart)
+  }
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the
@@ -278,5 +354,12 @@ private[spark] abstract class MemoryManager(
       case MemoryMode.ON_HEAP => MemoryAllocator.HEAP
       case MemoryMode.OFF_HEAP => MemoryAllocator.UNSAFE
     }
+  }
+}
+
+private[memory] object MemoryManager {
+  private[memory] def consumerLogName(c: ManagedConsumer): String = {
+    val n = if (c.name != null) c.name else ""
+    if (n.nonEmpty) n else c.getClass.getName
   }
 }

@@ -159,17 +159,18 @@ private[spark] class UnifiedMemoryManager(
      */
     def maybeGrowExecutionPool(extraMemoryNeeded: Long): Unit = {
       if (extraMemoryNeeded > 0) {
-        // There is not enough free memory in the execution pool, so try to reclaim memory from
-        // storage. We can reclaim any free memory from the storage pool. If the storage pool
-        // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
-        // the memory that storage has borrowed from execution.
+        // Compute the reclaim cap BEFORE asking externals to shrink, otherwise shrunk bytes
+        // would let execution claim into the protected storage region.
         val memoryReclaimableFromStorage = math.max(
           storagePool.memoryFree,
           storagePool.poolSize - storageRegionSize)
+        val targetReclaim = math.min(extraMemoryNeeded, memoryReclaimableFromStorage)
+        val shrinkNeeded = math.max(0L, targetReclaim - storagePool.memoryFree)
+        if (shrinkNeeded > 0L) {
+          shrinkExternal(shrinkNeeded, memoryMode)
+        }
         if (memoryReclaimableFromStorage > 0) {
-          // Only reclaim as much space as is necessary and available:
-          val spaceToReclaim = storagePool.freeSpaceToShrinkPool(
-            math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
+          val spaceToReclaim = storagePool.freeSpaceToShrinkPool(targetReclaim)
           storagePool.decrementPoolSize(spaceToReclaim)
           executionPool.incrementPoolSize(spaceToReclaim)
         }
@@ -206,9 +207,63 @@ private[spark] class UnifiedMemoryManager(
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
+      memoryMode: MemoryMode): Boolean = {
+    acquireStorageMemoryUnified(
+      numBytes,
+      memoryMode,
+      exclude = None,
+      (effective, unmanaged) =>
+        logInfo(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space" +
+          log" (${MDC(NUM_BYTES, numBytes)} bytes) exceeds our" +
+          log" memory limit (${MDC(NUM_BYTES_MAX, effective)} bytes)" +
+          (if (unmanaged > 0) log" (unmanaged memory usage: ${MDC(NUM_BYTES, unmanaged)} bytes)"
+           else log"")),
+      (pool, n) => pool.acquireMemory(blockId, n))
+  }
+
+  override def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      memoryMode: MemoryMode): Boolean = {
+    acquireStorageMemory(blockId, numBytes, memoryMode)
+  }
+
+  override def acquireStorageMemory(
+      self: ManagedConsumer,
+      numBytes: Long,
+      memoryMode: MemoryMode): Boolean = {
+    require(self != null, "self ManagedConsumer must not be null")
+    require(self.memoryMode == memoryMode,
+      s"requested memoryMode=$memoryMode does not match self.memoryMode=${self.memoryMode}; " +
+        "a ManagedConsumer may only acquire memory in the mode it manages")
+    acquireStorageMemoryUnified(
+      numBytes,
+      memoryMode,
+      exclude = Some(self),
+      (effective, unmanaged) =>
+        logInfo(log"Will not grant external storage memory request of " +
+          log"${MDC(NUM_BYTES, numBytes)} bytes as it exceeds the " +
+          log"effective limit (${MDC(NUM_BYTES_MAX, effective)} bytes)" +
+          (if (unmanaged > 0) log" (unmanaged memory usage: ${MDC(NUM_BYTES, unmanaged)} bytes)"
+           else log"")),
+      (pool, n) => pool.acquireMemoryForManagedConsumer(n))
+  }
+
+  /**
+   * Shared body for the two [[acquireStorageMemory]] overloads. `logFailFast` and
+   * `acquireFromPool` capture the only per-overload differences. Order is: fail-fast on
+   * `effectiveMaxMemory`, borrow free execution memory, [[shrinkExternal]] for any remaining
+   * deficit, then delegate to the pool. Borrow runs before shrink because it is free
+   * (no eviction).
+   */
+  private def acquireStorageMemoryUnified(
+      numBytes: Long,
+      memoryMode: MemoryMode,
+      exclude: Option[ManagedConsumer],
+      logFailFast: (Long, Long) => Unit,
+      acquireFromPool: (StorageMemoryPool, Long) => Boolean): Boolean = synchronized {
     assertInvariants()
-    assert(numBytes >= 0)
+    require(numBytes >= 0, s"numBytes must be >= 0, got $numBytes")
     val (executionPool, storagePool, maxMemory) = memoryMode match {
       case MemoryMode.ON_HEAP => (
         onHeapExecutionMemoryPool,
@@ -220,39 +275,29 @@ private[spark] class UnifiedMemoryManager(
         maxOffHeapStorageMemory)
     }
 
-    // Factor in unmanaged memory usage for the specific memory mode
     val unmanagedMemory = getUnmanagedMemoryUsed(memoryMode)
     val effectiveMaxMemory = math.max(0L, maxMemory - unmanagedMemory)
 
     if (numBytes > effectiveMaxMemory) {
-      // Fail fast if the block simply won't fit
-      logInfo(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space" +
-        log" (${MDC(NUM_BYTES, numBytes)} bytes) exceeds our" +
-        log" memory limit (${MDC(NUM_BYTES_MAX, effectiveMaxMemory)} bytes)" +
-        (if (unmanagedMemory > 0) {
-          log" (unmanaged memory usage: ${MDC(NUM_BYTES, unmanagedMemory)} bytes)"
-        } else {
-          log""
-        }))
+      logFailFast(effectiveMaxMemory, unmanagedMemory)
       return false
     }
     if (numBytes > storagePool.memoryFree) {
-      // There is not enough free memory in the storage pool, so try to borrow free memory from
-      // the execution pool.
       val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree,
         numBytes - storagePool.memoryFree)
       executionPool.decrementPoolSize(memoryBorrowedFromExecution)
       storagePool.incrementPoolSize(memoryBorrowedFromExecution)
     }
-    storagePool.acquireMemory(blockId, numBytes)
+    val deficitAfterBorrow = math.max(0L, numBytes - storagePool.memoryFree)
+    if (deficitAfterBorrow > 0L) {
+      shrinkExternal(deficitAfterBorrow, memoryMode, exclude)
+    }
+    acquireFromPool(storagePool, numBytes)
   }
 
-  override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      memoryMode: MemoryMode): Boolean = synchronized {
-    acquireStorageMemory(blockId, numBytes, memoryMode)
-  }
+  override private[spark] def getShrinkableConsumers(
+      memoryMode: MemoryMode): Iterable[ManagedConsumer] =
+    UnifiedMemoryManager.getShrinkableConsumers(memoryMode)
 }
 
 object UnifiedMemoryManager extends Logging {
@@ -294,6 +339,26 @@ object UnifiedMemoryManager extends Logging {
       unmanagedMemoryConsumer: UnmanagedMemoryConsumer): Unit = {
     val id = unmanagedMemoryConsumer.unmanagedMemoryConsumerId
     unmanagedMemoryConsumers.put(id, unmanagedMemoryConsumer)
+    unmanagedMemoryConsumer match {
+      case mc: ManagedConsumer if isRegisteredManaged(mc) => warnCrossRegistered(mc)
+      case _ =>
+    }
+  }
+
+  private def isRegisteredManaged(mc: ManagedConsumer): Boolean = {
+    val n = mc.name
+    n != null && n.nonEmpty && (managedConsumers.get(n) eq mc)
+  }
+
+  private def isRegisteredUnmanaged(umc: UnmanagedMemoryConsumer): Boolean = {
+    val id = umc.unmanagedMemoryConsumerId
+    unmanagedMemoryConsumers.get(id) eq umc
+  }
+
+  private def warnCrossRegistered(mc: ManagedConsumer): Unit = {
+    logWarning(log"Object ${MDC(LogKeys.OBJECT_ID, MemoryManager.consumerLogName(mc))} " +
+      log"is registered as BOTH ManagedConsumer and UnmanagedMemoryConsumer; the same " +
+      log"bytes will be subtracted twice from effectiveMaxMemory. Pick exactly one SPI.")
   }
 
   /**
@@ -339,6 +404,95 @@ object UnifiedMemoryManager extends Logging {
     // Reset cached values when clearing consumers
     unmanagedOnHeapUsed.set(0L)
     unmanagedOffHeapUsed.set(0L)
+  }
+
+  // -- Managed consumer registry --
+
+  private val managedConsumers =
+    new ConcurrentHashMap[String, ManagedConsumer]()
+
+  /**
+   * Register a [[ManagedConsumer]] as a candidate for [[MemoryManager.shrinkExternal]]
+   * (requires `spark.memory.managedConsumer.enabled=true`).
+   *
+   * The registry is JVM-global and does NOT propagate across the cluster. Keyed by
+   * [[ManagedConsumer.name]] (ON_HEAP and OFF_HEAP share one namespace); re-registering
+   * the SAME instance is idempotent, a DIFFERENT instance under an already-taken name
+   * fails. Callers MUST invoke [[unregisterManagedConsumer]] on shutdown -- the registry
+   * holds strong references.
+   */
+  def registerManagedConsumer(consumer: ManagedConsumer): Unit = {
+    require(consumer != null, "ManagedConsumer must not be null")
+    val n = consumer.name
+    require(n != null && n.nonEmpty,
+      "ManagedConsumer.name must be non-empty (used as the registry key)")
+    val prior = managedConsumers.putIfAbsent(n, consumer)
+    if (prior != null && (prior ne consumer)) {
+      throw new IllegalArgumentException(
+        s"A different ManagedConsumer is already registered under name '$n'. " +
+          s"Existing: ${prior.getClass.getName}, new: ${consumer.getClass.getName}. " +
+          "Names must be unique within this JVM (ON_HEAP and OFF_HEAP share one namespace).")
+    }
+    consumer match {
+      case umc: UnmanagedMemoryConsumer if isRegisteredUnmanaged(umc) =>
+        warnCrossRegistered(consumer)
+      case _ =>
+    }
+  }
+
+  /**
+   * Unregister a [[ManagedConsumer]]. Removes only when the registered instance is the
+   * one passed here (a stale unregister cannot evict a later re-registration under the
+   * same name). No-op for null / empty-name / not-registered.
+   */
+  private[spark] def unregisterManagedConsumer(consumer: ManagedConsumer): Unit = {
+    if (consumer == null) return
+    val n = consumer.name
+    if (n != null && n.nonEmpty) {
+      managedConsumers.remove(n, consumer)
+    }
+  }
+
+  /**
+   * Snapshot of registered managed consumers for `memoryMode`, filtered to those reporting
+   * positive [[ManagedConsumer.getShrinkableMemoryBytes]], sorted DESC (tie-break unspecified).
+   * Iteration is weakly-consistent; consumers that throw or return negative are coerced to 0
+   * and filtered out.
+   */
+  private[spark] def getShrinkableConsumers(
+      memoryMode: MemoryMode): Iterable[ManagedConsumer] = {
+    if (managedConsumers.isEmpty) return Iterable.empty
+    def safeGetShrinkableBytes(c: ManagedConsumer): Long = {
+      try {
+        val b = c.getShrinkableMemoryBytes
+        if (b < 0L) {
+          logWarning(log"ManagedConsumer ${MDC(LogKeys.OBJECT_ID,
+              MemoryManager.consumerLogName(c))} returned negative " +
+            log"getShrinkableMemoryBytes=${MDC(LogKeys.NUM_BYTES, b)}; treating as 0")
+          0L
+        } else {
+          b
+        }
+      } catch {
+        case NonFatal(t) =>
+          logWarning(log"ManagedConsumer ${MDC(LogKeys.OBJECT_ID,
+              MemoryManager.consumerLogName(c))} threw from getShrinkableMemoryBytes; " +
+            log"treating as 0: ${MDC(LogKeys.ERROR, t.getMessage)}", t)
+          0L
+      }
+    }
+    managedConsumers.values().asScala.iterator
+      .filter(_.memoryMode == memoryMode)
+      .map(c => (c, safeGetShrinkableBytes(c)))
+      .filter(_._2 > 0L)
+      .toSeq
+      .sortBy(-_._2)
+      .map(_._1)
+  }
+
+  /** Test-only: clear all managed consumers. */
+  private[spark] def clearManagedConsumers(): Unit = {
+    managedConsumers.clear()
   }
 
   // Shared polling infrastructure - only one polling thread per JVM
