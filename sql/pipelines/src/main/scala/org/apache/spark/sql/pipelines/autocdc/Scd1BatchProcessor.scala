@@ -274,6 +274,90 @@ case class Scd1BatchProcessor(
       .merge()
   }
 
+  /**
+   * Merge the reconciled (deduplicated, tombstone applied, and column selection + metadata
+   * column projected) microbatch onto the target table, as per SCD1 semantics.
+   *
+   * Microbatch invariants:
+   *   - Exactly one of {upsert, delete} version is non-null, the other is null.
+   *   - There is at most one event per key, representing the latest known event for the key
+   *     across the microbatch and auxiliary table.
+   *
+   * Target table invariants:
+   *   - Target table only contains live rows; delete sequence is always null, upsert sequence
+   *     is always non-null.
+   *
+   * @param reconciledMicrobatchDf The reconciled microbatch dataframe.
+   * @param targetTableIdentifier  The identifier (not a [[DataFrame]]) of the target
+   *                               table, as required by the `mergeInto(table, condition)`
+   *                               API.
+   */
+  def mergeMicrobatchOntoTarget(
+      reconciledMicrobatchDf: DataFrame,
+      targetTableIdentifier: TableIdentifier
+  ): Unit = {
+    val meta = Scd1BatchProcessor.cdcMetadataColName
+
+    val destinationTableStr = targetTableIdentifier.quotedString
+    // (Re-)alias the reconciled microbatch DF for easy reference for the remainder of the merge.
+    val microbatchDf = reconciledMicrobatchDf.as("microbatch")
+
+    val microbatchCdcMetadataCol = F.col(s"microbatch.`$meta`")
+    val destinationCdcMetadataCol =
+      F.col(s"$destinationTableStr.`$meta`")
+
+    val microbatchDeleteVersionField =
+      Scd1BatchProcessor.deleteSequenceOf(microbatchCdcMetadataCol)
+    val microbatchUpsertVersionField =
+      Scd1BatchProcessor.upsertSequenceOf(microbatchCdcMetadataCol)
+    val destinationUpsertVersionField =
+      Scd1BatchProcessor.upsertSequenceOf(destinationCdcMetadataCol)
+
+    val keysMatch = changeArgs.keys
+      .map(k =>
+        F.col(s"microbatch.${k.quoted}") === F.col(s"$destinationTableStr.${k.quoted}")
+      )
+      .reduce(_ && _)
+
+    // Upsert beats existing row if incoming upsert sequence is geq to the upsert sequence on
+    // the target.
+    val incomingWinsUpsert = microbatchUpsertVersionField.isNotNull &&
+      microbatchUpsertVersionField >= destinationUpsertVersionField
+
+    // Delete beats existing row if delete sequencing is strictly greater than the upsert
+    // sequence on the target. This is an arbitrary but deliberate choice to maintain that
+    // upserts get priority over deletes on duplicate sequencing.
+    val incomingWinsDelete = microbatchDeleteVersionField.isNotNull &&
+      microbatchDeleteVersionField > destinationUpsertVersionField
+
+    // When the incoming upsert wins against an existing record, the entire row (all columns)
+    // will be overwritten, including the CDC metadata column. We only exclude keys because
+    // most merge implementations require that join columns are not being mutated, even if
+    // the mutation is a no-op.
+    val resolver = microbatchDf.sparkSession.sessionState.conf.resolver
+    val keyNames = changeArgs.keys.map(_.name)
+    val columnsToUpdateWhenIncomingWinsUpsert: Map[String, Column] =
+      microbatchDf.columns
+        .filterNot(c => keyNames.exists(resolver(_, c)))
+        .map { c =>
+          val quotedCol = QuotingUtils.quoteIdentifier(c)
+          s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
+        }
+        .toMap
+
+    microbatchDf
+      .mergeInto(destinationTableStr, keysMatch)
+      .whenMatched(incomingWinsDelete)
+      .delete()
+      .whenMatched(incomingWinsUpsert)
+      .update(columnsToUpdateWhenIncomingWinsUpsert)
+      // New key: only insert upserts; deletes for absent keys are no-ops for the target table
+      // merge, and instead would have been inserted as tombstones into the auxiliary table.
+      .whenNotMatched(microbatchDeleteVersionField.isNull)
+      .insertAll()
+      .merge()
+  }
+
   private def validateCdcMetadataColumnNotPresent(microbatch: DataFrame): Unit = {
     val microbatchSqlConf = microbatch.sparkSession.sessionState.conf
     val resolver = microbatchSqlConf.resolver
