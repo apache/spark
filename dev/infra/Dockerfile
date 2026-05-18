@@ -63,7 +63,6 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     python3.10 \
     python3-psutil \
-    python3-pyparsing \
     qpdf \
     r-base \
     ruby \
