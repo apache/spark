@@ -29,7 +29,9 @@ class AmmoniteReplE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     val sparkHome = sys.props.getOrElse(
       "spark.test.home",
       sys.env.getOrElse("SPARK_HOME", fail("spark.test.home or SPARK_HOME not set")))
-    val command = Seq(s"$sparkHome/connector/connect/bin/spark-connect-scala-client", "--remote",
+    val command = Seq(
+      s"$sparkHome/connector/connect/bin/spark-connect-scala-client",
+      "--remote",
       s"sc://localhost:$serverPort")
 
     val process = new ProcessBuilder(command: _*).start()
