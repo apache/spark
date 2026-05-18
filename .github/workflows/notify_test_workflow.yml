@@ -156,7 +156,11 @@ jobs:
                 status: status,
                 output: {
                   title: 'Test results',
-                  summary: '[See test results](' + check_run_url + ')',
+                  summary: '[See test results](' + check_run_url + ')\n\n'
+                    + 'If the tests fail for reasons unrelated to this pull request, '
+                    + 'please rerun the workflow in your forked repository.\n'
+                    + 'If the failures are related to this pull request, '
+                    + 'please investigate them and push follow-up changes.',
                   text: JSON.stringify({
                     owner: context.payload.pull_request.head.repo.owner.login,
                     repo: context.payload.pull_request.head.repo.name,
