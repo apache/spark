@@ -437,10 +437,27 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_hyp_settings
         @given(value=_bool_strategy)
         @_seed_examples(_BOOL_EDGES)
-        def test_truthy_bool_branch_matches_python(self, value):
+        def test_truthy_bool_branch_falls_back(self, value):
+            # `if x:` on a bare parameter name is a bare truthiness test whose
+            # type is unknown at transpile time. The transpiler must refuse to
+            # lower it (Spark's coalesce(x, false) is unsound for non-boolean
+            # columns) and fall back to interpreted Python instead.
             df = self._single_arg_df(value, BooleanType())
-            transpiled, interpreted = self._run(truthy_bool_branch, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"truthy_bool_branch mismatch on {value!r}")
+            with self.sql_conf(
+                {
+                    "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                    "spark.sql.ansi.enabled": True,
+                }
+            ):
+                pudf = UserDefinedFunction(truthy_bool_branch, LongType())
+                self.assertEqual(
+                    [],
+                    pudf.transpiled,
+                    "truthy_bool_branch: bare truthiness test must NOT transpile",
+                )
+                interpreted = df.select(pudf("a")).collect()[0][0]
+            expected = 1 if value else 2
+            self.assertEqual(interpreted, expected, f"truthy_bool_branch mismatch on {value!r}")
 
         @_hyp_settings
         @given(value=_long_strategy)
@@ -481,10 +498,26 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_hyp_settings
         @given(value=_bool_strategy)
         @_seed_examples(_BOOL_EDGES)
-        def test_negate_truthy_matches_python(self, value):
+        def test_negate_truthy_falls_back(self, value):
+            # `if not x:` where x is a bare parameter name is unknown-type at
+            # transpile time. The transpiler must refuse (Spark's `~` is
+            # bitwise, not Python truthiness) and fall back to interpreted Python.
             df = self._single_arg_df(value, BooleanType())
-            transpiled, interpreted = self._run(negate_truthy, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"negate_truthy mismatch on {value!r}")
+            with self.sql_conf(
+                {
+                    "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                    "spark.sql.ansi.enabled": True,
+                }
+            ):
+                pudf = UserDefinedFunction(negate_truthy, LongType())
+                self.assertEqual(
+                    [],
+                    pudf.transpiled,
+                    "negate_truthy: bare `not x` must NOT transpile",
+                )
+                interpreted = df.select(pudf("a")).collect()[0][0]
+            expected = 0 if not value else 1
+            self.assertEqual(interpreted, expected, f"negate_truthy mismatch on {value!r}")
 
         @_hyp_settings
         @given(x=_long_strategy, y=_long_strategy)

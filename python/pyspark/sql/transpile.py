@@ -279,17 +279,16 @@ class CatalystTranspiler(AbstractTranspiler):
                 # `~NULL` is `NULL`. Coalesce against `lit(True)` so a NULL
                 # operand mirrors Python's "None is falsy" rule. We only
                 # accept operands that are statically known to be boolean;
-                # for non-boolean operands (e.g. `not 0` against an int
-                # column) Spark's `~` is bitwise, not Python truthiness, so
-                # we bail and let the caller fall back to interpreted
-                # Python rather than silently diverge.
-                if _is_definitely_non_boolean(operand):
+                # for non-boolean operands (e.g. `not 0`, `not x` where x is
+                # a bare parameter name) Spark's `~` is bitwise, not Python
+                # truthiness, so we bail and let the caller fall back to
+                # interpreted Python rather than silently diverge.
+                if not _is_definitely_boolean(operand):
                     raise UnsupportedOperationException(
-                        "`not` operand is statically non-boolean (numeric / "
-                        "string literal or arithmetic expression); Spark's "
-                        "`~` is bitwise, not Python truthiness, so the "
-                        "transpiler refuses to lower this and the UDF "
-                        "falls back to interpreted Python"
+                        "`not` operand type is not statically known to be "
+                        "boolean; Spark's `~` is bitwise, not Python "
+                        "truthiness, so the transpiler refuses to lower this "
+                        "and the UDF falls back to interpreted Python"
                     )
                 return coalesce(self._convert_chunk(params, operand).__invert__(), lit(True))
             case ast.UnaryOp(op=ast.USub(), operand=operand):
@@ -304,18 +303,18 @@ class CatalystTranspiler(AbstractTranspiler):
                 # operands rather than a strict boolean. For the booleans
                 # produced by Compare / UnaryOp(Not) / nested BoolOps this
                 # maps cleanly onto Spark Column `&` / `|`. For
-                # non-boolean operands the right semantics would require
+                # non-boolean operands (including bare parameter names whose
+                # runtime type is unknown) the right semantics would require
                 # Python's truthiness rules (0 / "" / None / [] all
                 # falsy), which we can't faithfully reproduce without the
                 # input column types -- Spark's `&` / `|` would silently
-                # do bitwise instead. Bail out here so the caller falls
-                # back to interpreted Python rather than producing a plan
-                # whose results disagree with the original UDF.
-                if any(_is_definitely_non_boolean(v) for v in values):
+                # do bitwise instead. Require all operands to be statically
+                # known boolean so the caller falls back to interpreted
+                # Python rather than producing a plan whose results diverge.
+                if not all(_is_definitely_boolean(v) for v in values):
                     raise UnsupportedOperationException(
-                        "`and` / `or` operand is statically non-boolean "
-                        "(numeric / string literal or arithmetic "
-                        "expression); Spark's `&` / `|` are bitwise, not "
+                        "`and` / `or` operand type is not statically known "
+                        "to be boolean; Spark's `&` / `|` are bitwise, not "
                         "Python truthiness, so the transpiler refuses to "
                         "lower this and the UDF falls back to interpreted "
                         "Python"
@@ -353,31 +352,56 @@ class CatalystTranspiler(AbstractTranspiler):
                     raise UnsupportedOperationException(
                         "chained comparisons (e.g. `a < b < c`) are not supported by the transpiler"
                     )
-                left_col = self._convert_chunk(params, left)
+                comp = comps[0]
                 match ops[0]:
-                    case ast.IsNot():
-                        return left_col.isNotNull()
-                    case ast.Is():
-                        return left_col.isNull()
+                    case ast.Is() | ast.IsNot():
+                        # Only lower `x is None` / `None is x` (and their
+                        # `is not` variants) to isNull/isNotNull. For any
+                        # other comparator (e.g. `x is 0`, `x is y`) Python
+                        # performs an object-identity check that has no SQL
+                        # equivalent, so we must fall back to interpreted
+                        # Python rather than silently emitting a null check.
+                        is_none_left = isinstance(left, ast.Constant) and left.value is None
+                        is_none_right = isinstance(comp, ast.Constant) and comp.value is None
+                        if not (is_none_left or is_none_right):
+                            raise UnsupportedOperationException(
+                                "`is`/`is not` is only supported when one "
+                                "operand is the literal None; other identity "
+                                "checks (e.g. `x is 0`, `x is y`) cannot be "
+                                "lowered to SQL and the UDF falls back to "
+                                "interpreted Python"
+                            )
+                        subject_node = comp if is_none_left else left
+                        subject_col = self._convert_chunk(params, subject_node)
+                        if isinstance(ops[0], ast.Is):
+                            return subject_col.isNull()
+                        else:
+                            return subject_col.isNotNull()
                     case ast.Eq():
-                        return self._lower_eq(params, left_col, comps[0], equal=True)
+                        left_col = self._convert_chunk(params, left)
+                        return self._lower_eq(params, left_col, comp, equal=True)
                     case ast.NotEq():
-                        return self._lower_eq(params, left_col, comps[0], equal=False)
+                        left_col = self._convert_chunk(params, left)
+                        return self._lower_eq(params, left_col, comp, equal=False)
                     case ast.Lt():
+                        left_col = self._convert_chunk(params, left)
                         return self._lower_value_compare(
-                            params, left_col, comps[0], lambda l, r: l < r, "<"
+                            params, left_col, comp, lambda l, r: l < r, "<"
                         )
                     case ast.LtE():
+                        left_col = self._convert_chunk(params, left)
                         return self._lower_value_compare(
-                            params, left_col, comps[0], lambda l, r: l <= r, "<="
+                            params, left_col, comp, lambda l, r: l <= r, "<="
                         )
                     case ast.Gt():
+                        left_col = self._convert_chunk(params, left)
                         return self._lower_value_compare(
-                            params, left_col, comps[0], lambda l, r: l > r, ">"
+                            params, left_col, comp, lambda l, r: l > r, ">"
                         )
                     case ast.GtE():
+                        left_col = self._convert_chunk(params, left)
                         return self._lower_value_compare(
-                            params, left_col, comps[0], lambda l, r: l >= r, ">="
+                            params, left_col, comp, lambda l, r: l >= r, ">="
                         )
                     case _:
                         raise UnsupportedOperationException(

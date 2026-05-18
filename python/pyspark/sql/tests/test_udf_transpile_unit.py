@@ -455,6 +455,210 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                     [result] = df.select(pudf("a")).collect()
                     self.assertEqual(result[0], expected, f"{label}: interpreted mismatch")
 
+    def test_udf_transpile_is_none_semantics(self):
+        # `x is None` and `None is x` (and their `is not` variants) should
+        # transpile to isNull/isNotNull. Any other identity check (`x is 0`,
+        # `x is y`, `x is True`) must NOT transpile -- Python's `is` is an
+        # object-identity test with no SQL equivalent outside of None.
+        import warnings as _warnings
+        from pyspark.sql.types import StructField, StructType
+
+        long_schema = StructType([StructField("a", LongType(), nullable=True)])
+
+        def x_is_none(x):
+            return x is None
+
+        def x_is_not_none(x):
+            if x is not None:
+                return x + 1
+
+        def none_is_x(x):
+            return None is x
+
+        def none_is_not_x(x):
+            if None is not x:
+                return x + 1
+
+        def x_is_zero(x):
+            return x is 0  # noqa: F632  identity vs equality
+
+        def x_is_true(x):
+            return x is True
+
+        def x_is_y(x, y):
+            return x is y
+
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            # `x is None` and `None is x` should transpile and produce
+            # identical results.
+            for func, label in [(x_is_none, "x_is_none"), (none_is_x, "none_is_x")]:
+                with self.subTest(case=label):
+                    pudf = UserDefinedFunction(func, BooleanType())
+                    self.assertTrue(
+                        pudf.transpiled,
+                        f"{label}: expected transpilation to succeed",
+                    )
+                    df = self.spark.createDataFrame([Row(a=None)], schema=long_schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertTrue(row[0], f"{label}: None is None should be True")
+                    df = self.spark.createDataFrame([Row(a=1)], schema=long_schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertFalse(row[0], f"{label}: 1 is None should be False")
+
+            # `x is not None` and `None is not x` should transpile.
+            for func, label in [
+                (x_is_not_none, "x_is_not_none"),
+                (none_is_not_x, "none_is_not_x"),
+            ]:
+                with self.subTest(case=label):
+                    pudf = UserDefinedFunction(func, LongType())
+                    self.assertTrue(
+                        pudf.transpiled,
+                        f"{label}: expected transpilation to succeed",
+                    )
+                    df = self.spark.createDataFrame([Row(a=2)], schema=long_schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertEqual(row[0], 3, f"{label}: non-None input should return x+1")
+                    df = self.spark.createDataFrame([Row(a=None)], schema=long_schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertIsNone(row[0], f"{label}: None input should return None")
+
+            # Non-None identity checks must NOT transpile and must still
+            # return correct results via interpreted Python.
+            bool_schema = StructType([StructField("a", BooleanType(), nullable=True)])
+            two_col_schema = StructType(
+                [
+                    StructField("a", LongType(), nullable=True),
+                    StructField("b", LongType(), nullable=True),
+                ]
+            )
+            non_none_cases = [
+                # CPython interns small ints so `0 is 0` happens to be True in CPython,
+                # but that is an implementation detail. The transpiler must still refuse
+                # to lower these to isNull/isNotNull. We just verify: (a) no transpile,
+                # (b) the interpreted result matches what Python actually produces.
+                ("x_is_zero", x_is_zero, BooleanType(), long_schema, Row(a=0), True),
+                # `True is True` is True because bool singletons are interned.
+                ("x_is_true", x_is_true, BooleanType(), bool_schema, Row(a=True), True),
+                ("x_is_y", x_is_y, BooleanType(), two_col_schema, Row(a=1, b=1), True),
+            ]
+            for label, func, return_type, schema, row, expected in non_none_cases:
+                with self.subTest(case=label):
+                    with _warnings.catch_warnings(record=True) as caught:
+                        _warnings.simplefilter("always")
+                        pudf = UserDefinedFunction(func, return_type)
+                    self.assertEqual(
+                        [],
+                        pudf.transpiled,
+                        f"{label}: non-None identity check must NOT transpile",
+                    )
+                    fallback = [
+                        w
+                        for w in caught
+                        if "Unable to transpile" in str(w.message)
+                        or "Errors encountered" in str(w.message)
+                    ]
+                    self.assertTrue(fallback, f"{label}: expected a fallback warning")
+                    df = self.spark.createDataFrame([row], schema=schema)
+                    args = ["a", "b"] if "b" in schema.fieldNames() else ["a"]
+                    [result] = df.select(pudf(*args)).collect()
+                    self.assertEqual(result[0], expected, f"{label}: interpreted result mismatch")
+
+    def test_udf_transpile_not_bare_param_falls_back(self):
+        # `not x` where x is a bare UDF parameter (unknown type at
+        # transpile time) must NOT be lowered: Spark's `~` is bitwise, not
+        # Python truthiness, so `not 0` would produce True via Python but
+        # Spark's `~0L` is -1 (truthy). The transpiler must refuse and fall
+        # back to interpreted Python.
+        import warnings as _warnings
+        from pyspark.sql.types import StructField, StructType
+
+        def not_x(x):
+            return not x
+
+        long_schema = StructType([StructField("a", LongType(), nullable=True)])
+
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            with _warnings.catch_warnings(record=True) as caught:
+                _warnings.simplefilter("always")
+                pudf = UserDefinedFunction(not_x, BooleanType())
+            self.assertEqual([], pudf.transpiled, "not x on bare param must NOT transpile")
+            fallback = [
+                w
+                for w in caught
+                if "Unable to transpile" in str(w.message) or "Errors encountered" in str(w.message)
+            ]
+            self.assertTrue(fallback, "expected a fallback warning for `not x`")
+            # Verify interpreted result is still correct.
+            for value, expected in [(0, True), (1, False), (None, True)]:
+                with self.subTest(value=value):
+                    df = self.spark.createDataFrame([Row(a=value)], schema=long_schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertEqual(row[0], expected)
+
+    def test_udf_transpile_and_or_bare_param_falls_back(self):
+        # `x and y` / `x or y` where x/y are bare UDF parameters (unknown
+        # type) must NOT be lowered: Python returns one of the operands
+        # (truthiness semantics) while Spark's `&`/`|` are bitwise. The
+        # transpiler must refuse and fall back.
+        import warnings as _warnings
+        from pyspark.sql.types import StructField, StructType
+
+        def x_and_y(x, y):
+            return x and y
+
+        def x_or_y(x, y):
+            return x or y
+
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            for func, label, row, expected in [
+                (x_and_y, "x_and_y_falsy", Row(a=0, b=5), 0),
+                (x_and_y, "x_and_y_truthy", Row(a=3, b=5), 5),
+                (x_or_y, "x_or_y_falsy_left", Row(a=0, b=5), 5),
+                (x_or_y, "x_or_y_truthy_left", Row(a=3, b=0), 3),
+            ]:
+                with self.subTest(case=label):
+                    with _warnings.catch_warnings(record=True) as caught:
+                        _warnings.simplefilter("always")
+                        pudf = UserDefinedFunction(func, LongType())
+                    self.assertEqual(
+                        [],
+                        pudf.transpiled,
+                        f"{label}: and/or on bare params must NOT transpile",
+                    )
+                    fallback = [
+                        w
+                        for w in caught
+                        if "Unable to transpile" in str(w.message)
+                        or "Errors encountered" in str(w.message)
+                    ]
+                    self.assertTrue(fallback, f"{label}: expected a fallback warning")
+                    df = self.spark.createDataFrame([row], schema=schema)
+                    [result] = df.select(pudf("a", "b")).collect()
+                    self.assertEqual(result[0], expected, f"{label}: interpreted result mismatch")
+
     def test_cannot_convert_column_into_bool_includes_column_repr(self):
         # The error fired by ``Column.__bool__`` should name the offending
         # column so users can see which expression triggered the fallback.
