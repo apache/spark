@@ -23,8 +23,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic
-import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, NullColumnIdInMemoryTableCatalog, TableCatalog, TableChange, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog, TableChange, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * DSv2 join tests for Spark Connect mirroring the classic DataSourceV2DataFrameSuite join
@@ -39,17 +40,21 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.nullcolidcat",
-      classOf[NullColumnIdInMemoryTableCatalog].getName)
-    .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullidcat",
+      classOf[NullTableIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullbothidscat",
+      classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
   private val T = "testcat.ns1.ns2.tbl"
   private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
 
   /** Get a catalog from the server-side session by name. */
   private def serverCatalog[T <: TableCatalog](
-      serverSession: classic.SparkSession, name: String): T =
-    serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
+      serverSession: classic.SparkSession,
+      catalogName: String): T =
+    serverSession.sessionState.catalogManager.catalog(catalogName).asInstanceOf[T]
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   private def externalAppend(
@@ -79,7 +84,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   }
 
   // Scenario 1: join after insert refreshes both sides to latest version.
-  test("[connect] join refreshes both sides after external insert") {
+  test("[connect] join refreshes both sides after external insert" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -90,9 +96,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         // external writer adds (2, 200) via direct catalog API
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val schema = StructType.fromDDL("id INT, salary INT")
         externalAppend(
-          cat = cat, ident = ident, schema = schema, row = InternalRow(2, 200))
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
         val df2 = session.table(T)
 
@@ -103,7 +111,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join refreshes both sides after session insert") {
+  test("[connect] join refreshes both sides after same-session insert" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -126,7 +135,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 2: join after ADD COLUMN.
   // In Connect, df1 also re-analyzes to the 3-column schema
   // (unlike classic where df1 keeps original 2-column schema).
-  test("[connect] join after external ADD COLUMN sees new schema on both sides") {
+  test("[connect] join after external ADD COLUMN sees new schema on both sides" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -141,9 +151,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, addCol)
 
         // external writer adds (2, 200, -1) with new schema
-        val newSchema = StructType.fromDDL("id INT, salary INT, new_column INT")
         externalAppend(
-          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200, -1))
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
+          row = InternalRow(2, 200, -1))
 
         val df2 = session.table(T)
 
@@ -154,7 +166,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join after session ADD COLUMN sees new schema on both sides") {
+  test("[connect] join after same-session ADD COLUMN sees new schema on both sides" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -178,7 +191,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 3: join after DROP COLUMN.
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see only 'id'.
-  test("[connect] join after external DROP COLUMN succeeds") {
+  test("[connect] join after external DROP COLUMN succeeds" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -193,18 +207,23 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         cat.alterTable(ident, dropCol)
 
         // external writer adds (2) with 1-col schema
-        val newSchema = StructType.fromDDL("id INT")
         externalAppend(
-          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2))
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT"),
+          row = InternalRow(2))
 
         val df2 = session.table(T)
 
-        assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(1, 1), Row(2, 2)))
+        assertRows(
+          df1.join(df2, df1("id") === df2("id")).collect(),
+          Seq(Row(1, 1), Row(2, 2)))
       }
     }
   }
 
-  test("[connect] join after session DROP COLUMN succeeds") {
+  test("[connect] join after same-session DROP COLUMN succeeds" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -218,16 +237,18 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
         val df2 = session.table(T)
 
-        assertRows(df1.join(df2, df1("id") === df2("id")).collect(), Seq(Row(1, 1), Row(2, 2)))
+        assertRows(
+          df1.join(df2, df1("id") === df2("id")).collect(),
+          Seq(Row(1, 1), Row(2, 2)))
       }
     }
   }
 
-  // Scenario 4: join after drop and recreate table.
+  // Scenario 4a: join after external drop and recreate table.
   // Classic fails with TABLE_ID_MISMATCH; Connect succeeds because
   // both sides re-analyze against the new table.
-  test("[connect] join after external drop/recreate table succeeds" +
-      " (table with column ID support)") {
+  test("[connect] join after external table drop and recreate succeeds" +
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -242,44 +263,33 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         cat.createTable(
           ident,
           new TableInfo.Builder()
-            .withColumns(
-              Array(Column.create("id", IntegerType), Column.create("salary", IntegerType)))
+            .withColumns(Array(
+              Column.create("id", IntegerType),
+              Column.create("salary", IntegerType)))
             .build())
 
-        val df2 = session.table(T)
-
-        val result = df1.join(df2, df1("id") === df2("id"))
-        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq.empty)
-      }
-    }
-  }
-
-  test("[connect] join after session drop/recreate table succeeds" +
-      " (table with column ID support)") {
-    withSession { session =>
-      withCleanup(session) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-
-        val df1 = session.table(T)
-
-        // session drop and recreate via SQL
-        session.sql(s"DROP TABLE $T").collect()
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        // external writer adds (2, 200) to the new table
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
         val df2 = session.table(T)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq.empty)
+        assertRows(result.collect(), Seq(Row(2, 200, 2, 200)))
       }
     }
   }
 
-  test("[connect] join after session drop/recreate table succeeds" +
-      " (table without column ID support)") {
-    val NC = "nullcolidcat.ns1.ns2.tbl"
+  // Scenario 4b: external drop/recreate with no table ID but with column IDs.
+  // Classic fails with COLUMN_ID_MISMATCH; Connect succeeds.
+  test("[connect] join after external drop/recreate succeeds" +
+      " (table without table ID support, but with column ID support)") {
+    val NC = "nullidcat.ns1.ns2.tbl"
+    val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
     withSession { session =>
       withCleanup(session, table = NC) {
         session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
@@ -287,67 +297,97 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
         val df1 = session.table(NC)
 
-        // session drop and recreate via SQL
-        session.sql(s"DROP TABLE $NC").collect()
-        session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
+        // external drop and recreate via catalog API
+        val serverSession = getServerSession(session)
+        val cat = serverCatalog[NullTableIdInMemoryTableCatalog](serverSession, "nullidcat")
+        cat.dropTable(ncIdent)
+        cat.createTable(
+          ncIdent,
+          new TableInfo.Builder()
+            .withColumns(Array(
+              Column.create("id", IntegerType),
+              Column.create("salary", IntegerType)))
+            .build())
+
+        // external writer adds (2, 200) to the new table
+        externalAppend(
+          cat = cat,
+          ident = ncIdent,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
         val df2 = session.table(NC)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq.empty)
+        assertRows(result.collect(), Seq(Row(2, 200, 2, 200)))
       }
     }
   }
 
-  // Scenario 5: join after drop and re-add column with same type.
-  // Both sides re-analyze against the new schema. Single alterTable preserves
-  // data because the column name matches in old/new schema (aligned with classic test).
-  test("[connect] join after external drop+re-add same-type column succeeds" +
-      " (table with column ID support)") {
+  // Scenario 4c: external drop/recreate with no table ID and no column IDs.
+  // Classic also succeeds (neither ID check fires); Connect succeeds.
+  test("[connect] join after external table drop and recreate succeeds" +
+      " (table without table ID support and without column ID support)") {
+    val NC = "nullbothidscat.ns1.ns2.tbl"
+    val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
     withSession { session =>
-      withCleanup(session) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      withCleanup(session, table = NC) {
+        session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $NC VALUES (1, 100)").collect()
 
-        val df1 = session.table(T)
+        val df1 = session.table(NC)
 
-        // external drop and re-add column via catalog API (single call, same as classic test)
+        // external drop and recreate via catalog API
         val serverSession = getServerSession(session)
-        val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val dropCol = TableChange.deleteColumn(Array("salary"), false)
-        val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
-        cat.alterTable(ident, dropCol, addCol)
+        val cat = serverCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
+          serverSession, "nullbothidscat")
+        cat.dropTable(ncIdent)
+        cat.createTable(
+          ncIdent,
+          new TableInfo.Builder()
+            .withColumns(Array(
+              Column.create("id", IntegerType),
+              Column.create("salary", IntegerType)))
+            .build())
 
-        // external writer adds (2, 200) with same schema
-        val newSchema = StructType.fromDDL("id INT, salary INT")
+        // external writer adds (2, 200) to the new table
         externalAppend(
-          cat = cat, ident = ident, schema = newSchema, row = InternalRow(2, 200))
+          cat = cat,
+          ident = ncIdent,
+          schema = StructType.fromDDL("id INT, salary INT"),
+          row = InternalRow(2, 200))
 
-        val df2 = session.table(T)
+        val df2 = session.table(NC)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(
-          result.collect(), Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
+        assertRows(result.collect(), Seq(Row(2, 200, 2, 200)))
       }
     }
   }
 
-  test("[connect] join after session drop+re-add same-type column succeeds" +
-      " (table with column ID support)") {
+  // Scenario 5a: two separate external alterTable calls assign a fresh column ID.
+  // Classic fails with COLUMN_ID_MISMATCH; Connect succeeds.
+  test("[connect] join after external drop+re-add column succeeds" +
+      " (table without table ID support, but with column ID support)") {
+    val NC = "nullidcat.ns1.ns2.tbl"
+    val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
     withSession { session =>
-      withCleanup(session) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      withCleanup(session, table = NC) {
+        session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $NC VALUES (1, 100)").collect()
 
-        val df1 = session.table(T)
+        val df1 = session.table(NC)
 
-        // session drop and re-add column via SQL
-        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-        session.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+        // Two separate alterTable calls: the first deletes salary (and its ID),
+        // the second adds a new salary column with a fresh ID.
+        val serverSession = getServerSession(session)
+        val cat = serverCatalog[NullTableIdInMemoryTableCatalog](serverSession, "nullidcat")
+        cat.alterTable(ncIdent, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
-        val df2 = session.table(T)
+        val df2 = session.table(NC)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
@@ -356,14 +396,40 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  // Scenario 6: join after drop and re-add column with different type.
+  // Scenario 5b: external drop+re-add column with no table ID and no column IDs.
+  // Classic also succeeds (neither ID check fires); Connect succeeds.
+  test("[connect] join after external drop+re-add column succeeds" +
+      " (table without table ID support and without column ID support)") {
+    val NC = "nullbothidscat.ns1.ns2.tbl"
+    val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withSession { session =>
+      withCleanup(session, table = NC) {
+        session.sql(s"CREATE TABLE $NC (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $NC VALUES (1, 100)").collect()
+
+        val df1 = session.table(NC)
+
+        // Two separate alterTable calls with no column IDs to detect the change.
+        val serverSession = getServerSession(session)
+        val cat = serverCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
+          serverSession, "nullbothidscat")
+        cat.alterTable(ncIdent, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
+
+        val df2 = session.table(NC)
+
+        val result = df1.join(df2, df1("id") === df2("id"))
+        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
+        assertRows(result.collect(), Seq(Row(1, null, 1, null)))
+      }
+    }
+  }
+
+  // Scenario 6: external type change.
   // Classic fails with COLUMNS_MISMATCH; Connect succeeds because
   // both sides re-analyze and see salary as STRING.
-  // Uses two separate alterTable calls (unlike classic which uses one) because
-  // InMemoryBaseTable preserves old INT data when names match across a single call,
-  // causing a type mismatch at read time. Two calls properly null out the old data.
   test("[connect] join after external drop+re-add different-type column succeeds" +
-      " (table with column ID support)") {
+      " (table with both table and column ID support)") {
     withSession { session =>
       withCleanup(session) {
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
@@ -374,36 +440,24 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         // external drop and re-add column with different type via catalog API
         val serverSession = getServerSession(session)
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(ident, TableChange.addColumn(Array("salary"), StringType, true))
+        val dropCol = TableChange.deleteColumn(Array("salary"), false)
+        val addCol = TableChange.addColumn(Array("salary"), StringType, true)
+        cat.alterTable(ident, dropCol, addCol)
+
+        // external writer adds (2, "high") with new schema
+        externalAppend(
+          cat = cat,
+          ident = ident,
+          schema = StructType.fromDDL("id INT, salary STRING"),
+          row = InternalRow(2, UTF8String.fromString("high")))
 
         val df2 = session.table(T)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq(Row(1, null, 1, null)))
-      }
-    }
-  }
-
-  test("[connect] join after session drop+re-add different-type column succeeds" +
-      " (table with column ID support)") {
-    withSession { session =>
-      withCleanup(session) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-
-        val df1 = session.table(T)
-
-        // session drop and re-add column with different type via SQL
-        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-        session.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
-
-        val df2 = session.table(T)
-
-        val result = df1.join(df2, df1("id") === df2("id"))
-        assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq(Row(1, null, 1, null)))
+        assertRows(
+          result.collect(),
+          Seq(Row(1, null, 1, null), Row(2, "high", 2, "high")))
       }
     }
   }
