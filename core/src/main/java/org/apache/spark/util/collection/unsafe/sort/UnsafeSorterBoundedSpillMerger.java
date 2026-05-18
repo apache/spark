@@ -93,7 +93,7 @@ final class UnsafeSorterBoundedSpillMerger {
    * <p>This method does not mutate the input {@code spillWriters} list; intermediate
    * rounds reassign a local variable to fresh lists. Callers are still responsible for
    * passing a defensive snapshot if they need to protect against concurrent mutation
-   * of the underlying list (see {@code UnsafeExternalSorter#prepareBoundedMerge}).</p>
+   * of the underlying list (see {@link UnsafeExternalSorter#prepareBoundedMerge}).</p>
    *
    * @param spillWriters the list of spill writers to merge
    * @param inMemIterator optional in-memory sorted iterator to include in the final merge
