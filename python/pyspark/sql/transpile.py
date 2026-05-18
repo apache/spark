@@ -119,6 +119,12 @@ def _is_definitely_non_boolean(node: ast.AST) -> bool:
         case ast.IfExp(body=body, orelse=orelse):
             # Conditional only known non-boolean if both branches are.
             return _is_definitely_non_boolean(body) and _is_definitely_non_boolean(orelse)
+        case ast.Call():
+            # Function calls: we don't know the return type statically, so we
+            # can't claim they're non-boolean. Leave as "possibly boolean" and
+            # let the caller attempt lowering; if the call itself is not
+            # supported the catch-all arm will raise UnsupportedOperationException.
+            return False
         case _:
             return False
 
@@ -128,12 +134,10 @@ class CatalystTranspiler(AbstractTranspiler):
 
     variety = "catalyst"
 
-    # TODO:
-    # handle
-    # def f(x):
-    #     x + x
-    # should return None because there is no return statement
-    # (although maybe we should log since it's likely a mistake).
+    # TODO (SPARK-55218): handle implicit-None return bodies like
+    # ``def f(x): x + x`` -- no return statement means return None;
+    # we should lower to lit(None) and optionally warn since it's
+    # likely a mistake.
     def _convert_branch(self, params: List[str], statements: List[ast.stmt], slot: str) -> Column:
         """Lower a single-statement if-body / if-else block.
 
@@ -358,7 +362,8 @@ class CatalystTranspiler(AbstractTranspiler):
                         "BinOp right operand could not be lowered to a Column"
                     )
                 match op:
-                    # TODO: Maybe use one of the try functions so we can control errors and map topython exceptional cases better.
+                    # TODO (SPARK-55210): Use try-variant functions to map Python exceptional
+                    # cases (e.g. overflow, divide-by-zero) to Catalyst errors more precisely.
                     case ast.Add():
                         return left_col.__add__(right_col)
                     case ast.Sub():
@@ -399,7 +404,8 @@ class CatalystTranspiler(AbstractTranspiler):
                         param_index -= 1
                     return col(f"_udf_param_{param_index}")
                 else:
-                    # TODO: Handle assignments, class vars, etc.
+                    # TODO (SPARK-55207): Handle assignments, class vars, and closures
+                    # via scope evaluation.
                     raise UnsupportedOperationException(
                         f"name {name!r} is not in the UDF's parameter list "
                         "and free variables / closures are not supported"

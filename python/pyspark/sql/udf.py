@@ -250,11 +250,10 @@ class UserDefinedFunction:
                 self.transpiled, errors, self._transpiled_param_names = _transpile_func(
                     session, func, returnType
                 )
-                if errors:
-                    warnings.warn(f"Errors encountered during transpilation attempts: {errors}")
-                    self._transpile_errors.extend(errors)
+                self._transpile_errors.extend(errors)
                 if not self.transpiled:
-                    warnings.warn(f"Unable to transpile UDF {func}")
+                    detail = f": {errors}" if errors else ""
+                    warnings.warn(f"Unable to transpile UDF {func}{detail}")
                     self._transpile_errors.append("Transpilation attempted but no result")
             except Exception as e:
                 # An inability to transpile must never break a working

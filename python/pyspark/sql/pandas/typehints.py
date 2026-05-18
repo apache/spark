@@ -108,7 +108,7 @@ def infer_pandas_eval_type(
                     or ta == pd.Series  # ...
                     or ta == pd.DataFrame  # Series
                     or check_union_annotation(  # DataFrame  # Union[DataFrame, Series]
-                        ta, parameter_check_func=lambda na: (na == pd.Series or na == pd.DataFrame)
+                        ta, parameter_check_func=lambda na: na == pd.Series or na == pd.DataFrame
                     )
                 ),
             ),
@@ -167,7 +167,7 @@ def infer_pandas_eval_type(
             parameters_sig[0],
             parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
                 a,
-                parameter_check_func=lambda ta: (ta == Ellipsis or ta == pd.Series),
+                parameter_check_func=lambda ta: ta == Ellipsis or ta == pd.Series,
             ),
         )
         and (
@@ -255,7 +255,7 @@ def infer_arrow_eval_type(
             parameters_sig[0],
             parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
                 a,
-                parameter_check_func=lambda ta: (ta == Ellipsis or ta == pa.Array),
+                parameter_check_func=lambda ta: ta == Ellipsis or ta == pa.Array,
             ),
         )
         and check_iterator_annotation(
@@ -295,7 +295,7 @@ def infer_arrow_eval_type(
             parameters_sig[0],
             parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
                 a,
-                parameter_check_func=lambda ta: (ta == Ellipsis or ta == pa.Array),
+                parameter_check_func=lambda ta: ta == Ellipsis or ta == pa.Array,
             ),
         )
         and (
