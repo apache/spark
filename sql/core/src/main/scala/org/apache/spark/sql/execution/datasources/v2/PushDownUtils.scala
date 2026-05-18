@@ -201,8 +201,8 @@ object PushDownUtils extends Logging {
    * Notes:
    *  - Do not call multiple times for the same `scan` instance; [[SupportsRuntimeV2Filtering.filter]]
    *    is mutating.
-   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every element of
-   *    `originalPartitions` must implement [[HasPartitionKey]].
+   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
+   *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
    *
    * @param scan                the V2 scan to push filters into
    * @param runtimeFilters      runtime filters to translate and push
