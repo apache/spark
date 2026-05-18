@@ -61,7 +61,7 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     pandoc \
     pkg-config \
-    python3.11 \
+    python3.10 \
     python3-psutil \
     python3-pyparsing \
     qpdf \
@@ -95,14 +95,14 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 graphviz==0.20.3"
 
-# Install Python 3.11 packages
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
-RUN python3.11 -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
-RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.11 -m pip install deepspeed torcheval && \
-    python3.11 -m pip cache purge
+# Install Python 3.10 packages
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+RUN python3.10 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
+RUN python3.10 -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
+RUN python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.10 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.10 -m pip install deepspeed torcheval && \
+    python3.10 -m pip cache purge
 
 # Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
