@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateView, CTEInChildren, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateView, CTEInChildren, InsertIntoStatement, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -70,26 +70,16 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
 
         executor.execute(p.planBuilder.apply(
           IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
-      case cmd if cmd.innerPlans.exists(_.exists {
-          case p: PlanWithUnresolvedIdentifier => p.identifierExpr.resolved && p.childrenResolved
-          case _ => false
-        }) =>
-        // Materialize placeholders that live in non-child LogicalPlan slots (e.g.
-        // `InsertIntoStatement.table`). Without this case, the standard `resolveOperatorsUp`
-        // never visits these slots because they're not in `children`.
-        val newInnerPlans = cmd.innerPlans.map { inner =>
-          inner.resolveOperatorsUpWithPruning(
-              _.containsAnyPattern(UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
-            case p: PlanWithUnresolvedIdentifier
-                if p.identifierExpr.resolved && p.childrenResolved =>
-              if (referredTempVars.isDefined) {
-                referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
-              }
-              executor.execute(p.planBuilder.apply(
-                IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
-          }
+      // `InsertIntoStatement.table` is a non-child LogicalPlan slot (`child = query`), so the
+      // standard `resolveOperatorsUp` traversal never visits placeholders inside it. Materialize
+      // them explicitly.
+      case i @ InsertIntoStatement(p: PlanWithUnresolvedIdentifier, _, _, _, _, _, _, _, _)
+          if p.identifierExpr.resolved && p.childrenResolved =>
+        if (referredTempVars.isDefined) {
+          referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
         }
-        cmd.withNewInnerPlans(newInnerPlans)
+        i.copy(table = executor.execute(p.planBuilder.apply(
+          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)))
       case other =>
         other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
           case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
@@ -102,12 +92,12 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
               IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
         }
     }
-    // For the call sites we cannot refactor at the parser level (e.g. `OverwriteByExpression`
-    // whose `table` field is typed `NamedRelation`, or `CacheTableAsSelect` whose name is a
-    // plain String), `PlanWithUnresolvedIdentifier` still wraps the entire command. When that
-    // wrapper is itself inside `WithCTE`, push the CTE defs into the materialized command's
-    // children - restoring the invariant `CTESubstitution.withCTEDefs` enforces at substitution
-    // time. SPARK-46625.
+    // For the `withIdentClause` call sites we cannot refactor at the parser level (e.g.
+    // `OverwriteByExpression` whose `table` field is typed `NamedRelation`, or
+    // `CacheTableAsSelect` whose name is a plain String), `PlanWithUnresolvedIdentifier` still
+    // wraps the entire command. When that wrapper is itself inside `WithCTE`, push the CTE
+    // defs into the materialized command's children - restoring the invariant
+    // `CTESubstitution.withCTEDefs` enforces at substitution time. SPARK-46625.
     resolved.resolveOperatorsUpWithPruning(_.containsPattern(CTE)) {
       case WithCTE(c: CTEInChildren, cteDefs) => c.withCTEDefs(cteDefs)
     }

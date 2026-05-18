@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.collection.BitSet
 
 
 abstract class LogicalPlan
@@ -80,40 +79,6 @@ abstract class LogicalPlan
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = _isStreaming
   private[this] lazy val _isStreaming = children.exists(_.isStreaming)
-
-  /**
-   * Logical sub-plans that live in non-child slots of this node (e.g.
-   * `InsertIntoStatement.table`). These are not traversed by the standard
-   * `children`-based machinery, but rules that need to reach unresolved
-   * placeholders inside them (e.g. tree-pattern propagation, `BindParameters`,
-   * `ResolveIdentifierClause`) can opt in by reading `innerPlans` and
-   * rebuilding via `withNewInnerPlans`.
-   *
-   * Most plans have no such slots; the default is `Nil`.
-   */
-  def innerPlans: Seq[LogicalPlan] = Nil
-
-  /**
-   * Rebuilds this node with new versions of the plans returned by `innerPlans`.
-   * `newInnerPlans` must have the same length and ordering as `innerPlans`.
-   * Default no-op for plans that do not override `innerPlans`.
-   */
-  def withNewInnerPlans(newInnerPlans: Seq[LogicalPlan]): LogicalPlan = {
-    assert(newInnerPlans.isEmpty,
-      s"$nodeName does not declare innerPlans; cannot replace with $newInnerPlans")
-    this
-  }
-
-  override protected def getDefaultTreePatternBits: BitSet = {
-    val bits = super.getDefaultTreePatternBits
-    // Propagate tree-pattern bits from inner plans (non-child LogicalPlan slots)
-    // so that rules using `containsPattern` can prune correctly.
-    val it = innerPlans.iterator
-    while (it.hasNext) {
-      bits.union(it.next().treePatternBits)
-    }
-    bits
-  }
 
   override def verboseStringWithSuffix(maxFields: Int): String = {
     super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
