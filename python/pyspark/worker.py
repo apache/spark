@@ -2653,11 +2653,23 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         )
         if runner_conf.assign_cols_by_name:
             expected_cols_and_types = {
-                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
+                col.name: to_arrow_type(
+                    col.dataType,
+                    timezone="UTC",
+                    prefers_large_types=runner_conf.use_large_var_types,
+                )
+                for col in return_type.fields
             }
         else:
             expected_cols_and_types = [
-                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
+                (
+                    col.name,
+                    to_arrow_type(
+                        col.dataType,
+                        timezone="UTC",
+                        prefers_large_types=runner_conf.use_large_var_types,
+                    ),
+                )
                 for col in return_type.fields
             ]
 
@@ -2726,11 +2738,23 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         )
         if runner_conf.assign_cols_by_name:
             expected_cols_and_types = {
-                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
+                col.name: to_arrow_type(
+                    col.dataType,
+                    timezone="UTC",
+                    prefers_large_types=runner_conf.use_large_var_types,
+                )
+                for col in return_type.fields
             }
         else:
             expected_cols_and_types = [
-                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
+                (
+                    col.name,
+                    to_arrow_type(
+                        col.dataType,
+                        timezone="UTC",
+                        prefers_large_types=runner_conf.use_large_var_types,
+                    ),
+                )
                 for col in return_type.fields
             ]
 
@@ -2945,12 +2969,24 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # columns must raise; no silent coercion.
         if runner_conf.assign_cols_by_name:
             expected_cols_and_types = {
-                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
+                col.name: to_arrow_type(
+                    col.dataType,
+                    timezone="UTC",
+                    prefers_large_types=runner_conf.use_large_var_types,
+                )
+                for col in return_type.fields
             }
             reorder_names = [col.name for col in return_type.fields]
         else:
             expected_cols_and_types = [
-                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
+                (
+                    col.name,
+                    to_arrow_type(
+                        col.dataType,
+                        timezone="UTC",
+                        prefers_large_types=runner_conf.use_large_var_types,
+                    ),
+                )
                 for col in return_type.fields
             ]
             reorder_names = None

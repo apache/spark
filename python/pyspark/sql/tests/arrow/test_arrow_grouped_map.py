@@ -101,6 +101,32 @@ class ApplyInArrowTestsMixin:
             actual2 = grouped_df.applyInArrow(func_variation, "id long, value long").collect()
             self.assertEqual(actual2, expected)
 
+    def test_apply_in_arrow_large_var_types(self):
+        # SPARK-56929: when useLargeVarTypes=true, the expected schema computed by
+        # worker.py for result validation must also use large_string/large_binary,
+        # otherwise verify_arrow_result raises a spurious RESULT_COLUMN_TYPES_MISMATCH.
+        data = [(0, "foo", b"foo"), (0, "bar", b"bar"), (1, None, None), (1, "baz", b"baz")]
+        df = self.spark.createDataFrame(data, "id long, s string, b binary")
+        schema = "id long, s string, b binary"
+
+        def func(table):
+            assert table.schema.field("s").type == pa.large_string()
+            assert table.schema.field("b").type == pa.large_binary()
+            return table
+
+        for assign_cols_by_name in [True, False]:
+            with self.subTest(assign_cols_by_name=assign_cols_by_name):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.useLargeVarTypes": True,
+                        "spark.sql.legacy.execution.pandas.groupedMap."
+                        "assignColumnsByName": assign_cols_by_name,
+                    }
+                ):
+                    for func_variation in function_variations(func):
+                        actual = df.groupby("id").applyInArrow(func_variation, schema)
+                        assertDataFrameEqual(actual, df)
+
     def test_apply_in_arrow_empty_groupby(self):
         df = self.data
 

@@ -121,6 +121,37 @@ class CogroupedMapInArrowTestsMixin:
         cogrouped_df = grouped_left_df.cogroup(grouped_right_df)
         self.do_test_apply_in_arrow(cogrouped_df, key_column=None)
 
+    def test_apply_in_arrow_large_var_types(self):
+        # SPARK-56929: when useLargeVarTypes=true, the expected schema computed by
+        # worker.py for result validation must also use large_string/large_binary,
+        # otherwise verify_arrow_result raises a spurious RESULT_COLUMN_TYPES_MISMATCH.
+        left = self.spark.createDataFrame(
+            [(0, "foo", b"foo"), (1, None, None)], "id long, s string, b binary"
+        )
+        right = self.spark.createDataFrame(
+            [(0, "bar", b"bar"), (1, "baz", b"baz")], "id long, s string, b binary"
+        )
+        schema = "s string, b binary"
+
+        def func(left_tbl, right_tbl):
+            assert left_tbl.schema.field("s").type == pa.large_string()
+            assert left_tbl.schema.field("b").type == pa.large_binary()
+            return left_tbl.select(["s", "b"])
+
+        expected = left.select("s", "b")
+        for assign_cols_by_name in [True, False]:
+            with self.subTest(assign_cols_by_name=assign_cols_by_name):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.useLargeVarTypes": True,
+                        "spark.sql.legacy.execution.pandas.groupedMap."
+                        "assignColumnsByName": assign_cols_by_name,
+                    }
+                ):
+                    cogrouped = left.groupBy("id").cogroup(right.groupBy("id"))
+                    actual = cogrouped.applyInArrow(func, schema)
+                    assertDataFrameEqual(actual, expected)
+
     def test_apply_in_arrow_not_returning_arrow_table(self):
         def func(key, left, right):
             return key
