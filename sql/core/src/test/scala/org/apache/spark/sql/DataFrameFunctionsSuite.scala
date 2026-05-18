@@ -325,6 +325,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("nullif(a, a)"), Seq(Row(null)))
     checkAnswer(df.select(nullif(lit(5), lit(5))), Seq(Row(null)))
+
+    val nestedDf = Seq("error_multiple_providers", "openai")
+      .toDF("provider")
+      .select(struct(col("provider")).as("c"))
+    checkAnswer(
+      nestedDf.select(nullif(col("c.provider"), lower(lit("ERROR_MULTIPLE_PROVIDERS")))),
+      Seq(Row(null), Row("openai")))
   }
 
   test("nvl") {

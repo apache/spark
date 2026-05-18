@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SimpleAnalyzer, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
@@ -138,6 +139,22 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(analyze(new Nvl(floatNullLit, intLit)).dataType == FloatType)
     }
     assert(analyze(new Nvl(floatLit, doubleLit)).dataType == DoubleType)
+  }
+
+  test("NullIf replacement preserves its data type before type coercion") {
+    val nullIf = new NullIf(Literal(1), Literal(1))
+    assert(nullIf.dataType == IntegerType)
+    assert(nullIf.replacement.dataType == IntegerType)
+  }
+
+  test("NullIf accepts unresolved nested fields during function construction") {
+    val nullIf = FunctionRegistry.builtin.lookupFunction(
+      FunctionIdentifier("nullif"),
+      Seq(
+        UnresolvedAttribute(Seq("c", "provider")),
+        Lower(Literal("ERROR_MULTIPLE_PROVIDERS"))))
+
+    assert(nullIf.isInstanceOf[NullIf])
   }
 
   test("AtLeastNNonNulls") {
