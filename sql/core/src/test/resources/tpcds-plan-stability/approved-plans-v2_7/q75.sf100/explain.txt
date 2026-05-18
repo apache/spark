@@ -192,7 +192,7 @@ Input [11]: [cs_item_sk#1, cs_order_number#2, cs_quantity#3, cs_ext_sales_price#
 
 (14) Exchange
 Input [9]: [cs_item_sk#1, cs_order_number#2, cs_quantity#3, cs_ext_sales_price#4, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, d_year#14]
-Arguments: nullawarehashpartitioning(cs_order_number#2, cs_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=2]
+Arguments: hashpartitioning(cs_order_number#2, cs_item_sk#1, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
 (15) Sort [codegen id : 4]
 Input [9]: [cs_item_sk#1, cs_order_number#2, cs_quantity#3, cs_ext_sales_price#4, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, d_year#14]
@@ -218,7 +218,7 @@ Input [5]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_
 
 (20) Exchange
 Input [4]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_amount#18]
-Arguments: nullawarehashpartitioning(cr_order_number#16, cr_item_sk#15, 5), ENSURE_REQUIREMENTS, [plan_id=3]
+Arguments: hashpartitioning(cr_order_number#16, cr_item_sk#15, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
 (21) Sort [codegen id : 6]
 Input [4]: [cr_item_sk#15, cr_order_number#16, cr_return_quantity#17, cr_return_amount#18]
@@ -277,7 +277,7 @@ Input [11]: [ss_item_sk#22, ss_ticket_number#23, ss_quantity#24, ss_ext_sales_pr
 
 (33) Exchange
 Input [9]: [ss_item_sk#22, ss_ticket_number#23, ss_quantity#24, ss_ext_sales_price#25, i_brand_id#28, i_class_id#29, i_category_id#30, i_manufact_id#31, d_year#33]
-Arguments: nullawarehashpartitioning(ss_ticket_number#23, ss_item_sk#22, 5), ENSURE_REQUIREMENTS, [plan_id=4]
+Arguments: hashpartitioning(ss_ticket_number#23, ss_item_sk#22, 5), ENSURE_REQUIREMENTS, [plan_id=4]
 
 (34) Sort [codegen id : 11]
 Input [9]: [ss_item_sk#22, ss_ticket_number#23, ss_quantity#24, ss_ext_sales_price#25, i_brand_id#28, i_class_id#29, i_category_id#30, i_manufact_id#31, d_year#33]
@@ -303,7 +303,7 @@ Input [5]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return
 
 (39) Exchange
 Input [4]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return_amt#37]
-Arguments: nullawarehashpartitioning(sr_ticket_number#35, sr_item_sk#34, 5), ENSURE_REQUIREMENTS, [plan_id=5]
+Arguments: hashpartitioning(sr_ticket_number#35, sr_item_sk#34, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
 (40) Sort [codegen id : 13]
 Input [4]: [sr_item_sk#34, sr_ticket_number#35, sr_return_quantity#36, sr_return_amt#37]
@@ -362,7 +362,7 @@ Input [11]: [ws_item_sk#41, ws_order_number#42, ws_quantity#43, ws_ext_sales_pri
 
 (52) Exchange
 Input [9]: [ws_item_sk#41, ws_order_number#42, ws_quantity#43, ws_ext_sales_price#44, i_brand_id#47, i_class_id#48, i_category_id#49, i_manufact_id#50, d_year#52]
-Arguments: nullawarehashpartitioning(ws_order_number#42, ws_item_sk#41, 5), ENSURE_REQUIREMENTS, [plan_id=6]
+Arguments: hashpartitioning(ws_order_number#42, ws_item_sk#41, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
 (53) Sort [codegen id : 18]
 Input [9]: [ws_item_sk#41, ws_order_number#42, ws_quantity#43, ws_ext_sales_price#44, i_brand_id#47, i_class_id#48, i_category_id#49, i_manufact_id#50, d_year#52]
@@ -388,7 +388,7 @@ Input [5]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_
 
 (58) Exchange
 Input [4]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_amt#56]
-Arguments: nullawarehashpartitioning(wr_order_number#54, wr_item_sk#53, 5), ENSURE_REQUIREMENTS, [plan_id=7]
+Arguments: hashpartitioning(wr_order_number#54, wr_item_sk#53, 5), ENSURE_REQUIREMENTS, [plan_id=7]
 
 (59) Sort [codegen id : 20]
 Input [4]: [wr_item_sk#53, wr_order_number#54, wr_return_quantity#55, wr_return_amt#56]
@@ -497,7 +497,7 @@ Input [11]: [cs_item_sk#68, cs_order_number#69, cs_quantity#70, cs_ext_sales_pri
 
 (81) Exchange
 Input [9]: [cs_item_sk#68, cs_order_number#69, cs_quantity#70, cs_ext_sales_price#71, i_brand_id#75, i_class_id#76, i_category_id#77, i_manufact_id#78, d_year#80]
-Arguments: nullawarehashpartitioning(cs_order_number#69, cs_item_sk#68, 5), ENSURE_REQUIREMENTS, [plan_id=11]
+Arguments: hashpartitioning(cs_order_number#69, cs_item_sk#68, 5), ENSURE_REQUIREMENTS, [plan_id=11]
 
 (82) Sort [codegen id : 29]
 Input [9]: [cs_item_sk#68, cs_order_number#69, cs_quantity#70, cs_ext_sales_price#71, i_brand_id#75, i_class_id#76, i_category_id#77, i_manufact_id#78, d_year#80]
@@ -563,7 +563,7 @@ Input [11]: [ss_item_sk#87, ss_ticket_number#88, ss_quantity#89, ss_ext_sales_pr
 
 (96) Exchange
 Input [9]: [ss_item_sk#87, ss_ticket_number#88, ss_quantity#89, ss_ext_sales_price#90, i_brand_id#93, i_class_id#94, i_category_id#95, i_manufact_id#96, d_year#98]
-Arguments: nullawarehashpartitioning(ss_ticket_number#88, ss_item_sk#87, 5), ENSURE_REQUIREMENTS, [plan_id=12]
+Arguments: hashpartitioning(ss_ticket_number#88, ss_item_sk#87, 5), ENSURE_REQUIREMENTS, [plan_id=12]
 
 (97) Sort [codegen id : 36]
 Input [9]: [ss_item_sk#87, ss_ticket_number#88, ss_quantity#89, ss_ext_sales_price#90, i_brand_id#93, i_class_id#94, i_category_id#95, i_manufact_id#96, d_year#98]
@@ -629,7 +629,7 @@ Input [11]: [ws_item_sk#105, ws_order_number#106, ws_quantity#107, ws_ext_sales_
 
 (111) Exchange
 Input [9]: [ws_item_sk#105, ws_order_number#106, ws_quantity#107, ws_ext_sales_price#108, i_brand_id#111, i_class_id#112, i_category_id#113, i_manufact_id#114, d_year#116]
-Arguments: nullawarehashpartitioning(ws_order_number#106, ws_item_sk#105, 5), ENSURE_REQUIREMENTS, [plan_id=13]
+Arguments: hashpartitioning(ws_order_number#106, ws_item_sk#105, 5), ENSURE_REQUIREMENTS, [plan_id=13]
 
 (112) Sort [codegen id : 43]
 Input [9]: [ws_item_sk#105, ws_order_number#106, ws_quantity#107, ws_ext_sales_price#108, i_brand_id#111, i_class_id#112, i_category_id#113, i_manufact_id#114, d_year#116]

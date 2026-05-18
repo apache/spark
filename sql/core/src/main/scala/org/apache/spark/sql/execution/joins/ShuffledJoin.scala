@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, IsNull}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Holds common logic for join operators by shuffling two child relations
@@ -34,13 +35,10 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   private lazy val canSpreadNullJoinKeys: Boolean = {
     val isOuterJoin = joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter
-    val canSpread = isOuterJoin &&
+    conf.getConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED) &&
+      isOuterJoin &&
       !containsNullSafeJoinMarker(leftKeys) &&
       !containsNullSafeJoinMarker(rightKeys)
-    if (canSpread) {
-      logWarning(s"Using null-aware shuffle distribution for $joinType equi-join keys.")
-    }
-    canSpread
   }
 
   override def nodeName: String = {

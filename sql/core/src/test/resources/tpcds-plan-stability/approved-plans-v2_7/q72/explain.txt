@@ -334,7 +334,7 @@ Input [7]: [cs_item_sk#4, cs_promo_sk#5, cs_order_number#6, w_warehouse_name#15,
 
 (57) Exchange
 Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#15, i_item_desc#17, d_week_seq#24]
-Arguments: nullawarehashpartitioning(cs_item_sk#4, cs_order_number#6, 5), ENSURE_REQUIREMENTS, [plan_id=9]
+Arguments: hashpartitioning(cs_item_sk#4, cs_order_number#6, 5), ENSURE_REQUIREMENTS, [plan_id=9]
 
 (58) Sort [codegen id : 11]
 Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#15, i_item_desc#17, d_week_seq#24]
@@ -360,7 +360,7 @@ Input [3]: [cr_item_sk#30, cr_order_number#31, cr_returned_date_sk#32]
 
 (63) Exchange
 Input [2]: [cr_item_sk#30, cr_order_number#31]
-Arguments: nullawarehashpartitioning(cr_item_sk#30, cr_order_number#31, 5), ENSURE_REQUIREMENTS, [plan_id=10]
+Arguments: hashpartitioning(cr_item_sk#30, cr_order_number#31, 5), ENSURE_REQUIREMENTS, [plan_id=10]
 
 (64) Sort [codegen id : 13]
 Input [2]: [cr_item_sk#30, cr_order_number#31]

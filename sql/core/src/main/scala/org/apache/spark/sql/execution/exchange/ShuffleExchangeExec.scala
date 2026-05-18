@@ -241,11 +241,6 @@ case class ShuffleExchangeExec(
    */
   @transient
   lazy val shuffleDependency : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    outputPartitioning match {
-      case h: NullAwareHashPartitioning =>
-        logWarning(s"Materializing null-aware hash shuffle with ${h.numPartitions} partitions.")
-      case _ =>
-    }
     // Wrap in the exchange's RDD scope so that any wrapper RDDs created during shuffle dependency
     // preparation (e.g. by prepareShuffleDependency's mapPartitionsInternal calls) get this
     // exchange's scope ID.
