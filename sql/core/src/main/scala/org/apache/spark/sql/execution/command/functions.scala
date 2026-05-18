@@ -110,7 +110,7 @@ case class DescribeFunctionCommand(
   }
 
   /**
-   * Pad all input strings into the same length using the max string length among all inputs.
+   * Pad all input strings to the same length using the max string length among all inputs.
    */
   private def tabulate(inputs: Seq[String]): Seq[String] = {
     val maxLen = inputs.map(_.length).max
@@ -132,10 +132,16 @@ case class DescribeFunctionCommand(
     }
   }
 
-  private def describeSQLFunction(info: ExpressionInfo, parser: ParserInterface): Seq[Row] = {
+  private def describeSQLFunction(
+      info: ExpressionInfo,
+      qualifiedName: FunctionIdentifier,
+      parser: ParserInterface): Seq[Row] = {
     val buffer = new ArrayBuffer[(String, String)]
     val f = SQLFunction.fromExpressionInfo(info, parser)
-    append(buffer, "Function:", f.name.toString)
+    // Match the legacy DESCRIBE FUNCTION path's qualification depth so
+    // `Function:` always renders the catalog-qualified 3-part name (when
+    // applicable), regardless of whether the function is a SQL UDF.
+    append(buffer, "Function:", qualifiedName.unquotedString)
     append(buffer, "Type:", if (f.isTableFunc) SQLFunction.TABLE else SQLFunction.SCALAR)
     // Function input
     val input = f.inputParam
@@ -191,15 +197,15 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    if (SQLFunction.isSQLFunction(info.getClassName)) {
-      describeSQLFunction(info, sparkSession.sessionState.sqlParser)
+    val identifier = if (info.getDb != null) {
+      sparkSession.sessionState.catalog.qualifyIdentifier(
+        FunctionIdentifier(info.getName, Some(info.getDb)))
     } else {
-      val identifier = if (info.getDb != null) {
-        sparkSession.sessionState.catalog.qualifyIdentifier(
-          FunctionIdentifier(info.getName, Some(info.getDb)))
-      } else {
-        FunctionIdentifier(info.getName)
-      }
+      FunctionIdentifier(info.getName)
+    }
+    if (SQLFunction.isSQLFunction(info.getClassName)) {
+      describeSQLFunction(info, identifier, sparkSession.sessionState.sqlParser)
+    } else {
       val name = identifier.unquotedString
       val result = if (info.getClassName != null) {
         Row(s"Function: $name") ::

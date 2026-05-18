@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -149,6 +152,7 @@ class SQLFunctionSuite extends SharedSparkSession {
         "Data Access:", "CONTAINS SQL",
         "Body:", "x + y")
       // Permanent function
+      val beforeMs = System.currentTimeMillis()
       sql(
         """
           |CREATE FUNCTION area(width double comment 'width', height double comment 'height')
@@ -157,11 +161,13 @@ class SQLFunctionSuite extends SharedSparkSession {
           |DETERMINISTIC
           |RETURN width * height
           |""".stripMargin)
+      val afterMs = System.currentTimeMillis()
       checkKeywordsExist(sql("describe function area"),
         "Function:", "default.area",
         "Type:", "SCALAR",
         "Input:", "width  DOUBLE", "height DOUBLE",
         "Returns:", "DOUBLE")
+      val extendedRows = sql("describe function extended area").collect()
       checkKeywordsExist(sql("describe function extended area"),
         "Input:", "width  DOUBLE 'width'", "height DOUBLE 'height'",
         "Comment:", "compute area",
@@ -169,6 +175,23 @@ class SQLFunctionSuite extends SharedSparkSession {
         "Data Access:", "CONTAINS SQL",
         "Create Time:",
         "Body:", "width * height")
+      // Verify the rendered Create Time falls within a small window around the
+      // CREATE FUNCTION call, i.e. the timestamp set at CREATE time was preserved
+      // (and not silently overwritten by a later cache-build / metadata-load).
+      val createTimeRow = extendedRows.map(_.getString(0))
+        .find(_.startsWith("Create Time:"))
+        .getOrElse(fail("DESCRIBE FUNCTION EXTENDED is missing the Create Time row"))
+      val tsStr = createTimeRow.split("Create Time:", 2)(1).trim
+      // Date.toString() format -- explicit Locale.ENGLISH avoids parser drift on
+      // build hosts whose default locale is not English.
+      val sdf = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.ENGLISH)
+      val parsedMs = sdf.parse(tsStr).getTime
+      // Date.toString() truncates to seconds; use a 2-second slop on each side.
+      val slopMs = 2000L
+      assert(parsedMs >= beforeMs - slopMs,
+        s"Create Time '$tsStr' is before CREATE FUNCTION (beforeMs=$beforeMs)")
+      assert(parsedMs <= afterMs + slopMs,
+        s"Create Time '$tsStr' is after DESCRIBE FUNCTION (afterMs=$afterMs)")
     }
   }
 
@@ -206,7 +229,7 @@ class SQLFunctionSuite extends SharedSparkSession {
         checkKeywordsExist(sql("DESCRIBE FUNCTION EXTENDED bar"),
           "Deterministic: false",
           "Data Access:", "READS SQL DATA")
-        // Do not overwrite user specified routine characteristics.
+        // Do not overwrite user-specified routine characteristics.
         checkKeywordsExist(sql("DESCRIBE FUNCTION EXTENDED baz"),
           "Deterministic: false",
           "Data Access:", "READS SQL DATA")
