@@ -465,9 +465,6 @@ object SparkBuild extends PomBuild {
   /* UDF Worker Proto settings */
   enable(UDFWorkerProto.settings)(udfWorkerProto)
 
-  /* UDF Worker Core settings */
-  enable(UDFWorkerCore.settings)(udfWorkerCore)
-
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
@@ -1088,32 +1085,10 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  import BuildCommons.protoVersion
-  lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
-    libraryDependencies ++= {
-      val grpcVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "io.grpc.version").asInstanceOf[String]
-      Seq(
-        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
-        "io.grpc" % "protoc-gen-grpc-java" % grpcVersion asProtocPlugin(),
-        "io.grpc" % "grpc-api" % grpcVersion,
-        "io.grpc" % "grpc-protobuf" % grpcVersion,
-        "io.grpc" % "grpc-stub" % grpcVersion
-      )
-    },
-
-    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
-
-    (assembly / test) := { },
-
-    (assembly / logLevel) := Level.Info,
-
-    // Exclude `scala-library` from assembly.
-    (assembly / assemblyPackageScala / assembleArtifact) := false,
-
-    // Include only the proto module jar and protobuf-java in the assembly.
+  // Reuses SparkConnectCommon for proto + gRPC codegen wiring; overrides
+  // only the assembly fields that need the UDF-worker namespace.
+  lazy val settings = SparkConnectCommon.settings ++ Seq(
+    // Include only this module's jar and protobuf-java in the assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
@@ -1124,51 +1099,8 @@ object UDFWorkerProto {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
-    ),
-
-    (assembly / assemblyMergeStrategy) := {
-      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
-        MergeStrategy.filterDistinctLines
-      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      case _ => MergeStrategy.first
-    }
-  ) ++ {
-    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
-    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
-      Seq(
-        (Compile / PB.targets) := Seq(
-          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
-          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) ->
-            target.value / "generated-sources" / "protobuf" / "grpc-java"
-        ),
-        PB.protocExecutable := file(sparkProtocExecPath.get)
-      )
-    } else {
-      Seq(
-        (Compile / PB.targets) := Seq(
-          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
-          PB.gens.plugin("grpc-java") ->
-            target.value / "generated-sources" / "protobuf" / "grpc-java"
-        )
-      )
-    }
-  }
-}
-
-object UDFWorkerCore {
-  lazy val settings = Seq(
-    libraryDependencies ++= {
-      val grpcVersion =
-        SbtPomKeys.effectivePom.value.getProperties.get(
-          "io.grpc.version").asInstanceOf[String]
-      Seq(
-        "io.grpc" % "grpc-inprocess" % grpcVersion % "test"
-      )
-    }
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
+    )
   )
 }
 
