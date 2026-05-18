@@ -96,8 +96,8 @@ public class ThriftHttpCLIService extends ThriftCLIService {
         sslContextFactoryServer.setKeyStorePath(keyStorePath);
         sslContextFactoryServer.setKeyStorePassword(keyStorePassword);
         // SPARK-54293: Configure SNI host check, which defaults to true since Jetty 10.
-        // Controlled by spark.sql.hive.thriftServer.http.sniHostCheckEnabled (default: false),
-        // consistent with the fix in JettyUtils.scala (SPARK-45522).
+        // Controlled by spark.sql.hive.thriftServer.http.sniHostCheckEnabled (default: true),
+        // consistent with the behavior since SPARK-45522 (Jetty 10+).
         HttpConfiguration httpConfig = new HttpConfiguration();
         SecureRequestCustomizer src = new SecureRequestCustomizer();
         src.setSniHostCheck(sniHostCheckEnabled);

@@ -49,18 +49,18 @@ class ThriftHttpCLIServiceSuite extends SparkFunSuite {
       .getOrElse(fail("SecureRequestCustomizer not found in HttpConfiguration"))
   }
 
-  test("SPARK-54293: SNI host check disabled by default") {
-    // Default behavior: sniHostCheckEnabled = false
-    val customizer = buildSslFactoriesAndGetCustomizer(sniHostCheckEnabled = false)
-    assert(!customizer.isSniHostCheck,
-      "SNI host check should be disabled when sniHostCheckEnabled is false")
-  }
-
-  test("SPARK-54293: SNI host check enabled when configured") {
-    // Opt-in behavior: sniHostCheckEnabled = true
+  test("SPARK-54293: SNI host check enabled by default") {
+    // Default behavior: sniHostCheckEnabled = true
     val customizer = buildSslFactoriesAndGetCustomizer(sniHostCheckEnabled = true)
     assert(customizer.isSniHostCheck,
       "SNI host check should be enabled when sniHostCheckEnabled is true")
+  }
+
+  test("SPARK-54293: SNI host check disabled when configured") {
+    // Opt-out behavior: sniHostCheckEnabled = false
+    val customizer = buildSslFactoriesAndGetCustomizer(sniHostCheckEnabled = false)
+    assert(!customizer.isSniHostCheck,
+      "SNI host check should be disabled when sniHostCheckEnabled is false")
   }
 
   test("SPARK-54293: SSL connection factories without fix have SNI host check enabled") {
