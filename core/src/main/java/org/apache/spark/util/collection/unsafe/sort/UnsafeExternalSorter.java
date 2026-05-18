@@ -647,20 +647,21 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // the task thread, sequentially with getSortedIterator(). The volatile modifier
     // on boundedMerger provides memory visibility across any intervening
     // synchronized blocks.
-    boundedMerger = new UnsafeSorterBoundedSpillMerger(
+    final UnsafeSorterBoundedSpillMerger merger = new UnsafeSorterBoundedSpillMerger(
         spillMergeFactor,
         recordComparatorSupplier.get(),
         prefixComparator,
         blockManager,
         serializerManager,
         fileBufferSizeBytes);
+    boundedMerger = merger; // visible to cleanupResources() for intermediate-file cleanup
 
     SpillableIterator inMemIter = null;
     if (inMemSorter != null) {
       readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
       inMemIter = readingIterator;
     }
-    return new BoundedMergerContext(snapshot, inMemIter, boundedMerger);
+    return new BoundedMergerContext(snapshot, inMemIter, merger);
   }
 
   @VisibleForTesting boolean hasSpaceForAnotherRecord() {
