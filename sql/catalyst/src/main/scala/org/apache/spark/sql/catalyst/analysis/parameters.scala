@@ -179,9 +179,18 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
       case p1 =>
         stop = p1.isInstanceOf[ParameterizedQuery]
-        p1.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
-          case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
-        })
+        val withBoundInnerPlans = if (p1.innerPlans.nonEmpty &&
+            p1.innerPlans.exists(_.containsPattern(PARAMETER))) {
+          // Recurse into non-child LogicalPlan slots (e.g. `InsertIntoStatement.table`).
+          // Without this, parameters inside identifier placeholders would never be bound.
+          p1.withNewInnerPlans(p1.innerPlans.map(bind(_)(f)))
+        } else {
+          p1
+        }
+        withBoundInnerPlans.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (
+          f orElse {
+            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
+          })
     }
   }
 

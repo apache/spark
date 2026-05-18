@@ -22,7 +22,7 @@ import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.Limit
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
@@ -2459,5 +2459,74 @@ class ParametersSuite extends SharedSparkSession {
     checkAnswer(
       spark.sql("SELECT 1", Array.empty[Any]),
       Row(1))
+  }
+
+  // SPARK-46625: WITH ... <write-with-IDENTIFIER> SELECT ... FROM cte
+  // The placeholder is pushed into the command's identifier slot at parse time, so
+  // `CTESubstitution` sees the `CTEInChildren` directly and never produces the invalid
+  // `WithCTE(InsertIntoStatement, ...)` / `WithCTE(CreateTableAsSelect, ...)` shape.
+  private def assertNoWithCTEAroundCTEInChildren(df: DataFrame): Unit = {
+    df.queryExecution.analyzed.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape:\n${df.queryExecution.analyzed}")
+      case _ =>
+    }
+  }
+
+  test("SPARK-46625: WITH ... INSERT OVERWRITE TABLE IDENTIFIER(:p) SELECT ... FROM cte") {
+    withTable("t_cte_overwrite") {
+      sql("CREATE TABLE t_cte_overwrite (a INT) USING PARQUET")
+      sql("INSERT INTO t_cte_overwrite VALUES (10)")
+      val df = spark.sql(
+        """WITH transformation AS (SELECT 1 AS a)
+          |INSERT OVERWRITE TABLE IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_overwrite"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_overwrite"), Row(1))
+    }
+  }
+
+  test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) SELECT ... FROM cte") {
+    withTable("t_cte_into") {
+      sql("CREATE TABLE t_cte_into (a INT) USING PARQUET")
+      val df = spark.sql(
+        """WITH transformation AS (SELECT 7 AS a)
+          |INSERT INTO IDENTIFIER(:tname)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_into"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_into"), Row(7))
+    }
+  }
+
+  test("SPARK-46625: CREATE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... FROM cte") {
+    withTable("t_cte_ctas") {
+      val df = spark.sql(
+        """CREATE TABLE IDENTIFIER(:tname) USING PARQUET AS
+          |WITH transformation AS (SELECT 3 AS a)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_ctas"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_ctas"), Row(3))
+    }
+  }
+
+  // SPARK-46625: legacy parameter-substitution mode triggers the parameters.scala traversal
+  // path. The placeholder lives in `InsertIntoStatement.table`, which is *not* a child, so this
+  // exercises the `innerPlans` hook on `LogicalPlan` and the corresponding recursion in
+  // `BindParameters.bind`.
+  test("SPARK-46625: INSERT IDENTIFIER(:p) under legacy parameter substitution") {
+    withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
+      withTable("t_legacy_param") {
+        sql("CREATE TABLE t_legacy_param (a INT) USING PARQUET")
+        spark.sql(
+          """WITH transformation AS (SELECT 11 AS a)
+            |INSERT INTO IDENTIFIER(:tname)
+            |SELECT * FROM transformation""".stripMargin,
+          Map("tname" -> "t_legacy_param"))
+        checkAnswer(spark.table("t_legacy_param"), Row(11))
+      }
+    }
   }
 }

@@ -210,6 +210,16 @@ case class InsertIntoStatement(
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoStatement =
     copy(query = newChild)
+
+  // `table` is a non-child LogicalPlan slot. Expose it via `innerPlans` so that
+  // tree-pattern propagation, `BindParameters`, and `ResolveIdentifierClause`
+  // can reach unresolved placeholders inside it.
+  override def innerPlans: Seq[LogicalPlan] = Seq(table)
+
+  override def withNewInnerPlans(newInnerPlans: Seq[LogicalPlan]): InsertIntoStatement = {
+    assert(newInnerPlans.length == 1)
+    copy(table = newInnerPlans.head)
+  }
 }
 
 sealed abstract class InsertReplaceCriteria extends Expression with Unevaluable {
