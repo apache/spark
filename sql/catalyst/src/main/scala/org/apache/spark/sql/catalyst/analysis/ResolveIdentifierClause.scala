@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateView, CTEInChildren, CTERelationRef, InsertIntoStatement, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateView, InsertIntoStatement, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -70,9 +70,9 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
 
         executor.execute(p.planBuilder.apply(
           IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
-      // `InsertIntoStatement.table` is a non-child LogicalPlan slot (`child = query`), so the
-      // standard `resolveOperatorsUp` traversal never visits placeholders inside it. Materialize
-      // them explicitly.
+      // `InsertIntoStatement.table` and `OverwriteByExpression.table` are non-child
+      // LogicalPlan slots (`child = query`), so the standard `resolveOperatorsUp` traversal
+      // never visits placeholders inside them. Materialize them explicitly.
       case i @ InsertIntoStatement(p: PlanWithUnresolvedIdentifier, _, _, _, _, _, _, _, _)
           if p.identifierExpr.resolved && p.childrenResolved =>
         if (referredTempVars.isDefined) {
@@ -80,6 +80,14 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         }
         i.copy(table = executor.execute(p.planBuilder.apply(
           IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)))
+      case o @ OverwriteByExpression(p: PlanWithUnresolvedIdentifier, _, _, _, _, _, _, _)
+          if p.identifierExpr.resolved && p.childrenResolved =>
+        if (referredTempVars.isDefined) {
+          referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+        }
+        o.withNewTable(executor.execute(p.planBuilder.apply(
+          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
+          .asInstanceOf[NamedRelation])
       case other =>
         other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
           case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
@@ -92,32 +100,7 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
               IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
         }
     }
-    // For the `withIdentClause` call sites we cannot refactor at the parser level (e.g.
-    // `OverwriteByExpression` whose `table` field is typed `NamedRelation`, or
-    // `CacheTableAsSelect` whose name is a plain String), `PlanWithUnresolvedIdentifier` still
-    // wraps the entire command. When that wrapper is itself inside `WithCTE`, push the CTE
-    // defs into the materialized command's children - restoring the invariant
-    // `CTESubstitution.withCTEDefs` enforces at substitution time. Skip the push when any
-    // cteDef is referenced from a non-child expression slot of `c` (e.g. `ReplaceData.condition`
-    // produced by `RewriteDeleteFromTable`); in that case the outer `WithCTE` must stay so
-    // those refs remain in scope. SPARK-46625.
-    resolved.resolveOperatorsUpWithPruning(_.containsPattern(CTE)) {
-      case WithCTE(c: CTEInChildren, cteDefs)
-          if !cteDefsRefdInNonChildSlots(c, cteDefs.map(_.id).toSet) =>
-        c.withCTEDefs(cteDefs)
-    }
-  }
-
-  private def cteDefsRefdInNonChildSlots(c: LogicalPlan, cteIds: Set[Long]): Boolean = {
-    c.expressions.exists { e =>
-      e.exists {
-        case sub: SubqueryExpression =>
-          sub.plan.collectFirstWithSubqueries {
-            case ref: CTERelationRef if cteIds.contains(ref.cteId) => ref
-          }.isDefined
-        case _ => false
-      }
-    }
+    resolved
   }
 
   private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {

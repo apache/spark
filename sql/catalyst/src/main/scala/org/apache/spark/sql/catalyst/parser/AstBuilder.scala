@@ -933,13 +933,11 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // For `InsertIntoStatement`-producing branches, build the `table` slot directly via
-      // `buildWriteTableSlot` so that any `PlanWithUnresolvedIdentifier` lives *inside* the
-      // command. This preserves the `CTEInChildren` shape and lets `CTESubstitution` place
-      // `WithCTE` on the command's children correctly (SPARK-46625).
-      // `OverwriteByExpression.table` is typed `NamedRelation`, so the REPLACE WHERE branch
-      // still wraps the command with `PlanWithUnresolvedIdentifier`; that case is handled
-      // by the post-hoc `WithCTE(c: CTEInChildren, _)` collapse in `ResolveIdentifierClause`.
+      // For all `InsertIntoStatement` / `OverwriteByExpression`-producing branches, build the
+      // `table` slot directly via `buildWriteTableSlot` so that any
+      // `PlanWithUnresolvedIdentifier` lives *inside* the command's identifier slot. This
+      // preserves the `CTEInChildren` shape and lets `CTESubstitution` place `WithCTE` on the
+      // command's children correctly (SPARK-46625).
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
         val privileges = Set(TableWritePrivilege.INSERT)
@@ -970,32 +968,27 @@ class AstBuilder extends DataTypeAstBuilder
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
           val options = Option(ctx.optionsClause())
-          // OverwriteByExpression.table is `NamedRelation`, so we cannot put a
-          // `PlanWithUnresolvedIdentifier` directly in the slot - wrap the whole command and
-          // rely on the post-hoc collapse in `ResolveIdentifierClause`.
-          withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-            val table = createUnresolvedRelation(
-              ctx = ctx.identifierReference,
-              ident = ident,
-              optionsClause = options,
-              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-              isStreaming = false)
-            val deleteExpr = expression(ctx.replaceCondition)
-            val isByName = ctx.NAME() != null
-            if (isByName) {
-              OverwriteByExpression.byName(
-                table,
-                df = otherPlans.head,
-                deleteExpr,
-                withSchemaEvolution = ctx.EVOLUTION() != null)
-            } else {
-              OverwriteByExpression.byPosition(
-                table,
-                query = otherPlans.head,
-                deleteExpr,
-                withSchemaEvolution = ctx.EVOLUTION() != null)
-            }
-          })
+          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+          // `PlanWithUnresolvedIdentifier` is a `NamedRelation`, so it can occupy
+          // `OverwriteByExpression.table` directly; the materialization happens in
+          // `ResolveIdentifierClause` via its `OverwriteByExpression` special-case.
+          val table = buildWriteTableSlotNamedRelation(
+            ctx.identifierReference, options, privileges)
+          val deleteExpr = expression(ctx.replaceCondition)
+          val isByName = ctx.NAME() != null
+          if (isByName) {
+            OverwriteByExpression.byName(
+              table,
+              df = query,
+              deleteExpr,
+              withSchemaEvolution = ctx.EVOLUTION() != null)
+          } else {
+            OverwriteByExpression.byPosition(
+              table,
+              query = query,
+              deleteExpr,
+              withSchemaEvolution = ctx.EVOLUTION() != null)
+          }
         } else {
           val insertParams = visitInsertIntoReplaceOn(ctx)
           val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
@@ -1186,6 +1179,18 @@ class AstBuilder extends DataTypeAstBuilder
       writePrivileges: Set[TableWritePrivilege]): LogicalPlan = {
     withIdentClause(ctx, parts =>
       createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
+  }
+
+  /**
+   * Variant of `buildWriteTableSlot` returning a `NamedRelation`, for slots typed as
+   * `NamedRelation` (e.g. `OverwriteByExpression.table`). `PlanWithUnresolvedIdentifier` is a
+   * `NamedRelation`, so the placeholder fits the slot type directly.
+   */
+  private def buildWriteTableSlotNamedRelation(
+      ctx: IdentifierReferenceContext,
+      optionsClause: Option[OptionsClauseContext],
+      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
+    buildWriteTableSlot(ctx, optionsClause, writePrivileges).asInstanceOf[NamedRelation]
   }
 
   /**

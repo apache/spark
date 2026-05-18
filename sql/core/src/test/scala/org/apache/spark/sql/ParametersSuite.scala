@@ -20,9 +20,10 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, PlanWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, OverwriteByExpression, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
@@ -2528,6 +2529,33 @@ class ParametersSuite extends SharedSparkSession {
           Map("tname" -> "t_legacy_param"))
         checkAnswer(spark.table("t_legacy_param"), Row(11))
       }
+    }
+  }
+
+  // SPARK-46625: INSERT INTO REPLACE WHERE goes through `OverwriteByExpression`, whose `table`
+  // slot is typed `NamedRelation`. `PlanWithUnresolvedIdentifier` extends `NamedRelation` so the
+  // placeholder sits in the slot directly. Verify on the parsed plan that the placeholder lives
+  // in `OverwriteByExpression.table` rather than wrapping the whole command — running the
+  // analyzer fully would require a v2 catalog.
+  test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... — parser") {
+    // Use a non-literal-string expression so `withIdentClause` produces
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """WITH transformation AS (SELECT 99 AS a)
+        |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
+        |SELECT * FROM transformation""".stripMargin)
+    val overwrite = parsedPlan.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
+      fail(s"Expected OverwriteByExpression in parsed plan:\n$parsedPlan"))
+    assert(overwrite.table.isInstanceOf[PlanWithUnresolvedIdentifier],
+      s"Expected OverwriteByExpression.table to be PlanWithUnresolvedIdentifier, " +
+        s"got ${overwrite.table.getClass.getSimpleName}:\n$parsedPlan")
+    // After CTESubstitution runs, the CTE defs should land on the command's children (because
+    // OverwriteByExpression is a CTEInChildren) — never as `WithCTE(OverwriteByExpression, _)`.
+    val substituted = CTESubstitution.apply(parsedPlan)
+    substituted.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
+      case _ =>
     }
   }
 }

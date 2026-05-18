@@ -44,6 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -242,6 +243,16 @@ case class OverwriteByExpression(
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
   override protected def withNewChildInternal(newChild: LogicalPlan): OverwriteByExpression =
     copy(query = newChild)
+
+  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
+  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
+  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
+  // `PARAMETER`).
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
+  }
 }
 
 object OverwriteByExpression {

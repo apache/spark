@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, OverwriteByExpression, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -179,13 +179,16 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
       case p1 =>
         stop = p1.isInstanceOf[ParameterizedQuery]
-        // `InsertIntoStatement.table` is a non-child LogicalPlan slot, so the standard
-        // `resolveOperatorsDown` traversal never visits parameter markers inside it.
-        // Recurse explicitly so `INSERT ... IDENTIFIER(:p)` resolves under the legacy
+        // `InsertIntoStatement.table` and `OverwriteByExpression.table` are non-child
+        // LogicalPlan slots, so the standard `resolveOperatorsDown` traversal never visits
+        // parameter markers inside them. Recurse explicitly so `INSERT ... IDENTIFIER(:p)`
+        // and `INSERT INTO REPLACE WHERE ... IDENTIFIER(:p)` resolve under the legacy
         // parameter-substitution mode (SPARK-46625).
         val withBoundTable = p1 match {
           case i: InsertIntoStatement if i.table.containsPattern(PARAMETER) =>
             i.copy(table = bind(i.table)(f))
+          case o: OverwriteByExpression if o.table.containsPattern(PARAMETER) =>
+            o.withNewTable(bind(o.table)(f).asInstanceOf[NamedRelation])
           case other => other
         }
         withBoundTable.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -59,18 +59,38 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
 /**
  * A logical plan placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual logical plan with the evaluated identifier string.
+ *
+ * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
+ * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
+ *
+ * Extends `CTEInChildren` so when the placeholder wraps an entire CTEInChildren command (e.g.
+ * `CacheTableAsSelect`), `CTESubstitution.withCTEDefs` pushes the surrounding `WithCTE` into the
+ * placeholder's children at substitution time — the cteDefs land in the materialized command's
+ * children by construction, with no post-hoc collapse required.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
     children: Seq[LogicalPlan],
     planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
-  extends UnresolvedNode {
+  extends UnresolvedNode with NamedRelation with CTEInChildren {
 
   def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_WITH_UNRESOLVED_IDENTIFIER)
+
+  override def name: String = identifierExpr.sql
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    if (children.isEmpty) {
+      // No inner plan to wrap; keep the `WithCTE` outside (same shape `CTESubstitution.withCTEDefs`
+      // would have produced if this node weren't `CTEInChildren`).
+      WithCTE(this, cteDefs)
+    } else {
+      withNewChildren(children.map(WithCTE(_, cteDefs)))
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
