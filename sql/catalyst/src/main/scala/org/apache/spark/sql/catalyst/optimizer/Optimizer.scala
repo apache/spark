@@ -2564,32 +2564,12 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   /** Maximum number of decimal digits representable precisely in a Double */
   private val MAX_DOUBLE_DIGITS = 15
 
-  /** Maximum inner precision for the AVG widened-cast peel arm. Conservative
-   *  guard: trigger surface stays strictly identical to the existing
-   *  `AVG(decimal(p<=7,s))` fast path, so SPARK-37024 (Double-regime silent
-   *  precision loss) is not amplified by this rule. Wider `p` deferred until
-   *  the SPARK-37024 root fix lands.
-   *
-   *  Derivation: the existing AVG fast path itself only requires
-   *  `prec + 4 <= MAX_DOUBLE_DIGITS` (i.e. `prec <= 11`); the tighter bound
-   *  `<= 7` is NOT the divide guard's mathematical limit but a deliberate
-   *  conservative narrowing matching the existing arm's actual workload
-   *  surface, leaving 4 digits of headroom against future SPARK-37024
-   *  symptom changes. Relaxing past 7 requires re-evaluating SPARK-37024
-   *  first; the boundary is locked by the AVG safety-bound invariant guard
-   *  in `DecimalAggregatesSuite`.
-   */
+  /** Tighter than the AVG fast path's `prec + 4 <= MAX_DOUBLE_DIGITS` (= 11):
+   *  the strict-subset keeps SPARK-37024 Double-regime exposure unchanged. */
   private val AVG_PEEL_MAX_INNER_PRECISION = 7
 
-  /**
-   * Matches a scale-preserving widening decimal Cast `Cast(inner, DecimalType(pPrime, s))`
-   * where inner has type `DecimalType(p, s)` and `pPrime >= p`. Binds `(inner, p, pPrime, s)`.
-   * Conservative: does not unwrap `CheckOverflow` (we should not peel through
-   * an overflow-checking cast, as it would change the semantics of the inner
-   * expression with respect to overflow on the unscaled value), nor
-   * `PromotePrecision`. Uses `DecimalExpression` for symmetry with the existing
-   * rule body in this object.
-   */
+  /** Matches a scale-preserving widening decimal Cast; refuses CheckOverflow
+   *  to preserve overflow semantics on the unscaled value. */
   private object WidenedDecimalChild {
     def unapply(e: Expression): Option[(Expression, Int, Int, Int)] = e match {
       case Cast(inner @ DecimalExpression(p, s), DecimalType.Fixed(pPrime, sPrime), _, _)
@@ -2604,13 +2584,9 @@ object DecimalAggregates extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsAnyPattern(SUM, AVERAGE), ruleId) {
       case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
-        // NOTE: Window arm does not extend widened-Cast peel. The analyzer
-        // `ExtractWindowExpressions` hoists composite children (here the
-        // widening Cast) into a preceding Project, so the Window aggregate
-        // only sees an `AttributeReference(_wN)`. A symmetric `WindowExpression
-        // (Sum(WidenedDecimalChild(...)))` case here would be dead code;
-        // Window peel for composite children requires a plan-layer rewrite
-        // that is out of scope for SPARK-56627.
+        // Window arm: `ExtractWindowExpressions` hoists composite children
+        // (here the widening Cast) into a child Project, so widened-Cast
+        // peel is unreachable from this expression-level rule.
         case Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
             prec + 10, scale)
@@ -2625,9 +2601,6 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         case _ => we
       }
       case ae @ AggregateExpression(af, _, _, _, _) => af match {
-        // SUM-of-widened-decimal-Cast arm: peel a scale-preserving widening
-        // Cast around a decimal child of SUM so the long-backed fast path can
-        // fire on the widened target type as well.
         case Sum(WidenedDecimalChild(inner, p, pPrime, s), _)
             if p + 10 <= MAX_LONG_DIGITS =>
           Cast(
@@ -2640,17 +2613,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         case Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 
-        // AVG-of-widened-decimal-Cast arm: peel a scale-preserving widening
-        // Cast around a decimal child of AVG so the long-backed fast path can
-        // fire on the widened target type as well. Strict-subset guard
-        // `p <= AVG_PEEL_MAX_INNER_PRECISION = 7` keeps this rule's trigger
-        // surface inside the existing `AVG(decimal(p<=7, s))` fast path's
-        // surface (does NOT widen the SPARK-37024 Double-regime exposure).
-        // Must be ordered BEFORE the existing `Average(DecimalExpression(...))`
-        // case below: with `pPrime in [8, 11]`, the outer Cast's dataType is
-        // `Decimal(pPrime, s)` which the un-widened arm would otherwise match
-        // first via its `prec + 4 <= MAX_DOUBLE_DIGITS` guard (= pPrime <= 11),
-        // intercepting our peel for that band.
+        // Ordered before the un-widened Average arm: when pPrime in [8, 11],
+        // the outer Cast's DecimalType would otherwise match that arm first.
         case Average(WidenedDecimalChild(inner, p, pPrime, s), _)
             if p <= AVG_PEEL_MAX_INNER_PRECISION =>
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(inner)))
