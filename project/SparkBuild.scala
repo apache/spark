@@ -465,6 +465,9 @@ object SparkBuild extends PomBuild {
   /* UDF Worker Proto settings */
   enable(UDFWorkerProto.settings)(udfWorkerProto)
 
+  /* UDF Worker Core settings */
+  enable(UDFWorkerCore.settings)(udfWorkerCore)
+
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
@@ -1088,13 +1091,20 @@ object UDFWorkerProto {
   import BuildCommons.protoVersion
   lazy val settings = Seq(
     PB.protocVersion := BuildCommons.protoVersion,
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+    libraryDependencies ++= {
+      val grpcVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "io.grpc.version").asInstanceOf[String]
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
+        "io.grpc" % "protoc-gen-grpc-java" % grpcVersion asProtocPlugin(),
+        "io.grpc" % "grpc-api" % grpcVersion,
+        "io.grpc" % "grpc-protobuf" % grpcVersion,
+        "io.grpc" % "grpc-stub" % grpcVersion
+      )
+    },
 
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
-
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-sources"
-    ),
 
     (assembly / test) := { },
 
@@ -1127,14 +1137,39 @@ object UDFWorkerProto {
     }
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) ->
+            target.value / "generated-sources" / "protobuf" / "grpc-java"
+        ),
         PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
-      Seq.empty
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin("grpc-java") ->
+            target.value / "generated-sources" / "protobuf" / "grpc-java"
+        )
+      )
     }
   }
+}
+
+object UDFWorkerCore {
+  lazy val settings = Seq(
+    libraryDependencies ++= {
+      val grpcVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "io.grpc.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "grpc-inprocess" % grpcVersion % "test"
+      )
+    }
+  )
 }
 
 object Unsafe {
