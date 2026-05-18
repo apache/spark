@@ -110,8 +110,8 @@ class ApplyInArrowTestsMixin:
         schema = "id long, s string, b binary"
 
         def func(table):
-            assert table.schema.field("s").type == pa.large_string()
-            assert table.schema.field("b").type == pa.large_binary()
+            assert pa.types.is_large_string(table.schema.field("s").type)
+            assert pa.types.is_large_binary(table.schema.field("b").type)
             return table
 
         for assign_cols_by_name in [True, False]:

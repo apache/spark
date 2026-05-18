@@ -134,8 +134,8 @@ class CogroupedMapInArrowTestsMixin:
         schema = "s string, b binary"
 
         def func(left_tbl, right_tbl):
-            assert left_tbl.schema.field("s").type == pa.large_string()
-            assert left_tbl.schema.field("b").type == pa.large_binary()
+            assert pa.types.is_large_string(left_tbl.schema.field("s").type)
+            assert pa.types.is_large_binary(left_tbl.schema.field("b").type)
             return left_tbl.select(["s", "b"])
 
         expected = left.select("s", "b")
