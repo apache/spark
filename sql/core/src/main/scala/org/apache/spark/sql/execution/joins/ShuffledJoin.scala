@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, IsNull}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.internal.SQLConf
@@ -29,16 +29,10 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
 
-  private def containsNullSafeJoinMarker(keys: Seq[Expression]): Boolean = {
-    keys.exists(_.exists(_.isInstanceOf[IsNull]))
-  }
-
   private lazy val canSpreadNullJoinKeys: Boolean = {
     val isOuterJoin = joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter
     conf.getConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED) &&
-      isOuterJoin &&
-      !containsNullSafeJoinMarker(leftKeys) &&
-      !containsNullSafeJoinMarker(rightKeys)
+      isOuterJoin
   }
 
   override def nodeName: String = {

@@ -485,7 +485,7 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     }
   }
 
-  test("null-safe outer equi-join keeps clustered NULL keys") {
+  test("null-safe outer equi-join can use null-aware shuffle partitioning") {
     val nullableLeft = Seq(
       (Integer.valueOf(1), "left-1"),
       (null.asInstanceOf[Integer], "left-null"))
@@ -509,7 +509,7 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
             case exchange: ShuffleExchangeExec => exchange.outputPartitioning
           }
           assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[HashPartitioning]))
+          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
         }
     }
   }
