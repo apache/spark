@@ -8503,15 +8503,15 @@
     ],
     "sqlState" : "42000"
   },
-  "UNSUPPORTED_TIMESTAMP_LTZ_NANOS_PRECISION" : {
+  "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION" : {
     "message" : [
-      "The fractional seconds precision <precision> of TIMESTAMP_LTZ is out of the supported range [<minPrecision>, <maxPrecision>] for nanosecond-capable timestamps."
+      "The seconds precision <precision> of TIMESTAMP_LTZ is out of the supported range [7, 9]."
     ],
     "sqlState" : "0A001"
   },
-  "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION" : {
+  "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION" : {
     "message" : [
-      "The fractional seconds precision <precision> of TIMESTAMP_NTZ is out of the supported range [<minPrecision>, <maxPrecision>] for nanosecond-capable timestamps."
+      "The seconds precision <precision> of TIMESTAMP_NTZ is out of the supported range [7, 9]."
     ],
     "sqlState" : "0A001"
   },

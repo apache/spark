@@ -1470,20 +1470,14 @@ class DataTypeSuite extends SparkFunSuite {
         exception = intercept[SparkException] {
           TimestampLTZNanosType(p)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_LTZ_NANOS_PRECISION",
-        parameters = Map(
-          "precision" -> p.toString,
-          "minPrecision" -> "7",
-          "maxPrecision" -> "9"))
+        condition = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
+        parameters = Map("precision" -> p.toString))
       checkError(
         exception = intercept[SparkException] {
           TimestampNTZNanosType(p)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
-        parameters = Map(
-          "precision" -> p.toString,
-          "minPrecision" -> "7",
-          "maxPrecision" -> "9"))
+        condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
+        parameters = Map("precision" -> p.toString))
     }
   }
 
@@ -1510,29 +1504,20 @@ class DataTypeSuite extends SparkFunSuite {
       exception = intercept[SparkException] {
         DataType.fromJson("\"timestamp_ltz(6)\"")
       },
-      condition = "UNSUPPORTED_TIMESTAMP_LTZ_NANOS_PRECISION",
-      parameters = Map(
-        "precision" -> "6",
-        "minPrecision" -> "7",
-        "maxPrecision" -> "9"))
+      condition = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
+      parameters = Map("precision" -> "6"))
     checkError(
       exception = intercept[SparkException] {
         DataType.fromJson("\"timestamp_ntz(0)\"")
       },
-      condition = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
-      parameters = Map(
-        "precision" -> "0",
-        "minPrecision" -> "7",
-        "maxPrecision" -> "9"))
+      condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
+      parameters = Map("precision" -> "0"))
     checkError(
       exception = intercept[SparkException] {
         DataType.fromJson("\"timestamp_ntz(10)\"")
       },
-      condition = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
-      parameters = Map(
-        "precision" -> "10",
-        "minPrecision" -> "7",
-        "maxPrecision" -> "9"))
+      condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
+      parameters = Map("precision" -> "10"))
   }
 
   test("singleton DataType equality after deserialization") {

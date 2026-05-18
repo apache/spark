@@ -36,10 +36,7 @@ case class TimestampNTZNanosType(precision: Int) extends DatetimeType {
 
   if (precision < TimestampNTZNanosType.MIN_PRECISION ||
     precision > TimestampNTZNanosType.MAX_PRECISION) {
-    throw DataTypeErrors.unsupportedTimestampNtzPrecisionError(
-      precision,
-      TimestampNTZNanosType.MIN_PRECISION,
-      TimestampNTZNanosType.MAX_PRECISION)
+    throw DataTypeErrors.unsupportedTimestampNtzPrecisionError(precision)
   }
 
   /**
