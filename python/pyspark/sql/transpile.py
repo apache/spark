@@ -73,6 +73,35 @@ class AbstractTranspiler(object):
         pass
 
 
+def _is_definitely_boolean(node: ast.AST) -> bool:
+    """Return True when ``node`` is statically guaranteed to produce a Python
+    ``bool`` (or ``None``, which round-trips through ``coalesce``).
+
+    Used to gate ``if``/ternary lowering: we only allow the test expression
+    into Catalyst's ``when(coalesce(test, false), ...)`` form when it provably
+    produces a boolean. Everything else (bare Name, arithmetic, function calls,
+    subscript, …) must force a fallback to interpreted Python instead of
+    silently diverging.
+    """
+    match node:
+        case ast.Constant(value=v):
+            return v is None or isinstance(v, bool)
+        case ast.Compare():
+            # All comparison operators produce bool.
+            return True
+        case ast.BoolOp():
+            # and / or of booleans produces bool.
+            return True
+        case ast.UnaryOp(op=ast.Not()):
+            # `not x` always produces bool.
+            return True
+        case ast.IfExp(body=body, orelse=orelse):
+            # Ternary is boolean only if both branches are.
+            return _is_definitely_boolean(body) and _is_definitely_boolean(orelse)
+        case _:
+            return False
+
+
 def _is_definitely_non_boolean(node: ast.AST) -> bool:
     """Return True when ``node`` is statically guaranteed to evaluate to a
     value that is *not* a Python ``bool``.
@@ -158,21 +187,24 @@ class CatalystTranspiler(AbstractTranspiler):
         test_col: Column,
         body_col: Column,
         else_col: Column,
+        test_node: ast.AST,
     ) -> Column:
-        # Python evaluates `if test:` by treating None as falsy first
-        # and then checking truthiness. Spark's `when` already routes
-        # NULL into the otherwise branch, so for boolean-typed tests
-        # (the common case after Compare / UnaryOp / IsNotNull) the
-        # cleanest mapping is `when(test, body).otherwise(else)`. We
-        # coalesce the test against `lit(False)` so that a NULL test
-        # deterministically takes the else branch: the previous
-        # double-wrapped form `otherwise(when(~test, else))` silently
-        # produced NULL when `test` itself was NULL (since `~NULL` is
-        # NULL), which doesn't match Python's `if None: ... else: ...`
-        # picking the else branch. Non-boolean tests (e.g. a bare
-        # `if some_int:`) still won't match Python truthiness exactly;
-        # doing that needs the actual input column type, which we
-        # don't currently thread through to the transpiler.
+        # We cannot soundly lower a generic Python truthiness test here.
+        # Python truthiness depends on the runtime input type and value:
+        # for example, 0, 0.0, "", empty collections, and None are all
+        # falsy, while most other values are truthy. The transpiler does
+        # not have enough input type information at this point to decide
+        # whether ``test_col`` is a boolean expression or a bare value
+        # whose truthiness would need Python-specific handling. Emitting
+        # ``when(coalesce(test_col, false), ...)`` is therefore unsound:
+        # it can either fail Spark analysis for non-boolean columns or
+        # silently diverge from Python semantics. Fail closed so the UDF
+        # falls back to interpreted Python execution instead.
+        if not _is_definitely_boolean(test_node):
+            raise UnsupportedOperationException(
+                "bare truthiness tests in if-expressions are not currently "
+                "supported by the transpiler"
+            )
         safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
 
@@ -307,12 +339,14 @@ class CatalystTranspiler(AbstractTranspiler):
                     self._convert_chunk(params, test),
                     self._convert_chunk(params, body_expr),
                     self._convert_chunk(params, orelse_expr),
+                    test,
                 )
             case ast.If(test, success, orelse):
                 return self._convert_if_like(
                     self._convert_chunk(params, test),
                     self._convert_branch(params, success, "body"),
                     self._convert_branch(params, orelse, "else body"),
+                    test,
                 )
             case ast.Compare(left, ops, comps):
                 if len(ops) != 1 or len(comps) != 1:

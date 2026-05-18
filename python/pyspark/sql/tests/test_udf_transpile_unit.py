@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     BooleanType,
     DoubleType,
     LongType,
+    StringType,
 )
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -387,6 +388,61 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                         [],
                         pudf.transpiled,
                         f"{label}: non-boolean and/or/not must NOT be lowered",
+                    )
+                    fallback = [
+                        w
+                        for w in caught
+                        if "Unable to transpile" in str(w.message)
+                        or "Errors encountered" in str(w.message)
+                    ]
+                    self.assertTrue(fallback, f"{label}: expected a fallback warning")
+                    df = self.spark.createDataFrame([row], schema=schema)
+                    [result] = df.select(pudf("a")).collect()
+                    self.assertEqual(result[0], expected, f"{label}: interpreted mismatch")
+
+    def test_udf_transpile_falls_back_for_bare_truthiness_test(self):
+        # A bare `if x:` applied to a non-boolean column cannot be soundly
+        # lowered: Python truthiness is type-dependent (0, "", [], None are
+        # falsy) and the transpiler has no input type information at this
+        # point. Emitting coalesce(x, false) either fails Spark analysis for
+        # non-boolean columns or silently produces wrong answers.  The
+        # transpiler must refuse and fall back to interpreted Python.
+        import warnings as _warnings
+        from pyspark.sql.types import StructField, StructType
+
+        def truthy_int(x):
+            if x:
+                return x
+            return -1
+
+        def truthy_string(x):
+            return x if x else "default"
+
+        long_schema = StructType([StructField("a", LongType(), nullable=True)])
+        str_schema = StructType([StructField("a", StringType(), nullable=True)])
+
+        cases = [
+            ("truthy_int_zero", truthy_int, LongType(), long_schema, Row(a=0), -1),
+            ("truthy_int_nonzero", truthy_int, LongType(), long_schema, Row(a=3), 3),
+            ("truthy_string_empty", truthy_string, StringType(), str_schema, Row(a=""), "default"),
+            ("truthy_string_val", truthy_string, StringType(), str_schema, Row(a="hi"), "hi"),
+        ]
+
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            for label, func, return_type, schema, row, expected in cases:
+                with self.subTest(case=label):
+                    with _warnings.catch_warnings(record=True) as caught:
+                        _warnings.simplefilter("always")
+                        pudf = UserDefinedFunction(func, return_type)
+                    self.assertEqual(
+                        [],
+                        pudf.transpiled,
+                        f"{label}: bare truthiness test must NOT be lowered to Catalyst",
                     )
                     fallback = [
                         w
