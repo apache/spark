@@ -1132,9 +1132,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # attribute carrying the same name; the original `c` is no longer in
         # the projection.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails (the AT&T-style root cause).
         sdf = self.spark.sql("SELECT 1 AS c")
@@ -1146,9 +1143,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect strict: same root cause, different error class.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df = self.connect.sql("SELECT 1 AS c")
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df.withColumn("c", CF.col("c").cast("string")).withColumn(
                     "c", CF.col("c").cast("int")
                 ).select(df["c"]).collect()
@@ -1164,9 +1159,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Same shadowing shape as withColumn but expressed through a select
         # with alias.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c")
@@ -1176,9 +1168,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect strict: fails.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df = self.connect.sql("SELECT 1 AS c")
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df.select(df["c"].cast("string").alias("c")).select(df["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
@@ -1192,9 +1182,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # neither the original attribute nor a column named `c` is in the
         # current child output.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c")
@@ -1205,16 +1192,13 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
                 df = self.connect.sql("SELECT 1 AS c")
-                with self.assertRaises(ConnectAnalysisException):
+                with self.assertRaises(AnalysisException):
                     df.withColumnRenamed("c", "c2").select(df["c"]).collect()
 
     def test_resolve_after_drop(self):
         # drop("c") removes the column entirely. Tagged df["c"] cannot resolve
         # under any mode.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c, 2 AS d")
@@ -1225,7 +1209,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
                 df = self.connect.sql("SELECT 1 AS c, 2 AS d")
-                with self.assertRaises(ConnectAnalysisException):
+                with self.assertRaises(AnalysisException):
                     df.drop("c").select(df["c"]).collect()
 
     def test_resolve_through_filter(self):
@@ -1284,9 +1268,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # strict cannot resolve the original tagged attribute; Connect lenient
         # falls back to name-based resolution on the grouping key.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails (the source attribute is consumed by Aggregate).
         sdf = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c")
@@ -1296,9 +1277,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect strict: fails.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c")
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df.groupBy("c").count().select(df["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
@@ -1312,9 +1291,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # the source `c`. The tagged df["c"] still references the source
         # attribute that has been aggregated away.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS x")
@@ -1324,9 +1300,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect strict: fails.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df = self.connect.sql("SELECT 1 AS x")
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df.groupBy().agg(CF.sum("x").alias("c")).select(df["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
@@ -1339,9 +1313,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # grouping key resolve under Connect lenient via name-based fallback
         # and fail under Connect strict.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         query = "SELECT 1 AS c, 'a' AS k, 10 AS v UNION ALL SELECT 2 AS c, 'b' AS k, 20 AS v"
 
@@ -1353,9 +1324,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect strict: fails.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df = self.connect.sql(query)
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df.groupBy("c").pivot("k").sum("v").select(df["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
@@ -1368,9 +1337,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # attributes. Tagged df1["c"] only resolves under Connect lenient by
         # name-based fallback.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         sdf1 = self.spark.sql("SELECT 1 AS c")
@@ -1382,9 +1348,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df1 = self.connect.sql("SELECT 1 AS c")
             df2 = self.connect.sql("SELECT 2 AS c")
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df1.union(df2).select(df1["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
@@ -1396,9 +1360,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
     def test_resolve_after_intersect(self):
         # intersect, like union, emits new attribute ids.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         sdf1 = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
@@ -1410,9 +1371,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
             df1 = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
             df2 = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
-            with self.assertRaisesRegex(
-                ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-            ):
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                 df1.intersect(df2).select(df1["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
@@ -1426,9 +1385,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # ancestor. The tagged df["c"] is ambiguous because two output
         # attributes match by name.
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails (ambiguous reference).
         sdf = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
@@ -1441,7 +1397,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
                 df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
                 a, b = df.alias("a"), df.alias("b")
-                with self.assertRaises(ConnectAnalysisException):
+                with self.assertRaises(AnalysisException):
                     a.join(b, a["c"] == b["c"]).select(df["c"]).collect()
 
     def test_resolve_after_subquery_view(self):
@@ -1452,9 +1408,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         import uuid
 
         from pyspark.errors import AnalysisException
-        from pyspark.errors.exceptions.connect import (
-            AnalysisException as ConnectAnalysisException,
-        )
 
         # Classic: fails.
         view = f"v_{uuid.uuid4().hex}"
@@ -1472,9 +1425,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
             df = self.connect.sql("SELECT 1 AS c")
             df.createOrReplaceTempView(view)
             try:
-                with self.assertRaisesRegex(
-                    ConnectAnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"
-                ):
+                with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
                     self.connect.table(view).select(df["c"]).collect()
             finally:
                 self.connect.sql(f"DROP VIEW IF EXISTS {view}")
