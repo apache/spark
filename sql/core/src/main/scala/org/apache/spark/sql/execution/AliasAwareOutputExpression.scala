@@ -40,7 +40,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     (projectedKPs ++ projectedOthers).take(aliasCandidateLimit) match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(p) => p
-      case ps => PartitioningCollection(ps)
+      case ps => PartitioningCollection.fromPartitionings(ps)
     }
   }
 
@@ -88,22 +88,15 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    *
    * The resulting [[KeyedPartitioning]]s are the cross-product of the per-position alternatives
    * restricted to the projectable positions. All share the same `partitionKeys` object (projected
-   * to the same subset of positions), preserving the invariant required by [[GroupPartitionsExec]].
+   * to the same subset of positions), preserving the invariant required by
+   * [[PartitioningCollection]].
    */
   private def projectKeyedPartitionings(
       kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
     if (kps.isEmpty) return LazyList.empty
+    // All input KPs share the same `partitionKeys` reference and matching arity by the
+    // [[PartitioningCollection]] invariant (the only producer of multi-KP inputs here).
     val numPositions = kps.head.expressions.length
-    // The function assumes all input KPs share the same `partitionKeys`, which implies matching
-    // expression arity. This invariant is asserted by [[GroupPartitionsExec]] and is established
-    // by the constructors of [[PartitioningCollection]] feeding this method (a join's
-    // `PartitioningCollection(left.outputPartitioning, right.outputPartitioning)` combines KPs
-    // that have been aligned by [[EnsureRequirements]] to the same join keys). If the invariant
-    // is ever violated upstream, fail early with a clear message instead of throwing an opaque
-    // `IndexOutOfBoundsException` from `kp.expressions(i)` below.
-    assert(kps.tail.forall(_.expressions.length == numPositions),
-      s"All input KeyedPartitionings must share the same expression arity, " +
-        s"but got: ${kps.map(_.expressions.length).mkString(", ")}.")
 
     val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =
       if (hasAlias) {
