@@ -20,9 +20,6 @@ import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.protobuf.ByteString
-
-// Requires grpc-stub and grpc-inprocess dependencies, plus grpc-java codegen
-// in udf/worker/proto/pom.xml to generate UdfWorkerGrpc.
 import io.grpc.stub.StreamObserver
 import io.grpc.{ManagedChannel, Server, Status}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
@@ -284,7 +281,7 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
         None
       }
       matchUpdateThen {
-        case s @ (AwaitingInit | AwaitingChunks(_)) =>
+        case AwaitingInit | AwaitingChunks(_) =>
           initError match {
             case Some(err) =>
               (PostError, () => sendControl(UdfControlResponse.newBuilder()
@@ -293,10 +290,12 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
             case None =>
               (Data, () => sendInitResponse())
           }
-        case other =>
-          // Concurrent Cancel moved state past the init phase; the cancel
-          // path owns the terminator.
+        // Concurrent Cancel / transport error moved state past the init
+        // phase; the cancel path owns the terminator.
+        case other @ (Cancelling | Cancelled | Done) =>
           (other, () => ())
+        case other =>
+          (other, () => closeWithProtocolError(s"finalizeInit invoked in state $other"))
       }
     }
 
@@ -329,7 +328,11 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
           .build()
         matchUpdateThen {
           case Data => (PostError, () => sendControl(errEnvelope))
-          case other => (other, () => ())
+          // Concurrent Cancel / transport error already moved past data
+          // phase; the cancel path owns the terminator.
+          case other @ (Cancelling | Cancelled | Done) => (other, () => ())
+          case other =>
+            (other, () => closeWithProtocolError(s"processEcho invoked in state $other"))
         }
       } else {
         responseLock.synchronized {
@@ -381,9 +384,11 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
         (Drained, () => sendFinishResponseAndFinalize())
       case Cancelling =>
         (Cancelled, () => sendCancelResponseAndFinalize())
+      // Stream already finalized (e.g. onError fired before this
+      // completion notification arrived) -- nothing to do.
+      case Done => (Done, () => ())
       case other =>
-        // Completion signal arrived after the stream was finalized.
-        (other, () => ())
+        (other, () => closeWithProtocolError(s"onWorkComplete invoked in state $other"))
     }
 
     private def sendFinishResponseAndFinalize(): Unit = {
