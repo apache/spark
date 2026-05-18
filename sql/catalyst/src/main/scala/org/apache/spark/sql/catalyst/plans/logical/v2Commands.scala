@@ -107,6 +107,18 @@ trait V2WriteCommand
 
   override def child: LogicalPlan = query
 
+  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
+  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
+  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
+  // `PARAMETER`). Only `OverwriteByExpression` is constructed at parse time with a placeholder
+  // in `table`, but applying this uniformly across all `V2WriteCommand`s keeps the invariant
+  // consistent for any future analyzer-built node that lands a placeholder in the same slot.
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
+  }
+
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
   def outputResolved: Boolean = {
@@ -243,16 +255,6 @@ case class OverwriteByExpression(
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
   override protected def withNewChildInternal(newChild: LogicalPlan): OverwriteByExpression =
     copy(query = newChild)
-
-  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
-  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
-  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
-  // `PARAMETER`).
-  override protected def getDefaultTreePatternBits: BitSet = {
-    val bits = super.getDefaultTreePatternBits
-    bits.union(table.treePatternBits)
-    bits
-  }
 }
 
 object OverwriteByExpression {
