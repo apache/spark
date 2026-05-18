@@ -1309,9 +1309,11 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
     def test_resolve_after_union(self):
         # Union emits new attribute ids. Classic still resolves the tagged
         # left-side reference by attribute id propagation, but Connect fails
-        # in both modes: plan-id-based resolution does not find the tagged
-        # ancestor in the union output, and name-based fallback is not
-        # triggered for set-op outputs.
+        # in both modes: per ColumnResolutionHelper, Union is treated as a
+        # leaf node when walking the plan tree for plan-id resolution
+        # (children are not searched), so cdf1's plan id is never found and
+        # CANNOT_RESOLVE_DATAFRAME_COLUMN is thrown before the lenient
+        # name-based fallback can run.
         # Classic: succeeds.
         sdf1 = self.spark.sql("SELECT 1 AS c")
         sdf2 = self.spark.sql("SELECT 2 AS c")
@@ -1349,8 +1351,11 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
 
     def test_resolve_self_join_alias(self):
         # In a self-join, both sides originate from the same plan-id-tagged
-        # ancestor. The tagged cdf["c"] is ambiguous because two output
-        # attributes match by name.
+        # ancestor. Plan-id resolution finds two candidates of equal depth
+        # that share the same attribute id; the disambiguation in
+        # ColumnResolutionHelper.resolveDataFrameColumn cannot tiebreak by
+        # depth and raises AMBIGUOUS_COLUMN_REFERENCE. Classic raises an
+        # ambiguous-reference AnalysisException for the same reason.
         # Classic: fails (ambiguous reference).
         sdf = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
         a, b = sdf.alias("a"), sdf.alias("b")
@@ -1394,6 +1399,98 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
                     self.assertEqual([r.c for r in rows], expected)
                 finally:
                     self.connect.sql(f"DROP VIEW IF EXISTS {view}")
+
+    def test_resolve_cross_dataframe_illegal_reference(self):
+        # Per ColumnResolutionHelper.resolveDataFrameColumn (the documented
+        # `df1.select(df2.a)` case): referencing a column from a DataFrame
+        # whose plan id is not an ancestor in the target plan tree fails
+        # with CANNOT_RESOLVE_DATAFRAME_COLUMN. The strict / lenient switch
+        # does not gate this throw, so the failure is identical in both
+        # Connect modes.
+        # Classic: fails (the attribute id of cdf2.id is not in cdf1's plan).
+        sdf1 = self.spark.range(3)
+        sdf2 = self.spark.range(5)
+        with self.assertRaises(AnalysisException):
+            sdf1.select(sdf2["id"]).collect()
+
+        # Connect: fails in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                cdf1 = self.connect.range(3)
+                cdf2 = self.connect.range(5)
+                with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+                    cdf1.select(cdf2["id"]).collect()
+
+    def test_resolve_df_star(self):
+        # `cdf["*"]` is an UnresolvedDataFrameStar carrying cdf's plan id.
+        # The analyzer expands it to the output of the matched plan node.
+        # This works in both Classic and Connect, in both Connect modes.
+        query = "SELECT 'Books' AS c, 100 AS v UNION ALL SELECT 'Electronics' AS c, 200 AS v"
+        expected = [("Books", 100), ("Electronics", 200)]
+
+        # Classic: succeeds.
+        sdf = self.spark.sql(query)
+        srows = sdf.select(sdf["*"]).collect()
+        self.assertEqual(sorted((r.c, r.v) for r in srows), expected)
+
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                cdf = self.connect.sql(query)
+                rows = cdf.select(cdf["*"]).collect()
+                self.assertEqual(sorted((r.c, r.v) for r in rows), expected)
+
+    def test_resolve_self_join_withcolumnrenamed(self):
+        # Documented example from ColumnResolutionHelper.scala (adjusted to
+        # produce one row per id rather than a 10x10 cross match):
+        #
+        #   df1 = spark.range(10).withColumn("a", sf.col("id"))
+        #   df2 = df1.withColumnRenamed("a", "b")
+        #   df1.join(df2, df1["a"] == df2["b"])
+        #
+        # When resolving the column reference df1.a, the target node with
+        # df1's plan id can be found on both sides of the Join. The
+        # candidate from the right side is filtered out because its `a`
+        # attribute is not in the output of the renaming Project above it.
+        # Disambiguation succeeds.
+        # Classic: succeeds.
+        sdf1 = self.spark.range(10).withColumn("a", SF.col("id"))
+        sdf2 = sdf1.withColumnRenamed("a", "b")
+        srows = sdf1.join(sdf2, sdf1["a"] == sdf2["b"]).select(sdf1["a"], sdf2["b"]).collect()
+        self.assertEqual(len(srows), 10)
+
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                cdf1 = self.connect.range(10).withColumn("a", CF.col("id"))
+                cdf2 = cdf1.withColumnRenamed("a", "b")
+                rows = (
+                    cdf1.join(cdf2, cdf1["a"] == cdf2["b"]).select(cdf1["a"], cdf2["b"]).collect()
+                )
+                self.assertEqual(len(rows), 10)
+
+    def test_resolve_sort_missing_attr_recovery(self):
+        # Documented example from ColumnResolutionHelper.scala:
+        #
+        #   df = spark.range(10).withColumn("v", sf.col("id") + 1)
+        #   df.select(df.v).sort(df.id)
+        #
+        # Sort references df.id which is not in the upstream select's
+        # output. The analyzer's resolveExprsAndAddMissingAttrs descends
+        # through the Project, resolves df.id via plan-id at the source,
+        # and adds it back to the upstream projection. This works in both
+        # Classic and Connect, in both Connect modes.
+        # Classic: succeeds.
+        sdf = self.spark.range(10).withColumn("v", SF.col("id") + 1)
+        srows = sdf.select(sdf["v"]).sort(sdf["id"]).collect()
+        self.assertEqual(len(srows), 10)
+
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                cdf = self.connect.range(10).withColumn("v", CF.col("id") + 1)
+                rows = cdf.select(cdf["v"]).sort(cdf["id"]).collect()
+                self.assertEqual(len(rows), 10)
 
     # --- Mixed-surface layered DataFrame programs ---------------------------
     #
