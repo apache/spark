@@ -39,6 +39,7 @@ from typing import (
     Union,
     get_args,
     get_origin,
+    BinaryIO,
 )
 
 T = TypeVar("T")
@@ -58,7 +59,6 @@ from pyspark.util import PythonEvalType
 from pyspark.serializers import (
     write_int,
     write_long,
-    read_int,
     SpecialLengths,
     CPickleSerializer,
     BatchedSerializer,
@@ -120,6 +120,10 @@ from pyspark.worker_util import (
     Conf,
 )
 from pyspark.logger.worker_io import capture_outputs
+from pyspark.messages import (
+    SparkMessageReceiver,
+    SparkSocketMessageReceiver,
+)
 
 
 class RunnerConf(Conf):
@@ -3574,11 +3578,20 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     return func, None, ser, ser
 
 
-@with_faulthandler
-def main(infile, outfile):
+def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
+    """
+    This function is the main processing function for worker.py.
+    It receives messages from the JVM, processes the data, and sends back results.
+    This method goes through three phases:
+
+    Initialization -> Processing -> Finish/Cleanup
+    """
     try:
         boot_time = time.time()
-        init_info = WorkerInitInfo.from_stream(infile)
+        # Initialization
+        init_message = message_receiver.get_init_message()
+        init_info = WorkerInitInfo.from_stream(init_message)
+
         start_faulthandler_periodic_traceback()
         check_python_version(init_info.python_version)
 
@@ -3602,6 +3615,7 @@ def main(infile, outfile):
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
         if eval_type == PythonEvalType.NON_UDF:
+            assert isinstance(init_info.udf_info, (bytes, memoryview))
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
         elif eval_type in (
             PythonEvalType.SQL_TABLE_UDF,
@@ -3618,8 +3632,13 @@ def main(infile, outfile):
 
         init_time = time.time()
 
+        # Processing
+
+        # Fetch the input data stream
+        input_data_stream = message_receiver.get_data_stream()
+
         def process():
-            iterator = deserializer.load_stream(infile)
+            iterator = deserializer.load_stream(input_data_stream)
             out_iter = func(init_info.split_index, iterator)
             try:
                 serializer.dump_stream(out_iter, outfile)
@@ -3635,6 +3654,7 @@ def main(infile, outfile):
                 process()
         processing_time_ms = int(1000 * (time.time() - processing_start_time))
 
+        # Cleanup
         # Reset task context to None. This is a guard code to avoid residual context when worker
         # reuse.
         TaskContext._setTaskContext(None)
@@ -3651,13 +3671,24 @@ def main(infile, outfile):
     write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
     send_accumulator_updates(outfile)
 
-    # check end of stream
-    if read_int(infile) == SpecialLengths.END_OF_STREAM:
+    # Check end of stream — raises if the finish signal is not received correctly.
+    # Note: this call might fail due to other reasons (e.g. channel broke)
+    # which will terminate the worker process.
+    try:
+        message_receiver.get_finish_signal_from_stream()
         write_int(SpecialLengths.END_OF_STREAM, outfile)
-    else:
-        # write a different value to tell JVM to not reuse this worker
+    except AssertionError:
+        # Write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
+
+
+@with_faulthandler
+def main(infile, outfile):
+    # Instantiate socket message readers for executing the UDF
+    socket_reader = SparkSocketMessageReceiver(infile)
+
+    invoke_udf(socket_reader, outfile)
 
 
 if __name__ == "__main__":
