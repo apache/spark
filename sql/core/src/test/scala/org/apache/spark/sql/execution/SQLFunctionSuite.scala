@@ -359,4 +359,79 @@ class SQLFunctionSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-52719: scalar SQL UDF as TVF argument") {
+    withUserDefinedFunction("scalar_udf" -> false, "table_func" -> false) {
+      sql("CREATE FUNCTION scalar_udf(x INT) RETURNS INT RETURN x + 1")
+      sql(
+        """CREATE FUNCTION table_func(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x
+          |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM table_func(scalar_udf(1))"), Row(2))
+    }
+  }
+
+  test("SPARK-52719: table-valued SQL function in TVF argument is still rejected") {
+    withUserDefinedFunction("tvf_inner" -> false, "tvf_outer" -> false) {
+      sql(
+        """CREATE FUNCTION tvf_inner(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x
+          |""".stripMargin)
+      sql(
+        """CREATE FUNCTION tvf_outer(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x
+          |""".stripMargin)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM tvf_outer(tvf_inner(1))").collect()
+        },
+        condition = "NOT_A_SCALAR_FUNCTION",
+        parameters = Map(
+          "functionName" -> "`spark_catalog`.`default`.`tvf_inner`"),
+        context = ExpectedContext(
+          fragment = "tvf_inner(1)",
+          start = 24,
+          stop = 35)
+      )
+    }
+  }
+
+  test("SPARK-52719: nested scalar UDFs in TVF argument") {
+    withUserDefinedFunction("add_one" -> false, "tvf" -> false) {
+      sql("CREATE FUNCTION add_one(x INT) RETURNS INT RETURN x + 1")
+      sql(
+        """CREATE FUNCTION tvf(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x
+          |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM tvf(add_one(add_one(1)))"), Row(3))
+    }
+  }
+
+  test("SPARK-52719: scalar UDF mixed with literals in TVF arguments") {
+    withUserDefinedFunction("add_one" -> false, "multi_tvf" -> false) {
+      sql("CREATE FUNCTION add_one(x INT) RETURNS INT RETURN x + 1")
+      sql(
+        """CREATE FUNCTION multi_tvf(x INT, y INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x + y
+          |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM multi_tvf(add_one(3), 10)"), Row(14))
+    }
+  }
+
+  test("SPARK-52719: scalar UDF returning NULL in TVF argument") {
+    withUserDefinedFunction("null_udf" -> false, "tvf" -> false) {
+      sql("CREATE FUNCTION null_udf(x INT) RETURNS INT RETURN CAST(NULL AS INT)")
+      sql(
+        """CREATE FUNCTION tvf(x INT)
+          |RETURNS TABLE(a INT)
+          |RETURN SELECT x
+          |""".stripMargin)
+      checkAnswer(sql("SELECT * FROM tvf(null_udf(1))"), Row(null))
+    }
+  }
 }

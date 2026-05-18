@@ -2859,6 +2859,10 @@ class Analyzer(
           j.copy(left = newLeft, right = newRight)
         }
 
+      // Allow scalar SQL UDFs in SQL table function inputs. They will be resolved
+      // when ResolveSQLTableFunctions expands the table function via executeSameContext.
+      case f: SQLTableFunction if hasSQLFunctionExpression(f.expressions) => f
+
       case o: LogicalPlan if o.resolved && hasSQLFunctionExpression(o.expressions) =>
         o.transformExpressionsWithPruning(_.containsPattern(SQL_FUNCTION_EXPRESSION)) {
           case f: SQLFunctionExpression =>
