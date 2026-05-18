@@ -2535,9 +2535,9 @@ class ParametersSuite extends SharedSparkSession {
   // SPARK-46625: INSERT INTO REPLACE WHERE goes through `OverwriteByExpression`, whose `table`
   // slot is typed `NamedRelation`. `PlanWithUnresolvedIdentifier` extends `NamedRelation` so the
   // placeholder sits in the slot directly. Verify on the parsed plan that the placeholder lives
-  // in `OverwriteByExpression.table` rather than wrapping the whole command — running the
+  // in `OverwriteByExpression.table` rather than wrapping the whole command -- running the
   // analyzer fully would require a v2 catalog.
-  test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... — parser") {
+  test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
     // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
@@ -2550,7 +2550,7 @@ class ParametersSuite extends SharedSparkSession {
       s"Expected OverwriteByExpression.table to be PlanWithUnresolvedIdentifier, " +
         s"got ${overwrite.table.getClass.getSimpleName}:\n$parsedPlan")
     // After CTESubstitution runs, the CTE defs should land on the command's children (because
-    // OverwriteByExpression is a CTEInChildren) — never as `WithCTE(OverwriteByExpression, _)`.
+    // OverwriteByExpression is a CTEInChildren) -- never as `WithCTE(OverwriteByExpression, _)`.
     val substituted = CTESubstitution.apply(parsedPlan)
     substituted.foreach {
       case WithCTE(_: CTEInChildren, _) =>

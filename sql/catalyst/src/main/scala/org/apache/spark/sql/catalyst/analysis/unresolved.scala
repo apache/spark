@@ -65,7 +65,7 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  *
  * Extends `CTEInChildren` so when the placeholder wraps an entire CTEInChildren command (e.g.
  * `CacheTableAsSelect`), `CTESubstitution.withCTEDefs` pushes the surrounding `WithCTE` into the
- * placeholder's children at substitution time — the cteDefs land in the materialized command's
+ * placeholder's children at substitution time -- the cteDefs land in the materialized command's
  * children by construction, with no post-hoc collapse required.
  */
 case class PlanWithUnresolvedIdentifier(
