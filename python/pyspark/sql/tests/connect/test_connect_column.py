@@ -1134,18 +1134,18 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
 
         # Connect strict: same root cause, different error class.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df = self.connect.sql("SELECT 1 AS c")
+            cdf = self.connect.sql("SELECT 1 AS c")
             with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df.withColumn("c", CF.col("c").cast("string")).withColumn(
+                cdf.withColumn("c", CF.col("c").cast("string")).withColumn(
                     "c", CF.col("c").cast("int")
-                ).select(df["c"]).collect()
+                ).select(cdf["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.sql("SELECT 1 AS c")
-            df.withColumn("c", CF.col("c").cast("string")).withColumn(
+            cdf = self.connect.sql("SELECT 1 AS c")
+            cdf.withColumn("c", CF.col("c").cast("string")).withColumn(
                 "c", CF.col("c").cast("int")
-            ).select(df["c"]).collect()
+            ).select(cdf["c"]).collect()
 
     def test_resolve_after_select_alias_shadow(self):
         # Same shadowing shape as withColumn but expressed through a select
@@ -1157,18 +1157,18 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
 
         # Connect strict: fails.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df = self.connect.sql("SELECT 1 AS c")
+            cdf = self.connect.sql("SELECT 1 AS c")
             with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df.select(df["c"].cast("string").alias("c")).select(df["c"]).collect()
+                cdf.select(cdf["c"].cast("string").alias("c")).select(cdf["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.sql("SELECT 1 AS c")
-            df.select(df["c"].cast("string").alias("c")).select(df["c"]).collect()
+            cdf = self.connect.sql("SELECT 1 AS c")
+            cdf.select(cdf["c"].cast("string").alias("c")).select(cdf["c"]).collect()
 
     def test_resolve_after_withcolumnrenamed(self):
         # withColumnRenamed drops the original `c` attribute and projects it
-        # as `c2`. The tagged df["c"] cannot resolve under any mode because
+        # as `c2`. The tagged cdf["c"] cannot resolve under any mode because
         # neither the original attribute nor a column named `c` is in the
         # current child output.
         # Classic: fails.
@@ -1179,12 +1179,12 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: fails in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 1 AS c")
+                cdf = self.connect.sql("SELECT 1 AS c")
                 with self.assertRaises(AnalysisException):
-                    df.withColumnRenamed("c", "c2").select(df["c"]).collect()
+                    cdf.withColumnRenamed("c", "c2").select(cdf["c"]).collect()
 
     def test_resolve_after_drop(self):
-        # drop("c") removes the column entirely. Tagged df["c"] cannot resolve
+        # drop("c") removes the column entirely. Tagged cdf["c"] cannot resolve
         # under any mode.
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c, 2 AS d")
@@ -1194,9 +1194,9 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: fails in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 1 AS c, 2 AS d")
+                cdf = self.connect.sql("SELECT 1 AS c, 2 AS d")
                 with self.assertRaises(AnalysisException):
-                    df.drop("c").select(df["c"]).collect()
+                    cdf.drop("c").select(cdf["c"]).collect()
 
     def test_resolve_through_filter(self):
         # filter is a pass-through operator: the child Project's attributes
@@ -1212,8 +1212,8 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: succeeds in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
-                rows = df.filter(df["c"] > 0).select(df["c"]).collect()
+                cdf = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+                rows = cdf.filter(cdf["c"] > 0).select(cdf["c"]).collect()
                 self.assertEqual(sorted(r.c for r in rows), expected)
 
     def test_resolve_through_sort(self):
@@ -1228,8 +1228,8 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: succeeds in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 1 AS c")
-                rows = df.sort(df["c"]).select(df["c"]).collect()
+                cdf = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 1 AS c")
+                rows = cdf.sort(cdf["c"]).select(cdf["c"]).collect()
                 self.assertEqual([r.c for r in rows], expected)
 
     def test_resolve_through_distinct(self):
@@ -1245,8 +1245,8 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: succeeds in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c")
-                rows = df.distinct().select(df["c"]).collect()
+                cdf = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c")
+                rows = cdf.distinct().select(cdf["c"]).collect()
                 self.assertEqual([r.c for r in rows], expected)
 
     def test_resolve_after_groupby_count(self):
@@ -1264,13 +1264,13 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: succeeds in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql(query)
-                rows = df.groupBy("c").count().select(df["c"]).collect()
+                cdf = self.connect.sql(query)
+                rows = cdf.groupBy("c").count().select(cdf["c"]).collect()
                 self.assertEqual(sorted(r.c for r in rows), expected)
 
     def test_resolve_after_agg_alias_shadow(self):
         # An aggregate output named `c` via alias() collides by name with
-        # the source `c`. The tagged df["c"] still references the source
+        # the source `c`. The tagged cdf["c"] still references the source
         # attribute that has been aggregated away.
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS x")
@@ -1279,14 +1279,14 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
 
         # Connect strict: fails.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df = self.connect.sql("SELECT 1 AS x")
+            cdf = self.connect.sql("SELECT 1 AS x")
             with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df.groupBy().agg(CF.sum("x").alias("c")).select(df["c"]).collect()
+                cdf.groupBy().agg(CF.sum("x").alias("c")).select(cdf["c"]).collect()
 
         # Connect lenient: succeeds via name-based fallback.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.sql("SELECT 1 AS x")
-            df.groupBy().agg(CF.sum("x").alias("c")).select(df["c"]).collect()
+            cdf = self.connect.sql("SELECT 1 AS x")
+            cdf.groupBy().agg(CF.sum("x").alias("c")).select(cdf["c"]).collect()
 
     def test_resolve_after_pivot(self):
         # pivot preserves the grouping key's attribute id in both Classic
@@ -1302,8 +1302,8 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: succeeds in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql(query)
-                rows = df.groupBy("c").pivot("k").sum("v").select(df["c"]).collect()
+                cdf = self.connect.sql(query)
+                rows = cdf.groupBy("c").pivot("k").sum("v").select(cdf["c"]).collect()
                 self.assertEqual(sorted(r.c for r in rows), expected)
 
     def test_resolve_after_union(self):
@@ -1321,10 +1321,10 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: fails in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df1 = self.connect.sql("SELECT 1 AS c")
-                df2 = self.connect.sql("SELECT 2 AS c")
+                cdf1 = self.connect.sql("SELECT 1 AS c")
+                cdf2 = self.connect.sql("SELECT 2 AS c")
                 with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                    df1.union(df2).select(df1["c"]).collect()
+                    cdf1.union(cdf2).select(cdf1["c"]).collect()
 
     def test_resolve_after_intersect(self):
         # intersect, like union, emits new attribute ids. Classic resolves
@@ -1342,14 +1342,14 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: succeeds in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df1 = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
-                df2 = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
-                rows = df1.intersect(df2).select(df1["c"]).collect()
+                cdf1 = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+                cdf2 = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
+                rows = cdf1.intersect(cdf2).select(cdf1["c"]).collect()
                 self.assertEqual([r.c for r in rows], expected)
 
     def test_resolve_self_join_alias(self):
         # In a self-join, both sides originate from the same plan-id-tagged
-        # ancestor. The tagged df["c"] is ambiguous because two output
+        # ancestor. The tagged cdf["c"] is ambiguous because two output
         # attributes match by name.
         # Classic: fails (ambiguous reference).
         sdf = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
@@ -1360,10 +1360,10 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # Connect: fails in both modes.
         for strict in (True, False):
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
-                a, b = df.alias("a"), df.alias("b")
+                cdf = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+                a, b = cdf.alias("a"), cdf.alias("b")
                 with self.assertRaises(AnalysisException):
-                    a.join(b, a["c"] == b["c"]).select(df["c"]).collect()
+                    a.join(b, a["c"] == b["c"]).select(cdf["c"]).collect()
 
     def test_resolve_after_subquery_view(self):
         # Persisting the original DataFrame as a temp view and reading it
@@ -1387,10 +1387,10 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         for strict in (True, False):
             view = f"v_{uuid.uuid4().hex}"
             with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
-                df = self.connect.sql("SELECT 1 AS c")
-                df.createOrReplaceTempView(view)
+                cdf = self.connect.sql("SELECT 1 AS c")
+                cdf.createOrReplaceTempView(view)
                 try:
-                    rows = self.connect.table(view).select(df["c"]).collect()
+                    rows = self.connect.table(view).select(cdf["c"]).collect()
                     self.assertEqual([r.c for r in rows], expected)
                 finally:
                     self.connect.sql(f"DROP VIEW IF EXISTS {view}")
@@ -1401,7 +1401,7 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
     # (for SQL EXISTS/IN), window functions, cube aggregations, UDFs and
     # struct field access - into 4-5 layer pipelines. Each program builds
     # the layered base entirely through the DataFrame API, then layers a
-    # shadowing operation on top with a tagged ``df["c"]`` reference at the
+    # shadowing operation on top with a tagged ``cdf["c"]`` reference at the
     # outermost select. The goal is to catch regressions in plan-id
     # propagation across Connect's analyzer rules that single-operator
     # tests miss when rules interact.
@@ -1479,12 +1479,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # access -> cube aggregation -> window NTILE. Then withColumn
         # shadow + tagged select.
         from pyspark.sql.connect.window import Window as CWindow
-        from pyspark.sql.types import (
-            IntegerType,
-            StringType,
-            StructField,
-            StructType,
-        )
         from pyspark.sql.window import Window as SWindow
 
         events_schema = StructType(
@@ -1581,7 +1575,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # per-partition max window -> UDF wrap. Then withColumn shadow +
         # tagged select.
         from pyspark.sql.connect.window import Window as CWindow
-        from pyspark.sql.types import IntegerType
         from pyspark.sql.window import Window as SWindow
 
         data = [
