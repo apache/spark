@@ -83,13 +83,15 @@ case class PlanWithUnresolvedIdentifier(
   override def name: String = identifierExpr.sql
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    // `CTESubstitution.withCTEDefs` reaches this override only when the placeholder is the
-    // `firstSubstituted` root of a `WITH ... <command>` subtree, which happens only via the
-    // two-arg `withIdentClause(ctx, otherPlans, builder)` form -- and that form is only used
-    // for wrap-the-whole-command callers (currently just `CacheTableAsSelect`), which always
-    // pass a non-empty `otherPlans`. A `children.isEmpty` call here would mean the placeholder
-    // is wrapping nothing, and falling back to `WithCTE(this, cteDefs)` would re-introduce the
-    // structurally invalid `WithCTE(<command>, _)` shape this PR is eliminating.
+    // `CTESubstitution.withCTEDefs` invokes this override only when the placeholder is the
+    // substituted root of a `WITH ... <command>` subtree -- i.e. when the parse tree has the
+    // shape `UnresolvedWith(this, _)`. Under the current grammar, `WITH` only precedes
+    // `query` or `dmlStatementNoWith`, and the parser places the placeholder inside the
+    // command's identifier slot rather than at that root, so this path is not reached in
+    // practice. The override remains as a safety net: if it does fire, `children` must be
+    // non-empty so `WithCTE` can be pushed inside the wrapped command. Falling back to
+    // `WithCTE(this, cteDefs)` with empty children would re-introduce the structurally
+    // invalid `WithCTE(<command>, _)` shape this placement is designed to avoid.
     assert(children.nonEmpty,
       "PlanWithUnresolvedIdentifier.withCTEDefs requires an inner plan to wrap; " +
         "callers using the single-arg withIdentClause form must place the placeholder in a " +

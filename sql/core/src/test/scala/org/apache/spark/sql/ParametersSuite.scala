@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, OverwriteByExpression, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -2584,5 +2584,29 @@ class ParametersSuite extends SharedSparkSession {
       fail(s"Expected OverwriteByExpression in bound plan:\n$bound"))
     assert(!boundOverwrite.table.containsPattern(PARAMETER),
       s"Expected :tname inside OverwriteByExpression.table to be bound, got:\n$boundOverwrite")
+  }
+
+  // SPARK-46625: RTAS mirrors CTAS -- the placeholder goes into `ReplaceTableAsSelect.name`
+  // at parse time. Verify on the parsed plan that the placeholder lives in that slot and that
+  // no `WithCTE(CTEInChildren, _)` shape survives `CTESubstitution`. Running RTAS through full
+  // analysis would require a v2 catalog, so this is a parser-level test.
+  test("SPARK-46625: REPLACE TABLE IDENTIFIER(...) AS WITH ... SELECT ... parser") {
+    // Use a non-literal-string expression so `withIdentClause` produces
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedIdentifier`.
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """REPLACE TABLE IDENTIFIER('some' || '_table') USING PARQUET AS
+        |WITH transformation AS (SELECT 5 AS a)
+        |SELECT * FROM transformation""".stripMargin)
+    val rtas = parsedPlan.collectFirst { case r: ReplaceTableAsSelect => r }.getOrElse(
+      fail(s"Expected ReplaceTableAsSelect in parsed plan:\n$parsedPlan"))
+    assert(rtas.name.isInstanceOf[PlanWithUnresolvedIdentifier],
+      s"Expected ReplaceTableAsSelect.name to be PlanWithUnresolvedIdentifier, " +
+        s"got ${rtas.name.getClass.getSimpleName}:\n$parsedPlan")
+    val substituted = CTESubstitution.apply(parsedPlan)
+    substituted.foreach {
+      case WithCTE(_: CTEInChildren, _) =>
+        fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
+      case _ =>
+    }
   }
 }
