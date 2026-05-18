@@ -356,10 +356,10 @@ message InitResponse {
 // is the canonical end-of-chunking signal; the worker MUST NOT send
 // [[InitResponse]] before receiving it.
 //
-// When [[UdfPayload.payload_size]] is set on [[Init.udf]], receivers
-// MAY validate that the total assembled payload (inline
-// [[UdfPayload.payload]] bytes plus all chunk bytes) matches it; a
-// mismatch is a protocol error.
+// Validation: when [[UdfPayload.payload_size]] is set, receivers MUST
+// verify the total assembled length matches; when
+// [[UdfPayload.payload_crc32]] is set, receivers MUST verify the CRC
+// over the assembled bytes. Either mismatch is a [[ProtocolError]].
 message PayloadChunk {
     // (Required, non-empty.) Bytes appended to the [[Init.udf]]
     // payload.
@@ -442,9 +442,10 @@ message Finish {}
 //   - [[HeartbeatResponse.metrics]]: worker-global metrics aggregated across
 //     all sessions (e.g. total rows processed, memory usage). Emitted
 //     periodically via the [[Manage]] RPC.
-//   - Real-time per-execution metrics (e.g. incremental progress during a
-//     long-running UDF) are not yet defined. They may be introduced as an
-//     optional message in a future revision without changing this contract.
+//   - Real-time / dynamic per-execution metrics (e.g. incremental progress
+//     during a long-running UDF) are not yet defined. They will be
+//     introduced as a separate streaming message in a future revision
+//     without changing this contract. TODO(SPARK-56922).
 message FinishResponse {
     // Per-execution metrics accumulated over the session. Free-form;
     // names are worker-defined.
@@ -604,6 +605,15 @@ message UdfPayload {
     // (Optional) Total payload size in bytes. Useful when chunked
     // streaming is used so the worker can pre-allocate buffers.
     optional int64 payload_size = 3;
+
+    // (Optional) CRC32 checksum (IEEE 802.3 polynomial, zlib-compatible)
+    // of the assembled [[payload]] bytes. When set, the worker MUST
+    // recompute the CRC over the assembled payload (inline +
+    // [[PayloadChunk.data]] bytes in arrival order) and reject the
+    // session as a [[ProtocolError]] on mismatch. Strongly recommended
+    // when the payload is delivered via [[PayloadChunk]], where the
+    // assembly spans multiple RPCs.
+    optional uint32 payload_crc32 = 6;
 
     // (Optional) Human-readable name for diagnostics and metrics.
     optional string name = 4;

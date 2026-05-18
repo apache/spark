@@ -510,10 +510,14 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
                 completeRequestStream()
                 done.countDown()
 
-              case _ =>
+              case unexpected =>
+                throw new IllegalStateException(
+                  s"unexpected control response: $unexpected")
             }
 
-          case _ =>
+          case unexpected =>
+            throw new IllegalStateException(
+              s"unexpected response type: $unexpected")
         }
       }
 
@@ -722,12 +726,17 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
         case UdfResponse.ResponseCase.CONTROL =>
           val c = r.getControl
           c.getControlCase match {
+            case UdfControlResponse.ControlCase.INIT => // InitResponse: data phase can proceed
             case UdfControlResponse.ControlCase.FINISH =>
               completeRequestStream()
               doneLatch.countDown()
-            case _ =>
+            case unexpected =>
+              throw new IllegalStateException(
+                s"unexpected control response: $unexpected")
           }
-        case _ =>
+        case unexpected =>
+          throw new IllegalStateException(
+            s"unexpected response type: $unexpected")
       }
       override def onError(t: Throwable): Unit = {
         streamErr = Some(t)
