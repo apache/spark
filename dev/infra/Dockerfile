@@ -149,6 +149,9 @@ RUN python3.13 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PI
     python3.13 -m pip install torcheval && \
     python3.13 -m pip cache purge
 
+# Install uv for lock file generation
+RUN python3.11 -m pip install uv
+
 # Remove unused installation packages to free up disk space
 RUN apt-get remove --purge -y 'humanity-icon-theme' 'nodejs-doc'
 RUN apt-get autoremove --purge -y

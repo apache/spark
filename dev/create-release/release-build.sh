@@ -808,6 +808,9 @@ if [[ "$1" == "package" ]]; then
 
   rm -rf spark-$SPARK_VERSION-bin-*/
 
+  echo "Generating pip lock files"
+  $SPARK_HOME/dev/generate-lock-files.sh --python-version 3.11 --platform linux
+
   if ! is_dry_run; then
     svn co --depth=empty $RELEASE_STAGING_LOCATION svn-spark
     rm -rf "svn-spark/${DEST_DIR_NAME}-bin"
@@ -817,6 +820,8 @@ if [[ "$1" == "package" ]]; then
     cp spark-* "svn-spark/${DEST_DIR_NAME}-bin/"
     cp pyspark* "svn-spark/${DEST_DIR_NAME}-bin/"
     cp SparkR* "svn-spark/${DEST_DIR_NAME}-bin/"
+    cp "$SPARK_HOME/dev/lock-files/"*.lock "$SPARK_HOME/dev/lock-files/"*.toml \
+      "svn-spark/${DEST_DIR_NAME}-bin/"
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark

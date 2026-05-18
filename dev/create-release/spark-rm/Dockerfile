@@ -71,6 +71,9 @@ RUN python3.10 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13'
 RUN ln -sf "$(which python3.10)" "/usr/local/bin/python" && \
     ln -sf "$(which python3.10)" "/usr/local/bin/python3"
 
+# Install uv for lock file generation
+RUN python3.10 -m pip install uv
+
 # Create user for release manager
 ARG UID
 RUN useradd -m -s /bin/bash -p spark-rm -u $UID spark-rm
