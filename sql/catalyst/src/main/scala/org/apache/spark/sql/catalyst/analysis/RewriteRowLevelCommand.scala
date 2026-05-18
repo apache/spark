@@ -91,9 +91,9 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       relation: DataSourceV2Relation,
       operation: SupportsDelta): Seq[AttributeReference] = {
 
-    val rowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+    val rowIdAttrs = V2ExpressionUtils.resolveRefs[NamedExpression](
       operation.rowId.toImmutableArraySeq,
-      relation)
+      relation).map(_.toAttribute.asInstanceOf[AttributeReference])
 
     val nullableRowIdAttrs = rowIdAttrs.filter(_.nullable)
     if (nullableRowIdAttrs.nonEmpty) {

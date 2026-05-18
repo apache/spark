@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.expressions._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class V2ExpressionUtilsSuite extends SparkFunSuite {
 
@@ -36,5 +36,46 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
         LocalRelation.apply(AttributeReference("a", StringType)()))
     }
     assert(exc.message.contains("v2Fun(a) ASC NULLS FIRST is not currently supported"))
+  }
+
+  test("resolveRefs[NamedExpression] handles nested field references") {
+    val structType = StructType(Seq(StructField("inner", IntegerType, nullable = false)))
+    val structAttr = AttributeReference("outer", structType, nullable = false)()
+    val plan = LocalRelation(structAttr)
+    val nestedRef = FieldReference(Seq("outer", "inner"))
+
+    // A nested reference resolves to an Alias(GetStructField(...)), not an AttributeReference,
+    // so casting the result to AttributeReference fails.
+    intercept[ClassCastException] {
+      V2ExpressionUtils.resolveRefs[AttributeReference](Seq(nestedRef), plan)
+    }
+
+    // Widening the type parameter to NamedExpression preserves both flat and nested refs,
+    // and toAttribute flattens the Alias back to an AttributeReference of the inner type.
+    val resolved = V2ExpressionUtils.resolveRefs[NamedExpression](Seq(nestedRef), plan)
+    assert(resolved.size == 1)
+    resolved.head match {
+      case Alias(GetStructField(child, 0, _), name) =>
+        assert(child == structAttr)
+        assert(name == "inner")
+      case other =>
+        fail(s"expected Alias(GetStructField(...), \"inner\"), got: $other")
+    }
+
+    val flat = resolved.map(_.toAttribute)
+    assert(flat.size == 1)
+    assert(flat.head.name == "inner")
+    assert(flat.head.dataType == IntegerType)
+    assert(!flat.head.nullable)
+  }
+
+  test("resolveRefs[NamedExpression] continues to handle flat references") {
+    val intAttr = AttributeReference("pk", IntegerType, nullable = false)()
+    val plan = LocalRelation(intAttr)
+    val flatRef = FieldReference("pk")
+
+    val resolved = V2ExpressionUtils.resolveRefs[NamedExpression](Seq(flatRef), plan)
+    assert(resolved == Seq(intAttr))
+    assert(resolved.map(_.toAttribute) == Seq(intAttr))
   }
 }

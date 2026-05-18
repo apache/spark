@@ -495,9 +495,9 @@ case class WriteDelta(
 
   // validates row ID projection output is compatible with row ID attributes
   private def rowIdAttrsResolved: Boolean = {
-    val outRowIdAttrs = V2ExpressionUtils.resolveRefs[AttributeReference](
+    val outRowIdAttrs = V2ExpressionUtils.resolveRefs[NamedExpression](
       operation.rowId.toImmutableArraySeq,
-      originalTable)
+      originalTable).map(_.toAttribute)
     val inRowIdAttrs = DataTypeUtils.toAttributes(projections.rowIdProjection.schema)
     areCompatible(inRowIdAttrs, outRowIdAttrs)
   }
