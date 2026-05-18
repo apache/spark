@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 case class TimestampLTZNanosType(precision: Int) extends DatetimeType {
 
   if (precision < TimestampLTZNanosType.MIN_PRECISION ||
-      precision > TimestampLTZNanosType.MAX_PRECISION) {
+    precision > TimestampLTZNanosType.MAX_PRECISION) {
     throw DataTypeErrors.unsupportedTimestampLtzPrecisionError(
       precision,
       TimestampLTZNanosType.MIN_PRECISION,
@@ -43,8 +43,8 @@ case class TimestampLTZNanosType(precision: Int) extends DatetimeType {
   }
 
   /**
-   * Default size used by Spark for row-size estimation. Values are represented logically as
-   * epoch microseconds (Long, 8 bytes) plus nanoseconds within that micro (Short, 2 bytes).
+   * Default size used by Spark for row-size estimation. Values are represented logically as epoch
+   * microseconds (Long, 8 bytes) plus nanoseconds within that micro (Short, 2 bytes).
    */
   override def defaultSize: Int = 10
 

@@ -21,8 +21,8 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
- * Timestamp without time zone with fractional-second precision in the nanosecond-capable range
- * (7 to 9 decimal digits). Values will use epoch microseconds plus nanoseconds within that
+ * Timestamp without time zone with fractional-second precision in the nanosecond-capable range (7
+ * to 9 decimal digits). Values will use epoch microseconds plus nanoseconds within that
  * microsecond.
  *
  * @param precision
@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.DataTypeErrors
 case class TimestampNTZNanosType(precision: Int) extends DatetimeType {
 
   if (precision < TimestampNTZNanosType.MIN_PRECISION ||
-      precision > TimestampNTZNanosType.MAX_PRECISION) {
+    precision > TimestampNTZNanosType.MAX_PRECISION) {
     throw DataTypeErrors.unsupportedTimestampNtzPrecisionError(
       precision,
       TimestampNTZNanosType.MIN_PRECISION,
@@ -43,8 +43,8 @@ case class TimestampNTZNanosType(precision: Int) extends DatetimeType {
   }
 
   /**
-   * Default size used by Spark for row-size estimation. Values are represented logically as
-   * epoch microseconds (Long, 8 bytes) plus nanoseconds within that micro (Short, 2 bytes).
+   * Default size used by Spark for row-size estimation. Values are represented logically as epoch
+   * microseconds (Long, 8 bytes) plus nanoseconds within that micro (Short, 2 bytes).
    */
   override def defaultSize: Int = 10
 
