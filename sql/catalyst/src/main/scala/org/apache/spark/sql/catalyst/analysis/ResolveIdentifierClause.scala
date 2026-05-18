@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateView, CTEInChildren, InsertIntoStatement, LogicalPlan, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateView, CTEInChildren, CTERelationRef, InsertIntoStatement, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -97,9 +97,26 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
     // `CacheTableAsSelect` whose name is a plain String), `PlanWithUnresolvedIdentifier` still
     // wraps the entire command. When that wrapper is itself inside `WithCTE`, push the CTE
     // defs into the materialized command's children - restoring the invariant
-    // `CTESubstitution.withCTEDefs` enforces at substitution time. SPARK-46625.
+    // `CTESubstitution.withCTEDefs` enforces at substitution time. Skip the push when any
+    // cteDef is referenced from a non-child expression slot of `c` (e.g. `ReplaceData.condition`
+    // produced by `RewriteDeleteFromTable`); in that case the outer `WithCTE` must stay so
+    // those refs remain in scope. SPARK-46625.
     resolved.resolveOperatorsUpWithPruning(_.containsPattern(CTE)) {
-      case WithCTE(c: CTEInChildren, cteDefs) => c.withCTEDefs(cteDefs)
+      case WithCTE(c: CTEInChildren, cteDefs)
+          if !cteDefsRefdInNonChildSlots(c, cteDefs.map(_.id).toSet) =>
+        c.withCTEDefs(cteDefs)
+    }
+  }
+
+  private def cteDefsRefdInNonChildSlots(c: LogicalPlan, cteIds: Set[Long]): Boolean = {
+    c.expressions.exists { e =>
+      e.exists {
+        case sub: SubqueryExpression =>
+          sub.plan.collectFirstWithSubqueries {
+            case ref: CTERelationRef if cteIds.contains(ref.cteId) => ref
+          }.isDefined
+        case _ => false
+      }
     }
   }
 
