@@ -150,7 +150,7 @@ RUN python3.13 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PI
     python3.13 -m pip cache purge
 
 # Install uv for lock file generation
-RUN python3.11 -m pip install uv
+RUN python3.11 -m pip install 'uv==0.11.11'
 
 # Remove unused installation packages to free up disk space
 RUN apt-get remove --purge -y 'humanity-icon-theme' 'nodejs-doc'

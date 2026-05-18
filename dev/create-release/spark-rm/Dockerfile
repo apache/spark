@@ -72,7 +72,7 @@ RUN ln -sf "$(which python3.10)" "/usr/local/bin/python" && \
     ln -sf "$(which python3.10)" "/usr/local/bin/python3"
 
 # Install uv for lock file generation
-RUN python3.10 -m pip install uv
+RUN python3.10 -m pip install 'uv==0.11.11'
 
 # Create user for release manager
 ARG UID

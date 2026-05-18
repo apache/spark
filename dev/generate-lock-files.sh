@@ -43,13 +43,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Map friendly platform names to uv's --python-platform values.
+# Map friendly platform names to uv's --python-platform values and PEP 508 marker expressions.
 case "$PLATFORM" in
-  linux)        UV_PLATFORM="manylinux_2_17_x86_64" ;;
-  linux-arm64)  UV_PLATFORM="manylinux_2_17_aarch64" ;;
-  macos-arm64)  UV_PLATFORM="macosx_11_0_arm64" ;;
-  macos-x86_64) UV_PLATFORM="macosx_10_12_x86_64" ;;
-  *)            UV_PLATFORM="$PLATFORM" ;;  # pass through verbatim
+  linux)
+    UV_PLATFORM="manylinux_2_17_x86_64"
+    UV_ENV_MARKER="sys_platform == 'linux' and platform_machine == 'x86_64'"
+    ;;
+  linux-arm64)
+    UV_PLATFORM="manylinux_2_17_aarch64"
+    UV_ENV_MARKER="sys_platform == 'linux' and platform_machine == 'aarch64'"
+    ;;
+  macos-arm64)
+    UV_PLATFORM="macosx_11_0_arm64"
+    UV_ENV_MARKER="sys_platform == 'darwin' and platform_machine == 'arm64'"
+    ;;
+  macos-x86_64)
+    UV_PLATFORM="macosx_10_12_x86_64"
+    UV_ENV_MARKER="sys_platform == 'darwin' and platform_machine == 'x86_64'"
+    ;;
+  *)
+    UV_PLATFORM="$PLATFORM"
+    UV_ENV_MARKER=""  # pass through verbatim; caller must set manually if needed
+    ;;
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -65,7 +80,6 @@ UV_COMPILE_ARGS=(
   --python-version "$PYTHON_VERSION"
   --python-platform "$UV_PLATFORM"
   --generate-hashes
-  --no-header
   --quiet
 )
 
@@ -105,6 +119,13 @@ _generate_pylock() {
   deps_toml=$(grep -v '^\s*#' "$deps_file" | grep -v '^\s*$' | \
     sed 's/\(.*\)/  "\1",/')
 
+  local env_section=""
+  if [[ -n "$UV_ENV_MARKER" ]]; then
+    env_section="
+[tool.uv]
+environments = [\"${UV_ENV_MARKER}\"]"
+  fi
+
   cat > "$tmp_dir/pyproject.toml" <<TOML
 [project]
 name = "spark-${label}-lock"
@@ -113,9 +134,7 @@ requires-python = ">=${PYTHON_VERSION}"
 dependencies = [
 ${deps_toml}
 ]
-
-[tool.uv]
-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+${env_section}
 TOML
 
   (

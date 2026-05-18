@@ -780,7 +780,7 @@ class PowerIterationClusteringModel(
         """
         Returns the cluster assignments of this model.
         """
-        return self.call("getAssignments").map(lambda x: (PowerIterationClustering.Assignment(*x)))
+        return self.call("getAssignments").map(lambda x: PowerIterationClustering.Assignment(*x))
 
     @classmethod
     @since("1.5.0")

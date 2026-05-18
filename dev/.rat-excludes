@@ -125,6 +125,8 @@ over1k
 over10k
 exported_table/*
 node_modules
+dev/lock-files/*.lock
+dev/lock-files/pylock.*.toml
 spark-events-broken/*
 SqlBaseLexer.tokens
 .*\.explain

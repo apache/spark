@@ -22,6 +22,7 @@
 # cd python/packaging/classic
 # python setup.py sdist
 
+import importlib.util
 import sys
 from setuptools import setup
 import os
@@ -55,6 +56,22 @@ except IOError:
         file=sys.stderr,
     )
     sys.exit(-1)
+try:
+    spec = importlib.util.spec_from_file_location(
+        "minimum_versions", "packaging/minimum_versions.py"
+    )
+    _mv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_mv)
+except (IOError, RuntimeError) as e:
+    print(f"Failed to load minimum_versions: {e}", file=sys.stderr)
+    sys.exit(-1)
+_minimum_pandas_version = _mv.minimum_pandas_version
+_minimum_numpy_version = _mv.minimum_numpy_version
+_minimum_pyarrow_version = _mv.minimum_pyarrow_version
+_minimum_grpc_version = _mv.minimum_grpc_version
+_minimum_googleapis_common_protos_version = _mv.minimum_googleapis_common_protos_version
+_minimum_pyyaml_version = _mv.minimum_pyyaml_version
+_minimum_zstandard_version = _mv.minimum_zstandard_version
 VERSION = __version__  # noqa
 
 # Check and see if we are under the spark path in which case we need to build the symlink farm.
@@ -127,20 +144,6 @@ try:
         move("lib", "lib.back")
         copyfile("packaging/client/setup.py", "setup.py")
         copyfile("packaging/client/setup.cfg", "setup.cfg")
-
-    # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
-    # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
-    # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
-    # Also don't forget to update python/docs/source/getting_started/install.rst,
-    # python/docs/source/tutorial/sql/arrow_pandas.rst,
-    # python/packaging/classic/setup.py, and python/packaging/connect/setup.py
-    _minimum_pandas_version = "2.2.0"
-    _minimum_numpy_version = "1.21"
-    _minimum_pyarrow_version = "18.0.0"
-    _minimum_grpc_version = "1.76.0"
-    _minimum_googleapis_common_protos_version = "1.71.0"
-    _minimum_pyyaml_version = "3.11"
-    _minimum_zstandard_version = "0.25.0"
 
     with open("README.md") as f:
         long_description = f.read()

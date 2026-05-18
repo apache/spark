@@ -101,14 +101,16 @@ class FrameMeltMixin:
         )
         self.assertRaises(
             ValueError,
-            lambda: psdf.melt(
-                id_vars=[(TEN, "A")],
-                value_vars=[(TEN, "B")],
-                var_name=["myV1", "myV2"],
-                value_name="myValname",
-            )
-            .sort_values(["myV1", "myV2", "myValname"])
-            .reset_index(drop=True),
+            lambda: (
+                psdf.melt(
+                    id_vars=[(TEN, "A")],
+                    value_vars=[(TEN, "B")],
+                    var_name=["myV1", "myV2"],
+                    value_name="myValname",
+                )
+                .sort_values(["myV1", "myV2", "myValname"])
+                .reset_index(drop=True)
+            ),
         )
 
         columns.names = ["v0", "v1"]
