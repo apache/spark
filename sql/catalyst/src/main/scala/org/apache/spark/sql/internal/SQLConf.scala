@@ -972,6 +972,7 @@ object SQLConf {
       .doc("When true, Spark may spread rows with NULL equi-join keys across shuffle partitions " +
         "for ordinary shuffled outer joins to reduce shuffle skew.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
