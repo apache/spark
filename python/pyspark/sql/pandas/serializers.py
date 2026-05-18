@@ -298,68 +298,6 @@ class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
         return super().dump_stream(apply_type_coercion(), stream)
 
 
-class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
-    """
-    Serializer for grouped Arrow UDFs.
-
-    Deserializes:
-        ``Iterator[Iterator[pa.RecordBatch]]`` - one inner iterator per group.
-        Each batch contains a single struct column.
-
-    Serializes:
-        ``Iterator[Tuple[Iterator[pa.RecordBatch], pa.DataType]]``
-        Each tuple contains iterator of flattened batches and their Arrow type.
-
-    Used by:
-        - SQL_GROUPED_MAP_ARROW_UDF
-        - SQL_GROUPED_MAP_ARROW_ITER_UDF
-
-    Parameters
-    ----------
-    assign_cols_by_name : bool
-        If True, reorder serialized columns by schema name.
-    """
-
-    def __init__(self, *, assign_cols_by_name):
-        super().__init__()
-        self._assign_cols_by_name = assign_cols_by_name
-
-    def load_stream(self, stream):
-        """
-        Load grouped Arrow record batches from stream.
-        """
-        for batches in ArrowStreamGroupSerializer.load_stream(self, stream):
-            yield batches
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in batches:
-                pass
-
-    def dump_stream(self, iterator, stream):
-        import pyarrow as pa
-
-        # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
-        # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
-        batch_iter = (
-            (batch, arrow_type)
-            for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
-            for batch in batches
-        )
-
-        if self._assign_cols_by_name:
-            batch_iter = (
-                (
-                    pa.RecordBatch.from_arrays(
-                        [batch.column(field.name) for field in arrow_type],
-                        names=[field.name for field in arrow_type],
-                    ),
-                    arrow_type,
-                )
-                for batch, arrow_type in batch_iter
-            )
-
-        super().dump_stream(batch_iter, stream)
-
-
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
