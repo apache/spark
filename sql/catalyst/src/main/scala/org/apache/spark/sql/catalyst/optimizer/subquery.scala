@@ -55,6 +55,64 @@ import org.apache.spark.util.Utils
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
+  private def existenceScalarSubquery(
+      plan: LogicalPlan,
+      hint: Option[HintInfo]): ScalarSubquery = {
+    ScalarSubquery(
+      plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), plan)),
+      hint = hint)
+  }
+
+  private def rewriteSingleColumnNotIn(
+      outerPlan: LogicalPlan,
+      value: Expression,
+      subplan: LogicalPlan,
+      subHint: Option[HintInfo]): LogicalPlan = {
+    val rightKey = subplan.output.head
+    val rightExists = existenceScalarSubquery(subplan, subHint)
+    val rightNullKeyExists =
+      existenceScalarSubquery(Filter(IsNull(rightKey), subplan), subHint)
+
+    // NULL-aware NOT IN has two mutually exclusive result-producing cases:
+    //   1. The right side is empty, so every left row passes.
+    //   2. The right side is non-empty, has no NULL key, the left key is non-null,
+    //      and no equality match exists.
+    val emptyRightBranch = Project(
+      outerPlan.output,
+      Filter(IsNull(rightExists), outerPlan))
+
+    val leftBranch = Filter(
+      And(
+        And(IsNotNull(rightExists), IsNull(rightNullKeyExists)),
+        IsNotNull(value)),
+      outerPlan)
+    val rightBranch = Filter(IsNotNull(rightKey), subplan)
+    val antiJoinBranch = Project(
+      outerPlan.output,
+      Join(
+        leftBranch,
+        rightBranch,
+        LeftAnti,
+        Some(EqualTo(value, rightKey)),
+        JoinHint(None, subHint)))
+
+    Union(Seq(emptyRightBranch, antiJoinBranch))
+  }
+
+  private def isSafeToDuplicateNotInSubquery(subplan: LogicalPlan): Boolean = {
+    // The UNION rewrite evaluates the RHS in multiple places:
+    //   1. whether the RHS is empty,
+    //   2. whether it contains a NULL key, and
+    //   3. the anti-join branch over non-null keys.
+    // Only duplicate plans whose repeated evaluation preserves the original NOT IN semantics.
+    subplan.deterministic && !subplan.exists {
+      // LIMIT / OFFSET are order- or cardinality-sensitive when re-evaluated independently, so
+      // duplicating them across those branches can change which RHS rows each branch observes.
+      case _: GlobalLimit | _: LocalLimit | _: Offset => true
+      case _ => false
+    }
+  }
+
   private def buildJoin(
       outerPlan: LogicalPlan,
       subplan: LogicalPlan,
@@ -149,6 +207,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case Nil => child
         case conditions => Filter(conditions.reduce(And), child)
       }
+      // Avoid nesting Union rewrites, or duplicating other top-level subquery rewrites across the
+      // Union branches, which would repeatedly duplicate the evolving outer plan.
+      val hasSingleTopLevelSubquery = withSubquery.lengthCompare(1) == 0
+      val singleColumnNotInRewriteCandidateCount = withSubquery.count {
+        case Not(InSubquery(values,
+            ListQuery(sub, outerAttrs, _, _, conditions, _))) =>
+          values.length == 1 && values.head.deterministic &&
+            outerAttrs.isEmpty && conditions.isEmpty &&
+            isSafeToDuplicateNotInSubquery(sub)
+        case _ => false
+      }
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
@@ -170,6 +239,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val join = Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
           Project(p.output, join)
+        case (p, Not(InSubquery(values,
+            ListQuery(sub, outerAttrs, _, _, conditions, subHint))))
+            if conf.optimizeTopLevelSingleColumnNotInWithUnion &&
+              hasSingleTopLevelSubquery &&
+              singleColumnNotInRewriteCandidateCount == 1 &&
+              values.length == 1 && values.head.deterministic &&
+              outerAttrs.isEmpty && conditions.isEmpty &&
+              isSafeToDuplicateNotInSubquery(sub) =>
+          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          rewriteSingleColumnNotIn(p, values.head, newSub, subHint)
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
