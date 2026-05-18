@@ -1489,18 +1489,16 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
             finally:
                 self.connect.sql(f"DROP VIEW IF EXISTS {view}")
 
-    # --- Reyden-style layered DataFrame programs ----------------------------
+    # --- Mixed-surface layered DataFrame programs ---------------------------
     #
-    # These tests are influenced by Reyden's golden-file layered-query-tests
-    # (reyden/query-tests/golden-files/layered-query-tests, referenced in
-    # SC-229895), which combine 4-level subquery chains, CTE chains,
-    # window functions, GROUPING SETS, NTILE/RANK, struct field access and
-    # correlated EXISTS/IN in a single query. Each program here builds a
-    # similarly layered base via spark.sql(), then layers DataFrame-API
-    # shadowing operations on top with a tagged ``df["c"]`` reference at the
-    # outermost select. The goal is to catch regressions in plan-id
-    # propagation across Connect's analyzer rules that single-operator
-    # tests miss when rules interact.
+    # These tests combine 4-level subquery chains, CTE chains, window
+    # functions, GROUPING SETS, NTILE/RANK, struct field access and
+    # correlated EXISTS/IN in a single query. Each program builds a deeply
+    # layered base via ``spark.sql()``, then layers DataFrame-API shadowing
+    # operations on top with a tagged ``df["c"]`` reference at the outermost
+    # select. The goal is to catch regressions in plan-id propagation
+    # across Connect's analyzer rules that single-operator tests miss when
+    # rules interact.
 
     def test_layered_subquery_chain_window_having_exists(self):
         # 4-level subquery chain combining windows, HAVING and correlated
