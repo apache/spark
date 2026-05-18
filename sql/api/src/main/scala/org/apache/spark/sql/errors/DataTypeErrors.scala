@@ -275,4 +275,30 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map("precision" -> precision.toString),
       cause = null)
   }
+
+  def unsupportedTimestampNtzPrecisionError(
+      precision: Int,
+      minPrecision: Int,
+      maxPrecision: Int): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
+      messageParameters = Map(
+        "precision" -> precision.toString,
+        "minPrecision" -> minPrecision.toString,
+        "maxPrecision" -> maxPrecision.toString),
+      cause = null)
+  }
+
+  def unsupportedTimestampLtzPrecisionError(
+      precision: Int,
+      minPrecision: Int,
+      maxPrecision: Int): Throwable = {
+    new SparkException(
+      errorClass = "UNSUPPORTED_TIMESTAMP_LTZ_NANOS_PRECISION",
+      messageParameters = Map(
+        "precision" -> precision.toString,
+        "minPrecision" -> minPrecision.toString,
+        "maxPrecision" -> maxPrecision.toString),
+      cause = null)
+  }
 }

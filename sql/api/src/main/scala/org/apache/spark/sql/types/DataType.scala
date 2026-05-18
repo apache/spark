@@ -127,6 +127,8 @@ object DataType {
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
   private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
+  private val TIMESTAMP_LTZ_NANOS_TYPE = """timestamp_ltz\(\s*(\d+)\s*\)""".r
+  private val TIMESTAMP_NTZ_NANOS_TYPE = """timestamp_ntz\(\s*(\d+)\s*\)""".r
   private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
   private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
   private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
@@ -208,7 +210,11 @@ object DataType {
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
       VariantType) ++
-      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)))
+      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)) ++
+      (TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION)
+        .map(TimestampLTZNanosType(_)) ++
+      (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION)
+        .map(TimestampNTZNanosType(_)))
       .map(t => t.typeName -> t)
       .toMap
   }
@@ -233,6 +239,8 @@ object DataType {
       case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) => GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
+      case TIMESTAMP_LTZ_NANOS_TYPE(precision) => TimestampLTZNanosType(precision.toInt)
+      case TIMESTAMP_NTZ_NANOS_TYPE(precision) => TimestampNTZNanosType(precision.toInt)
       case "timestamp_ltz" => TimestampType
       case other =>
         otherTypes.getOrElse(

@@ -255,6 +255,13 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(TimestampNTZType)
   checkDataTypeFromDDL(TimestampNTZType)
 
+  checkDataTypeFromJson(TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION))
+  checkDataTypeFromJson(TimestampLTZNanosType(8))
+  checkDataTypeFromJson(TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION))
+  checkDataTypeFromJson(TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION))
+  checkDataTypeFromJson(TimestampNTZNanosType(8))
+  checkDataTypeFromJson(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+
   checkDataTypeFromJson(StringType)
   checkDataTypeFromDDL(StringType)
 
@@ -403,6 +410,10 @@ class DataTypeSuite extends SparkFunSuite {
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
   checkDefaultSize(TimeType(TimeType.MIN_PRECISION), 8)
   checkDefaultSize(TimeType(TimeType.MAX_PRECISION), 8)
+  checkDefaultSize(TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION), 10)
+  checkDefaultSize(TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION), 10)
+  checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION), 10)
+  checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION), 10)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -1446,6 +1457,82 @@ class DataTypeSuite extends SparkFunSuite {
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'time'", "hint" -> ""))
+  }
+
+  test("SPARK-56876: precisions of nanos-capable TIMESTAMP_LTZ and TIMESTAMP_NTZ types") {
+    TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { p =>
+      assert(TimestampLTZNanosType(p).sql === s"TIMESTAMP_LTZ($p)")
+      assert(TimestampNTZNanosType(p).sql === s"TIMESTAMP_NTZ($p)")
+    }
+
+    Seq(6, 10, Int.MinValue, Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimestampLTZNanosType(p)
+        },
+        condition = "UNSUPPORTED_TIMESTAMP_LTZ_NANOS_PRECISION",
+        parameters = Map(
+          "precision" -> p.toString,
+          "minPrecision" -> "7",
+          "maxPrecision" -> "9"))
+      checkError(
+        exception = intercept[SparkException] {
+          TimestampNTZNanosType(p)
+        },
+        condition = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
+        parameters = Map(
+          "precision" -> p.toString,
+          "minPrecision" -> "7",
+          "maxPrecision" -> "9"))
+    }
+  }
+
+  test("SPARK-56876: parse timestamp with nanosecond precision from JSON") {
+    TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+      assert(DataType.fromJson(s"\"timestamp_ltz($n)\"") === TimestampLTZNanosType(n))
+      assert(DataType.fromJson(s"\"timestamp_ltz( $n)\"") === TimestampLTZNanosType(n))
+      assert(DataType.fromJson(s"\"timestamp_ntz($n)\"") === TimestampNTZNanosType(n))
+      assert(DataType.fromJson(s"\"timestamp_ntz($n )\"") === TimestampNTZNanosType(n))
+    }
+    // JSON round-trip for nanos timestamp types inside struct, array, and map
+    val structWithNanos = StructType(Seq(
+      StructField("ntz", TimestampNTZNanosType(7)),
+      StructField("ltz", TimestampLTZNanosType(8))))
+    assert(DataType.fromJson(structWithNanos.json) === structWithNanos)
+    val arrayOfNanos = ArrayType(TimestampNTZNanosType(9), containsNull = false)
+    assert(DataType.fromJson(arrayOfNanos.json) === arrayOfNanos)
+    val mapOfNanos = MapType(StringType, TimestampNTZNanosType(7), valueContainsNull = true)
+    assert(DataType.fromJson(mapOfNanos.json) === mapOfNanos)
+
+    assert(DataType.fromJson("\"timestamp_ltz\"") === TimestampType)
+    assert(DataType.fromJson("\"timestamp_ntz\"") === TimestampNTZType)
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson("\"timestamp_ltz(6)\"")
+      },
+      condition = "UNSUPPORTED_TIMESTAMP_LTZ_NANOS_PRECISION",
+      parameters = Map(
+        "precision" -> "6",
+        "minPrecision" -> "7",
+        "maxPrecision" -> "9"))
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson("\"timestamp_ntz(0)\"")
+      },
+      condition = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
+      parameters = Map(
+        "precision" -> "0",
+        "minPrecision" -> "7",
+        "maxPrecision" -> "9"))
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson("\"timestamp_ntz(10)\"")
+      },
+      condition = "UNSUPPORTED_TIMESTAMP_NTZ_NANOS_PRECISION",
+      parameters = Map(
+        "precision" -> "10",
+        "minPrecision" -> "7",
+        "maxPrecision" -> "9"))
   }
 
   test("singleton DataType equality after deserialization") {
