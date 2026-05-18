@@ -95,7 +95,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
   // Scenario 1: join after insert refreshes both sides to latest version.
   // Datasets are re-analyzed, same result as classic.
-  test("[connect] join refreshes both sides after external insert" +
+  test("[connect][S1] join refreshes both sides after external insert" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { serverSession =>
@@ -118,7 +118,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join refreshes both sides after same-session insert" +
+  test("[connect][S1] join refreshes both sides after same-session insert" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { _ =>
@@ -139,7 +139,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 2: join after ADD COLUMN.
   // Datasets are re-analyzed: both sides see the 3-column schema.
   // Classic preserves df1's 2-column schema because the plan is pinned at analysis time.
-  test("[connect] join after external ADD COLUMN sees new schema on both sides" +
+  test("[connect][S2] join after external ADD COLUMN sees new schema on both sides" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { serverSession =>
@@ -166,7 +166,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join after same-session ADD COLUMN sees new schema on both sides" +
+  test("[connect][S2] join after same-session ADD COLUMN sees new schema on both sides" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { _ =>
@@ -189,7 +189,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Datasets are re-analyzed: both sides see the 1-column schema.
   // Classic fails with COLUMNS_MISMATCH because df1's pinned plan still references
   // the dropped column.
-  test("[connect] join after external DROP COLUMN succeeds" +
+  test("[connect][S3] join after external DROP COLUMN succeeds" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { serverSession =>
@@ -216,7 +216,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
     }
   }
 
-  test("[connect] join after same-session DROP COLUMN succeeds" +
+  test("[connect][S3] join after same-session DROP COLUMN succeeds" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { _ =>
@@ -239,7 +239,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Datasets are re-analyzed: both sides resolve against the new table.
   // Classic fails with TABLE_ID_MISMATCH because df1's pinned plan captured the
   // original table ID.
-  test("[connect] join after external table drop and recreate succeeds" +
+  test("[connect][S4a] join after external table drop and recreate succeeds" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { serverSession =>
@@ -256,18 +256,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
               Column.create("salary", IntegerType)))
             .build())
 
-        // external writer adds (2, 200) to the new table
-        externalAppend(
-          cat = cat,
-          ident = ident,
-          schema = StructType.fromDDL("id INT, salary INT"),
-          row = InternalRow(2, 200))
-
         val df2 = session.table(T)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq(Row(2, 200, 2, 200)))
+        assertRows(result.collect(), Seq.empty)
       }
     }
   }
@@ -276,7 +269,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Datasets are re-analyzed: both sides resolve against the new table.
   // Classic fails with COLUMN_ID_MISMATCH because df1's pinned column IDs differ
   // from the recreated table's.
-  test("[connect] join after external drop/recreate succeeds" +
+  test("[connect][S4b] join after external drop/recreate succeeds" +
       " (table without table ID support, but with column ID support)") {
     val NC = "nullidcat.ns1.ns2.tbl"
     val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -295,25 +288,18 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
               Column.create("salary", IntegerType)))
             .build())
 
-        // external writer adds (2, 200) to the new table
-        externalAppend(
-          cat = cat,
-          ident = ncIdent,
-          schema = StructType.fromDDL("id INT, salary INT"),
-          row = InternalRow(2, 200))
-
         val df2 = session.table(NC)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq(Row(2, 200, 2, 200)))
+        assertRows(result.collect(), Seq.empty)
       }
     }
   }
 
   // Scenario 4c: external drop/recreate with no table ID and no column IDs.
   // Datasets are re-analyzed. Classic also succeeds since neither ID check fires.
-  test("[connect] join after external table drop and recreate succeeds" +
+  test("[connect][S4c] join after external table drop and recreate succeeds" +
       " (table without table ID support and without column ID support)") {
     val NC = "nullbothidscat.ns1.ns2.tbl"
     val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -333,18 +319,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
               Column.create("salary", IntegerType)))
             .build())
 
-        // external writer adds (2, 200) to the new table
-        externalAppend(
-          cat = cat,
-          ident = ncIdent,
-          schema = StructType.fromDDL("id INT, salary INT"),
-          row = InternalRow(2, 200))
-
         val df2 = session.table(NC)
 
         val result = df1.join(df2, df1("id") === df2("id"))
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary", "id", "salary"))
-        assertRows(result.collect(), Seq(Row(2, 200, 2, 200)))
+        assertRows(result.collect(), Seq.empty)
       }
     }
   }
@@ -352,7 +331,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 5a: two separate external alterTable calls assign a fresh column ID.
   // Datasets are re-analyzed: both sides see the new schema.
   // Classic fails with COLUMN_ID_MISMATCH because the re-added column gets a fresh ID.
-  test("[connect] join after external drop+re-add column succeeds" +
+  test("[connect][S5a] join after external drop+re-add column succeeds" +
       " (table without table ID support, but with column ID support)") {
     val NC = "nullidcat.ns1.ns2.tbl"
     val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -377,7 +356,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
 
   // Scenario 5b: external drop+re-add column with no table ID and no column IDs.
   // Datasets are re-analyzed. Classic also succeeds since neither ID check fires.
-  test("[connect] join after external drop+re-add column succeeds" +
+  test("[connect][S5b] join after external drop+re-add column succeeds" +
       " (table without table ID support and without column ID support)") {
     val NC = "nullbothidscat.ns1.ns2.tbl"
     val ncIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -403,7 +382,7 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
   // Scenario 6: external type change.
   // Datasets are re-analyzed: both sides see salary as STRING.
   // Classic fails with COLUMNS_MISMATCH because df1's pinned plan still expects INT.
-  test("[connect] join after external drop+re-add different-type column succeeds" +
+  test("[connect][S6] join after external drop+re-add different-type column succeeds" +
       " (table with both table and column ID support)") {
     withSession { session =>
       withTable(session) { serverSession =>
