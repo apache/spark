@@ -439,11 +439,11 @@ object ShuffleExchangeExec {
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
       newPartitioning.numPartitions > 1
-    val isNullAwareRoundRobin =
+    val isNullAwareHashPartitioning =
       newPartitioning.isInstanceOf[NullAwareHashPartitioning] &&
         newPartitioning.numPartitions > 1
     val needsDeterministicLocalSort =
-      (isRoundRobin || isNullAwareRoundRobin) && SQLConf.get.sortBeforeRepartition
+      (isRoundRobin || isNullAwareHashPartitioning) && SQLConf.get.sortBeforeRepartition
 
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
       // [SPARK-23207] Have to make sure stateful row-to-partition assignment is deterministic,
@@ -495,7 +495,7 @@ object ShuffleExchangeExec {
       // round-robin function is order sensitive if we don't sort the input.
       // Stateful partition assignment is order-sensitive when it depends on row visitation order.
       val isOrderSensitive =
-        (isRoundRobin || isNullAwareRoundRobin) && !SQLConf.get.sortBeforeRepartition
+        (isRoundRobin || isNullAwareHashPartitioning) && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()

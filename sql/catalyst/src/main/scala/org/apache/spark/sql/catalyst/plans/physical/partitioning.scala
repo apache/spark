@@ -944,6 +944,25 @@ case class RangeShuffleSpec(
   }
 }
 
+private object HashShuffleSpecCompatibility {
+  def isCompatible(
+      leftDistribution: ClusteredDistribution,
+      leftNumPartitions: Int,
+      leftExpressions: Seq[Expression],
+      leftHashKeyPositions: Seq[mutable.BitSet],
+      rightDistribution: ClusteredDistribution,
+      rightNumPartitions: Int,
+      rightExpressions: Seq[Expression],
+      rightHashKeyPositions: Seq[mutable.BitSet]): Boolean = {
+    leftDistribution.clustering.length == rightDistribution.clustering.length &&
+    leftNumPartitions == rightNumPartitions &&
+    leftExpressions.length == rightExpressions.length &&
+    leftHashKeyPositions.zip(rightHashKeyPositions).forall { case (left, right) =>
+      left.intersect(right).nonEmpty
+    }
+  }
+}
+
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
@@ -976,24 +995,26 @@ case class HashShuffleSpec(
       //  3. both partitioning have the same number of expressions
       //  4. each pair of partitioning expression from both sides has overlapping positions in their
       //     corresponding distributions.
-      distribution.clustering.length == otherDistribution.clustering.length &&
-      partitioning.numPartitions == otherPartitioning.numPartitions &&
-      partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = otherHashSpec.hashKeyPositions
-        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
-          left.intersect(right).nonEmpty
-        }
-      }
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherHashSpec.hashKeyPositions)
     case otherNullAwareSpec @ NullAwareHashShuffleSpec(otherPartitioning, otherDistribution)
         if distribution.allowNullKeySpreading && otherDistribution.allowNullKeySpreading =>
-      distribution.clustering.length == otherDistribution.clustering.length &&
-      partitioning.numPartitions == otherPartitioning.numPartitions &&
-      partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = otherNullAwareSpec.hashKeyPositions
-        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
-          left.intersect(right).nonEmpty
-        }
-      }
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherNullAwareSpec.hashKeyPositions)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ =>
@@ -1040,24 +1061,26 @@ case class NullAwareHashShuffleSpec(
     case SinglePartitionShuffleSpec =>
       partitioning.numPartitions == 1
     case otherSpec @ NullAwareHashShuffleSpec(otherPartitioning, otherDistribution) =>
-      distribution.clustering.length == otherDistribution.clustering.length &&
-      partitioning.numPartitions == otherPartitioning.numPartitions &&
-      partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = otherSpec.hashKeyPositions
-        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
-          left.intersect(right).nonEmpty
-        }
-      }
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherSpec.hashKeyPositions)
     case otherHashSpec @ HashShuffleSpec(otherPartitioning, otherDistribution)
         if distribution.allowNullKeySpreading && otherDistribution.allowNullKeySpreading =>
-      distribution.clustering.length == otherDistribution.clustering.length &&
-      partitioning.numPartitions == otherPartitioning.numPartitions &&
-      partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = otherHashSpec.hashKeyPositions
-        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
-          left.intersect(right).nonEmpty
-        }
-      }
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherHashSpec.hashKeyPositions)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ =>
