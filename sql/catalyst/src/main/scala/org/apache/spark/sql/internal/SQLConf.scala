@@ -546,7 +546,7 @@ object SQLConf {
         "UDF construction." +
         "This initial version only works in regular Spark with Spark Connect to follow"
     )
-    .version("4.2.0")
+    .version("4.3.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -556,7 +556,7 @@ object SQLConf {
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .doc("Which transpilers to use for transpiling UDFS. Without the default optimizer " +
       " the first successful result will be the one used.")
-    .version("4.2.0")
+    .version("4.3.0")
     .stringConf
     .createWithDefault("catalyst")
 

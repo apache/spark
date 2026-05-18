@@ -56,7 +56,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader["FPGrowthModel"])
         """
         Returns the frequent itemsets of this model.
         """
-        return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
+        return self.call("getFreqItemsets").map(lambda x: FPGrowth.FreqItemset(x[0], x[1]))
 
     @classmethod
     @since("2.0.0")
