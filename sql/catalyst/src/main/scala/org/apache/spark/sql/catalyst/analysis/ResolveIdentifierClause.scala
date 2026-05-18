@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateView, InsertIntoStatement, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -59,8 +60,8 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
 
   private def apply0(
       plan: LogicalPlan,
-      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan = {
-    val resolved = plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
+      referredTempVars: Option[mutable.ArrayBuffer[Seq[String]]] = None): LogicalPlan =
+    plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(
       UNRESOLVED_IDENTIFIER, PLAN_WITH_UNRESOLVED_IDENTIFIER)) {
       case p: PlanWithUnresolvedIdentifier if p.identifierExpr.resolved && p.childrenResolved =>
 
@@ -85,9 +86,14 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
         if (referredTempVars.isDefined) {
           referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
         }
-        o.withNewTable(executor.execute(p.planBuilder.apply(
-          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
-          .asInstanceOf[NamedRelation])
+        executor.execute(p.planBuilder.apply(
+          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)) match {
+          case nr: NamedRelation => o.withNewTable(nr)
+          case other =>
+            throw SparkException.internalError(
+              "PlanWithUnresolvedIdentifier in OverwriteByExpression.table must materialize " +
+                s"into a NamedRelation, but got: ${other.getClass.getName}")
+        }
       case other =>
         other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {
           case e: ExpressionWithUnresolvedIdentifier if e.identifierExpr.resolved =>
@@ -100,8 +106,6 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
               IdentifierResolution.evalIdentifierExpr(e.identifierExpr), e.otherExprs)
         }
     }
-    resolved
-  }
 
   private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {
     def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {

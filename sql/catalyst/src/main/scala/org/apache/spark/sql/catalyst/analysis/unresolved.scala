@@ -83,13 +83,18 @@ case class PlanWithUnresolvedIdentifier(
   override def name: String = identifierExpr.sql
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
-    if (children.isEmpty) {
-      // No inner plan to wrap; keep the `WithCTE` outside (same shape `CTESubstitution.withCTEDefs`
-      // would have produced if this node weren't `CTEInChildren`).
-      WithCTE(this, cteDefs)
-    } else {
-      withNewChildren(children.map(WithCTE(_, cteDefs)))
-    }
+    // `CTESubstitution.withCTEDefs` reaches this override only when the placeholder is the
+    // `firstSubstituted` root of a `WITH ... <command>` subtree, which happens only via the
+    // two-arg `withIdentClause(ctx, otherPlans, builder)` form -- and that form is only used
+    // for wrap-the-whole-command callers (currently just `CacheTableAsSelect`), which always
+    // pass a non-empty `otherPlans`. A `children.isEmpty` call here would mean the placeholder
+    // is wrapping nothing, and falling back to `WithCTE(this, cteDefs)` would re-introduce the
+    // structurally invalid `WithCTE(<command>, _)` shape this PR is eliminating.
+    assert(children.nonEmpty,
+      "PlanWithUnresolvedIdentifier.withCTEDefs requires an inner plan to wrap; " +
+        "callers using the single-arg withIdentClause form must place the placeholder in a " +
+        "slot that is not the substitution root.")
+    withNewChildren(children.map(WithCTE(_, cteDefs)))
   }
 
   override protected def withNewChildrenInternal(

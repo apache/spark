@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, PlanWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, Limit, OverwriteByExpression, WithCTE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
@@ -2557,5 +2558,31 @@ class ParametersSuite extends SharedSparkSession {
         fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
       case _ =>
     }
+  }
+
+  // SPARK-46625: Parameter inside `IDENTIFIER(:p)` on REPLACE WHERE lives in
+  // `OverwriteByExpression.table`, which is a non-child slot. Verify that
+  // `BindParameters.bind` reaches into the slot via the explicit `OverwriteByExpression`
+  // recursion (parameters.scala) and that the `getDefaultTreePatternBits` override on
+  // `OverwriteByExpression` exposes the PARAMETER bit for pruning. Done at the rule level
+  // because driving REPLACE WHERE through full analysis would require a v2 catalog.
+  test("SPARK-46625: BindParameters recurses into OverwriteByExpression.table") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(:tname) REPLACE WHERE a = 10
+        |SELECT 1 AS a""".stripMargin)
+    val overwrite = parsedPlan.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
+      fail(s"Expected OverwriteByExpression in parsed plan:\n$parsedPlan"))
+    // Pruning prerequisite: the PARAMETER bit must be visible at the OverwriteByExpression
+    // level (it lives inside `table`, which is not a child); this exercises the
+    // `getDefaultTreePatternBits` override.
+    assert(overwrite.containsPattern(PARAMETER),
+      "OverwriteByExpression.getDefaultTreePatternBits must propagate `table`'s PARAMETER bit")
+
+    val bound = BindParameters.apply(
+      NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
+    val boundOverwrite = bound.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
+      fail(s"Expected OverwriteByExpression in bound plan:\n$bound"))
+    assert(!boundOverwrite.table.containsPattern(PARAMETER),
+      s"Expected :tname inside OverwriteByExpression.table to be bound, got:\n$boundOverwrite")
   }
 }

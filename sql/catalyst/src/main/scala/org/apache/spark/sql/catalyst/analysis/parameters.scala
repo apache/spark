@@ -188,7 +188,13 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
           case i: InsertIntoStatement if i.table.containsPattern(PARAMETER) =>
             i.copy(table = bind(i.table)(f))
           case o: OverwriteByExpression if o.table.containsPattern(PARAMETER) =>
-            o.withNewTable(bind(o.table)(f).asInstanceOf[NamedRelation])
+            bind(o.table)(f) match {
+              case nr: NamedRelation => o.withNewTable(nr)
+              case other =>
+                throw SparkException.internalError(
+                  "Parameter binding on OverwriteByExpression.table must preserve " +
+                    s"NamedRelation, but got: ${other.getClass.getName}")
+            }
           case other => other
         }
         withBoundTable.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (
