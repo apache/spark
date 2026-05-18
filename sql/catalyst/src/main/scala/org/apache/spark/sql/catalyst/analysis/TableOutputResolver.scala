@@ -116,7 +116,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         conf,
         errors += _,
         Nil,
-        defaultValueFillMode)
+        defaultValueFillMode,
+        enforceFullOutput = true)
     } else {
       if (expected.size > query.output.size && !fillDefaultValue) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -127,7 +128,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
 
     if (errors.nonEmpty) {
-      cannotFindOutputData(tableName, Nil, expected.map(_.name))
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+        tableName, expected.map(_.name).map(toSQLId).mkString(", "))
     }
 
     if (resolved == query.output) {
@@ -161,17 +163,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
         resolvedValue.getOrElse(value)
       case _ =>
         checkUpdate(tableName, value, col, conf, addError, colPath)
@@ -308,7 +310,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String] = Nil,
-      defaultValueFillMode: DefaultValueFillMode.Value): Seq[NamedExpression] = {
+      defaultValueFillMode: DefaultValueFillMode.Value,
+      enforceFullOutput: Boolean = false): Seq[NamedExpression] = {
     val matchedCols = mutable.HashSet.empty[String]
     val reordered = expectedCols.flatMap { expectedCol =>
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
@@ -320,7 +323,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           None
         }
         if (defaultExpr.isEmpty) {
-          cannotFindOutputData(tableName, newColPath.quoted)
+          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+            tableName, newColPath.quoted
+          )
         }
         Some(applyColumnMetadata(defaultExpr.get, expectedCol))
       } else if (matched.length > 1) {
@@ -338,15 +343,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
           case _ =>
             checkField(
               tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
@@ -368,8 +373,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       } else {
         reordered
       }
+    } else if (enforceFullOutput) {
+      val colName =
+        if (colPath.nonEmpty) colPath.quoted
+        else expectedCols.map(_.name).map(toSQLId).mkString(", ")
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
-      cannotFindOutputData(tableName, colPath, expectedCols.map(_.name))
+      Nil
     }
   }
 
@@ -416,15 +426,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         case (inputType: StructType, expectedType: StructType) =>
           resolveStructType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
         case _ =>
           checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
       }
@@ -435,7 +445,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         val defaultExpr = getDefaultValueExprOrNullLit(
           expectedCol, conf.useNullsForMissingDefaultColumnValues)
         if (defaultExpr.isEmpty) {
-          cannotFindOutputData(tableName, (colPath :+ expectedCol.name).quoted)
+          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+            tableName, (colPath :+ expectedCol.name).quoted)
         }
         applyColumnMetadata(defaultExpr.get, expectedCol)
       }
@@ -445,7 +456,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     val result = matched ++ defaults
     if (result.length != actualExpectedCols.size) {
-      cannotFindOutputData(tableName, colPath, actualExpectedCols.map(_.name))
+      val colName =
+        if (colPath.nonEmpty) colPath.quoted
+        else actualExpectedCols.map(_.name).map(toSQLId).mkString(", ")
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     }
     result
   }
@@ -469,6 +483,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     input.nullable && !attr.nullable && conf.storeAssignmentPolicy != StoreAssignmentPolicy.LEGACY
   }
 
+  // scalastyle:off argcount
   private def resolveStructType(
       tableName: String,
       input: Expression,
@@ -479,7 +494,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      fillDefaultValue: Boolean): Option[NamedExpression] = {
+      fillDefaultValue: Boolean,
+      enforceFullOutput: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
@@ -487,7 +503,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
     val resolved = if (byName) {
       reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
-        defaultValueMode)
+        defaultValueMode, enforceFullOutput)
     } else {
       resolveColumnsByPosition(
         tableName, fields, toAttributes(expectedType), conf, addError, colPath, fillDefaultValue)
@@ -500,11 +516,13 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         struct
       }
       Some(applyColumnMetadata(res, expected))
+    } else if (enforceFullOutput) {
+      val colName =
+        if (colPath.nonEmpty) colPath.quoted
+        else expectedType.fields.map(_.name).map(toSQLId).mkString(", ")
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
-      cannotFindOutputData(
-        tableName,
-        colPath,
-        expectedType.fields.iterator.map(_.name).toSeq)
+      None
     }
   }
 
@@ -518,7 +536,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      fillDefaultValue: Boolean): Option[NamedExpression] = {
+      fillDefaultValue: Boolean,
+      enforceFullOutput: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
@@ -526,7 +545,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val res = if (byName) {
       val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
       reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
-        defaultValueMode)
+        defaultValueMode, enforceFullOutput)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath, fillDefaultValue)
@@ -541,8 +560,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           ArrayTransform(nullCheckedInput, func)
         }
       Some(applyColumnMetadata(castedArray, expected))
+    } else if (enforceFullOutput) {
+      val colName = if (colPath.nonEmpty) colPath.quoted else toSQLId(expected.name)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
-      cannotFindOutputData(tableName, colPath, toSQLId(expected.name))
+      None
     }
   }
 
@@ -556,7 +578,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      fillDefaultValue: Boolean): Option[NamedExpression] = {
+      fillDefaultValue: Boolean,
+      enforceFullOutput: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
@@ -564,7 +587,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val defaultValueFillMode = if (fillDefaultValue) RECURSE else NONE
     val resKey = if (byName) {
       reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
-        defaultValueFillMode)
+        defaultValueFillMode, enforceFullOutput)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath, fillDefaultValue)
@@ -576,7 +599,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
     val resValue = if (byName) {
       reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
-        defaultValueFillMode)
+        defaultValueFillMode, enforceFullOutput)
     } else {
       resolveColumnsByPosition(
         tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath, fillDefaultValue)
@@ -604,31 +627,14 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           MapFromArrays(newKeys, newValues)
         }
       Some(applyColumnMetadata(casted, expected))
+    } else if (enforceFullOutput) {
+      val colName = if (colPath.nonEmpty) colPath.quoted else toSQLId(expected.name)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
-      cannotFindOutputData(tableName, colPath, toSQLId(expected.name))
+      None
     }
   }
-
-  private def cannotFindOutputData(tableName: String, quotedColName: String): Nothing =
-    throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-      tableName, quotedColName)
-
-  private def cannotFindOutputData(
-      tableName: String,
-      colPath: Seq[String],
-      quotedFallback: String): Nothing =
-    cannotFindOutputData(
-      tableName,
-      if (colPath.nonEmpty) colPath.quoted else quotedFallback)
-
-  private def cannotFindOutputData(
-      tableName: String,
-      colPath: Seq[String],
-      missingNames: Iterable[String]): Nothing =
-    cannotFindOutputData(
-      tableName,
-      colPath,
-      missingNames.iterator.map(toSQLId).mkString(", "))
+  // scalastyle:on argcount
 
   // For table insertions, capture the overflow errors and show proper message.
   // Without this method, the overflow errors of castings will show hints for turning off ANSI SQL
