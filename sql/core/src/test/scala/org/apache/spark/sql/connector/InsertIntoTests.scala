@@ -1957,10 +1957,15 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
           StructField("c2", StringType))))))
       val sourceData = spark.createDataFrame(
         spark.sparkContext.parallelize(Seq(Row(1, Row(10, "b")))), sourceSchema)
-      val ex = intercept[AnalysisException] {
-        doInsertByName(t1, sourceData)
-      }
-      assert(ex.getMessage.contains("Cannot find data"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          doInsertByName(t1, sourceData)
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        parameters = Map(
+          "tableName" -> toSQLId(s"${catalogAndNamespace}tbl"),
+          "colName" -> "`s`.`c3`")
+      )
     }
   }
 
@@ -1986,10 +1991,15 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
           StructField("c2", StringType))))))
       val sourceData = spark.createDataFrame(
         spark.sparkContext.parallelize(Seq(Row(1, Row(10, "b")))), sourceSchema)
-      val ex = intercept[AnalysisException] {
-        doInsertWithSchemaEvolution(t1, sourceData, byName = true)
-      }
-      assert(ex.getMessage.contains("Cannot find data"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          doInsertWithSchemaEvolution(t1, sourceData, byName = true)
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        parameters = Map(
+          "tableName" -> toSQLId(s"${catalogAndNamespace}tbl"),
+          "colName" -> "`s`.`c3`")
+      )
     }
   }
 
