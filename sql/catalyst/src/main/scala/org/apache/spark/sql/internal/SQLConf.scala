@@ -3072,6 +3072,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_PARTITION_SUBDIR_ACTION =
+    buildConf("spark.sql.hive.convertMetastore.subdirPartitionAction")
+      .doc("Controls how Spark handles subdirectories (e.g. HIVE_UNION_DIR_*) found inside " +
+        "Hive partition directories when reading converted metastore tables " +
+        "(spark.sql.hive.convertMetastoreOrc/Parquet = true). " +
+        "'ignore' (default) silently returns no data for affected partitions. " +
+        "'fail' throws an exception so users know about the subdirectory layout. " +
+        "'recurse' automatically includes data files found in subdirectories of partition paths.")
+      .version("3.5.5")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("ignore", "fail", "recurse"))
+      .createWithDefault("ignore")
+
   val CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE =
     buildConf("spark.sql.streaming.continuous.epochBacklogQueueSize")
       .doc("The max number of entries to be stored in queue to wait for late epochs. " +
@@ -5106,6 +5120,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
   def validatePartitionColumns: Boolean = getConf(VALIDATE_PARTITION_COLUMNS)
+
+  def hivePartitionSubdirAction: String = getConf(HIVE_PARTITION_SUBDIR_ACTION)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))

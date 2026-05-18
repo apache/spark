@@ -32,11 +32,13 @@ import org.mockito.Mockito.{mock, when}
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.KnownSizeEstimation
 
 class FileIndexSuite extends SharedSparkSession {
@@ -554,7 +556,133 @@ class FileIndexSuite extends SharedSparkSession {
     assert(FileIndexOptions.isValidOption("modifiedafter"))
     assert(FileIndexOptions.isValidOption("pathglobfilter"))
   }
+
+  test("subdirPartitionAction=ignore: returns no files for partition subdirs (default)") {
+    withTempDir { dir =>
+      val (partitionSchema, partitions) = createHiveUnionDirLayout(dir)
+      withSQLConf(SQLConf.HIVE_PARTITION_SUBDIR_ACTION.key -> "ignore") {
+        val fileIndex = new InMemoryFileIndex(
+          spark,
+          rootPathsSpecified = partitions.map(_.path),
+          parameters = Map.empty,
+          userSpecifiedSchema = Some(partitionSchema),
+          userSpecifiedPartitionSpec = Some(PartitionSpec(partitionSchema, partitions)))
+        val files = fileIndex.listFiles(Nil, Nil)
+        assert(files.length == 2)
+        assert(files.forall(_.files.isEmpty),
+          "ignore mode should return no files for partitions with only subdirectories")
+      }
+    }
+  }
+
+  test("subdirPartitionAction=fail: throws exception for partition subdirs") {
+    withTempDir { dir =>
+      val (partitionSchema, partitions) = createHiveUnionDirLayout(dir)
+      withSQLConf(SQLConf.HIVE_PARTITION_SUBDIR_ACTION.key -> "fail") {
+        val fileIndex = new InMemoryFileIndex(
+          spark,
+          rootPathsSpecified = partitions.map(_.path),
+          parameters = Map.empty,
+          userSpecifiedSchema = Some(partitionSchema),
+          userSpecifiedPartitionSpec = Some(PartitionSpec(partitionSchema, partitions)))
+        val ex = intercept[SparkException] {
+          fileIndex.listFiles(Nil, Nil)
+        }
+        assert(ex.getMessage.contains("subdirectories"))
+        assert(ex.getMessage.contains("HIVE_UNION_DIR"))
+      }
+    }
+  }
+
+  test("subdirPartitionAction=recurse: returns files from partition subdirs") {
+    withTempDir { dir =>
+      val (partitionSchema, partitions) = createHiveUnionDirLayout(dir)
+      withSQLConf(SQLConf.HIVE_PARTITION_SUBDIR_ACTION.key -> "recurse") {
+        val fileIndex = new InMemoryFileIndex(
+          spark,
+          rootPathsSpecified = partitions.map(_.path),
+          parameters = Map.empty,
+          userSpecifiedSchema = Some(partitionSchema),
+          userSpecifiedPartitionSpec = Some(PartitionSpec(partitionSchema, partitions)))
+        val files = fileIndex.listFiles(Nil, Nil)
+        assert(files.length == 2)
+        val allFiles = files.flatMap(_.files)
+        assert(allFiles.length == 2, "recurse mode should find data files in subdirectories")
+        assert(allFiles.map(_.getPath.getName).toSet == Set("data.txt"))
+      }
+    }
+  }
+
+  test("subdirPartitionAction=recurse: works with mixed direct and subdir files") {
+    withTempDir { dir =>
+      // partition=value1 has a direct file
+      val part1 = new File(dir, "partition=value1")
+      part1.mkdirs()
+      val directFile = new File(part1, "direct.txt")
+      stringToFile(directFile, "direct")
+
+      // partition=value2 has files in a subdirectory
+      val part2 = new File(dir, "partition=value2")
+      val subDir2 = new File(part2, "HIVE_UNION_DIR_1")
+      subDir2.mkdirs()
+      stringToFile(new File(subDir2, "data.txt"), "data2")
+
+      val partitionSchema = StructType(Seq(StructField("partition", StringType)))
+      val fs = new Path(dir.getCanonicalPath).getFileSystem(spark.sessionState.newHadoopConf())
+      val partitions = Seq(
+        PartitionPath(InternalRow(UTF8String.fromString("value1")),
+          fs.makeQualified(new Path(part1.getCanonicalPath))),
+        PartitionPath(InternalRow(UTF8String.fromString("value2")),
+          fs.makeQualified(new Path(part2.getCanonicalPath)))
+      )
+
+      withSQLConf(SQLConf.HIVE_PARTITION_SUBDIR_ACTION.key -> "recurse") {
+        val fileIndex = new InMemoryFileIndex(
+          spark,
+          rootPathsSpecified = partitions.map(_.path),
+          parameters = Map.empty,
+          userSpecifiedSchema = Some(partitionSchema),
+          userSpecifiedPartitionSpec = Some(PartitionSpec(partitionSchema, partitions)))
+        val files = fileIndex.listFiles(Nil, Nil)
+        // partition=value1 should have 1 direct file
+        assert(files(0).files.length == 1)
+        assert(files(0).files(0).getPath.getName == "direct.txt")
+        // partition=value2 should have 1 file from subdirectory
+        assert(files(1).files.length == 1)
+        assert(files(1).files(0).getPath.getName == "data.txt")
+      }
+    }
+  }
+
+  /**
+   * Creates a directory layout mimicking Hive UNION ALL output:
+   *   dir/partition=value1/HIVE_UNION_DIR_1/data.txt
+   *   dir/partition=value2/HIVE_UNION_DIR_1/data.txt
+   * Returns (partitionSchema, partitions) for use with InMemoryFileIndex.
+   */
+  private def createHiveUnionDirLayout(dir: File): (StructType, Seq[PartitionPath]) = {
+    val part1 = new File(dir, "partition=value1")
+    val subDir1 = new File(part1, "HIVE_UNION_DIR_1")
+    subDir1.mkdirs()
+    stringToFile(new File(subDir1, "data.txt"), "data1")
+
+    val part2 = new File(dir, "partition=value2")
+    val subDir2 = new File(part2, "1")
+    subDir2.mkdirs()
+    stringToFile(new File(subDir2, "data.txt"), "data2")
+
+    val partitionSchema = StructType(Seq(StructField("partition", StringType)))
+    val fs = new Path(dir.getCanonicalPath).getFileSystem(spark.sessionState.newHadoopConf())
+    val partitions = Seq(
+      PartitionPath(InternalRow(UTF8String.fromString("value1")),
+        fs.makeQualified(new Path(part1.getCanonicalPath))),
+      PartitionPath(InternalRow(UTF8String.fromString("value2")),
+        fs.makeQualified(new Path(part2.getCanonicalPath)))
+    )
+    (partitionSchema, partitions)
+  }
 }
+
 
 object DeletionRaceFileSystem {
   val rootDirPath: Path = new Path("mockFs:///rootDir/")

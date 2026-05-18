@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.FileFormat.createMetadataInternalRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -129,8 +131,12 @@ abstract class PartitioningAwareFileIndex(
                 matchFileMetadataPredicate(values, f))
 
             case None =>
-              // Directory does not exist, or has no children files
-              Nil
+              // Directory does not exist, or has no children files.
+              // Check for subdirectories (e.g. HIVE_UNION_DIR_*) that may contain
+              // data files when reading converted Hive metastore tables.
+              (path, values).filter(f =>handlePartitionSubdirs
+                matchPathPattern(f) && isNonEmptyFile(f) &&
+                  matchFileMetadataPredicate(values, f))
           }
           PartitionDirectory(values, files.toArray)
       }
@@ -176,6 +182,53 @@ abstract class PartitioningAwareFileIndex(
       leafFiles.values.toSeq
     }
     files.filter(matchPathPattern)
+  }
+
+  /**
+   * Handles the case where a partition directory path has no direct children files
+   * in `leafDirToChildrenFiles`. This occurs when Hive creates subdirectories
+   * (e.g. HIVE_UNION_DIR_*) inside partition directories during UNION ALL operations.
+   *
+   * Behavior is controlled by `spark.sql.hive.convertMetastore.subdirPartitionAction`:
+   * - "ignore": returns Nil (current default behavior)
+   * - "fail": throws an exception if subdirectories with data files exist
+   * - "recurse": collects and returns data files from subdirectories
+   */
+  private def handlePartitionSubdirs(
+      partitionPath: Path,
+      partitionValues: InternalRow): Seq[FileStatus] = {
+    val action = sparkSession.sessionState.conf.hivePartitionSubdirAction
+    if (action == "ignore") {
+      return Nil
+    }
+
+    // Find all leaf directories that are descendants of this partition path.
+    val partitionPathStr = partitionPath.toUri.getPath.stripSuffix("/") + "/"
+    val subdirEntries = leafDirToChildrenFiles.filter { case (dir, _) =>
+      val dirStr = dir.toUri.getPath.stripSuffix("/") + "/"
+      dirStr.startsWith(partitionPathStr) && dirStr != partitionPathStr
+    }
+
+    if (subdirEntries.isEmpty) {
+      return Nil
+    }
+
+    action match {
+      case "fail" =>
+        val subdirNames = subdirEntries.keys.map(_.getName).mkString(", ")
+        throw new SparkException(
+          s"Partition directory $partitionPath contains subdirectories [$subdirNames] " +
+            s"with data files. This typically occurs with Hive UNION ALL operations that create " +
+            s"HIVE_UNION_DIR_* subdirectories. Either set " +
+            s"spark.sql.hive.convertMetastoreOrc=false / " +
+            s"spark.sql.hive.convertMetastoreParquet=false to use the Hive serde reader, or set " +
+            s"spark.sql.hive.convertMetastore.subdirPartitionAction=recurse to automatically " +
+            s"include files from subdirectories.")
+      case "recurse" =>
+        logInfo(s"Partition $partitionPath has no direct data files but has subdirectories. " +
+          s"Recursing into subdirectories to find data files.")
+        subdirEntries.values.flatten.toSeq
+    }
   }
 
   protected def inferPartitioning(): PartitionSpec = {
