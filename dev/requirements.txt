@@ -1,17 +1,5 @@
-# PySpark dependencies (required)
-py4j>=0.10.9.9
-
-# PySpark dependencies (optional)
-numpy>=1.22
-pyarrow>=18.0.0
-pandas>=2.2.0
-scipy>=1.8.0
-plotly<6.0.0
-mlflow>=2.3.1
-scikit-learn
-matplotlib
-memory-profiler>=0.61.0
-pyyaml>=3.11
+# PySpark runtime dependencies (single source of truth is dev/lock-files/pyspark-deps.in)
+-r lock-files/pyspark-deps.in
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -65,12 +53,8 @@ PyGithub
 # pandas API on Spark Code formatter.
 black==26.3.1
 
-# Spark Connect (required)
-grpcio>=1.76.0
-grpcio-status>=1.76.0
-googleapis-common-protos>=1.71.0
+# Spark Connect (required — grpcio/grpcio-status/googleapis-common-protos/zstandard come from pyspark-deps.in above)
 protobuf==6.33.5
-zstandard>=0.25.0
 
 # Spark Connect python proto generation plugin (optional)
 mypy-protobuf==3.3.0
