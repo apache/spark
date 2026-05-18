@@ -2514,8 +2514,9 @@ class ParametersSuite extends SharedSparkSession {
 
   // SPARK-46625: legacy parameter-substitution mode triggers the parameters.scala traversal
   // path. The placeholder lives in `InsertIntoStatement.table`, which is *not* a child, so this
-  // exercises the `innerPlans` hook on `LogicalPlan` and the corresponding recursion in
-  // `BindParameters.bind`.
+  // exercises the `InsertIntoStatement` special-case in `BindParameters.bind` that recurses into
+  // the `table` slot, and the `getDefaultTreePatternBits` override on `InsertIntoStatement` that
+  // exposes `table`'s tree-pattern bits for pruning.
   test("SPARK-46625: INSERT IDENTIFIER(:p) under legacy parameter substitution") {
     withSQLConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY.key -> "true") {
       withTable("t_legacy_param") {
