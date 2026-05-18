@@ -40,7 +40,7 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.connectutils import should_test_connect, ReusedMixedTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -1109,9 +1109,8 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
 
     For each pattern, the test runs the equivalent program against:
 
-      * Spark Classic (``self.spark``) - one-block baseline that anchors the
-        Classic behavior (always-failed shadowing patterns vs. pass-through
-        operators that work in both worlds).
+      * Spark Classic (``self.spark``) - baseline that anchors the Classic
+        behavior.
       * Spark Connect strict mode (default,
         ``spark.sql.analyzer.strictDataFrameColumnResolution=true``) - plan-id-
         based resolution only. Tagged ``df["c"]`` references whose ancestor's
@@ -1119,21 +1118,14 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
       * Spark Connect lenient mode
         (``spark.sql.analyzer.strictDataFrameColumnResolution=false``) - if
         plan-id-based resolution fails the analyzer also tries name-based
-        resolution against the current child output. This is the Connect-
-        specific contract that customer workflows depend on.
-
-    Tests live here intentionally: they must NOT be moved to Classic-shared
-    suites where they'd be removed as "diverging from Classic" during routine
-    cleanup.
+        resolution against the current child output.
     """
 
     def test_resolve_after_chained_withcolumn_shadow(self):
         # Two consecutive withColumn calls each shadow `c` with a new
         # attribute carrying the same name; the original `c` is no longer in
         # the projection.
-        from pyspark.errors import AnalysisException
-
-        # Classic: fails (the AT&T-style root cause).
+        # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException):
             sdf.withColumn("c", SF.col("c").cast("string")).withColumn(
@@ -1158,8 +1150,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
     def test_resolve_after_select_alias_shadow(self):
         # Same shadowing shape as withColumn but expressed through a select
         # with alias.
-        from pyspark.errors import AnalysisException
-
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException):
@@ -1181,8 +1171,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         # as `c2`. The tagged df["c"] cannot resolve under any mode because
         # neither the original attribute nor a column named `c` is in the
         # current child output.
-        from pyspark.errors import AnalysisException
-
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException):
@@ -1198,8 +1186,6 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
     def test_resolve_after_drop(self):
         # drop("c") removes the column entirely. Tagged df["c"] cannot resolve
         # under any mode.
-        from pyspark.errors import AnalysisException
-
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS c, 2 AS d")
         with self.assertRaises(AnalysisException):
@@ -1264,34 +1250,28 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
                 self.assertEqual([r.c for r in rows], expected)
 
     def test_resolve_after_groupby_count(self):
-        # groupBy("c").count() emits a new aggregate output schema. Connect
-        # strict cannot resolve the original tagged attribute; Connect lenient
-        # falls back to name-based resolution on the grouping key.
-        from pyspark.errors import AnalysisException
+        # groupBy("c").count() preserves the grouping key's attribute id in
+        # both Classic and Connect, so the tagged reference resolves in all
+        # modes.
+        query = "SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c"
+        expected = [1, 2]
 
-        # Classic: fails (the source attribute is consumed by Aggregate).
-        sdf = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c")
-        with self.assertRaises(AnalysisException):
-            sdf.groupBy("c").count().select(sdf["c"]).collect()
+        # Classic: succeeds.
+        sdf = self.spark.sql(query)
+        srows = sdf.groupBy("c").count().select(sdf["c"]).collect()
+        self.assertEqual(sorted(r.c for r in srows), expected)
 
-        # Connect strict: fails.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c")
-            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df.groupBy("c").count().select(df["c"]).collect()
-
-        # Connect lenient: succeeds via name-based fallback.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c")
-            rows = df.groupBy("c").count().select(df["c"]).collect()
-            self.assertEqual(sorted(r.c for r in rows), [1, 2])
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                df = self.connect.sql(query)
+                rows = df.groupBy("c").count().select(df["c"]).collect()
+                self.assertEqual(sorted(r.c for r in rows), expected)
 
     def test_resolve_after_agg_alias_shadow(self):
         # An aggregate output named `c` via alias() collides by name with
         # the source `c`. The tagged df["c"] still references the source
         # attribute that has been aggregated away.
-        from pyspark.errors import AnalysisException
-
         # Classic: fails.
         sdf = self.spark.sql("SELECT 1 AS x")
         with self.assertRaises(AnalysisException):
@@ -1309,83 +1289,68 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
             df.groupBy().agg(CF.sum("x").alias("c")).select(df["c"]).collect()
 
     def test_resolve_after_pivot(self):
-        # pivot emits a new schema. Tagged references to the original
-        # grouping key resolve under Connect lenient via name-based fallback
-        # and fail under Connect strict.
-        from pyspark.errors import AnalysisException
-
+        # pivot preserves the grouping key's attribute id in both Classic
+        # and Connect, so the tagged reference resolves in all modes.
         query = "SELECT 1 AS c, 'a' AS k, 10 AS v UNION ALL SELECT 2 AS c, 'b' AS k, 20 AS v"
+        expected = [1, 2]
 
-        # Classic: fails.
+        # Classic: succeeds.
         sdf = self.spark.sql(query)
-        with self.assertRaises(AnalysisException):
-            sdf.groupBy("c").pivot("k").sum("v").select(sdf["c"]).collect()
+        srows = sdf.groupBy("c").pivot("k").sum("v").select(sdf["c"]).collect()
+        self.assertEqual(sorted(r.c for r in srows), expected)
 
-        # Connect strict: fails.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df = self.connect.sql(query)
-            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df.groupBy("c").pivot("k").sum("v").select(df["c"]).collect()
-
-        # Connect lenient: succeeds via name-based fallback.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.sql(query)
-            df.groupBy("c").pivot("k").sum("v").select(df["c"]).collect()
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                df = self.connect.sql(query)
+                rows = df.groupBy("c").pivot("k").sum("v").select(df["c"]).collect()
+                self.assertEqual(sorted(r.c for r in rows), expected)
 
     def test_resolve_after_union(self):
-        # Union emits new attribute ids that differ from either input's
-        # attributes. Tagged df1["c"] only resolves under Connect lenient by
-        # name-based fallback.
-        from pyspark.errors import AnalysisException
-
-        # Classic: fails.
+        # Union emits new attribute ids. Classic still resolves the tagged
+        # left-side reference by attribute id propagation, but Connect fails
+        # in both modes: plan-id-based resolution does not find the tagged
+        # ancestor in the union output, and name-based fallback is not
+        # triggered for set-op outputs.
+        # Classic: succeeds.
         sdf1 = self.spark.sql("SELECT 1 AS c")
         sdf2 = self.spark.sql("SELECT 2 AS c")
-        with self.assertRaises(AnalysisException):
-            sdf1.union(sdf2).select(sdf1["c"]).collect()
+        srows = sdf1.union(sdf2).select(sdf1["c"]).collect()
+        self.assertEqual(sorted(r.c for r in srows), [1, 2])
 
-        # Connect strict: fails.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df1 = self.connect.sql("SELECT 1 AS c")
-            df2 = self.connect.sql("SELECT 2 AS c")
-            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df1.union(df2).select(df1["c"]).collect()
-
-        # Connect lenient: succeeds via name-based fallback.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df1 = self.connect.sql("SELECT 1 AS c")
-            df2 = self.connect.sql("SELECT 2 AS c")
-            df1.union(df2).select(df1["c"]).collect()
+        # Connect: fails in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                df1 = self.connect.sql("SELECT 1 AS c")
+                df2 = self.connect.sql("SELECT 2 AS c")
+                with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+                    df1.union(df2).select(df1["c"]).collect()
 
     def test_resolve_after_intersect(self):
-        # intersect, like union, emits new attribute ids.
-        from pyspark.errors import AnalysisException
+        # intersect, like union, emits new attribute ids. Classic resolves
+        # the tagged reference by attribute id propagation; Connect also
+        # resolves it successfully (the intersect output retains the
+        # propagated id), in both modes.
+        expected = [2]
 
-        # Classic: fails.
+        # Classic: succeeds.
         sdf1 = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
         sdf2 = self.spark.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
-        with self.assertRaises(AnalysisException):
-            sdf1.intersect(sdf2).select(sdf1["c"]).collect()
+        srows = sdf1.intersect(sdf2).select(sdf1["c"]).collect()
+        self.assertEqual([r.c for r in srows], expected)
 
-        # Connect strict: fails.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df1 = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
-            df2 = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
-            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                df1.intersect(df2).select(df1["c"]).collect()
-
-        # Connect lenient: succeeds via name-based fallback.
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df1 = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
-            df2 = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
-            df1.intersect(df2).select(df1["c"]).collect()
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                df1 = self.connect.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+                df2 = self.connect.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
+                rows = df1.intersect(df2).select(df1["c"]).collect()
+                self.assertEqual([r.c for r in rows], expected)
 
     def test_resolve_self_join_alias(self):
         # In a self-join, both sides originate from the same plan-id-tagged
         # ancestor. The tagged df["c"] is ambiguous because two output
         # attributes match by name.
-        from pyspark.errors import AnalysisException
-
         # Classic: fails (ambiguous reference).
         sdf = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
         a, b = sdf.alias("a"), sdf.alias("b")
@@ -1402,62 +1367,51 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
 
     def test_resolve_after_subquery_view(self):
         # Persisting the original DataFrame as a temp view and reading it
-        # back via spark.table() produces a new plan with new attribute ids.
-        # The tagged reference targets the original plan id, which is not an
-        # ancestor of the new DataFrame.
+        # back via spark.table() produces a new plan. Classic resolves the
+        # tagged reference; Connect also resolves it in both modes.
         import uuid
 
-        from pyspark.errors import AnalysisException
+        expected = [1]
 
-        # Classic: fails.
+        # Classic: succeeds.
         view = f"v_{uuid.uuid4().hex}"
         sdf = self.spark.sql("SELECT 1 AS c")
         sdf.createOrReplaceTempView(view)
         try:
-            with self.assertRaises(AnalysisException):
-                self.spark.table(view).select(sdf["c"]).collect()
+            srows = self.spark.table(view).select(sdf["c"]).collect()
+            self.assertEqual([r.c for r in srows], expected)
         finally:
             self.spark.sql(f"DROP VIEW IF EXISTS {view}")
 
-        # Connect strict: fails.
-        view = f"v_{uuid.uuid4().hex}"
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
-            df = self.connect.sql("SELECT 1 AS c")
-            df.createOrReplaceTempView(view)
-            try:
-                with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
-                    self.connect.table(view).select(df["c"]).collect()
-            finally:
-                self.connect.sql(f"DROP VIEW IF EXISTS {view}")
-
-        # Connect lenient: succeeds via name-based fallback.
-        view = f"v_{uuid.uuid4().hex}"
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.sql("SELECT 1 AS c")
-            df.createOrReplaceTempView(view)
-            try:
-                self.connect.table(view).select(df["c"]).collect()
-            finally:
-                self.connect.sql(f"DROP VIEW IF EXISTS {view}")
+        # Connect: succeeds in both modes.
+        for strict in (True, False):
+            view = f"v_{uuid.uuid4().hex}"
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                df = self.connect.sql("SELECT 1 AS c")
+                df.createOrReplaceTempView(view)
+                try:
+                    rows = self.connect.table(view).select(df["c"]).collect()
+                    self.assertEqual([r.c for r in rows], expected)
+                finally:
+                    self.connect.sql(f"DROP VIEW IF EXISTS {view}")
 
     # --- Mixed-surface layered DataFrame programs ---------------------------
     #
-    # These tests combine 4-level subquery chains, CTE chains, window
-    # functions, GROUPING SETS, NTILE/RANK, struct field access and
-    # correlated EXISTS/IN in a single query. Each program builds a deeply
-    # layered base via ``spark.sql()``, then layers DataFrame-API shadowing
-    # operations on top with a tagged ``df["c"]`` reference at the outermost
-    # select. The goal is to catch regressions in plan-id propagation
-    # across Connect's analyzer rules that single-operator tests miss when
-    # rules interact.
+    # These tests chain multiple DataFrame transformations - semi-joins
+    # (for SQL EXISTS/IN), window functions, cube aggregations, UDFs and
+    # struct field access - into 4-5 layer pipelines. Each program builds
+    # the layered base entirely through the DataFrame API, then layers a
+    # shadowing operation on top with a tagged ``df["c"]`` reference at the
+    # outermost select. The goal is to catch regressions in plan-id
+    # propagation across Connect's analyzer rules that single-operator
+    # tests miss when rules interact.
 
-    def test_layered_subquery_chain_window_having_exists(self):
-        # 4-level subquery chain combining windows, HAVING and correlated
-        # EXISTS, then a tagged ``df["category"]`` reference after a
-        # groupBy shadow.
-        import uuid
-
-        from pyspark.errors import AnalysisException
+    def test_layered_semijoin_groupby_window_shadow(self):
+        # 4-layer DataFrame pipeline: filter -> semi-join -> groupBy/agg
+        # -> windows. Then a tagged ``layered["category"]`` reference after
+        # a groupBy shadow.
+        from pyspark.sql.connect.window import Window as CWindow
+        from pyspark.sql.window import Window as SWindow
 
         events_data = [
             (1, 1, "Books", 100.0, 2, True),
@@ -1471,79 +1425,67 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         events_cols = ["id", "user_id", "category", "amount", "quantity", "is_active"]
         users_cols = ["id", "age"]
 
-        def layered_sql(events_view, users_view):
-            return f"""
-                SELECT category, total_amt, running_avg, rank_num
-                FROM (
-                  SELECT category, total_amt,
-                    AVG(total_amt) OVER (ORDER BY total_amt
-                      ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS running_avg,
-                    RANK() OVER (ORDER BY total_amt DESC) AS rank_num
-                  FROM (
-                    SELECT e.category, SUM(e.amount * e.quantity * 0.1) AS total_amt
-                    FROM (
-                      SELECT id, user_id, category, amount, quantity
-                      FROM {events_view}
-                      WHERE is_active = true
-                        AND EXISTS (
-                          SELECT 1 FROM {users_view} u
-                          WHERE u.id = {events_view}.user_id AND u.age > 20
-                        )
-                    ) e
-                    GROUP BY e.category
-                    HAVING SUM(e.amount) > 50
-                  ) agg
-                ) ranked
-                WHERE rank_num <= 5
-            """
+        def build_layered(spark, F, Window):
+            events = spark.createDataFrame(events_data, events_cols)
+            users = spark.createDataFrame(users_data, users_cols)
 
-        # Classic: groupBy shadow of the SQL-built "category" attribute
-        # makes the tagged reference unresolvable.
-        events_view = f"events_{uuid.uuid4().hex[:8]}"
-        users_view = f"users_{uuid.uuid4().hex[:8]}"
-        self.spark.createDataFrame(events_data, events_cols).createOrReplaceTempView(events_view)
-        self.spark.createDataFrame(users_data, users_cols).createOrReplaceTempView(users_view)
-        try:
-            sdf = self.spark.sql(layered_sql(events_view, users_view))
-            with self.assertRaises(AnalysisException):
-                sdf.groupBy("category").count().select(sdf["category"]).collect()
-        finally:
-            self.spark.sql(f"DROP VIEW IF EXISTS {events_view}")
-            self.spark.sql(f"DROP VIEW IF EXISTS {users_view}")
-
-        # Connect lenient: name-based fallback resolves the tagged reference
-        # against the post-aggregate grouping key, so the program succeeds
-        # end-to-end.
-        events_view = f"events_{uuid.uuid4().hex[:8]}"
-        users_view = f"users_{uuid.uuid4().hex[:8]}"
-        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            self.connect.createDataFrame(events_data, events_cols).createOrReplaceTempView(
-                events_view
+            # Layer 1: filter + semi-join (DataFrame-API equivalent of
+            # WHERE is_active AND EXISTS (user with age > 20)).
+            active = events.where(events["is_active"]).join(
+                users.where(users["age"] > 20),
+                events["user_id"] == users["id"],
+                "left_semi",
             )
-            self.connect.createDataFrame(users_data, users_cols).createOrReplaceTempView(users_view)
-            try:
-                df = self.connect.sql(layered_sql(events_view, users_view))
-                rows = df.groupBy("category").count().select(df["category"]).collect()
-                self.assertEqual(
-                    sorted(r.category for r in rows),
-                    ["Books", "Electronics", "Home"],
+            # Layer 2: groupBy + agg, then post-agg filter (HAVING equivalent).
+            totals = (
+                active.groupBy("category")
+                .agg(
+                    F.sum(active["amount"] * active["quantity"] * F.lit(0.1)).alias("total_amt"),
+                    F.sum(active["amount"]).alias("amount_sum"),
                 )
-            finally:
-                self.connect.sql(f"DROP VIEW IF EXISTS {events_view}")
-                self.connect.sql(f"DROP VIEW IF EXISTS {users_view}")
+                .where(F.col("amount_sum") > 50)
+                .select("category", "total_amt")
+            )
+            # Layer 3: window functions on top of the aggregate.
+            running = Window.orderBy("total_amt").rowsBetween(-1, 1)
+            ranking = Window.orderBy(F.col("total_amt").desc())
+            windowed = totals.select(
+                "category",
+                "total_amt",
+                F.avg(F.col("total_amt")).over(running).alias("running_avg"),
+                F.rank().over(ranking).alias("rank_num"),
+            )
+            # Layer 4: outer filter.
+            return windowed.where(F.col("rank_num") <= 5)
 
-    def test_layered_cte_chain_grouping_sets_ntile_correlated_in(self):
-        # CTE chain with GROUPING SETS, NTILE, struct field access and
-        # correlated IN, then withColumn shadow + tagged select.
-        import uuid
+        expected_categories = ["Books", "Electronics", "Home"]
 
-        from pyspark.errors import AnalysisException
+        # Classic: groupBy propagates the "category" attribute id through
+        # the aggregate, so the tagged reference still resolves.
+        slayered = build_layered(self.spark, SF, SWindow)
+        srows = slayered.groupBy("category").count().select(slayered["category"]).collect()
+        self.assertEqual(sorted(r.category for r in srows), expected_categories)
+
+        # Connect: succeeds in both modes (groupBy attribute id propagates
+        # through Connect's aggregate as well).
+        for strict in (True, False):
+            with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": strict}):
+                clayered = build_layered(self.connect, CF, CWindow)
+                rows = clayered.groupBy("category").count().select(clayered["category"]).collect()
+                self.assertEqual(sorted(r.category for r in rows), expected_categories)
+
+    def test_layered_struct_semijoin_cube_ntile_shadow(self):
+        # 5-layer DataFrame pipeline: filter -> semi-join -> struct field
+        # access -> cube aggregation -> window NTILE. Then withColumn
+        # shadow + tagged select.
+        from pyspark.sql.connect.window import Window as CWindow
         from pyspark.sql.types import (
             IntegerType,
             StringType,
             StructField,
             StructType,
         )
+        from pyspark.sql.window import Window as SWindow
 
         events_schema = StructType(
             [
@@ -1573,87 +1515,74 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         categories_data = [("Books", 1), ("Electronics", 2), ("Home", 3), ("Toys", 5)]
         categories_cols = ["name", "priority"]
 
-        def cte_sql(events_view, categories_view):
-            return f"""
-                WITH base AS (
-                  SELECT id, category, status, amount,
-                    detail.name AS detail_name,
-                    detail.nested.x AS nx
-                  FROM {events_view}
-                  WHERE quantity > 1
-                    AND category IN (
-                      SELECT c.name FROM {categories_view} c WHERE c.priority <= 3
-                    )
-                ),
-                grouped AS (
-                  SELECT category, status, detail_name,
-                    GROUPING(category) AS g_cat,
-                    GROUPING(status) AS g_stat,
-                    SUM(amount) AS total,
-                    COUNT(*) AS cnt
-                  FROM base
-                  GROUP BY GROUPING SETS (
-                    (category, status, detail_name),
-                    (category),
-                    ()
-                  )
-                ),
-                tiled AS (
-                  SELECT *, NTILE(2) OVER (ORDER BY total DESC) AS tile
-                  FROM grouped
-                  WHERE g_cat = 0 AND g_stat = 0
-                )
-                SELECT category, status, detail_name, total, cnt, tile
-                FROM tiled WHERE tile <= 2
-            """
+        def build_layered(spark, F, Window):
+            events = spark.createDataFrame(events_data, events_schema)
+            categories = spark.createDataFrame(categories_data, categories_cols)
 
-        # Classic: withColumn shadow of the CTE-produced "category" attribute
-        # makes the tagged reference unresolvable.
-        events_view = f"events_{uuid.uuid4().hex[:8]}"
-        categories_view = f"categories_{uuid.uuid4().hex[:8]}"
-        self.spark.createDataFrame(events_data, events_schema).createOrReplaceTempView(events_view)
-        self.spark.createDataFrame(categories_data, categories_cols).createOrReplaceTempView(
-            categories_view
-        )
-        try:
-            sdf = self.spark.sql(cte_sql(events_view, categories_view))
-            with self.assertRaises(AnalysisException):
-                sdf.withColumn("category", SF.col("category").cast("string")).select(
-                    sdf["category"], "total"
+            # Layer 1: filter + semi-join (DataFrame-API equivalent of
+            # WHERE quantity > 1 AND category IN (SELECT ...)).
+            filtered = events.where(events["quantity"] > 1).join(
+                categories.where(categories["priority"] <= 3),
+                events["category"] == categories["name"],
+                "left_semi",
+            )
+            # Layer 2: project with struct field access.
+            base = filtered.select(
+                filtered["id"],
+                filtered["category"],
+                filtered["status"],
+                filtered["amount"],
+                filtered["detail"]["name"].alias("detail_name"),
+                filtered["detail"]["nested"]["x"].alias("nx"),
+            )
+            # Layer 3: cube aggregation (mixed grouping levels - similar
+            # surface area to SQL GROUPING SETS without an exact equivalent
+            # in the DataFrame API).
+            grouped = (
+                base.cube("category", "status", "detail_name")
+                .agg(F.sum(F.col("amount")).alias("total"), F.count(F.lit(1)).alias("cnt"))
+                .where(F.col("category").isNotNull() & F.col("status").isNotNull())
+            )
+            # Layer 4: NTILE window.
+            tiled = grouped.withColumn(
+                "tile", F.ntile(2).over(Window.orderBy(F.col("total").desc()))
+            )
+            # Layer 5: outer filter.
+            return tiled.where(F.col("tile") <= 2)
+
+        # Classic: withColumn shadow of "category" drops the original
+        # attribute - the tagged reference cannot resolve.
+        slayered = build_layered(self.spark, SF, SWindow)
+        with self.assertRaises(AnalysisException):
+            slayered.withColumn("category", SF.col("category").cast("string")).select(
+                slayered["category"], "total"
+            ).collect()
+
+        # Connect strict: fails.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
+            clayered = build_layered(self.connect, CF, CWindow)
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+                clayered.withColumn("category", CF.col("category").cast("string")).select(
+                    clayered["category"], "total"
                 ).collect()
-        finally:
-            self.spark.sql(f"DROP VIEW IF EXISTS {events_view}")
-            self.spark.sql(f"DROP VIEW IF EXISTS {categories_view}")
 
-        # Connect lenient: succeeds end-to-end via name-based fallback.
-        events_view = f"events_{uuid.uuid4().hex[:8]}"
-        categories_view = f"categories_{uuid.uuid4().hex[:8]}"
+        # Connect lenient: succeeds via name-based fallback.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            self.connect.createDataFrame(events_data, events_schema).createOrReplaceTempView(
-                events_view
+            clayered = build_layered(self.connect, CF, CWindow)
+            rows = (
+                clayered.withColumn("category", CF.col("category").cast("string"))
+                .select(clayered["category"], "total")
+                .collect()
             )
-            self.connect.createDataFrame(categories_data, categories_cols).createOrReplaceTempView(
-                categories_view
-            )
-            try:
-                df = self.connect.sql(cte_sql(events_view, categories_view))
-                rows = (
-                    df.withColumn("category", CF.col("category").cast("string"))
-                    .select(df["category"], "total")
-                    .collect()
-                )
-                self.assertGreater(len(rows), 0)
-            finally:
-                self.connect.sql(f"DROP VIEW IF EXISTS {events_view}")
-                self.connect.sql(f"DROP VIEW IF EXISTS {categories_view}")
+            self.assertGreater(len(rows), 0)
 
-    def test_layered_self_join_window_udf_shadow(self):
-        # Mixed surface: temp-view self-join via SQL with a window function,
-        # wrapped by a UDF, then withColumn shadow + tagged select.
-        import uuid
-
-        from pyspark.errors import AnalysisException
+    def test_layered_window_window_udf_shadow(self):
+        # 4-layer DataFrame pipeline: filter -> running-total window ->
+        # per-partition max window -> UDF wrap. Then withColumn shadow +
+        # tagged select.
+        from pyspark.sql.connect.window import Window as CWindow
         from pyspark.sql.types import IntegerType
+        from pyspark.sql.window import Window as SWindow
 
         data = [
             (1, "A", 100),
@@ -1664,57 +1593,47 @@ class SparkConnectColumnResolutionTests(ReusedMixedTestCase):
         ]
         cols = ["id", "category", "amount"]
 
-        def self_join_sql(view):
-            # Self-join via SQL with a windowed running total and a correlated
-            # subquery on the same view.
-            return f"""
-                SELECT t.id, t.category, t.amount,
-                  SUM(t.amount) OVER (PARTITION BY t.category ORDER BY t.id) AS run_amt,
-                  (SELECT MAX(o.amount) FROM {view} o WHERE o.category = t.category) AS cat_max
-                FROM {view} t
-                WHERE EXISTS (
-                  SELECT 1 FROM {view} p WHERE p.id = t.id AND p.amount > 0
-                )
-            """
+        def build_layered(spark, F, Window):
+            df = spark.createDataFrame(data, cols)
+            # Layer 1: filter (replaces WHERE EXISTS amount > 0).
+            filtered = df.where(df["amount"] > 0)
+            # Layer 2: running total window.
+            run_w = Window.partitionBy("category").orderBy("id")
+            with_run = filtered.withColumn("run_amt", F.sum(F.col("amount")).over(run_w))
+            # Layer 3: per-category max window (replaces correlated subquery
+            # for cat_max).
+            cat_w = Window.partitionBy("category")
+            return with_run.withColumn("cat_max", F.max(F.col("amount")).over(cat_w))
 
         # Classic: withColumn shadow of "category" breaks the tagged reference.
-        view = f"layered_{uuid.uuid4().hex[:8]}"
-        sdf = self.spark.createDataFrame(data, cols)
-        sdf.createOrReplaceTempView(view)
-        try:
-            sjoined = self.spark.sql(self_join_sql(view))
-            double_udf = SF.udf(lambda x: x * 2 if x is not None else None, IntegerType())
-            with self.assertRaises(AnalysisException):
-                (
-                    sjoined.withColumn("amount", double_udf(SF.col("amount")))
-                    .withColumn("category", SF.col("category").cast("string"))
-                    .select(sjoined["category"], "amount", "run_amt", "cat_max")
-                    .collect()
-                )
-        finally:
-            self.spark.sql(f"DROP VIEW IF EXISTS {view}")
+        slayered = build_layered(self.spark, SF, SWindow)
+        sdouble = SF.udf(lambda x: x * 2 if x is not None else None, IntegerType())
+        with self.assertRaises(AnalysisException):
+            slayered.withColumn("amount", sdouble(SF.col("amount"))).withColumn(
+                "category", SF.col("category").cast("string")
+            ).select(slayered["category"], "amount", "run_amt", "cat_max").collect()
 
-        # Connect lenient: succeeds end-to-end via name-based fallback.
-        view = f"layered_{uuid.uuid4().hex[:8]}"
+        # Connect strict: fails.
+        with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": True}):
+            clayered = build_layered(self.connect, CF, CWindow)
+            cdouble = CF.udf(lambda x: x * 2 if x is not None else None, IntegerType())
+            with self.assertRaisesRegex(AnalysisException, "CANNOT_RESOLVE_DATAFRAME_COLUMN"):
+                clayered.withColumn("amount", cdouble(CF.col("amount"))).withColumn(
+                    "category", CF.col("category").cast("string")
+                ).select(clayered["category"], "amount", "run_amt", "cat_max").collect()
+
+        # Connect lenient: succeeds via name-based fallback.
         with self.connect_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": False}):
-            df = self.connect.createDataFrame(data, cols)
-            df.createOrReplaceTempView(view)
-            try:
-                joined = self.connect.sql(self_join_sql(view))
-                double_udf = CF.udf(lambda x: x * 2 if x is not None else None, IntegerType())
-                rows = (
-                    joined.withColumn("amount", double_udf(CF.col("amount")))
-                    .withColumn("category", CF.col("category").cast("string"))
-                    .select(joined["category"], "amount", "run_amt", "cat_max")
-                    .collect()
-                )
-                self.assertEqual(len(rows), 5)
-                self.assertEqual(
-                    sorted({r.category for r in rows}),
-                    ["A", "B", "C"],
-                )
-            finally:
-                self.connect.sql(f"DROP VIEW IF EXISTS {view}")
+            clayered = build_layered(self.connect, CF, CWindow)
+            cdouble = CF.udf(lambda x: x * 2 if x is not None else None, IntegerType())
+            rows = (
+                clayered.withColumn("amount", cdouble(CF.col("amount")))
+                .withColumn("category", CF.col("category").cast("string"))
+                .select(clayered["category"], "amount", "run_amt", "cat_max")
+                .collect()
+            )
+            self.assertEqual(len(rows), 5)
+            self.assertEqual(sorted({r.category for r in rows}), ["A", "B", "C"])
 
 
 if __name__ == "__main__":
