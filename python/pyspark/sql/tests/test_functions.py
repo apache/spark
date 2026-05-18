@@ -948,6 +948,14 @@ class FunctionsTestsMixin:
         actual = df.select(F.isnull(F.try_make_interval("num")))
         assertDataFrameEqual([Row(True)], actual)
 
+    def test_try_mod_function(self):
+        df = self.spark.createDataFrame([(6000, 15), (3, 2), (1234, 0)], ["a", "b"])
+        actual = df.select(F.try_mod("a", "b").alias("r"))
+        assertDataFrameEqual([Row(r=0), Row(r=1), Row(r=None)], actual)
+
+        actual = df.select(F.try_mod(F.col("a"), F.lit(2)).alias("r"))
+        assertDataFrameEqual([Row(r=0), Row(r=1), Row(r=0)], actual)
+
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001f408",)], ["cat"])
