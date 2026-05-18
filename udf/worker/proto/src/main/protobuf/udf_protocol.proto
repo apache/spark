@@ -46,13 +46,14 @@ service UdfWorker {
     // worker errors, protocol violations) are reported via [[ErrorResponse]]
     // or [[InitResponse.error]] so the stream lifecycle remains intact.
     //
-    // Hanging UDFs: user code that blocks indefinitely inside a batch
-    // keeps the connection alive, produces no gRPC error, and is not
-    // reachable by the in-band [[Cancel]] message (which sits behind the
-    // blocked batch in the receive queue). Detecting and recovering from
-    // a hanging UDF is outside the scope of this protocol; mechanisms
-    // such as worker-side watchdog timers are the appropriate tool, with
-    // thresholds configurable at the session or UDF level.
+    // Hanging UDFs: this protocol does not define what constitutes a
+    // hanging UDF -- the protocol cannot distinguish user code that is
+    // genuinely stuck from code that is merely slow or intentionally
+    // long-running. In-band [[Cancel]] is also not a reliable remedy:
+    // a Cancel queued behind a blocked batch (or behind a full sender
+    // buffer) is never delivered to the worker. Detection and recovery
+    // are layered on top of this protocol -- typically via worker-side
+    // watchdog timers configurable at the session or UDF level.
     //
     // Stream lifecycle: the engine MUST half-close the request stream
     // (call onCompleted() on the gRPC request side) only after the session
@@ -80,8 +81,6 @@ service UdfWorker {
 // Engine -> Worker. Either a control message ([[Init]] / [[PayloadChunk]]
 // / [[Finish]] / [[Cancel]]) or a data message.
 message UdfRequest {
-    // Exactly one branch MUST be set; receivers MUST reject messages
-    // with no branch set.
     oneof request {
         UdfControlRequest control = 1;
         DataRequest       data    = 2;
@@ -92,8 +91,6 @@ message UdfRequest {
 // [[FinishResponse]] / [[CancelResponse]] / [[ErrorResponse]]) or a
 // data response message.
 message UdfResponse {
-    // Exactly one branch MUST be set; receivers MUST reject messages
-    // with no branch set.
     oneof response {
         UdfControlResponse control = 1;
         DataResponse       data    = 2;
@@ -120,46 +117,40 @@ message UdfResponse {
 // within each direction, not a request/response pairing.
 //
 // Ordering invariants:
-//   - PayloadChunk* only after Init and before InitResponse is received.
-//     [[Init.is_chunking_payload]] = true signals that chunks will follow;
-//     [[PayloadChunk.last]] = true is the canonical end-of-chunking signal.
-//     When [[Init.is_chunking_payload]] is false or absent, [[InitResponse]]
-//     MAY be sent immediately after [[Init]] without waiting for chunks.
-//   - InitResponse MUST be emitted before any DataResponse.
-//   - The engine MUST wait for InitResponse before sending any DataRequest
-//     or Finish. Sending data-phase messages during the init handshake is
-//     a protocol violation. (Cancel is the one exception -- it may be sent
-//     at any point after the stream opens.)
-//   - ErrorResponse (if any) MUST be emitted after all DataResponse
-//     messages and only from the data-processing phase (not from the
-//     finish or cancel callback). It signals that the execution is
-//     aborted; the terminator is always CancelResponse. The engine
-//     MUST send Cancel upon receiving ErrorResponse (using
-//     Cancel-after-Finish if Finish was already sent), and the worker
-//     MUST respond with CancelResponse. At most one ErrorResponse is
-//     sent per stream; the worker aggregates multiple errors internally.
-//   - InitResponse.error signals an init failure; same termination
-//     rule applies (engine sends Cancel, worker responds CancelResponse).
-//   - Errors in the finish callback (if any) are reported via
-//     [[FinishResponse.error]]; errors in the cancel callback (if any)
-//     via [[CancelResponse.error]].
-//   - The engine terminates with one of:
-//     (a) Finish alone        -> worker sends FinishResponse.
-//     (b) Cancel alone        -> worker sends CancelResponse.
-//     (c) Finish then Cancel  -> worker sends CancelResponse if it has not
-//         yet sent FinishResponse, otherwise FinishResponse (see [[Finish]]).
-//   - Cancel MUST NOT precede Finish on the same stream; if the engine
-//     cancels before all data is submitted, it sends Cancel alone (case b).
+//   - PayloadChunk* sit between Init and InitResponse, used only when
+//     [[Init.is_chunking_payload]] = true. The worker waits for the
+//     chunk carrying [[PayloadChunk.last]] = true before sending
+//     InitResponse; otherwise InitResponse MAY follow Init immediately.
+//   - InitResponse MUST precede any DataResponse.
+//   - The engine MUST wait for InitResponse before sending any
+//     DataRequest or Finish. Cancel is the only message permitted
+//     before InitResponse.
+//   - ErrorResponse (if any) is emitted after all DataResponse messages,
+//     only from the data-processing phase, and at most once per stream
+//     (multiple errors are aggregated internally). The terminator is
+//     always CancelResponse: the engine MUST send Cancel
+//     (Cancel-after-Finish if Finish was already sent) and the worker
+//     replies with CancelResponse. [[InitResponse.error]] follows the
+//     same termination rule. Errors raised inside the finish or cancel
+//     callback are carried in [[FinishResponse.error]] /
+//     [[CancelResponse.error]] respectively.
+//   - Stream terminators -- Cancel MUST NOT precede Finish:
+//       (a) Finish alone        -> FinishResponse
+//       (b) Cancel alone        -> CancelResponse
+//       (c) Finish then Cancel  -> CancelResponse if FinishResponse has
+//           not yet been sent, otherwise FinishResponse (see [[Finish]]).
 //
 // A worker that receives messages out of order (e.g. a second Init,
 // a PayloadChunk after InitResponse, or a DataRequest/Finish before
-// InitResponse) MUST send [[ErrorResponse]] with a [[ProtocolError]]
-// kind and then [[CancelResponse]] to close the stream cleanly.
-// (Cancel is permitted at any point after the stream opens, including
-// before Init -- it terminates the session.)
+// InitResponse) MUST report the violation as a [[ProtocolError]] --
+// carried in [[InitResponse.error]] when the violation occurs in the
+// init phase (no [[InitResponse]] sent yet), in [[FinishResponse.error]]
+// or [[CancelResponse.error]] when it occurs while producing a
+// terminator, and in [[ErrorResponse.error]] otherwise -- and close
+// the stream with [[CancelResponse]]. (Cancel is permitted at any
+// point after the stream opens, including before Init -- it terminates
+// the session.)
 message UdfControlRequest {
-    // Exactly one branch MUST be set; receivers MUST reject messages
-    // with no branch set.
     oneof control {
         Init         init    = 1;
         PayloadChunk payload = 2;
@@ -170,8 +161,6 @@ message UdfControlRequest {
 
 // Worker -> Engine control messages.
 message UdfControlResponse {
-    // Exactly one branch MUST be set; receivers MUST reject messages
-    // with no branch set.
     oneof control {
         InitResponse   init   = 1;
         FinishResponse finish = 2;
@@ -236,6 +225,12 @@ message Init {
     // session. Exactly one payload per Execute stream.
     UdfPayload udf = 3;
 
+    // (Optional) When true, the UDF payload is delivered via
+    // [[PayloadChunk]] messages rather than inline in
+    // [[UdfPayload.payload]]; see [[PayloadChunk]] for the chunking
+    // contract.
+    optional bool is_chunking_payload = 4;
+
     // (Optional) Schema of the input data plane in the wire format
     // declared by [[data_format]] -- e.g. an Arrow IPC schema when
     // data_format = ARROW. This is an engine-side requirement: it
@@ -249,13 +244,13 @@ message Init {
     //
     // Left unset when the worker can derive the schema from the
     // payload alone.
-    optional bytes input_schema = 4;
+    optional bytes input_schema = 5;
 
     // (Optional) Schema of the output data plane in the wire format
     // declared by [[data_format]]. Same semantics as
     // [[input_schema]] -- engine-side requirement describing the
     // bytes the engine expects on [[DataResponse.data]].
-    optional bytes output_schema = 5;
+    optional bytes output_schema = 6;
 
     // (Optional; defaults to an empty map.) Per-task context
     // provided by the engine. Common keys identify the task instance
@@ -263,7 +258,7 @@ message Init {
     // partition id, task attempt id, stage id, micro-batch id.
     // Engine and worker agree on the keys they share; the protocol
     // does not enumerate them.
-    map<string, string> task_context = 6;
+    map<string, string> task_context = 7;
 
     // (Optional; defaults to an empty map.) Worker-private knobs not
     // already captured by typed fields above. Free-form; both sides
@@ -274,7 +269,7 @@ message Init {
     // a typed field number from the reserved range right after this
     // block and is removed from [[session_conf]]. [[timezone]] below
     // is an example of a key that has already been promoted.
-    map<string, string> session_conf = 7;
+    map<string, string> session_conf = 8;
 
     // (Optional) Session timezone, promoted out of [[session_conf]]
     // because every eval needs it for timestamp encoding/decoding.
@@ -285,15 +280,7 @@ message Init {
     // it would resolve from the session conf without further
     // transformation, so the worker can interpret it the same way
     // Spark does.
-    optional string timezone = 8;
-
-    // (Optional) When true, the UDF payload will be delivered via
-    // [[PayloadChunk]] messages rather than inline in [[UdfPayload.payload]].
-    // The worker MUST wait for [[PayloadChunk.last]] = true before sending
-    // [[InitResponse]]. When false or absent, the payload is fully contained
-    // in [[UdfPayload.payload]] and the worker MAY send [[InitResponse]]
-    // immediately after [[Init]] without waiting for any [[PayloadChunk]].
-    optional bool is_chunking_payload = 9;
+    optional string timezone = 9;
 
     // Reserved for future typed Init fields, in particular keys
     // graduated from [[session_conf]] (see the [[timezone]] precedent
@@ -346,9 +333,8 @@ message InitResponse {
     // worker agree on what (if anything) it carries.
     optional bytes data = 1;
 
-    // (Optional) Error raised during init (if any). When set, no
-    // [[DataResponse]] messages will follow; the engine MUST send
-    // [[Cancel]] and the worker responds with [[CancelResponse]].
+    // (Optional) Error raised during init. See the message-level
+    // comment for the termination rule.
     optional ExecutionError error = 2;
 }
 
@@ -379,12 +365,8 @@ message PayloadChunk {
     // payload.
     bytes data = 1;
 
-    // Marks the final chunk. When the engine uses [[PayloadChunk]]
-    // at all, it MUST set `last = true` on the last chunk. This is
-    // the canonical end-of-chunking signal: the worker MUST wait for
-    // it before emitting [[InitResponse]] and before treating any
-    // subsequent message as a [[DataRequest]]. Non-final chunks omit
-    // this field.
+    // Marks the final chunk. Non-final chunks omit this field. See
+    // the message-level comment for the end-of-chunking contract.
     //
     // Kept `optional` so future revisions can distinguish "engine did
     // not set this field" from "engine set false" without renumbering.
@@ -499,12 +481,16 @@ message FinishResponse {
 // case gRPC surfaces an error on the stream (see [[Execute]]).
 //
 // Cancellation latency: [[Cancel]] is delivered in-order on the same
-// stream as [[DataRequest]] messages, so it takes effect only after all
-// preceding batches in the gRPC receive queue have been processed. The
-// delay is bounded by (queue depth) × (batch processing time); the
-// queue depth itself is bounded by HTTP/2 flow control. Workers SHOULD
-// set a cancellation flag as soon as [[Cancel]] is received so that any
-// in-flight processing thread can abort at the next safe checkpoint.
+// stream as [[DataRequest]] messages. A worker that processes batches
+// synchronously on the gRPC callback thread observes Cancel only after
+// the queued batches have been processed; a worker that hands batches
+// off to a thread pool (and returns from the handler quickly) observes
+// Cancel as soon as gRPC delivers it, regardless of whether in-flight
+// batches have finished. Workers SHOULD set a cancellation flag on
+// receipt so in-flight processing can abort at the next safe
+// checkpoint. The pathological case is a hung UDF combined with a full
+// sender buffer: Cancel may never reach the worker at all (see the
+// [[Execute]] service comment for the hanging-UDF discussion).
 //
 // Worker behavior on involuntary stream error: when the worker observes
 // a gRPC error on the Execute stream (i.e. the engine-side connection
@@ -535,24 +521,10 @@ message CancelResponse {
     optional ExecutionError error = 2;
 }
 
-// Worker -> Engine. Carries an application-level error during UDF execution.
-// Wraps [[ExecutionError]] in the [[UdfControlResponse]] oneof as [[ErrorResponse]]
-// so all control response branches follow the uniform [[error]] field pattern.
-//
-// Wire position: emitted at most once, after all [[DataResponse]] messages,
-// and only from the data-processing phase. Errors in the init phase are
-// reported via [[InitResponse.error]]; errors in the finish or cancel
-// callback (if any) via [[FinishResponse.error]] or [[CancelResponse.error]].
-//
-// Terminator: after [[ErrorResponse]] the terminator is always
-// [[CancelResponse]] -- the execution is considered aborted regardless of
-// whether the engine already sent [[Finish]]. The engine MUST send
-// [[Cancel]] (using Cancel-after-Finish if [[Finish]] was already sent)
-// and wait for [[CancelResponse]], then raise the error.
-//
-// If more than one [[ErrorResponse]] arrives (protocol violation),
-// the engine SHOULD surface the first as the primary exception and
-// attach subsequent ones as suppressed exceptions.
+// Worker -> Engine application-level error raised during the
+// data-processing phase. See the ordering invariants on
+// [[UdfControlRequest]] for the wire position, the termination rule,
+// and the engine's reaction.
 message ErrorResponse {
     ExecutionError error = 1;
 }
@@ -654,24 +626,20 @@ message UdfPayload {
 // Manage RPC -- worker-scoped operations independent of Execute
 // =====================================================================
 
-// Engine -> Worker. Wraps the manage operations in a oneof so the RPC
-// is a single typed call, leaving room for future operations
-// (capability query, profiling, ...).
+// Engine -> Worker management request. Exactly one operation is set
+// per call; new operations (capability query, profiling, etc.) can be
+// added as additional branches without changing the RPC signature.
 message WorkerRequest {
-    // Exactly one branch MUST be set; receivers MUST reject messages
-    // with no branch set.
     oneof manage {
         Heartbeat       heartbeat = 1;
         ShutdownRequest shutdown  = 2;
     }
 }
 
-// Worker -> Engine.
+// Worker -> Engine management response. The set branch MUST correspond
+// to the request's operation -- e.g. [[Heartbeat]] is answered with
+// [[HeartbeatResponse]]. A mismatched branch is a protocol error.
 message WorkerResponse {
-    // Exactly one branch MUST be set, and it MUST be the branch
-    // matching the request's oneof (e.g. [[Heartbeat]] is answered
-    // with [[HeartbeatResponse]], not [[ShutdownResponse]]). A
-    // mismatched response is a protocol error.
     oneof manage {
         HeartbeatResponse heartbeat = 1;
         ShutdownResponse  shutdown  = 2;
