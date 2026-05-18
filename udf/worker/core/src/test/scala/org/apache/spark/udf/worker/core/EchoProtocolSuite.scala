@@ -20,23 +20,21 @@ import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import com.google.protobuf.ByteString
-import io.grpc.stub.StreamObserver
 import io.grpc.{ManagedChannel, Server, Status}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
-import org.apache.spark.udf.worker.UdfWorkerGrpc
-
-import org.apache.spark.udf.worker.{
-  Cancel, CancelResponse, DataRequest, DataResponse,
-  ErrorResponse, ExecutionError, UserError, WorkerError, ProtocolError,
-  Finish, FinishResponse, Heartbeat, HeartbeatResponse,
-  Init, InitResponse, PayloadChunk, ShutdownRequest, ShutdownResponse,
-  UDFWorkerDataFormat, UdfControlRequest, UdfControlResponse,
-  UdfPayload, UdfRequest, UdfResponse, WorkerRequest, WorkerResponse
-}
-
+import io.grpc.stub.StreamObserver
+import org.scalatest.BeforeAndAfterEach
 // scalastyle:off funsuite
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.udf.worker.{
+  Cancel, CancelResponse, DataRequest, DataResponse, ErrorResponse, ExecutionError,
+  Finish, FinishResponse, Heartbeat, HeartbeatResponse, Init, InitResponse,
+  PayloadChunk, ProtocolError, ShutdownRequest, ShutdownResponse,
+  UdfControlRequest, UdfControlResponse, UdfPayload, UdfRequest, UdfResponse,
+  UDFWorkerDataFormat, UdfWorkerGrpc, UserError, WorkerError, WorkerRequest,
+  WorkerResponse
+}
 
 /**
  * Protocol validation test for the UDF gRPC execution protocol.
