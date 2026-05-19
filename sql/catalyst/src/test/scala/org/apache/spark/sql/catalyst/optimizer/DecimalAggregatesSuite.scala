@@ -23,7 +23,7 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -581,5 +581,98 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     val optimized = Optimize.execute(q.analyze)
     val correctAnswer = q.analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  // ---------------------------------------------------------------------------
+  // SPARK-56949: DecimalAggregates must preserve evalMode / evalContext when
+  // rewriting Sum / Average through the fast-path. The pre-fix rule called the
+  // single-arg helper ctor `Sum(child)` / `Average(child)`, which re-reads
+  // EvalMode from SQLConf and silently drops EvalMode.TRY from try_sum /
+  // try_avg, breaking their "return NULL on overflow" semantics.
+  //
+  // Vanilla 3.5.3 ground-truth (rule OFF vs ON) recorded in todos repo:
+  //   features/spark-decimal-aggregate-evalmode-preserve/docs/0001-idea.md (section 3)
+  // ---------------------------------------------------------------------------
+
+  private def findSum(plan: LogicalPlan): Seq[Sum] =
+    plan.collect { case n => n.expressions }.flatten
+      .flatMap(_.collect { case s: Sum => s })
+  private def findAverage(plan: LogicalPlan): Seq[Average] =
+    plan.collect { case n => n.expressions }.flatten
+      .flatMap(_.collect { case a: Average => a })
+
+  test("SPARK-56949: DecimalAggregates preserves Sum.evalContext for try_sum") {
+    val trySum = Sum($"a", NumericEvalContext(EvalMode.TRY))
+    val q = testRelation.select(trySum.toAggregateExpression().as("ts"))
+    val optimized = Optimize.execute(q.analyze)
+    val sums = findSum(optimized)
+    assert(sums.nonEmpty, "DecimalAggregates fast path should fire for dec(2,1)")
+    assert(sums.forall(_.evalContext.evalMode == EvalMode.TRY),
+      s"evalMode should be preserved as TRY after rewrite, got " +
+        sums.map(_.evalContext.evalMode).mkString(","))
+  }
+
+  test("SPARK-56949: DecimalAggregates preserves Average.evalMode for try_avg") {
+    val tryAvg = Average($"a", EvalMode.TRY)
+    val q = testRelation.select(tryAvg.toAggregateExpression().as("ta"))
+    val optimized = Optimize.execute(q.analyze)
+    val avgs = findAverage(optimized)
+    assert(avgs.nonEmpty, "DecimalAggregates fast path should fire for dec(2,1)")
+    assert(avgs.forall(_.evalMode == EvalMode.TRY),
+      s"evalMode should be preserved as TRY after rewrite, got " +
+        avgs.map(_.evalMode).mkString(","))
+  }
+
+  test("SPARK-56949: DecimalAggregates preserves Sum.evalContext " +
+      "for try_sum on widened-cast peel arm") {
+    val trySum = Sum($"d7_2".cast(DecimalType(12, 2)),
+      NumericEvalContext(EvalMode.TRY))
+    val q = widenRel.select(trySum.toAggregateExpression().as("ts"))
+    val optimized = Optimize.execute(q.analyze)
+    val sums = findSum(optimized)
+    assert(sums.nonEmpty, "widened-cast SUM peel should fire for dec(7,2)->dec(12,2)")
+    assert(sums.forall(_.evalContext.evalMode == EvalMode.TRY),
+      s"evalMode should be preserved as TRY after rewrite, got " +
+        sums.map(_.evalContext.evalMode).mkString(","))
+  }
+
+  test("SPARK-56949: DecimalAggregates preserves Average.evalMode " +
+      "for try_avg on widened-cast peel arm") {
+    val tryAvg = Average($"d7_2".cast(DecimalType(12, 2)), EvalMode.TRY)
+    val q = widenRel.select(tryAvg.toAggregateExpression().as("ta"))
+    val optimized = Optimize.execute(q.analyze)
+    val avgs = findAverage(optimized)
+    assert(avgs.nonEmpty, "widened-cast AVG peel should fire for dec(7,2)->dec(12,2)")
+    assert(avgs.forall(_.evalMode == EvalMode.TRY),
+      s"evalMode should be preserved as TRY after rewrite, got " +
+        avgs.map(_.evalMode).mkString(","))
+  }
+
+  test("SPARK-56949: DecimalAggregates preserves Sum.evalContext " +
+      "for try_sum over Window (un-widened arm)") {
+    val spec = windowSpec(Seq($"a"), Nil, UnspecifiedFrame)
+    val trySum = Sum($"a", NumericEvalContext(EvalMode.TRY))
+    val q = testRelation.select(
+      windowExpr(trySum.toAggregateExpression(), spec).as("ts"))
+    val optimized = Optimize.execute(q.analyze)
+    val sums = findSum(optimized)
+    assert(sums.nonEmpty, "Window-arm SUM peel should fire for dec(2,1)")
+    assert(sums.forall(_.evalContext.evalMode == EvalMode.TRY),
+      s"evalMode should be preserved as TRY after rewrite, got " +
+        sums.map(_.evalContext.evalMode).mkString(","))
+  }
+
+  test("SPARK-56949: DecimalAggregates preserves Average.evalMode " +
+      "for try_avg over Window (un-widened arm)") {
+    val spec = windowSpec(Seq($"a"), Nil, UnspecifiedFrame)
+    val tryAvg = Average($"a", EvalMode.TRY)
+    val q = testRelation.select(
+      windowExpr(tryAvg.toAggregateExpression(), spec).as("ta"))
+    val optimized = Optimize.execute(q.analyze)
+    val avgs = findAverage(optimized)
+    assert(avgs.nonEmpty, "Window-arm AVG peel should fire for dec(2,1)")
+    assert(avgs.forall(_.evalMode == EvalMode.TRY),
+      s"evalMode should be preserved as TRY after rewrite, got " +
+        avgs.map(_.evalMode).mkString(","))
   }
 }

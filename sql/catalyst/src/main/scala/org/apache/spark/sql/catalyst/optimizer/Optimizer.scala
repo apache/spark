@@ -2587,13 +2587,16 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         // Window arm: `ExtractWindowExpressions` hoists composite children
         // (here the widening Cast) into a child Project, so widened-Cast
         // peel is unreachable from this expression-level rule.
-        case Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
-          MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
+        case s @ Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
+          MakeDecimal(we.copy(windowFunction =
+            ae.copy(aggregateFunction = s.copy(child = UnscaledValue(e)))),
             prec + 10, scale)
 
-        case Average(e @ DecimalExpression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+        case a @ Average(e @ DecimalExpression(prec, scale), _)
+            if prec + 4 <= MAX_DOUBLE_DIGITS =>
           val newAggExpr =
-            we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
+            we.copy(windowFunction = ae.copy(aggregateFunction =
+              a.copy(child = UnscaledValue(e))))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
             DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
@@ -2601,29 +2604,30 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         case _ => we
       }
       case ae @ AggregateExpression(af, _, _, _, _) => af match {
-        case Sum(WidenedDecimalChild(inner, p, pPrime, s), _)
+        case s @ Sum(WidenedDecimalChild(inner, p, pPrime, s_scale), _)
             if p + 10 <= MAX_LONG_DIGITS =>
           Cast(
             MakeDecimal(
-              ae.copy(aggregateFunction = Sum(UnscaledValue(inner))),
-              p + 10, s),
-            DecimalType.bounded(pPrime + 10, s),
+              ae.copy(aggregateFunction = s.copy(child = UnscaledValue(inner))),
+              p + 10, s_scale),
+            DecimalType.bounded(pPrime + 10, s_scale),
             Option(conf.sessionLocalTimeZone))
 
-        case Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
-          MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
+        case s @ Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
+          MakeDecimal(ae.copy(aggregateFunction = s.copy(child = UnscaledValue(e))),
+            prec + 10, scale)
 
         // Ordered before the un-widened Average arm: when pPrime in [8, 11],
         // the outer Cast's DecimalType would otherwise match that arm first.
-        case Average(WidenedDecimalChild(inner, p, pPrime, s), _)
+        case a @ Average(WidenedDecimalChild(inner, p, pPrime, s_scale), _)
             if p <= AVG_PEEL_MAX_INNER_PRECISION =>
-          val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(inner)))
+          val newAggExpr = ae.copy(aggregateFunction = a.copy(child = UnscaledValue(inner)))
           Cast(
-            Divide(newAggExpr, Literal.create(math.pow(10.0, s), DoubleType)),
-            DecimalType.bounded(pPrime + 4, s + 4), Option(conf.sessionLocalTimeZone))
+            Divide(newAggExpr, Literal.create(math.pow(10.0, s_scale), DoubleType)),
+            DecimalType.bounded(pPrime + 4, s_scale + 4), Option(conf.sessionLocalTimeZone))
 
-        case Average(e @ DecimalExpression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
-          val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
+        case a @ Average(e @ DecimalExpression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+          val newAggExpr = ae.copy(aggregateFunction = a.copy(child = UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
             DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
