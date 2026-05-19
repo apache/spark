@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -40,7 +40,8 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
  * Note: When there are no equi-keys, both sides are collected into a
  * single partition (AllTuples). The right side is fully buffered in
  * memory, so this operator is not suitable for large right-side tables
- * without equi-keys.
+ * without equi-keys. For each equi-key group, all right rows with that
+ * key are also buffered in memory; skewed equi-key groups can OOM.
  */
 case class SortMergeAsOfJoinExec(
     leftKeys: Seq[Expression],
@@ -61,8 +62,11 @@ case class SortMergeAsOfJoinExec(
   override def output: Seq[Attribute] = joinType match {
     case LeftOuter =>
       left.output ++ right.output.map(_.withNullability(true))
-    case _ =>
+    case _: InnerLike =>
       left.output ++ right.output
+    case other =>
+      throw SparkException.internalError(
+        s"$nodeName does not support join type: $other")
   }
 
   override def outputOrdering: Seq[SortOrder] = {
@@ -178,14 +182,16 @@ private[joins] class SortMergeAsOfJoinScanner(
   // Forward (left <= right): best match is at start -> left-to-right
   // Nearest / unknown: left-to-right (works correctly, just no early termination
   // guarantee for the "as-of not satisfied" shortcut)
+  //
+  // This is a performance heuristic only -- if it misclassifies, the scan
+  // still produces the correct result; only the early-termination shortcut
+  // is lost. The tree-wide search tolerates conjunct reordering by the
+  // optimizer.
   private val scanRightToLeft: Boolean = {
-    def isBackward(expr: Expression): Boolean = expr match {
-      case GreaterThanOrEqual(_, _) => true
-      case GreaterThan(_, _) => true
-      case And(l, _) => isBackward(l)
+    asOfCondition.exists {
+      case _: GreaterThanOrEqual | _: GreaterThan => true
       case _ => false
     }
-    isBackward(asOfCondition)
   }
 
   // Null row for LeftOuter when no match is found
