@@ -38,7 +38,6 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  *      bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/Test/runMain <this class>"
- *      Optional: pass "matched-update-only" to run a single case.
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/MergeRowsExecBenchmark-results.txt".
@@ -257,22 +256,13 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("MergeRowsExec Codegen Benchmark") {
-      if (mainArgs.isEmpty) {
-        mergeMatchedUpdateOnly()
-        mergeNotMatchedInsertOnly()
-        mergeMatchedAndNotMatched()
-        mergeMatchedDelete()
-        mergeConditionalClauses()
-        mergeAllThreeClauses()
-        mergeSplitUpdate()
-      } else {
-        mainArgs.foreach {
-          case "matched-update-only" => mergeMatchedUpdateOnly()
-          case other =>
-            throw new IllegalArgumentException(
-              s"Unknown benchmark case: $other (supported: matched-update-only)")
-        }
-      }
+      mergeMatchedUpdateOnly()
+      mergeNotMatchedInsertOnly()
+      mergeMatchedAndNotMatched()
+      mergeMatchedDelete()
+      mergeConditionalClauses()
+      mergeAllThreeClauses()
+      mergeSplitUpdate()
     }
   }
 }
