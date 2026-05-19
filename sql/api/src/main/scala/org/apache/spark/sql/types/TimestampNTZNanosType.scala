@@ -21,9 +21,11 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
- * Timestamp without time zone with fractional-second precision in the nanosecond-capable range (7
- * to 9 decimal digits). Values will use epoch microseconds plus nanoseconds within that
- * microsecond.
+ * Timestamp without time zone with fractional-second precision in the nanosecond-capable range
+ * (7 to 9 decimal digits). Represents a local date-time analogous to `TimestampNTZType`, but with
+ * sub-microsecond precision: valid range is [0001-01-01T00:00:00.000000000,
+ * 9999-12-31T23:59:59.999999999] in the proleptic Gregorian calendar. The value is independent of
+ * any time zone. To represent an absolute point in time, use `TimestampLTZNanosType` instead.
  *
  * @param precision
  *   Number of digits of fractional seconds for this SQL type. The valid values are 7, 8, and 9
