@@ -30,12 +30,16 @@ trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
 
   private lazy val canSpreadNullJoinKeys: Boolean = {
+    // NULL keys on the preserved side of an outer join must be emitted, but cannot satisfy
+    // ordinary equi-join predicates. Their reducer placement is therefore a layout choice.
+    //
     // Null-safe equality usually rewrites to non-null shuffle keys. The NullType corner can still
     // produce NULL shuffle keys, but shuffled join execution already treats those rows as
     // unmatched, so spreading them does not change the result.
     val isOuterJoin = joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter
     conf.getConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED) &&
-      isOuterJoin
+      isOuterJoin &&
+      (leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable))
   }
 
   override def nodeName: String = {

@@ -359,29 +359,28 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       LeftOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(
-            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
-              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
-          assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
 
-          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
-            Seq(
-              Row(1, "left-1", 1, "right-1"),
-              Row(null, "left-null-1", null, null),
-              Row(null, "left-null-2", null, null)),
-            sortAnswers = true)
-        }
+      checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
+        Seq(
+          Row(1, "left-1", 1, "right-1"),
+          Row(null, "left-null-1", null, null),
+          Row(null, "left-null-2", null, null)),
+        sortAnswers = true)
     }
   }
 
@@ -396,18 +395,40 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       LeftOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
-              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
-          assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[HashPartitioning]))
-        }
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[HashPartitioning]))
+    }
+  }
+
+  test("ordinary outer equi-join keeps hash partitioning for non-nullable join keys") {
+    val nonNullableLeft = spark.range(3).toDF("k")
+    val nonNullableRight = spark.range(3).toDF("k")
+    val joinCondition = (nonNullableLeft("k") === nonNullableRight("k")).expr
+    val join = Join(nonNullableLeft.logicalPlan, nonNullableRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          nonNullableLeft.queryExecution.sparkPlan, nonNullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[HashPartitioning]))
     }
   }
 
@@ -423,29 +444,28 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       RightOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(
-            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition,
-              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
-          assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
 
-          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition, left, right)),
-            Seq(
-              Row(1, "left-1", 1, "right-1"),
-              Row(null, null, null, "right-null-1"),
-              Row(null, null, null, "right-null-2")),
-            sortAnswers = true)
-        }
+      checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition, left, right)),
+        Seq(
+          Row(1, "left-1", 1, "right-1"),
+          Row(null, null, null, "right-null-1"),
+          Row(null, null, null, "right-null-2")),
+        sortAnswers = true)
     }
   }
 
@@ -462,31 +482,30 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       FullOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(
-            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, FullOuter, boundCondition,
-              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
-          assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, FullOuter, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
 
-          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              SortMergeJoinExec(leftKeys, rightKeys, FullOuter, boundCondition, left, right)),
-            Seq(
-              Row(1, "left-1", 1, "right-1"),
-              Row(null, "left-null-1", null, null),
-              Row(null, "left-null-2", null, null),
-              Row(null, null, null, "right-null-1"),
-              Row(null, null, null, "right-null-2")),
-            sortAnswers = true)
-        }
+      checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          SortMergeJoinExec(leftKeys, rightKeys, FullOuter, boundCondition, left, right)),
+        Seq(
+          Row(1, "left-1", 1, "right-1"),
+          Row(null, "left-null-1", null, null),
+          Row(null, "left-null-2", null, null),
+          Row(null, null, null, "right-null-1"),
+          Row(null, null, null, "right-null-2")),
+        sortAnswers = true)
     }
   }
 
@@ -501,25 +520,24 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       LeftOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(
-            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
-          val existingLeftShuffle = ShuffleExchangeExec(
-            HashPartitioning(leftKeys, 4),
-            nullableLeft.queryExecution.sparkPlan)
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
-              existingLeftShuffle, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val existingLeftShuffle = ShuffleExchangeExec(
+        HashPartitioning(leftKeys, 4),
+        nullableLeft.queryExecution.sparkPlan)
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          existingLeftShuffle, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
 
-          assert(partitionings.size == 2)
-          assert(partitionings.count(_.isInstanceOf[HashPartitioning]) == 1)
-          assert(partitionings.count(_.isInstanceOf[NullAwareHashPartitioning]) == 1)
-        }
+      assert(partitionings.size == 2)
+      assert(partitionings.count(_.isInstanceOf[HashPartitioning]) == 1)
+      assert(partitionings.count(_.isInstanceOf[NullAwareHashPartitioning]) == 1)
     }
   }
 
@@ -538,32 +556,31 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       LeftOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(
-            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
-              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
-          assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
 
-          checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
-            EnsureRequirements.apply(
-              SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
-            Seq(
-              Row(1, null, "left-match", 1, null, "right-match"),
-              Row(2, null, "left-no-match", null, null, null)),
-            sortAnswers = true)
-        }
+      checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
+        Seq(
+          Row(1, null, "left-match", 1, null, "right-match"),
+          Row(2, null, "left-no-match", null, null, null)),
+        sortAnswers = true)
     }
   }
 
-  test("null-safe outer equi-join can use null-aware shuffle partitioning") {
+  test("null-safe outer equi-join keeps hash partitioning for non-null shuffle keys") {
     val nullableLeft = Seq(
       (Integer.valueOf(1), "left-1"),
       (null.asInstanceOf[Integer], "left-null"))
@@ -575,20 +592,88 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
       LeftOuter, Some(joinCondition), JoinHint.NONE)
 
-    ExtractEquiJoinKeys.unapply(join).foreach {
-      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
-        withSQLConf(
-            SQLConf.SHUFFLE_PARTITIONS.key -> "4",
-            SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
-          val plan = EnsureRequirements.apply(
-            SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
-              nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
-          val partitionings = plan.collect {
-            case exchange: ShuffleExchangeExec => exchange.outputPartitioning
-          }
-          assert(partitionings.size == 2)
-          assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
-        }
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[HashPartitioning]))
+    }
+  }
+
+  test("ordinary outer equi-join spreads NULL keys for shuffled hash join") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (null.asInstanceOf[Integer], "left-null-1"),
+      (null.asInstanceOf[Integer], "left-null-2")).toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        ShuffledHashJoinExec(leftKeys, rightKeys, LeftOuter, BuildRight, boundCondition,
+          nullableLeft.queryExecution.sparkPlan, nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+      checkAnswer2(nullableLeft, nullableRight, (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          ShuffledHashJoinExec(
+            leftKeys, rightKeys, LeftOuter, BuildRight, boundCondition, left, right)),
+        Seq(
+          Row(1, "left-1", 1, "right-1"),
+          Row(null, "left-null-1", null, null),
+          Row(null, "left-null-2", null, null)),
+        sortAnswers = true)
+    }
+  }
+
+  test("NullType null-safe outer equi-join remains result-safe with null-aware shuffle") {
+    val nullTypeLeft = spark.range(2).selectExpr("NULL AS k", "id AS lv")
+    val nullTypeRight = spark.range(1).selectExpr("NULL AS k", "id AS rv")
+    val joinCondition = nullTypeLeft("k").eqNullSafe(nullTypeRight("k")).expr
+    val join = Join(nullTypeLeft.logicalPlan, nullTypeRight.logicalPlan,
+      LeftOuter, Some(joinCondition), JoinHint.NONE)
+
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val plan = EnsureRequirements.apply(
+        SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
+          nullTypeLeft.queryExecution.sparkPlan, nullTypeRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+      checkAnswer2(nullTypeLeft, nullTypeRight, (left: SparkPlan, right: SparkPlan) =>
+        EnsureRequirements.apply(
+          SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition, left, right)),
+        Seq(
+          Row(null, 0L, null, null),
+          Row(null, 1L, null, null)),
+        sortAnswers = true)
     }
   }
 }

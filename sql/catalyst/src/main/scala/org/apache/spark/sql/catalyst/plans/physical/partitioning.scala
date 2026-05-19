@@ -81,6 +81,10 @@ case object AllTuples extends Distribution {
  *
  * @param requireAllClusterKeys When true, `Partitioning` which satisfies this distribution,
  *                              must match all `clustering` expressions in the same ordering.
+ * @param allowNullKeySpreading When true, the default partitioning may spread rows whose
+ *                              clustering keys contain NULL values. This is a permission for
+ *                              consumers that do not require NULL-key co-location; ordinary
+ *                              [[HashPartitioning]] can still satisfy this distribution.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
@@ -332,7 +336,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 /**
  * Represents a hash partitioning for equi-join inputs where rows with a NULL join key do not need
  * to be co-located. Non-NULL join keys preserve the same partitioning contract as
- * [[HashPartitioning]], while rows with any NULL join key may be spread across partitions.
+ * [[HashPartitioning]], while rows with any NULL join key may be spread across partitions. As a
+ * result, this partitioning intentionally does not satisfy a strict [[ClusteredDistribution]].
  */
 case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends HashPartitioningLike {
@@ -343,6 +348,8 @@ case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions
       case AllTuples => numPartitions == 1
       case _ => false
     }) || {
+      // Stateful operators require strict NULL-key co-location and therefore cannot consume
+      // null-aware hash partitioning as a compatible clustered layout.
       required match {
         case c @ ClusteredDistribution(
             requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
@@ -390,6 +397,11 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
     copy(from = from.copy(expressions = newChildren))
 }
 
+/**
+ * Represents a null-aware hash partitioning whose reducer ranges have been coalesced into fewer
+ * partitions. It preserves the same relaxed NULL-key co-location contract as
+ * [[NullAwareHashPartitioning]].
+ */
 case class CoalescedNullAwareHashPartitioning(
     from: NullAwareHashPartitioning,
     partitions: Seq[CoalescedBoundary]) extends HashPartitioningLike {
@@ -1045,6 +1057,10 @@ case class HashShuffleSpec(
   override def numPartitions: Int = partitioning.numPartitions
 }
 
+/**
+ * Shuffle specification for [[NullAwareHashPartitioning]]. It is compatible only with shuffle
+ * layouts whose distributions explicitly allow NULL-key spreading.
+ */
 case class NullAwareHashShuffleSpec(
     partitioning: NullAwareHashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {

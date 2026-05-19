@@ -80,6 +80,18 @@ class ExchangeSuite extends SharedSparkSession {
     }
   }
 
+  test("null-aware hash shuffle marks unsorted repartitioning as order-sensitive") {
+    withSQLConf(SQLConf.SORT_BEFORE_REPARTITION.key -> "false") {
+      val input = spark.range(64).repartition(4).selectExpr("CAST(NULL AS INT) AS k")
+      val plan = input.queryExecution.executedPlan
+      val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+
+      assert(plan.execute().outputDeterministicLevel == DeterministicLevel.UNORDERED)
+      assert(exchange.shuffleDependency.rdd.outputDeterministicLevel ==
+        DeterministicLevel.INDETERMINATE)
+    }
+  }
+
   test("BroadcastMode.canonicalized") {
     val mode1 = IdentityBroadcastMode
     val mode2 = HashedRelationBroadcastMode(Literal(1L) :: Nil)

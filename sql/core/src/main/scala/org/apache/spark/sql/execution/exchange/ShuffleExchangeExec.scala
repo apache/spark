@@ -30,7 +30,9 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow, UnsafeRowChecksum}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute, BoundReference, CollationAwareMurmur3Hash, Literal, Pmod, UnsafeProjection,
+  UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -406,9 +408,14 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case h: NullAwareHashPartitioning =>
-        val partitionIdProjection =
-          UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         val joinKeyProjection = UnsafeProjection.create(h.expressions, outputAttributes)
+        val boundJoinKeys = h.expressions.zipWithIndex.map { case (expr, index) =>
+          BoundReference(index, expr.dataType, expr.nullable)
+        }
+        val partitionIdExpression = Pmod(
+          new CollationAwareMurmur3Hash(boundJoinKeys),
+          Literal(h.numPartitions))
+        val partitionIdProjection = UnsafeProjection.create(partitionIdExpression :: Nil)
         var nullKeyPartition =
           new XORShiftRandom(TaskContext.get().partitionId()).nextInt(h.numPartitions)
         row => {
@@ -420,7 +427,7 @@ object ShuffleExchangeExec {
             nullKeyPartition = (nullKeyPartition + 1) % h.numPartitions
             partition
           } else {
-            partitionIdProjection(row).getInt(0)
+            partitionIdProjection(joinKeys).getInt(0)
           }
         }
       case RangePartitioning(sortingExpressions, _) =>
