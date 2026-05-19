@@ -2610,6 +2610,22 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  // SPARK-46625: End-to-end CACHE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... -- exercises the
+  // `tempViewNameString` extraction in `DataSourceV2Strategy` and the `CheckAnalysis` invariant
+  // case for `CacheTableAsSelect.tempViewName`. The parser-level test above already verifies
+  // the placement and CTE shape; this one drives the full analysis + execution path.
+  test("SPARK-46625: CACHE TABLE IDENTIFIER(:p) AS WITH ... SELECT ...") {
+    withTempView("t_cte_cache") {
+      val df = spark.sql(
+        """CACHE TABLE IDENTIFIER(:tname) AS
+          |WITH transformation AS (SELECT 21 AS a)
+          |SELECT * FROM transformation""".stripMargin,
+        Map("tname" -> "t_cte_cache"))
+      assertNoWithCTEAroundCTEInChildren(df)
+      checkAnswer(spark.table("t_cte_cache"), Row(21))
+    }
+  }
+
   // SPARK-46625: RTAS mirrors CTAS -- the placeholder goes into `ReplaceTableAsSelect.name`
   // at parse time. Verify on the parsed plan that the placeholder lives in that slot and that
   // no `WithCTE(CTEInChildren, _)` shape survives `CTESubstitution`. Running RTAS through full

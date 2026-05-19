@@ -76,31 +76,33 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
       // placeholders inside them. Materialize them explicitly. Only `InsertIntoStatement` and
       // `OverwriteByExpression` carry a parse-time placeholder today, but matching the
       // `V2WriteCommand` trait keeps the rule consistent across the family.
-      case i: InsertIntoStatement if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] && {
+      case i: InsertIntoStatement if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] =>
         val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        p.identifierExpr.resolved && p.childrenResolved
-      } =>
-        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        if (referredTempVars.isDefined) {
-          referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+        if (p.identifierExpr.resolved && p.childrenResolved) {
+          if (referredTempVars.isDefined) {
+            referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+          }
+          i.copy(table = executor.execute(p.planBuilder.apply(
+            IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)))
+        } else {
+          i
         }
-        i.copy(table = executor.execute(p.planBuilder.apply(
-          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)))
-      case w: V2WriteCommand if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] && {
+      case w: V2WriteCommand if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] =>
         val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        p.identifierExpr.resolved && p.childrenResolved
-      } =>
-        val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
-        if (referredTempVars.isDefined) {
-          referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
-        }
-        executor.execute(p.planBuilder.apply(
-          IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)) match {
-          case nr: NamedRelation => w.withNewTable(nr)
-          case other =>
-            throw SparkException.internalError(
-              "PlanWithUnresolvedIdentifier in V2WriteCommand.table must materialize " +
-                s"into a NamedRelation, but got: ${other.getClass.getName}")
+        if (p.identifierExpr.resolved && p.childrenResolved) {
+          if (referredTempVars.isDefined) {
+            referredTempVars.get ++= collectTemporaryVariablesInLogicalPlan(p)
+          }
+          executor.execute(p.planBuilder.apply(
+            IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children)) match {
+            case nr: NamedRelation => w.withNewTable(nr)
+            case other =>
+              throw SparkException.internalError(
+                "PlanWithUnresolvedIdentifier in V2WriteCommand.table must materialize " +
+                  s"into a NamedRelation, but got: ${other.getClass.getName}")
+          }
+        } else {
+          w
         }
       case other =>
         other.transformExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_IDENTIFIER)) {

@@ -82,6 +82,10 @@ case class PlanWithUnresolvedIdentifier(
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_WITH_UNRESOLVED_IDENTIFIER)
 
+  // Placeholder name used by error paths that render `NamedRelation.name` for an unresolved
+  // table reference -- e.g. `SparkStrategies.extractTableNameForError` and the `r: NamedRelation`
+  // fallback in `QueryCompilationErrors`. Renders as the SQL text of the identifier expression
+  // (e.g. `IDENTIFIER(:p)` or `concat('a', 'b')`) so error messages remain informative.
   override def name: String = identifierExpr.sql
 
   override protected def withNewChildrenInternal(
