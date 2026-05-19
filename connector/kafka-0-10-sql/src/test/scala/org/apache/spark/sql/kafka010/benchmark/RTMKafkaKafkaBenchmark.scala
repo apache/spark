@@ -66,6 +66,58 @@ import org.apache.spark.util.Utils
  */
 object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
+  // ----- Benchmark dimensions -----
+
+  // Checkpoint interval for the streaming query. 5-minute is recommended.
+  // Lowering it may cause more frequent checkpointing but can increase latency.
+  private val checkpointInterval = 5.minutes
+
+  // Total number of batches to run before stopping. With numBatchesToFilter
+  // warm-up batches filtered out, (numBatches - numBatchesToFilter) batches
+  // contribute to the reported percentiles.
+  private val numBatches = 4
+
+  // Warm-up batches dropped from the percentile calculation to discount
+  // cold-start effects (JIT, executor warm-up, Kafka producer buffering).
+  private val numBatchesToFilter = 1
+
+  // Synthetic input throughput in records/second produced by the data generator
+  // thread into the input Kafka topic. Each record is a small string payload.
+  private val recordsPerSecond = 1000L
+
+  // ----- Spark topology -----
+
+  // local-cluster[N_WORKERS, CORES_PER_WORKER, HEAP_MB_PER_WORKER]. 3 workers x 5
+  // cores matches the 5-partition input topic so each task gets its own core; 1 GB
+  // heap is enough for the stateless transform.
+  private val sparkMaster = "local-cluster[3, 5, 1024]"
+
+  // Partition count on both the input and output topics.
+  // By default, spark launches a task per partition.
+  // Make sure there is enough available slots in the cluster to schedule all tasks.
+  private val numPartitions = 5
+
+  // ----- Streaming + Kafka tuning (chosen for low latency, not throughput) -----
+
+  // How long the streaming engine waits between polling micro-batches. Set low so
+  // RTM picks up new data with sub-50ms delay instead of the default 100ms.
+  private val streamingPollingDelayMs = 10
+
+  // Consumer-side: how long a fetch request blocks waiting for data on the broker
+  // before returning empty. Set low so a partition that's briefly empty does not
+  // delay the consumer for the default 500ms.
+  private val kafkaFetchMaxWaitMs = "10"
+
+  // Consumer-side: maximum bytes returned per partition per fetch. 10 MB lets a
+  // single fetch drain the whole batch of records produced during one trigger.
+  private val kafkaMaxPartitionFetchBytes = "10485760"
+
+  // Producer-side (Spark Kafka sink): total memory the client uses for batching
+  // unsent records. 64 MB keeps batching from blocking the writer under bursty load.
+  private val kafkaBufferMemoryBytes = "67108864"
+
+  // ----- Mutable state -----
+
   private val topicId = new AtomicInteger(0)
   private var spark: SparkSession = _
   private var testUtils: KafkaTestUtils = _
@@ -78,11 +130,11 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     try {
       testUtils.setup()
       spark = SparkSession.builder()
-        .master("local-cluster[3, 5, 1024]")
+        .master(sparkMaster)
         .appName(this.getClass.getCanonicalName)
         .getOrCreate()
       runBenchmark("RTM stateless kafka-to-kafka") {
-        benchmark(5.minutes.toMillis, 4)
+        benchmark()
       }
     } finally {
       cleanup()
@@ -126,22 +178,21 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     }
   }
 
-  def benchmark(longRunningBatchDurationMs: Long, numBatches: Long): Unit = withTempDir {
-      checkpointDir =>
+  def benchmark(): Unit = withTempDir { checkpointDir =>
     val inputTopic = newTopic()
-    testUtils.createTopic(inputTopic, partitions = 5)
+    testUtils.createTopic(inputTopic, partitions = numPartitions)
 
     val outputTopic = newTopic()
-    testUtils.createTopic(outputTopic, partitions = 5)
+    testUtils.createTopic(outputTopic, partitions = numPartitions)
 
-    spark.conf.set(SQLConf.STREAMING_POLLING_DELAY.key, 10)
+    spark.conf.set(SQLConf.STREAMING_POLLING_DELAY.key, streamingPollingDelayMs)
 
     val kafkaStream = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", inputTopic)
-      .option("kafka.fetch.max.wait.ms", "10")
-      .option("kafka.max.partition.fetch.bytes", "10485760") // 10MB
+      .option("kafka.fetch.max.wait.ms", kafkaFetchMaxWaitMs)
+      .option("kafka.max.partition.fetch.bytes", kafkaMaxPartitionFetchBytes)
       .load()
 
     // UDF instead of current_timestamp(): the built-in is evaluated once per batch
@@ -181,15 +232,15 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", outputTopic)
       .option("checkpointLocation", checkpointDir.getAbsolutePath)
-      .option("kafka.buffer.memory", "67108864") // 64MB
+      .option("kafka.buffer.memory", kafkaBufferMemoryBytes)
       .option("kafka.compression.type", "snappy")
       .outputMode("update")
       .queryName("rtm-kafka-kafka")
-      .trigger(RealTimeTrigger.apply(s"${longRunningBatchDurationMs} milliseconds"))
+      .trigger(RealTimeTrigger.apply(s"${checkpointInterval.toMillis} milliseconds"))
       .start()
 
     val dataGenThread = new Thread(() => {
-      genData(testUtils.brokerAddress, inputTopic, 1000)
+      genData(testUtils.brokerAddress, inputTopic)
     })
     dataGenThread.start()
 
@@ -210,7 +261,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     }
     spark.streams.addListener(listener)
 
-    val timeoutMs = numBatches * longRunningBatchDurationMs * 2 + 60 * 1000
+    val timeoutMs = numBatches * checkpointInterval.toMillis * 2 + 60 * 1000
     val completed = try {
       latch.await(timeoutMs, TimeUnit.MILLISECONDS)
     } finally {
@@ -224,11 +275,11 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
         s"Benchmark timed out waiting for $numBatches batches to complete after ${timeoutMs}ms.")
     }
 
-    getLatencies(longRunningBatchDurationMs, numBatches, outputTopic)
+    getLatencies(outputTopic)
   }
 
-  private def genData(url: String, topicName: String, throughput: Long): Unit = {
-    logInfo(s"Producing to $url topic $topicName at $throughput records / sec")
+  private def genData(url: String, topicName: String): Unit = {
+    logInfo(s"Producing to $url topic $topicName at $recordsPerSecond records / sec")
 
     val props: Properties = new Properties()
     props.put("bootstrap.servers", url)
@@ -252,7 +303,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
       var i = 0L
       val startTime = System.nanoTime
-      val delay = (Math.pow(10, 9) / throughput).asInstanceOf[Long]
+      val delay = (Math.pow(10, 9) / recordsPerSecond).asInstanceOf[Long]
       var nextDeadline = startTime + delay
       while (true) {
         var currentTime = System.nanoTime
@@ -329,10 +380,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     }
   }
 
-  private def getLatencies(
-      longRunningBatchDurationMs: Long,
-      numBatches: Long,
-      outputTopic: String): Unit = {
+  private def getLatencies(outputTopic: String): Unit = {
     val kafkaSinkData = spark.read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
@@ -348,8 +396,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     val minimumSourceTimestamp =
       kafkaSinkData.agg(min("source-timestamp")).collect()(0)(0).asInstanceOf[Long]
 
-    val numBatchesToFilter = 1
-    val timeFilterThresholdMs = longRunningBatchDurationMs * numBatchesToFilter
+    val timeFilterThresholdMs = checkpointInterval.toMillis * numBatchesToFilter
     val filteredSink = kafkaSinkData
       .withColumn("time", col("source-timestamp") - minimumSourceTimestamp)
       .filter(col("time") > timeFilterThresholdMs)
