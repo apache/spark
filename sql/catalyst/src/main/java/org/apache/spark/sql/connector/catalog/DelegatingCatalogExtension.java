@@ -112,6 +112,19 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
+  public Table createTable(Identifier ident, TableInfo tableInfo)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return asTableCatalog().createTable(ident, tableInfo);
+  }
+
+  @Override
+  public Table createTableLike(
+      Identifier ident, TableInfo tableInfo, Table sourceTable)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return asTableCatalog().createTableLike(ident, tableInfo, sourceTable);
+  }
+
+  @Override
   public Table alterTable(
       Identifier ident,
       TableChange... changes) throws NoSuchTableException {
