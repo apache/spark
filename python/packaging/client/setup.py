@@ -135,7 +135,7 @@ try:
     # python/docs/source/tutorial/sql/arrow_pandas.rst,
     # python/packaging/classic/setup.py, and python/packaging/connect/setup.py
     _minimum_pandas_version = "2.2.0"
-    _minimum_numpy_version = "1.21"
+    _minimum_numpy_version = "1.23.2"
     _minimum_pyarrow_version = "18.0.0"
     _minimum_grpc_version = "1.76.0"
     _minimum_googleapis_common_protos_version = "1.71.0"
