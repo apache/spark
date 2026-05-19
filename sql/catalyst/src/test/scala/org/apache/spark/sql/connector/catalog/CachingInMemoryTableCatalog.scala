@@ -29,6 +29,10 @@ import java.util.concurrent.ConcurrentHashMap
  * cached, so they modify the underlying table directly. Cached [[loadTable]]
  * results may still be stale until [[clearCache]] or REFRESH TABLE (which
  * invokes [[invalidateTable]]) is called.
+ *
+ * Note: [[dropTable]], [[createTable]], and [[alterTable]] do not invalidate
+ * the cache, matching the behavior of real caching connectors like Iceberg's
+ * CachingCatalog.
  */
 class CachingInMemoryTableCatalog extends InMemoryTableCatalog {
   private val cachedTables = new ConcurrentHashMap[Identifier, Table]()

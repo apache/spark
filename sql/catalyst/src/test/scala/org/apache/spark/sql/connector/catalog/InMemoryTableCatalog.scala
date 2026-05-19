@@ -184,6 +184,9 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     // matching names against its newSchema argument. Passing this post-drop schema
     // (rather than the final schema that may re-add a same-named column) ensures that
     // dropped column values are physically removed from existing data.
+    // Note: this only handles top-level column deletions. Nested column deletions
+    // would need additional handling, but [[alterTableWithData]] only filters by
+    // top-level field name anyway.
     val deletedTopLevelNames = changes.collect {
       case d: TableChange.DeleteColumn if d.fieldNames.length == 1 => d.fieldNames.head
     }.toSet
