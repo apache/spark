@@ -20,9 +20,12 @@ package org.apache.spark.sql.catalyst.expressions;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 
 /**
- * Static helpers used by {@code BinaryArithmetic.doGenCode} (and
- * corresponding eval paths) for ANSI overflow-checked {@code byte} and
- * {@code short} arithmetic. Primitive {@code int} / {@code long} /
+ * Static helpers used by {@code BinaryArithmetic.doGenCode} for ANSI
+ * overflow-checked {@code byte} and {@code short} arithmetic. These mirror
+ * {@code ByteExactNumeric} / {@code ShortExactNumeric} in {@code numerics.scala}
+ * (which the eval path uses); the Java helpers exist only because Scala
+ * {@code object} methods can't be called from generated code without going
+ * through the {@code references[]} array. Primitive {@code int} / {@code long} /
  * {@code float} / {@code double} arithmetic stays inline -- routing those
  * single-bytecode operations through a static method would be a runtime
  * regression.

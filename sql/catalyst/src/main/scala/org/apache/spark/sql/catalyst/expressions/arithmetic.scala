@@ -307,8 +307,8 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
         case "-" => "Subtract"
         case "*" => "Multiply"
         case _ =>
-          throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
-            s"genCode for Byte/Short with symbol '$symbol'", "genCode")
+          throw SparkException.internalError(
+            s"Unexpected symbol '$symbol' for Byte/Short BinaryArithmetic")
       }
       val typeName = if (dataType == ByteType) "byte" else "short"
       val arithmeticUtils = classOf[ArithmeticUtils].getName
@@ -449,10 +449,6 @@ case class Add(
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], getContextOrNull())
     case _: LongType if failOnError =>
       MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], getContextOrNull())
-    case _: ByteType if failOnError =>
-      ArithmeticUtils.byteAddExact(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
-    case _: ShortType if failOnError =>
-      ArithmeticUtils.shortAddExact(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
     case _ => numeric.plus(input1, input2)
   }
 
@@ -550,10 +546,6 @@ case class Subtract(
         input1.asInstanceOf[Long],
         input2.asInstanceOf[Long],
         getContextOrNull())
-    case _: ByteType if failOnError =>
-      ArithmeticUtils.byteSubtractExact(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
-    case _: ShortType if failOnError =>
-      ArithmeticUtils.shortSubtractExact(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
     case _ => numeric.minus(input1, input2)
   }
 
@@ -624,10 +616,6 @@ case class Multiply(
         input1.asInstanceOf[Long],
         input2.asInstanceOf[Long],
         getContextOrNull())
-    case _: ByteType if failOnError =>
-      ArithmeticUtils.byteMultiplyExact(input1.asInstanceOf[Byte], input2.asInstanceOf[Byte])
-    case _: ShortType if failOnError =>
-      ArithmeticUtils.shortMultiplyExact(input1.asInstanceOf[Short], input2.asInstanceOf[Short])
     case _ => numeric.times(input1, input2)
   }
 
