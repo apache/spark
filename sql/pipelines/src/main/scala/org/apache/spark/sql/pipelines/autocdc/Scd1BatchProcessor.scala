@@ -103,8 +103,8 @@ case class Scd1BatchProcessor(
   }
 
   private def validateCdcMetadataColumnNotPresent(microbatchDf: DataFrame): Unit = {
-    val sqlConf = microbatchDf.sparkSession.sessionState.conf
-    val resolver = sqlConf.resolver
+    val microbatchSqlConf = microbatchDf.sparkSession.sessionState.conf
+    val resolver = microbatchSqlConf.resolver
 
     microbatchDf.schema.fieldNames
       .find(resolver(_, Scd1BatchProcessor.cdcMetadataColName))
@@ -112,7 +112,7 @@ case class Scd1BatchProcessor(
         throw new AnalysisException(
           errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
           messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(sqlConf.caseSensitiveAnalysis),
+            "caseSensitivity" -> CaseSensitivityLabels.of(microbatchSqlConf.caseSensitiveAnalysis),
             "columnName" -> conflictingColumnName,
             "schemaName" -> "microbatch",
             "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
