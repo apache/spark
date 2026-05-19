@@ -2515,6 +2515,10 @@ def _test() -> None:
 
     globs = pyspark.sql.dataframe.__dict__.copy()
 
+    # `zip` is not yet supported on Spark Connect; the parent docstring's
+    # example would call into the connect impl and fail with NOT_IMPLEMENTED.
+    del pyspark.sql.dataframe.DataFrame.zip.__doc__
+
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
