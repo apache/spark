@@ -19,6 +19,7 @@ import concurrent.futures
 from decimal import Decimal
 import itertools
 import os
+import re
 import unittest
 
 from pyspark.sql.functions import pandas_udf
@@ -151,6 +152,48 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
     def _run_pandas_udf_return_type_coercion(self, golden_file, test_name):
         self._compare_or_generate_golden(golden_file, test_name)
 
+    def _patch_golden_for_pandas3(self, golden):
+        # Rename columns whose key differs between pandas 2 and pandas 3:
+        # datetime64 ndarrays default to [us] instead of [ns], and Categorical
+        # categories default to str instead of object.
+        rename = {}
+        for value in self.test_data:
+            if isinstance(value, np.ndarray) and value.dtype.kind == "M":
+                new_key = self.repr_value(value)
+                old_key = self.repr_value(value.astype("datetime64[ns]"))
+            elif isinstance(value, pd.Categorical) and value.categories.dtype != object:
+                new_key = self.repr_value(value)
+                old_key = self.repr_value(
+                    pd.Categorical(
+                        value.tolist(),
+                        categories=pd.Index(value.categories.tolist(), dtype=object),
+                    )
+                )
+            else:
+                continue
+            if old_key != new_key:
+                rename[old_key] = new_key
+        if rename:
+            golden.rename(columns=rename, inplace=True)
+
+        # Scale ns->us in datetime64 / Timedelta columns: any 13+ digit integer
+        # in those cells is a pandas-2 nanosecond value; the pandas-3 cast
+        # returns microseconds (1000x smaller).
+        def _ns_to_us(s):
+            return re.sub(r"\d{13,}", lambda m: str(int(m.group()) // 1000), s)
+
+        scale_cols = [
+            c for c in golden.columns if "@ndarray[datetime64[" in c or c.startswith("[Timedelta(")
+        ]
+        for col in scale_cols:
+            golden[col] = golden[col].map(_ns_to_us)
+
+        # Pandas 3 succeeds at coercing string list -> Decimal where pandas 2
+        # errored, so the corresponding cell flips from "X" to the new repr.
+        decimal_col = "['12', '34']@list"
+        if "decimal(10,0)" in golden.index and decimal_col in golden.columns:
+            golden.loc["decimal(10,0)", decimal_col] = "[Decimal('12'), Decimal('34')]"
+
     def _compare_or_generate_golden(self, golden_file, test_name):
         generating = self.is_generating_golden()
 
@@ -162,33 +205,10 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             golden = self.load_golden_csv(golden_csv)
             # The golden file was generated under pandas 2, where the default
             # dtypes differ from pandas >= 3.0 (datetime64[ns] vs [us]; object
-            # vs str for categorical categories). Remap the affected columns
-            # so the same file works under both versions.
+            # vs str for categorical categories). Patch the loaded golden in
+            # memory so the same file works under both versions.
             if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-                rename = {}
-                for value in self.test_data:
-                    if isinstance(value, np.ndarray) and value.dtype.kind == "M":
-                        new_key = self.repr_value(value)
-                        old_key = self.repr_value(value.astype("datetime64[ns]"))
-                    elif (
-                        isinstance(value, pd.Categorical)
-                        and value.categories.dtype != object
-                    ):
-                        new_key = self.repr_value(value)
-                        old_key = self.repr_value(
-                            pd.Categorical(
-                                value.tolist(),
-                                categories=pd.Index(
-                                    value.categories.tolist(), dtype=object
-                                ),
-                            )
-                        )
-                    else:
-                        continue
-                    if old_key != new_key:
-                        rename[old_key] = new_key
-                if rename:
-                    golden = golden.rename(columns=rename)
+                self._patch_golden_for_pandas3(golden)
 
         def work(arg):
             spark_type, value = arg
