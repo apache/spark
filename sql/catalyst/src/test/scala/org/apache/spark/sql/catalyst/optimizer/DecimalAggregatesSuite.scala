@@ -293,6 +293,14 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-56627: AVG(CAST(dec(7,2) AS dec(17,2))) -- peel preserves schema") {
+    val q = widenRel.select(avg($"d7_2".cast(DecimalType(17, 2))))
+    val baselineSchema = q.analyze.schema
+    val optimized = Optimize.execute(q.analyze)
+    assert(optimized.schema === baselineSchema,
+      s"peel changed schema: $baselineSchema -> ${optimized.schema}")
+  }
+
   test("SPARK-56627: SUM(CAST(dec(7,2) AS dec(18,6))) does NOT peel (scale change)") {
     val q = widenRel.select(sum($"d7_2".cast(DecimalType(18, 6))))
     val optimized = Optimize.execute(q.analyze)
