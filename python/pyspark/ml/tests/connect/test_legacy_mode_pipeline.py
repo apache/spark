@@ -43,6 +43,7 @@ class PipelineTestsMixin:
                 rtol=1e-1,
             )
 
+    @unittest.skipIf(not have_torch, "torch is required")
     def test_pipeline(self):
         train_dataset = self.spark.createDataFrame(
             [
