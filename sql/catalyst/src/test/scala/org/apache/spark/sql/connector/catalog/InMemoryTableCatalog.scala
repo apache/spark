@@ -182,6 +182,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     // Compute the intermediate schema with only column deletions applied.
     // This is used for data migration so that dropped column values are physically removed,
     // even when a column with the same name is re-added in the same ALTER call.
+    // Limitation: this only handles top-level column deletions.
     val deleteOnlyChanges = changes.filter(_.isInstanceOf[TableChange.DeleteColumn])
     val schemaAfterDrops = if (deleteOnlyChanges.nonEmpty) {
       CatalogV2Util.applySchemaChanges(

@@ -35,6 +35,16 @@ import java.util.concurrent.ConcurrentHashMap
 class CachingInMemoryTableCatalog extends InMemoryTableCatalog {
   import CachingInMemoryTableCatalog._
 
+  // Note: The write-path loadTable(ident, writePrivileges) is NOT overridden,
+  // so writes bypass the cache and go directly to the underlying table.
+  // This is intentional: it simulates connectors where writes update the real
+  // table while reads may return stale cached copies.
+  //
+  // Note: dropTable, createTable, and alterTable are NOT overridden, so they
+  // do not invalidate the cache. Only explicit invalidateTable calls (e.g.,
+  // via REFRESH TABLE) clear cached entries. This simulates real-world
+  // caching connectors where external DDL is invisible until refresh.
+
   override def loadTable(ident: Identifier): Table = {
     cachedTables.computeIfAbsent(cacheKey(name, ident), _ => {
       super.loadTable(ident)
