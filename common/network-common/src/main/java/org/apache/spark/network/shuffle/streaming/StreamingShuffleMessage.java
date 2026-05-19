@@ -81,11 +81,28 @@ public abstract sealed class StreamingShuffleMessage
     buf.writeLong(seqNum);
   }
 
+  /**
+   * Returns the number of bytes the encoded message header occupies on the wire.
+   *
+   * For control messages (CreditControl, TerminationControl, TerminationAck) this is
+   * the full encoded length of the message. For {@link DataMessage} this is the header
+   * size only; the variable-length payload of {@code dataSize} bytes follows the header
+   * and is NOT included in this count. Callers use this value to pre-size the
+   * {@link CompositeByteBuf} that the encoded message is written into.
+   */
   public int headerLength() {
     // 4 bytes for message type, 8 bytes for the sequence number
     return 12;
   }
 
+  /**
+   * Registers a callback that will be invoked exactly once when {@link #release()}
+   * runs to completion. The callback runs AFTER {@code ownedBuf.release()} and is
+   * cleared after invocation, so a subsequent {@code release()} call on the same
+   * thread will not re-run it.
+   *
+   * Replaces any previously-registered callback. Not thread-safe; see {@link #release()}.
+   */
   public void setReleaseCallback(Runnable releaseCallback) {
     this.releaseCallback = releaseCallback;
   }

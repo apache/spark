@@ -74,6 +74,20 @@ public final class DataMessage extends StreamingShuffleMessage {
     buf.addComponent(true, data.retainedSlice(data.readerIndex(), dataSize));
   }
 
+  /**
+   * Decodes a {@link DataMessage} from {@code message}. The 12-byte common header
+   * (message-type id + sequence number) has already been consumed by
+   * {@link StreamingShuffleMessage#decode(ByteBuf)}; this method reads the remaining
+   * 20-byte DataMessage header and treats the rest of {@code message} as the payload.
+   *
+   * On success, the returned DataMessage retains a reference to {@code message} via
+   * its {@code ownedBuf} field (refcount is incremented in the constructor), and the
+   * caller transfers ownership.
+   *
+   * On failure (an {@link IllegalArgumentException} is thrown — see the constructor's
+   * validation), the caller still owns {@code message} and is responsible for
+   * releasing it, since the constructor's {@code data.retain()} never ran.
+   */
   public static DataMessage decode(ByteBuf message) {
     int shuffleWriterId = message.readInt();
     int shuffleReaderId = message.readInt();
@@ -94,6 +108,11 @@ public final class DataMessage extends StreamingShuffleMessage {
   /**
    * Returns a slice of {@link #data} containing exactly the serialized records
    * (i.e., {@code dataSize} bytes starting at the current reader index).
+   *
+   * Uses {@code slice} (not {@code readSlice}), so this method DOES NOT advance the
+   * reader index of {@link #data}. The returned slice shares the underlying storage;
+   * no data is copied. Callers may freely consume the returned slice without
+   * affecting subsequent calls to this method.
    */
   public ByteBuf getRecordData() {
     return data.slice(data.readerIndex(), dataSize);
