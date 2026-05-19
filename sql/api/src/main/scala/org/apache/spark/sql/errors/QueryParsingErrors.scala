@@ -313,22 +313,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def invalidTableFunctionTableArgumentWithSinglePartitionError(
-      ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass =
-        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_WITH_SINGLE_PARTITION",
-      ctx)
-  }
-
-  def invalidTableFunctionTableArgumentOrderByWithoutPartitioningError(
-      ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass =
-        "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_ORDER_BY_WITHOUT_PARTITIONING",
-      ctx)
-  }
-
   def emptyQuantifiedPatternError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN", ctx)
   }

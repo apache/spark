@@ -2809,14 +2809,6 @@ class AstBuilder extends DataTypeAstBuilder
           invalidCtx)
       }
     }
-    if (withSinglePartition && partitionByExpressions.nonEmpty) {
-      throw QueryParsingErrors.invalidTableFunctionTableArgumentWithSinglePartitionError(
-        ctx.tableArgumentPartitioning)
-    }
-    if (orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition) {
-      throw QueryParsingErrors.invalidTableFunctionTableArgumentOrderByWithoutPartitioningError(
-        ctx.tableArgumentPartitioning)
-    }
     FunctionTableSubqueryArgumentExpression(
       plan = p,
       partitionByExpressions = partitionByExpressions,

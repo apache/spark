@@ -2004,6 +2004,18 @@ class PlanParserSuite extends AnalysisTest {
             start = 29,
             stop = 110 + partition.length)
         )
+        val sql9tableArg = "table(select col1, col2, col3 from v2)"
+        val sql9partition = s"$partition by col1 $order by col2 asc, col3 desc"
+        val sql9 = s"select * from my_tvf(arg1 => $sql9tableArg $sql9partition)"
+        checkError(
+          exception = parseException(sql9),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "ORDER BY"),
+          context = ExpectedContext(
+            fragment = s"$sql9tableArg $sql9partition",
+            start = 29,
+            stop = 99 + partition.length + order.length)
+        )
       }
     }
   }
