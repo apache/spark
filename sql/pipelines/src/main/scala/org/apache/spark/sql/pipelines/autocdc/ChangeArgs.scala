@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import java.util.Locale
-
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -72,71 +70,42 @@ object ColumnSelection {
       columnSelection: Option[ColumnSelection],
       ignoreCase: Boolean): StructType = columnSelection match {
     case None =>
-      // A none column selection is interpreted as a no-op.
+      // A None column selection is interpreted as a no-op.
       schema
     case Some(IncludeColumns(cols)) =>
-      val includeColumnNames = cols.map(_.name)
-      validateColumnsExistInSchema(schemaName, schema, includeColumnNames, ignoreCase)
-
-      val caseNormalizedIncludeColumnNames =
-        includeColumnNames.map(normalizeCase(_, ignoreCase)).toSet
-
-      StructType(
-        schema.fields.filter(schemaField =>
-          caseNormalizedIncludeColumnNames.contains(normalizeCase(schemaField.name, ignoreCase))
-        )
-      )
+      val keepIndices = lookupFieldIndices(schemaName, schema, cols, ignoreCase)
+      StructType(schema.fields.zipWithIndex.collect {
+        case (field, idx) if keepIndices.contains(idx) => field
+      })
     case Some(ExcludeColumns(cols)) =>
-      val excludeColumnNames = cols.map(_.name)
-      validateColumnsExistInSchema(schemaName, schema, excludeColumnNames, ignoreCase)
-
-      val caseNormalizedExcludeColumnNames =
-        excludeColumnNames.map(normalizeCase(_, ignoreCase)).toSet
-
-      StructType(
-        schema.fields.filterNot(schemaField =>
-          caseNormalizedExcludeColumnNames.contains(normalizeCase(schemaField.name, ignoreCase))
-        )
-      )
+      val dropIndices = lookupFieldIndices(schemaName, schema, cols, ignoreCase)
+      StructType(schema.fields.zipWithIndex.collect {
+        case (field, idx) if !dropIndices.contains(idx) => field
+      })
   }
 
-  private def validateColumnsExistInSchema(
+  private def lookupFieldIndices(
       schemaName: String,
       schema: StructType,
-      columnNames: Seq[String],
-      ignoreCase: Boolean): Unit = {
-    val caseNormalizedSchemaColumns =
-      schema.fieldNames.map(normalizeCase(_, ignoreCase)).toSet
+      fields: Seq[UnqualifiedColumnName],
+      ignoreCase: Boolean): Set[Int] = {
+    val caseAwareGetFieldIndex: String => Option[Int] =
+      if (ignoreCase) schema.getFieldIndexCaseInsensitive else schema.getFieldIndex
 
-    // Compare folded forms but report the missing and available columns using their original
-    // casing so error messages reflect what the user actually wrote and what the schema holds.
-    val columnsMissingInSchema = columnNames
-      .filterNot(columnName =>
-        caseNormalizedSchemaColumns.contains(normalizeCase(columnName, ignoreCase))
-      )
-      .distinct
-
-    if (columnsMissingInSchema.nonEmpty) {
+    val fieldIndexResolutions = fields.map(f => f -> caseAwareGetFieldIndex(f.name))
+    val missingFieldNames = fieldIndexResolutions.collect { case (f, None) => f.name }.distinct
+    if (missingFieldNames.nonEmpty) {
       throw new AnalysisException(
         errorClass = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
         messageParameters = Map(
           "caseSensitivity" -> CaseSensitivityLabels.of(ignoreCase),
           "schemaName" -> schemaName,
-          "missingColumns" -> columnsMissingInSchema.mkString(", "),
+          "missingColumns" -> missingFieldNames.mkString(", "),
           "availableColumns" -> schema.fieldNames.mkString(", ")
-        ))
+        )
+      )
     }
-  }
-
-  /**
-   * If ignoreCase, normalize all strings to lowercase for stable comparison.
-   */
-  private def normalizeCase(name: String, ignoreCase: Boolean): String = {
-    if (ignoreCase) {
-      name.toLowerCase(Locale.ROOT)
-    } else {
-      name
-    }
+    fieldIndexResolutions.flatMap { case (_, idx) => idx }.toSet
   }
 }
 

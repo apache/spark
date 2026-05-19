@@ -40,6 +40,30 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
       ) == sourceSchema)
   }
 
+  test("ColumnSelection IncludeColumns(Seq()) returns an empty schema") {
+    // An explicit empty include-list is semantically distinct from None: it means "select
+    // no columns" and produces an empty StructType, not the original schema.
+    assert(
+      ColumnSelection.applyToSchema(
+        schemaName = "test",
+        schema = sourceSchema,
+        columnSelection = Some(ColumnSelection.IncludeColumns(Seq.empty)),
+        ignoreCase = false
+      ) == new StructType())
+  }
+
+  test("ColumnSelection ExcludeColumns(Seq()) leaves schema unchanged") {
+    // An empty exclude-list is a no-op: nothing to remove, so the original schema is
+    // returned unchanged (same observable behavior as None for this case).
+    assert(
+      ColumnSelection.applyToSchema(
+        schemaName = "test",
+        schema = sourceSchema,
+        columnSelection = Some(ColumnSelection.ExcludeColumns(Seq.empty)),
+        ignoreCase = false
+      ) == sourceSchema)
+  }
+
   test("ColumnSelection IncludeColumns filters by exact name in schema order") {
     val filteredSchema = ColumnSelection.applyToSchema(
       schemaName = "test",
