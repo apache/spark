@@ -21,7 +21,6 @@ import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -637,16 +636,20 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // readingIterator.spill(), which appends a new writer to spillWriters AND rebinds
     // readingIterator.upstream to that same file. A post-publication snapshot would
     // then feed that file to BOTH the snapshot path and readingIterator -- duplicate
-    // records in the merged output.
-    final List<UnsafeSorterSpillWriter> snapshot = new ArrayList<>(spillWriters);
+    // records in the merged output. List.copyOf returns an unmodifiable list so any
+    // future code that mutates the snapshot (or aliases the live spillWriters field
+    // into the context and adds to it) fails fast.
+    final List<UnsafeSorterSpillWriter> snapshot = List.copyOf(spillWriters);
 
-    // This assignment is not inside synchronized(this), unlike the read in
-    // cleanupResources(). That is safe because all callers of cleanupResources()
-    // (the task completion listener, iterator-end cleanup from wrappers like
-    // UnsafeExternalRowSorter / UnsafeKVExternalSorter / SortExec, etc.) run on
-    // the task thread, sequentially with getSortedIterator(). The volatile modifier
-    // on boundedMerger provides memory visibility across any intervening
-    // synchronized blocks.
+    // The volatile fields published below -- boundedMerger and readingIterator -- are
+    // written without holding synchronized(this). Safe because all callers of
+    // getSortedIterator() and cleanupResources() (the task completion listener,
+    // iterator-end cleanup from wrappers like UnsafeExternalRowSorter /
+    // UnsafeKVExternalSorter / SortExec, etc.) run on the task thread, sequentially.
+    // The volatile modifier provides memory visibility to off-task-thread readers:
+    // sibling MemoryConsumer.spill() reads readingIterator, and cleanupResources()'s
+    // synchronized(this) read of boundedMerger crosses any intervening synchronized
+    // blocks.
     final UnsafeSorterBoundedSpillMerger merger = new UnsafeSorterBoundedSpillMerger(
         spillMergeFactor,
         recordComparatorSupplier.get(),
@@ -654,7 +657,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         blockManager,
         serializerManager,
         fileBufferSizeBytes);
-    boundedMerger = merger; // visible to cleanupResources() for intermediate-file cleanup
+    boundedMerger = merger;
 
     SpillableIterator inMemIter = null;
     if (inMemSorter != null) {
@@ -676,11 +679,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   @VisibleForTesting
   int getSpillMergeRounds() {
     return boundedMerger == null ? 0 : boundedMerger.getIntermediateRoundsCompleted();
-  }
-
-  @VisibleForTesting
-  int getSpillWritersCount() {
-    return spillWriters.size();
   }
 
   private static void spillIterator(UnsafeSorterIterator inMemIterator,
