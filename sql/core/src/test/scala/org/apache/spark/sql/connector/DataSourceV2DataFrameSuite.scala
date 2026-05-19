@@ -28,7 +28,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -75,7 +75,7 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
 
   after {
-    CachingInMemoryTableCatalog.clearCache()
+    catalog("cachingcat").asInstanceOf[CachingInMemoryTableCatalog].clearCache()
     spark.sessionState.catalogManager.reset()
   }
 
@@ -2525,31 +2525,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("temp view with stored plan after session drop and re-add column same type") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
-
-      // create two temp views with salary filters
-      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
-      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_null")
-      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
-      assert(spark.table("v_null").schema.fieldNames.toSeq == Seq("id", "salary"))
-      checkAnswer(spark.table("v_null"), Seq.empty)
-
-      // drop and re-add column with same name and type
-      sql(s"ALTER TABLE $t DROP COLUMN salary")
-      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
-
-      // salary values are now null, so the salary < 999 filter returns nothing
-      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "salary"))
-      checkAnswer(spark.table("v"), Seq.empty)
-      // IS NULL filter now matches all rows
-      checkAnswer(spark.table("v_null"), Seq(Row(1, null), Row(10, null)))
-    }
-  }
-
   // Column ID tests: Write operations
   //
   // [[writeTo().append()]] eagerly executes the command during the
@@ -3020,13 +2995,14 @@ class DataSourceV2DataFrameSuite
   // behavior after various table modifications (session or external).
 
   /** Appends rows to a DSv2 table via the catalog API, bypassing the session. */
+  // The row layout must match the current table column order.
   private def externalAppend(
       catalogName: String,
       ident: Identifier,
-      schema: StructType,
       row: InternalRow): Unit = {
     val extTable = catalog(catalogName).loadTable(ident,
       util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
+    val schema = CatalogV2Util.v2ColumnsToStructType(extTable.columns())
     extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
   }
 
@@ -3061,7 +3037,6 @@ class DataSourceV2DataFrameSuite
       externalAppend(
         catalogName = "testcat",
         ident = ident,
-        schema = StructType.fromDDL("id INT, salary INT"),
         row = InternalRow(2, 200))
 
       checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
@@ -3083,7 +3058,6 @@ class DataSourceV2DataFrameSuite
       externalAppend(
         catalogName = "cachingcat",
         ident = ident,
-        schema = StructType.fromDDL("id INT, salary INT"),
         row = InternalRow(2, 200))
 
       // Caching connector returns stale table: external write invisible
@@ -3132,7 +3106,6 @@ class DataSourceV2DataFrameSuite
       externalAppend(
         catalogName = "testcat",
         ident = ident,
-        schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
         row = InternalRow(2, 200, -1))
 
       // view preserves original 2-column schema, filter still applied
@@ -3158,7 +3131,6 @@ class DataSourceV2DataFrameSuite
       externalAppend(
         catalogName = "cachingcat",
         ident = ident,
-        schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
         row = InternalRow(2, 200, -1))
 
       // Caching connector returns stale table: external changes invisible

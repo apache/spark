@@ -21,40 +21,25 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * An InMemoryTableCatalog that simulates a caching connector like
- * Iceberg's CachingCatalog. On first loadTable, returns a fresh
+ * Iceberg's CachingCatalog. On first [[loadTable]], returns a fresh
  * copy. On subsequent loads, returns the CACHED (stale) copy,
  * making external changes invisible.
  *
- * Session writes go through the SQL path which modifies the
- * original table and invalidates, but direct catalog API
- * modifications are not visible until the cache is cleared.
- *
- * Call [[CachingInMemoryTableCatalog.clearCache()]] to simulate
- * cache expiration (like Iceberg's 30-second TTL).
+ * Session writes go through the write-variant [[loadTable]], which is not
+ * cached, so they modify the underlying table directly. Cached [[loadTable]]
+ * results may still be stale until [[clearCache]] or REFRESH TABLE (which
+ * invokes [[invalidateTable]]) is called.
  */
 class CachingInMemoryTableCatalog extends InMemoryTableCatalog {
-  import CachingInMemoryTableCatalog._
+  private val cachedTables = new ConcurrentHashMap[Identifier, Table]()
 
-  override def loadTable(ident: Identifier): Table = {
-    cachedTables.computeIfAbsent(cacheKey(name, ident), _ => {
-      super.loadTable(ident)
-    })
-  }
+  override def loadTable(ident: Identifier): Table =
+    cachedTables.computeIfAbsent(ident, _ => super.loadTable(ident))
 
   override def invalidateTable(ident: Identifier): Unit = {
     super.invalidateTable(ident)
-    cachedTables.remove(cacheKey(name, ident))
+    cachedTables.remove(ident)
   }
-
-  private def cacheKey(
-      catalog: String, ident: Identifier): String = {
-    s"$catalog.${ident.toString}"
-  }
-}
-
-object CachingInMemoryTableCatalog {
-  private val cachedTables =
-    new ConcurrentHashMap[String, Table]()
 
   def clearCache(): Unit = cachedTables.clear()
 }
