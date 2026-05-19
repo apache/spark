@@ -63,7 +63,7 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.11 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-ARG BASIC_PIP_PKGS="numpy==1.22.4 pyarrow==18.0.0 pandas==2.2.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting psutil"
+ARG BASIC_PIP_PKGS="numpy==1.23.2 pyarrow==18.0.0 pandas==2.2.0 six==1.16.0 scipy scikit-learn coverage unittest-xml-reporting psutil"
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20 protobuf==6.33.5"
 
 RUN python3.11 -m pip install --force $BASIC_PIP_PKGS $CONNECT_PIP_PKGS && \
