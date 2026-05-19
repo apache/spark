@@ -308,6 +308,76 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  // Run each SPARK-56945 case under both conf values: legacy=true asserts the pre-fix
+  // (default) snapshot is eager, freezing the placeholder's hard-coded nullable = true;
+  // legacy=false asserts the deferred snapshot preserves the body's actual non-null
+  // nullability. df.schema("x").nullable must therefore equal `legacy`.
+  Seq(true, false).foreach { legacy =>
+    test(s"SPARK-56945: CTE column nullability tracks " +
+        s"LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF=$legacy") {
+      withSQLConf(SQLConf.LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF.key -> legacy.toString) {
+        withUserDefinedFunction("non_null_one" -> false, "wrap_int" -> false) {
+          sql("CREATE FUNCTION non_null_one() RETURNS INT RETURN 1")
+          sql("CREATE FUNCTION wrap_int(x INT) RETURNS INT RETURN x")
+          val df = sql(
+            "WITH cte AS (SELECT wrap_int(non_null_one()) AS x) SELECT * FROM cte")
+          assert(df.schema("x").nullable == legacy,
+            s"Expected nullable = $legacy under legacy=$legacy, " +
+              s"got schema ${df.schema.treeString}")
+          checkAnswer(df, Row(1))
+        }
+      }
+    }
+
+    test(s"SPARK-56945: nested CTE schema settles across multiple ResolveSQLFunctions passes " +
+        s"(legacy=$legacy)") {
+      withSQLConf(SQLConf.LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF.key -> legacy.toString) {
+        withUserDefinedFunction("non_null_one" -> false, "wrap_int" -> false) {
+          sql("CREATE FUNCTION non_null_one() RETURNS INT RETURN 1")
+          sql("CREATE FUNCTION wrap_int(x INT) RETURNS INT RETURN x")
+          // 3-level nesting needs three ResolveSQLFunctions iterations to fully inline:
+          // iter 1 rewrites non_null_one(), iter 2 rewrites the inner wrap_int(...), iter 3
+          // rewrites the outer wrap_int(...). With legacy=false the CTE substitution must
+          // remain deferred through both intermediate iterations and snapshot only after
+          // the last one; with legacy=true it snapshots in iter 1 and freezes nullable=true.
+          val df = sql(
+            "WITH cte AS (SELECT wrap_int(wrap_int(non_null_one())) AS x) SELECT * FROM cte")
+          assert(df.schema("x").nullable == legacy,
+            s"Expected nullable = $legacy under legacy=$legacy, " +
+              s"got schema ${df.schema.treeString}")
+          checkAnswer(df, Row(1))
+        }
+      }
+    }
+
+    test(s"SPARK-56945: persisted VIEW captures schema at CREATE under legacy=$legacy and " +
+        s"stays frozen on read") {
+      withUserDefinedFunction("non_null_one" -> false, "wrap_int" -> false) {
+        sql("CREATE FUNCTION non_null_one() RETURNS INT RETURN 1")
+        sql("CREATE FUNCTION wrap_int(x INT) RETURNS INT RETURN x")
+        withView("cte_udf_view") {
+          // Snapshot the catalog schema under the create-time conf.
+          withSQLConf(SQLConf.LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF.key -> legacy.toString) {
+            sql(
+              "CREATE VIEW cte_udf_view AS " +
+                "WITH cte AS (SELECT wrap_int(non_null_one()) AS x) SELECT * FROM cte")
+          }
+          // The stored schema reflects the create-time conf and stays frozen regardless of
+          // the read-time conf: flipping the conf at read time does not re-derive it.
+          Seq(true, false).foreach { readLegacy =>
+            withSQLConf(
+                SQLConf.LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF.key -> readLegacy.toString) {
+              val schema = spark.table("cte_udf_view").schema
+              assert(schema("x").nullable == legacy,
+                s"Expected stored view 'x' nullable = $legacy under create-time legacy=$legacy " +
+                  s"(read-time legacy=$readLegacy), got schema ${schema.treeString}")
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Regression guard: frozen resolution path must not leak into CURRENT_SCHEMA/CURRENT_PATH.
   test("SPARK-56639: current_schema/current_path in SQL functions use invoker context") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {

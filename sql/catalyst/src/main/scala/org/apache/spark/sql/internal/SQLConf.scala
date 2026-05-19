@@ -5931,6 +5931,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF =
+    buildConf("spark.sql.legacy.eagerCteSnapshotWithSqlUdf")
+      .internal()
+      .doc("When true (the default), ResolveWithCTE snapshots a non-recursive CTERelationRef's " +
+        "schema from cteDef.output eagerly, even if the CTE body still contains an unresolved " +
+        "SQLFunctionExpression placeholder. The placeholder hard-codes nullable = true, so this " +
+        "legacy behavior can freeze incorrect nullability into the materialized schema (see " +
+        "SPARK-56945). When false, the snapshot is deferred until ResolveSQLFunctions inlines " +
+        "the placeholder. Defaulted to true so the fix can soak behind a flag before the " +
+        "default is flipped.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +

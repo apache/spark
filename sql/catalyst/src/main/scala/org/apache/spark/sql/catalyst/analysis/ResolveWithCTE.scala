@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION, SQL_FUNCTION_EXPRESSION}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Updates CTE references with the resolve output attributes of corresponding CTE definitions.
@@ -284,10 +285,32 @@ object ResolveWithCTE extends Rule[LogicalPlan] {
       // This is a non-recursive reference to a definition.
       case ref: CTERelationRef if !ref.resolved =>
         cteDefMap.get(ref.cteId).map { cteDef =>
-          // cteDef is certainly resolved, otherwise it would not have been in the map.
-          CTERelationRef(
-            cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming, maxRows = cteDef.maxRows,
+          // Defer the CTERelationRef substitution while the CTE body still contains an
+          // unresolved SQLFunctionExpression. Two compounding factors make snapshotting now
+          // incorrect: (1) the placeholder reports `resolved = true` as soon as its inputs are
+          // resolved, so cteDef.resolved flips before ResolveSQLFunctions inlines the body;
+          // and (2) the placeholder hard-codes `nullable = true`, so cteDef.output advertises
+          // the wrong nullability. Capturing cteDef.output here would freeze that incorrect
+          // nullability into CTERelationRef.output, and the `!ref.resolved` gate above
+          // prevents any later iteration from re-snapshotting. Gated by
+          // LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF; the conf defaults to true (pre-fix
+          // behavior) so the fix can soak behind a flag before the default is flipped, and
+          // is set to false to opt into the deferral.
+          val deferForSqlUdf =
+            !conf.getConf(SQLConf.LEGACY_EAGER_CTE_SNAPSHOT_WITH_SQL_UDF) &&
+              cteDef.containsPattern(SQL_FUNCTION_EXPRESSION)
+          if (deferForSqlUdf) {
+            ref
+          } else {
+            // cteDef.resolved was true when it was put into the map (so cteDef.output is
+            // populated), but as noted above that flag can be premature while a
+            // SQLFunctionExpression placeholder is still in the body; the deferForSqlUdf
+            // gate is what keeps the snapshot honest when the fix is enabled.
+            CTERelationRef(
+              cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming,
+              maxRows = cteDef.maxRows,
               isUnlimitedRecursion = ref.isUnlimitedRecursion)
+          }
         }.getOrElse {
           ref
         }
