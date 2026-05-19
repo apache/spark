@@ -619,12 +619,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val scheduler = backend.getTaskSchedulerImpl()
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
-    val concreteLossReason = ExecutorExited(
-      1,
-      exitCausedByApp = false,
-      "Executor pod was deleted by the cluster manager.")
-
-    backend.driverEndpoint.askSync[RegisterExecutorReply](
+    backend.driverEndpoint.askSync[Boolean](
       RegisterExecutor("1", mockEndpointRef, mockAddress.host, 1, Map.empty, Map.empty,
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
 
@@ -635,9 +630,9 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       force = true,
       lossReason = Some(ExecutorProcessLost("Executor heartbeat timed out"))).isEmpty)
 
-    backend.driverEndpoint.send(RemoveExecutor("1", concreteLossReason))
+    backend.driverEndpoint.send(RemoveExecutor("1", ExecutorKilled))
     eventually(timeout(5.seconds)) {
-      verify(scheduler).executorLost("1", concreteLossReason)
+      verify(scheduler).executorLost("1", ExecutorKilled)
     }
   }
 
