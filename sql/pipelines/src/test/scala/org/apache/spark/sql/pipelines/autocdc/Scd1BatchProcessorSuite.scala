@@ -482,6 +482,32 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("extendMicrobatchRowsWithCdcMetadata treats null deleteCondition results as upserts") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("is_delete", BooleanType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, 10L, null)
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1,
+        deleteCondition = Some(F.col("is_delete"))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    checkAnswer(
+      df = processor.extendMicrobatchRowsWithCdcMetadata(batch),
+      expectedAnswer = Row(1, 10L, null, Row(null, 10L))
+    )
+  }
+
   test("extendMicrobatchRowsWithCdcMetadata treats every row as an upsert " +
     "when deleteCondition is None") {
     val schema = new StructType()
@@ -640,6 +666,44 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
           "columnName" -> Scd1BatchProcessor.cdcMetadataColName,
+          "schemaName" -> "microbatch",
+          "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
+        )
+      )
+    }
+  }
+
+  test("extendMicrobatchRowsWithCdcMetadata rejects reserved CDC metadata column " +
+    "case-insensitively") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val conflictingColumnName = Scd1BatchProcessor.cdcMetadataColName.toUpperCase
+      val schema = new StructType()
+        .add("id", IntegerType)
+        .add("seq", LongType)
+        .add(conflictingColumnName, StringType)
+
+      val batch = microbatchOf(schema)(
+        Row(1, 10L, "user-supplied")
+      )
+
+      val processor = Scd1BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type1
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          processor.extendMicrobatchRowsWithCdcMetadata(batch)
+        },
+        condition = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
+        sqlState = "42710",
+        parameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
+          "columnName" -> conflictingColumnName,
           "schemaName" -> "microbatch",
           "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
         )

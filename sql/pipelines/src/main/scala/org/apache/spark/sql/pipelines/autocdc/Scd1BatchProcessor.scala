@@ -73,6 +73,14 @@ case class Scd1BatchProcessor(
   /**
    * Project the CDC metadata column onto the microbatch.
    *
+   * This must run before any column selection is applied to the microbatch. The
+   * [[ChangeArgs.deleteCondition]] and [[ChangeArgs.sequencing]] expressions are evaluated against
+   * the current microbatch schema, and column selection may drop inputs required by those
+   * expressions.
+   *
+   * Rows are classified as deletes only when [[ChangeArgs.deleteCondition]] evaluates to true. A
+   * false or null delete condition classifies the row as an upsert.
+   *
    * The returned dataframe has all of the columns in the input microbatch + the CDC metadata
    * column.
    */
