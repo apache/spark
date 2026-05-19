@@ -61,24 +61,34 @@ object ColumnSelection {
       extends ColumnSelection
 
   /**
-   * Applies [[ColumnSelection]] to a [[StructType]] and returns the filtered schema. Field
-   * order follows the original schema; filtering happens in place.
+   * Applies [[ColumnSelection]] to a [[StructType]] and returns the filtered schema. Field order
+   * follows the original schema; only matching fields are retained in the returned schema.
+   *
+   * @param schemaName      Logical name of the schema being filtered, surfaced in error messages
+   *                        when columns are not found (e.g. "microbatch", "target").
+   * @param schema          The schema to filter.
+   * @param columnSelection The user-provided selection. `None` is a no-op and returns `schema`
+   *                        unchanged.
+   * @param caseSensitive   Whether to match column names case-sensitively against the schema.
+   *                        Callers should derive this from the session, e.g.
+   *                        `session.sessionState.conf.caseSensitiveAnalysis`, so column matching
+   *                        stays consistent with `spark.sql.caseSensitive`.
    */
   def applyToSchema(
       schemaName: String,
       schema: StructType,
       columnSelection: Option[ColumnSelection],
-      ignoreCase: Boolean): StructType = columnSelection match {
+      caseSensitive: Boolean): StructType = columnSelection match {
     case None =>
       // A None column selection is interpreted as a no-op.
       schema
     case Some(IncludeColumns(cols)) =>
-      val keepIndices = lookupFieldIndices(schemaName, schema, cols, ignoreCase)
+      val keepIndices = lookupFieldIndices(schemaName, schema, cols, caseSensitive)
       StructType(schema.fields.zipWithIndex.collect {
         case (field, idx) if keepIndices.contains(idx) => field
       })
     case Some(ExcludeColumns(cols)) =>
-      val dropIndices = lookupFieldIndices(schemaName, schema, cols, ignoreCase)
+      val dropIndices = lookupFieldIndices(schemaName, schema, cols, caseSensitive)
       StructType(schema.fields.zipWithIndex.collect {
         case (field, idx) if !dropIndices.contains(idx) => field
       })
@@ -88,9 +98,9 @@ object ColumnSelection {
       schemaName: String,
       schema: StructType,
       fields: Seq[UnqualifiedColumnName],
-      ignoreCase: Boolean): Set[Int] = {
+      caseSensitive: Boolean): Set[Int] = {
     val caseAwareGetFieldIndex: String => Option[Int] =
-      if (ignoreCase) schema.getFieldIndexCaseInsensitive else schema.getFieldIndex
+      if (caseSensitive) schema.getFieldIndex else schema.getFieldIndexCaseInsensitive
 
     val fieldIndexResolutions = fields.map(f => f -> caseAwareGetFieldIndex(f.name))
     val missingFieldNames = fieldIndexResolutions.collect { case (f, None) => f.name }.distinct
@@ -98,7 +108,7 @@ object ColumnSelection {
       throw new AnalysisException(
         errorClass = "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA",
         messageParameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.of(ignoreCase),
+          "caseSensitivity" -> CaseSensitivityLabels.of(caseSensitive),
           "schemaName" -> schemaName,
           "missingColumns" -> missingFieldNames.mkString(", "),
           "availableColumns" -> schema.fieldNames.mkString(", ")
@@ -114,8 +124,8 @@ private[autocdc] object CaseSensitivityLabels {
   val CaseSensitive: String = "case-sensitive"
   val CaseInsensitive: String = "case-insensitive"
 
-  def of(ignoreCase: Boolean): String =
-    if (ignoreCase) CaseInsensitive else CaseSensitive
+  def of(caseSensitive: Boolean): String =
+    if (caseSensitive) CaseSensitive else CaseInsensitive
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
