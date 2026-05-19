@@ -314,6 +314,7 @@ class SubquerySuite extends SharedSparkSession
     )
 
     withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
       val df = sql("select a from l l1 where a not in " +
         "(select a from l where a < 3 group by a)")
@@ -1992,10 +1993,28 @@ class SubquerySuite extends SharedSparkSession
   }
 
   test("single-column top-level NOT IN union rewrite preserves empty RHS semantics") {
-    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
       val df = sql("select * from l where a not in (select c from r where c > 10)")
       checkAnswer(df, spark.table("l"))
       assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
+    }
+  }
+
+  test("single-column top-level NOT IN keeps broadcast null-aware anti join when available") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql("select * from l where a not in (select c from r where d < 6.0)")
+      checkAnswer(df, Seq.empty)
+      assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
+
+      val nullAwareAntiHashJoin = collect(df.queryExecution.sparkPlan) {
+        case join: BroadcastHashJoinExec
+            if join.joinType == LeftAnti && join.isNullAwareAntiJoin => join
+      }
+      assert(nullAwareAntiHashJoin.nonEmpty)
     }
   }
 

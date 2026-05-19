@@ -79,7 +79,9 @@ class RewriteSubquerySuite extends PlanTest {
 
     val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
     var optimized: LogicalPlan = null
-    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
       optimized = Optimize.execute(query.analyze)
     }
 
@@ -105,6 +107,21 @@ class RewriteSubquerySuite extends PlanTest {
     val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
     var optimized: LogicalPlan = null
     withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "false") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN keeps broadcast null-aware anti join when available") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
       optimized = Optimize.execute(query.analyze)
     }
 
