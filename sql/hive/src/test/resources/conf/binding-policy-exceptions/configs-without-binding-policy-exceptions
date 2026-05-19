@@ -1035,6 +1035,7 @@ spark.sql.streaming.numRecentProgressUpdates
 spark.sql.streaming.offsetLog.formatVersion
 spark.sql.streaming.optimizeOneRowPlan.enabled
 spark.sql.streaming.pollingDelay
+spark.sql.streaming.queryEvolution.enableSinkEvolution
 spark.sql.streaming.queryEvolution.enableSourceEvolution
 spark.sql.streaming.ratioExtraSpaceAllowedInCheckpoint
 spark.sql.streaming.realTimeMode.allowlistCheck
