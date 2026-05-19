@@ -520,18 +520,18 @@ case class MergeRowsExec(
 
     // Resolve metrics once per partition; longMetric(name) does a map lookup on each call.
     // See SPARK-56933.
-    private val numTargetRowsCopied = longMetric("numTargetRowsCopied")
-    private val numTargetRowsInserted = longMetric("numTargetRowsInserted")
-    private val numTargetRowsDeleted = longMetric("numTargetRowsDeleted")
-    private val numTargetRowsUpdated = longMetric("numTargetRowsUpdated")
+    private val numTargetRowsCopied = MergeRowsExec.this.longMetric("numTargetRowsCopied")
+    private val numTargetRowsInserted = MergeRowsExec.this.longMetric("numTargetRowsInserted")
+    private val numTargetRowsDeleted = MergeRowsExec.this.longMetric("numTargetRowsDeleted")
+    private val numTargetRowsUpdated = MergeRowsExec.this.longMetric("numTargetRowsUpdated")
     private val numTargetRowsMatchedUpdated =
-      longMetric("numTargetRowsMatchedUpdated")
+      MergeRowsExec.this.longMetric("numTargetRowsMatchedUpdated")
     private val numTargetRowsMatchedDeleted =
-      longMetric("numTargetRowsMatchedDeleted")
+      MergeRowsExec.this.longMetric("numTargetRowsMatchedDeleted")
     private val numTargetRowsNotMatchedBySourceUpdated =
-      longMetric("numTargetRowsNotMatchedBySourceUpdated")
+      MergeRowsExec.this.longMetric("numTargetRowsNotMatchedBySourceUpdated")
     private val numTargetRowsNotMatchedBySourceDeleted =
-      longMetric("numTargetRowsNotMatchedBySourceDeleted")
+      MergeRowsExec.this.longMetric("numTargetRowsNotMatchedBySourceDeleted")
 
     var cachedExtraRow: InternalRow = _
 
