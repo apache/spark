@@ -21,7 +21,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import DataError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyCumulativeMixin:
@@ -390,7 +389,6 @@ class GroupbyCumulativeMixin:
 class GroupbyCumulativeTests(
     GroupbyCumulativeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

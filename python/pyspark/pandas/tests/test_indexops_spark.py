@@ -21,7 +21,6 @@ from pyspark.errors import AnalysisException
 from pyspark.sql import functions as F
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SparkIndexOpsMethodsTestsMixin:
@@ -63,9 +62,7 @@ class SparkIndexOpsMethodsTestsMixin:
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
 
-class SparkIndexOpsMethodsTests(
-    SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase, SQLTestUtils
-):
+class SparkIndexOpsMethodsTests(SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase):
     pass
 
 

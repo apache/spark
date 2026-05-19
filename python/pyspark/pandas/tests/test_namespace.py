@@ -34,7 +34,6 @@ from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
 from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.testing import assert_frame_equal
 
 
@@ -734,7 +733,7 @@ class NamespaceTestsMixin:
                 getattr(ps, name)()
 
 
-class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase):
     pass
 
 

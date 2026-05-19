@@ -20,7 +20,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import extension_float_dtypes_available
 
 
@@ -183,7 +182,6 @@ class ArithmeticMixin(ArithmeticTestingFuncMixin):
 class ArithmeticTests(
     ArithmeticMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
