@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
@@ -2608,6 +2608,21 @@ class ParametersSuite extends SharedSparkSession {
         fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
       case _ =>
     }
+  }
+
+  // SPARK-46625: Regression for the `if c.tempViewName.resolved` guard in CheckAnalysis. When
+  // the IDENTIFIER expression itself fails to resolve (e.g. references an unresolved column),
+  // the guard skips the invariant-validation case so the catch-all `LogicalPlan` case can
+  // produce `UNRESOLVED_COLUMN`. Without the guard, the invariant case would pre-empt this
+  // path and throw a `SparkException internal error` instead.
+  test("SPARK-46625: CACHE TABLE IDENTIFIER(<unresolved-col>) reports UNRESOLVED_COLUMN") {
+    val ex = intercept[AnalysisException] {
+      spark.sql("CACHE TABLE IDENTIFIER(unresolved_col) AS SELECT 1 AS a")
+    }
+    assert(ex.getCondition != null && ex.getCondition.startsWith("UNRESOLVED_COLUMN"),
+      s"Expected UNRESOLVED_COLUMN.*, got ${ex.getCondition}: ${ex.getMessage}")
+    assert(!ex.getMessage.contains("CacheTableAsSelect.tempViewName must be"),
+      s"Internal-error message leaked into user-facing error: ${ex.getMessage}")
   }
 
   // SPARK-46625: End-to-end CACHE TABLE IDENTIFIER(:p) AS WITH ... SELECT ... -- exercises the
