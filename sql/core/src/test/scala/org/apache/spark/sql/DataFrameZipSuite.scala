@@ -84,4 +84,62 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
       condition = "ZIP_PLANS_NOT_MERGEABLE"
     )
   }
+
+  test("zip: withColumn on both sides") {
+    val df = Seq((1, 10), (2, 20), (3, 30)).toDF("a", "b")
+    val left = df.withColumn("a_plus_1", $"a" + 1)
+    val right = df.withColumn("b_times_2", $"b" * 2)
+    val zipped = left.zip(right)
+
+    assert(zipped.queryExecution.analyzed.isInstanceOf[Project])
+    checkAnswer(
+      zipped,
+      Row(1, 10, 2, 1, 10, 20) ::
+        Row(2, 20, 3, 2, 20, 40) ::
+        Row(3, 30, 4, 3, 30, 60) :: Nil)
+  }
+
+  test("zip: chained withColumn (multiple Project layers on the same side)") {
+    val df = Seq((1, 10), (2, 20)).toDF("a", "b")
+    val left = df
+      .withColumn("a_plus_1", $"a" + 1)
+      .withColumn("a_plus_2", $"a" + 2)
+    val right = df.withColumn("b_times_2", $"b" * 2)
+    val zipped = left.zip(right)
+
+    assert(zipped.queryExecution.analyzed.isInstanceOf[Project])
+    checkAnswer(
+      zipped,
+      Row(1, 10, 2, 3, 1, 10, 20) ::
+        Row(2, 20, 3, 4, 2, 20, 40) :: Nil)
+  }
+
+  test("zip: longer chain of selects on both sides") {
+    val df = Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c")
+    val left = df.select("a", "b", "c").select("a", "b").select("a")
+    val right = df.select("c")
+    val zipped = left.zip(right)
+
+    assert(zipped.queryExecution.analyzed.isInstanceOf[Project])
+    checkAnswer(zipped, Row(1, 3) :: Row(4, 6) :: Nil)
+  }
+
+  test("zip: parent and child with chain") {
+    val df = Seq((1, 2), (3, 4)).toDF("a", "b")
+    val child = df.select(($"a" + 1).as("a_plus_1")).select(($"a_plus_1" * 2).as("doubled"))
+    val zipped = df.zip(child)
+
+    assert(zipped.queryExecution.analyzed.isInstanceOf[Project])
+    checkAnswer(zipped, Row(1, 2, 4) :: Row(3, 4, 8) :: Nil)
+  }
+
+  test("zip: withColumnRenamed on both sides") {
+    val df = Seq((1, 2), (3, 4)).toDF("a", "b")
+    val left = df.withColumnRenamed("a", "a1")
+    val right = df.withColumnRenamed("b", "b1")
+
+    checkAnswer(
+      left.zip(right),
+      Row(1, 2, 1, 2) :: Row(3, 4, 3, 4) :: Nil)
+  }
 }

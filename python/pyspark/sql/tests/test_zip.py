@@ -115,6 +115,65 @@ class DataFrameZipTestsMixin:
             df1.zip(df2).schema
         self.assertEqual(ctx.exception.getCondition(), "ZIP_PLANS_NOT_MERGEABLE")
 
+    def test_zip_with_withColumn(self):
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.withColumn("a_plus_1", sf.col("a") + 1)
+        right = df.withColumn("b_times_2", sf.col("b") * 2)
+        zipped = left.zip(right)
+        # Schema has duplicates (a, b appear twice) since withColumn keeps original columns.
+        self.assertEqual(zipped.columns, ["a", "b", "a_plus_1", "a", "b", "b_times_2"])
+        rows = sorted(zipped.collect(), key=lambda r: r[0])
+        self.assertEqual(
+            [tuple(r) for r in rows],
+            [(1, 10, 2, 1, 10, 20), (2, 20, 3, 2, 20, 40), (3, 30, 4, 3, 30, 60)],
+        )
+
+    def test_zip_with_withColumnRenamed(self):
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.withColumnRenamed("a", "a1")
+        right = df.withColumnRenamed("b", "b1")
+        self.assertEqual(
+            sorted(left.zip(right).collect()),
+            [Row(a1=1, b=2, a=1, b1=2), Row(a1=3, b=4, a=3, b1=4)],
+        )
+
+    def test_zip_chained_withColumn(self):
+        # Stack two withColumn calls on left (two Project layers) and one on right.
+        df = self.spark.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
+        left = df.withColumn("a_plus_1", sf.col("a") + 1).withColumn("a_plus_2", sf.col("a") + 2)
+        right = df.withColumn("b_times_2", sf.col("b") * 2)
+        zipped = left.zip(right)
+        self.assertEqual(
+            zipped.columns,
+            ["a", "b", "a_plus_1", "a_plus_2", "a", "b", "b_times_2"],
+        )
+        rows = sorted(zipped.collect(), key=lambda r: r[0])
+        self.assertEqual(
+            [tuple(r) for r in rows],
+            [(1, 10, 2, 3, 1, 10, 20), (2, 20, 3, 4, 2, 20, 40)],
+        )
+
+    def test_zip_longer_chain(self):
+        # Left has three nested Projects; right has one.
+        df = self.spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
+        left = df.select("a", "b", "c").select("a", "b").select("a")
+        right = df.select("c")
+        self.assertEqual(
+            sorted(left.zip(right).collect()),
+            [Row(a=1, c=3), Row(a=4, c=6)],
+        )
+
+    def test_zip_parent_with_chained_child(self):
+        # df.zip(<chained projection of df>) -- the parent has no Project, child has many.
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        child = df.select((sf.col("a") + 1).alias("a_plus_1")).select(
+            (sf.col("a_plus_1") * 2).alias("doubled")
+        )
+        self.assertEqual(
+            sorted(df.zip(child).collect()),
+            [Row(a=1, b=2, doubled=4), Row(a=3, b=4, doubled=8)],
+        )
+
 
 class DataFrameZipTests(DataFrameZipTestsMixin, ReusedSQLTestCase):
     pass

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, NamedExpression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, NamedExpression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Zip}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.ZIP
@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.ZIP
  *
  * This rule:
  * 1. Waits for both children to be resolved
- * 2. Strips Project layers from each side to find the base plan
+ * 2. Strips Project layers from each side to find the base plan, composing alias
+ *    substitutions so the resulting expressions reference the base plan's attributes directly
  * 3. Verifies the base plans produce the same result (via `sameResult`)
  * 4. Verifies neither side contains a non-scalar Python UDF
  * 5. Remaps the right side's attribute references to the left base plan's output
@@ -62,10 +63,45 @@ object ResolveZip extends Rule[LogicalPlan] {
       }
   }
 
+  /**
+   * Walks down a chain of [[Project]] nodes, composing alias substitutions so the returned
+   * expressions reference the deepest non-Project base directly. Necessary because chains of
+   * `select`/`withColumn` produce nested Projects, and merging two Zip sides requires both to
+   * reach the same `sameResult` base regardless of chain depth.
+   */
   private def extractProjectAndBase(
       plan: LogicalPlan): (Seq[NamedExpression], LogicalPlan) = plan match {
-    case Project(projectList, child) => (projectList, child)
+    case Project(projectList, child) => stripProjects(child, projectList)
     case other => (other.output, other)
+  }
+
+  @scala.annotation.tailrec
+  private def stripProjects(
+      plan: LogicalPlan,
+      outerExprs: Seq[NamedExpression]): (Seq[NamedExpression], LogicalPlan) = plan match {
+    case Project(innerExprs, child) =>
+      val aliasMap = AttributeMap(innerExprs.collect {
+        case a: Alias => a.toAttribute -> a.child
+      })
+      val composed = outerExprs.map(substitute(_, aliasMap))
+      stripProjects(child, composed)
+    case other => (outerExprs, other)
+  }
+
+  /**
+   * Replaces references to inner aliases inside `expr` with the underlying expressions. When
+   * `expr` is a bare [[Attribute]] that matches an inner alias, wraps the substituted expression
+   * in a fresh [[Alias]] preserving the outer name and exprId so downstream references stay
+   * stable.
+   */
+  private def substitute(
+      expr: NamedExpression, aliasMap: AttributeMap[Expression]): NamedExpression = expr match {
+    case attr: Attribute if aliasMap.contains(attr) =>
+      Alias(aliasMap(attr), attr.name)(exprId = attr.exprId)
+    case _ =>
+      expr.transform {
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
+      }.asInstanceOf[NamedExpression]
   }
 
   /**

@@ -104,4 +104,48 @@ class ResolveZipSuite extends AnalysisTest {
       expectedMessageParameters = Map.empty
     )
   }
+
+  test("resolve Zip: longer chain of selects on both sides") {
+    // Left has 3 nested Projects, right has 1 Project. Both reach the same base.
+    val left = Project(Seq(base.output(0)),
+      Project(Seq(base.output(0), base.output(1)),
+        Project(base.output, base)))
+    val right = Project(Seq(base.output(1)), base)
+    val zip = Zip(left, right)
+
+    val resolved = Resolve.execute(zip)
+    assert(resolved.isInstanceOf[Project], "Asymmetric chain should still merge to a Project")
+    assert(resolved.output.map(_.name) == Seq("a", "b"))
+  }
+
+  test("resolve Zip: chained Project with aliases composes substitutions") {
+    // Build df.select(a + 1 AS x).select(x * 2 AS y) — outer references the inner alias.
+    val inner = base.select(($"a" + 1).as("x"))
+    val outer = inner.select(($"x" * 2).as("y")).analyze
+    val right = base.select(($"b" * 3).as("z")).analyze
+    val zip = Zip(outer, right)
+
+    val resolved = Resolve.execute(zip)
+    assert(resolved.isInstanceOf[Project], "Aliased chain should still merge to a Project")
+    assert(resolved.asInstanceOf[Project].child eq base,
+      "Resolved Project should sit directly on the shared base")
+    assert(resolved.output.map(_.name) == Seq("y", "z"))
+  }
+
+  test("resolve Zip: stacked withColumn-style projections (multiple Project layers)") {
+    // Emulate df.withColumn("d", a + 1).withColumn("e", b * 2) on left:
+    // two passthrough-plus-alias Projects stacked, while right has a single layer.
+    val left = base
+      .select($"a", $"b", $"c", ($"a" + 1).as("d"))
+      .select($"a", $"b", $"c", $"d", ($"b" * 2).as("e"))
+      .analyze
+    val right = base.select($"a", $"b", $"c", ($"c" + 100).as("f")).analyze
+    val zip = Zip(left, right)
+
+    val resolved = Resolve.execute(zip)
+    assert(resolved.isInstanceOf[Project], "Stacked withColumn chain should merge to a Project")
+    assert(resolved.asInstanceOf[Project].child eq base,
+      "Resolved Project should sit directly on the shared base")
+    assert(resolved.output.map(_.name) == Seq("a", "b", "c", "d", "e", "a", "b", "c", "f"))
+  }
 }
