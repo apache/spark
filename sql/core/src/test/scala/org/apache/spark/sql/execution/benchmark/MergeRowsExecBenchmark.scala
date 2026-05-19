@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import scala.concurrent.duration._
+
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
@@ -24,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Insert, Keep, Split, Update}
 import org.apache.spark.sql.classic.{ClassicConversions, Dataset}
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
@@ -34,6 +38,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  *      bin/spark-submit --class <this class>
  *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/Test/runMain <this class>"
+ *      Optional: pass "matched-update-only" to run a single case.
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/Test/runMain <this class>"
  *      Results will be written to "benchmarks/MergeRowsExecBenchmark-results.txt".
@@ -101,6 +106,33 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
     Dataset.ofRows(spark, mergeRows)
   }
 
+  /**
+   * Like [[codegenBenchmark]], but with JIT warm-up and a longer timed window so interpreted
+   * (whole-stage off) results are more stable when comparing metric caching changes.
+   */
+  private def mergeRowsCodegenBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") { f }
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") { f }
+
+    val benchmark = new Benchmark(
+      name,
+      cardinality,
+      minNumIters = 3,
+      warmupTime = 15.seconds,
+      minTime = 15.seconds,
+      output = output)
+
+    benchmark.addCase(s"$name wholestage off") { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") { f }
+    }
+
+    benchmark.addCase(s"$name wholestage on") { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") { f }
+    }
+
+    benchmark.run()
+  }
+
   private def mergeMatchedUpdateOnly(): Unit = {
     val inputDF = createJoinOutput(N, matchedFraction = 1.0)
     val a = inputDF.queryExecution.analyzed.output
@@ -110,7 +142,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       a(0), a(5), a(6), a(3)
     )))
 
-    codegenBenchmark("merge - matched update only", N) {
+    mergeRowsCodegenBenchmark("merge - matched update only", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -126,7 +158,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       a(4), a(5), a(6), a(7)
     )))
 
-    codegenBenchmark("merge - not matched insert only", N) {
+    mergeRowsCodegenBenchmark("merge - not matched insert only", N) {
       val df = buildMergeRowsDF(inputDF, Seq.empty, notMatchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -144,7 +176,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       a(4), a(5), a(6), a(7)
     )))
 
-    codegenBenchmark("merge - matched update + not matched insert", N) {
+    mergeRowsCodegenBenchmark("merge - matched update + not matched insert", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr, notMatchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -156,7 +188,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
 
     val matchedInstr = Seq(Discard(TrueLiteral))
 
-    codegenBenchmark("merge - matched delete", N) {
+    mergeRowsCodegenBenchmark("merge - matched delete", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -177,7 +209,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       Keep(Insert, GreaterThan(a(5), Literal(500)), Seq(a(4), a(5), a(6), a(7)))
     )
 
-    codegenBenchmark("merge - conditional clauses", N) {
+    mergeRowsCodegenBenchmark("merge - conditional clauses", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr, notMatchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -199,7 +231,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
     )))
     val notMatchedBySourceInstr = Seq(Discard(TrueLiteral))
 
-    codegenBenchmark("merge - matched + not matched + not matched by source", N) {
+    mergeRowsCodegenBenchmark("merge - matched + not matched + not matched by source", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr, notMatchedInstr, notMatchedBySourceInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -216,7 +248,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       Seq(a(0), a(5), a(6), a(3))
     ))
 
-    codegenBenchmark("merge - split update (delete + insert)", N) {
+    mergeRowsCodegenBenchmark("merge - split update (delete + insert)", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -225,13 +257,22 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("MergeRowsExec Codegen Benchmark") {
-      mergeMatchedUpdateOnly()
-      mergeNotMatchedInsertOnly()
-      mergeMatchedAndNotMatched()
-      mergeMatchedDelete()
-      mergeConditionalClauses()
-      mergeAllThreeClauses()
-      mergeSplitUpdate()
+      if (mainArgs.isEmpty) {
+        mergeMatchedUpdateOnly()
+        mergeNotMatchedInsertOnly()
+        mergeMatchedAndNotMatched()
+        mergeMatchedDelete()
+        mergeConditionalClauses()
+        mergeAllThreeClauses()
+        mergeSplitUpdate()
+      } else {
+        mainArgs.foreach {
+          case "matched-update-only" => mergeMatchedUpdateOnly()
+          case other =>
+            throw new IllegalArgumentException(
+              s"Unknown benchmark case: $other (supported: matched-update-only)")
+        }
+      }
     }
   }
 }
