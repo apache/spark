@@ -2577,7 +2577,8 @@ case class MakeDate(
         year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
     } else {
       try {
-        val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
+        val ld = LocalDate.of(
+          year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
         localDateToDays(ld)
       } catch {
         case _: java.time.DateTimeException => null
