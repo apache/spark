@@ -1482,13 +1482,46 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   test("SPARK-56876: parse timestamp with nanosecond precision from JSON") {
-    TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
-      assert(DataType.fromJson(s"\"timestamp_ltz($n)\"") === TimestampLTZNanosType(n))
-      assert(DataType.fromJson(s"\"timestamp_ltz( $n)\"") === TimestampLTZNanosType(n))
-      assert(DataType.fromJson(s"\"timestamp_ntz($n)\"") === TimestampNTZNanosType(n))
-      assert(DataType.fromJson(s"\"timestamp_ntz($n )\"") === TimestampNTZNanosType(n))
+    // (json-type-name, precision-error-condition, factory)
+    val variants = Seq[(String, String, Int => DataType)](
+      ("timestamp_ltz", "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION", TimestampLTZNanosType(_)),
+      ("timestamp_ntz", "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION", TimestampNTZNanosType(_)))
+    val overflowing = "9" * 20
+
+    variants.foreach { case (name, precisionError, factory) =>
+      // Happy path across valid precisions, tolerant of surrounding whitespace.
+      TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+        assert(DataType.fromJson(s"""\"$name($n)\"""") === factory(n))
+        assert(DataType.fromJson(s"""\"$name( $n)\"""") === factory(n))
+        assert(DataType.fromJson(s"""\"$name($n )\"""") === factory(n))
+      }
+
+      // Out-of-range precisions surface as UNSUPPORTED_TIMESTAMP_*_PRECISION. The overflowing
+      // case verifies the original digit string is preserved instead of leaking
+      // NumberFormatException.
+      Seq("0", "6", "10", overflowing).foreach { p =>
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(s"""\"$name($p)\"""")
+          },
+          condition = precisionError,
+          parameters = Map("precision" -> p))
+      }
+
+      // Malformed precision forms that don't match the regex fall through to
+      // INVALID_JSON_DATA_TYPE: negative, empty parens, non-numeric, and uppercase
+      // (JSON type-name convention is lowercase).
+      Seq(s"$name(-1)", s"$name()", s"$name(abc)", s"${name.toUpperCase}(7)").foreach { raw =>
+        checkError(
+          exception = intercept[SparkIllegalArgumentException] {
+            DataType.fromJson(s"""\"$raw\"""")
+          },
+          condition = "INVALID_JSON_DATA_TYPE",
+          parameters = Map("invalidType" -> raw))
+      }
     }
-    // JSON round-trip for nanos timestamp types inside struct, array, and map
+
+    // JSON round-trip for nanos timestamp types inside struct, array, and map.
     val structWithNanos = StructType(Seq(
       StructField("ntz", TimestampNTZNanosType(7)),
       StructField("ltz", TimestampLTZNanosType(8))))
@@ -1498,42 +1531,9 @@ class DataTypeSuite extends SparkFunSuite {
     val mapOfNanos = MapType(StringType, TimestampNTZNanosType(7), valueContainsNull = true)
     assert(DataType.fromJson(mapOfNanos.json) === mapOfNanos)
 
+    // Bare names without parens still map to the legacy single-precision types.
     assert(DataType.fromJson("\"timestamp_ltz\"") === TimestampType)
     assert(DataType.fromJson("\"timestamp_ntz\"") === TimestampNTZType)
-    checkError(
-      exception = intercept[SparkException] {
-        DataType.fromJson("\"timestamp_ltz(6)\"")
-      },
-      condition = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
-      parameters = Map("precision" -> "6"))
-    checkError(
-      exception = intercept[SparkException] {
-        DataType.fromJson("\"timestamp_ntz(0)\"")
-      },
-      condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
-      parameters = Map("precision" -> "0"))
-    checkError(
-      exception = intercept[SparkException] {
-        DataType.fromJson("\"timestamp_ntz(10)\"")
-      },
-      condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
-      parameters = Map("precision" -> "10"))
-
-    // Precision strings that overflow Int should surface as UNSUPPORTED_*_PRECISION
-    // (with the original digit string preserved), not as a raw NumberFormatException.
-    val overflowing = "9" * 20
-    checkError(
-      exception = intercept[SparkException] {
-        DataType.fromJson(s"""\"timestamp_ltz($overflowing)\"""")
-      },
-      condition = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
-      parameters = Map("precision" -> overflowing))
-    checkError(
-      exception = intercept[SparkException] {
-        DataType.fromJson(s"""\"timestamp_ntz($overflowing)\"""")
-      },
-      condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
-      parameters = Map("precision" -> overflowing))
   }
 
   test("singleton DataType equality after deserialization") {
