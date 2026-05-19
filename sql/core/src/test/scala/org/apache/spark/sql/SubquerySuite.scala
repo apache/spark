@@ -2068,6 +2068,19 @@ class SubquerySuite extends SharedSparkSession
       _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
   }
 
+  test("single-column top-level NOT IN with unseeded RHS TABLESAMPLE skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where a not in " +
+          "(select c from r tablesample (50 percent))")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
   test("single-column top-level NOT IN with another top-level subquery skips union rewrite") {
     var optimizedPlan: LogicalPlan = null
     withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {

@@ -133,6 +133,9 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper
       // LIMIT / OFFSET are order- or cardinality-sensitive when re-evaluated independently, so
       // duplicating them across those branches can change which RHS rows each branch observes.
       case _: GlobalLimit | _: LocalLimit | _: Offset => true
+      // An unseeded sample resolves its random seed in physical planning. Duplicating the RHS
+      // would let the scalar subqueries and anti-join branch observe different sampled rows.
+      case Sample(_, _, _, None, _, _) => true
       case _ => false
     }
   }

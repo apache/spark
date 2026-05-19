@@ -6407,8 +6407,9 @@ object SQLConf {
     buildConf("spark.sql.optimizeTopLevelSingleColumnNotInWithUnion")
       .internal()
       .doc("When true, deterministic top-level single-column NOT IN subqueries without " +
-        "correlation predicates are rewritten into a UNION that separates the empty-right " +
-        "case from a regular equi left anti join.")
+        "correlation predicates may be rewritten into a UNION fallback that separates the " +
+        "empty-right case from a regular equi left anti join when the broadcast null-aware " +
+        "anti join path is unavailable.")
       .booleanConf
       .createWithDefault(false)
 

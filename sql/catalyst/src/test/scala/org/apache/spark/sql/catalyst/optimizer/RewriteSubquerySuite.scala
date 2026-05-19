@@ -188,6 +188,26 @@ class RewriteSubquerySuite extends PlanTest {
     assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
   }
 
+  test("single-column top-level NOT IN with unseeded RHS sample skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val sampledRelation2 =
+      org.apache.spark.sql.catalyst.plans.logical.Sample(
+        lowerBound = 0.0,
+        upperBound = 0.5,
+        withReplacement = false,
+        seed = None,
+        child = relation2)
+    val query = relation1.where(Not($"a".in(ListQuery(sampledRelation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
     val relation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".int)
     val query = relation.where(($"a" === 1 || $"b" === 2)
