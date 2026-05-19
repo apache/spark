@@ -132,15 +132,25 @@ class CatalogManager(
     }
   }
 
-  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
-    if (isSessionCatalog(currentCatalog) && namespace.length == 1) {
+  def setCurrentNamespace(namespace: Array[String]): Unit = {
+    // SPARK-56939: do NOT hold [[CatalogManager]]'s intrinsic lock across the callbacks below.
+    // [[v1SessionCatalog.setCurrentDatabaseWithNameCheck]] briefly synchronizes on
+    // [[SessionCatalog]], and concurrent unqualified function resolution acquires the
+    // [[SessionCatalog]] lock and then reaches into [[CatalogManager]] via
+    // [[sqlResolutionPathEntries]]; nesting the manager lock outside the catalog lock here
+    // would invert that order and deadlock. Snapshot the dispatch decision under the lock,
+    // run callbacks outside it, then publish the new namespace under the lock again.
+    val isSession = synchronized(isSessionCatalog(currentCatalog))
+    if (isSession && namespace.length == 1) {
       v1SessionCatalog.setCurrentDatabaseWithNameCheck(
         namespace.head,
         _ => assertNamespaceExist(namespace))
     } else {
       assertNamespaceExist(namespace)
     }
-    _currentNamespace = Some(namespace)
+    synchronized {
+      _currentNamespace = Some(namespace)
+    }
   }
 
   import CatalogManager.SessionPathEntry
@@ -266,6 +276,42 @@ class CatalogManager(
       currentCatalog, currentNamespace)
 
   /**
+   * Snapshot the live PATH-derived [[SessionCatalog.SessionFunctionKind]] order used by
+   * unqualified function/table-function resolution.
+   *
+   * The kinds list is computed by reading the current catalog, current namespace, and the
+   * effective session path together so that a concurrent USE / SET PATH cannot return a
+   * torn snapshot (catalog from one observation, namespace from another). The `v1`
+   * current-database read (used only when `currentCatalog` is the session catalog and no
+   * explicit namespace has been published) is taken OUTSIDE this manager's intrinsic lock
+   * to avoid the SPARK-56939 lock-order inversion with [[SessionCatalog.synchronized]]:
+   * the rest of the snapshot then runs under a single CM critical section.
+   *
+   * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]],
+   * [[org.apache.spark.sql.catalyst.analysis.FunctionResolution.isSessionBeforeBuiltinInPath]])
+   * MUST NOT hold [[SessionCatalog]]'s intrinsic lock when invoking this method.
+   */
+  def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionCatalog.SessionFunctionKind] = {
+    // SPARK-56939: read v1's current database before taking the CM lock. We only need it
+    // if there is no explicit `_currentNamespace` AND the current catalog is the session
+    // catalog. The read might be unused; the alternative (reading it from inside
+    // synchronized) would re-introduce the deadlock cycle this helper is designed to avoid.
+    val v1CurrentDb = v1SessionCatalog.getCurrentDatabase
+    val pathEntries = synchronized {
+      val catName = currentCatalog.name()
+      val effectiveNs: Seq[String] = _currentNamespace.map(_.toSeq).getOrElse {
+        if (catName == SESSION_CATALOG_NAME) {
+          Seq(v1CurrentDb)
+        } else {
+          currentCatalog.defaultNamespace().toSeq
+        }
+      }
+      sqlResolutionPathEntries(catName, effectiveNs)
+    }
+    CatalogManager.systemFunctionKindsFromPath(pathEntries)
+  }
+
+  /**
    * True if `system.session` is on the SQL path. Only literal path entries can match: the
    * [[org.apache.spark.sql.connector.catalog.CatalogManager.CurrentSchemaEntry$]] marker expands to
    * `currentCatalog.name() +: currentNamespace`, and
@@ -330,15 +376,32 @@ class CatalogManager(
     catalog(_currentCatalogName.getOrElse(conf.getConf(SQLConf.DEFAULT_CATALOG)))
   }
 
-  def setCurrentCatalog(catalogName: String): Unit = synchronized {
-    // `setCurrentCatalog` is noop if it doesn't switch to a different catalog.
-    if (currentCatalog.name() != catalogName) {
-      catalog(catalogName)
-      _currentCatalogName = Some(catalogName)
-      _currentNamespace = None
+  def setCurrentCatalog(catalogName: String): Unit = {
+    // SPARK-56939: see [[setCurrentNamespace]]. Avoid nesting [[CatalogManager]]'s lock
+    // across [[v1SessionCatalog.setCurrentDatabase]] (which synchronizes on
+    // [[SessionCatalog]]) to prevent a lock-order inversion with concurrent unqualified
+    // function resolution.
+    val needsSwitch = synchronized {
+      // `setCurrentCatalog` is noop if it doesn't switch to a different catalog.
+      if (currentCatalog.name() != catalogName) {
+        // Force-load the named catalog while holding the manager lock to keep the
+        // not-found error semantics; if loading fails, throw before mutating state.
+        catalog(catalogName)
+        true
+      } else {
+        false
+      }
+    }
+    if (needsSwitch) {
       // Reset the current database of v1 `SessionCatalog` when switching current catalog, so that
       // when we switch back to session catalog, the current namespace definitely is ["default"].
+      // Run this BEFORE publishing the new catalog name so that if a reader observes the new
+      // catalog, the v1 state is already consistent with it.
       v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
+      synchronized {
+        _currentCatalogName = Some(catalogName)
+        _currentNamespace = None
+      }
     }
   }
 

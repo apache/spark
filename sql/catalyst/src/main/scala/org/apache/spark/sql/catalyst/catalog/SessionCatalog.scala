@@ -154,13 +154,19 @@ class SessionCatalog(
    * Session function kinds in resolution order for unqualified lookups: test override if set,
    * else live PATH from [[catalogManagerForSessionFunctionKinds]], else
    * [[SQLConf.systemPathOrder]].
+   *
+   * MUST NOT be called while holding [[SessionCatalog]]'s intrinsic lock (see SPARK-56939):
+   * the path-driven branch delegates to [[CatalogManager]], which has its own intrinsic lock
+   * and re-enters this catalog through `USE` paths, so nesting the two locks here would
+   * deadlock.
    */
   private def sessionFunctionKindsInResolutionOrder: Seq[SessionFunctionKind] =
     sessionFunctionKindsTestOverride.getOrElse {
       catalogManagerForSessionFunctionKinds match {
         case Some(cm) =>
-          CatalogManager.systemFunctionKindsFromPath(
-            cm.sqlResolutionPathEntries(cm.currentCatalog.name(), cm.currentNamespace.toSeq))
+          // Use the consolidated helper so unqualified resolution observes a consistent
+          // (currentCatalog, currentNamespace, path) triple in a single critical section.
+          cm.sessionFunctionKindsForUnqualifiedResolution()
         case None =>
           CatalogManager.systemFunctionKindsFromPath(conf.systemPathOrder)
       }

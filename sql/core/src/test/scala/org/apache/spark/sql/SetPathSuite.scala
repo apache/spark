@@ -977,6 +977,83 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-56939: concurrent USE SCHEMA and unqualified function lookups do not deadlock") {
+    // Regression for SPARK-56939. Prior to the fix, [[CatalogManager.setCurrentNamespace]]
+    // held the manager's intrinsic lock while calling into
+    // [[SessionCatalog.setCurrentDatabaseWithNameCheck]] (which takes the catalog's
+    // intrinsic lock), while concurrent unqualified function resolution acquired the
+    // catalog's intrinsic lock and then reached back into the manager via
+    // [[CatalogManager.sqlResolutionPathEntries]]. That lock-order inversion deadlocked the
+    // session whenever a `USE SCHEMA` raced with any unqualified function reference.
+    //
+    // The hazard is independent of [[SQLConf.PATH_ENABLED]] and the
+    // resolution-order setting, so this test exercises the default configuration.
+    sql("CREATE SCHEMA IF NOT EXISTS spark_56939_s1")
+    sql("CREATE SCHEMA IF NOT EXISTS spark_56939_s2")
+    try {
+      val budget = 200
+      val iterations = new java.util.concurrent.atomic.AtomicInteger(0)
+      val barrier = new java.util.concurrent.CyclicBarrier(2)
+      val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+      val useThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            sql(if ((i % 2) == 0) "USE SCHEMA spark_56939_s1" else "USE SCHEMA spark_56939_s2")
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-use-schema")
+
+      val lookupThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Unqualified `count(*)` exercises the kinds-order provider that resolves
+            // against the live PATH via [[CatalogManager]] -- the side of the cycle
+            // that previously acquired the catalog lock first and then the manager lock.
+            val n = sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)")
+              .head().getLong(0)
+            assert(n == 3L, s"unexpected count: $n at iteration $i")
+            iterations.incrementAndGet()
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-lookup")
+
+      useThread.start()
+      lookupThread.start()
+
+      // Generous join: 30s is plenty for 200 cheap queries on either side and gives a
+      // clear failure signal if the implementation regresses into a deadlock.
+      val joinMillis = 30000L
+      useThread.join(joinMillis)
+      lookupThread.join(joinMillis)
+
+      assert(!useThread.isAlive,
+        "USE SCHEMA thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely returned (SPARK-56939).")
+      assert(!lookupThread.isAlive,
+        "Lookup thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely returned (SPARK-56939).")
+      assert(errors.isEmpty,
+        s"Concurrent lookups raised unexpected errors: ${errors.toArray.mkString("; ")}")
+      assert(iterations.get() > 0,
+        "Lookup thread never completed a query; suspect contention or deadlock.")
+    } finally {
+      sql("USE SCHEMA default")
+      sql("DROP SCHEMA IF EXISTS spark_56939_s1 CASCADE")
+      sql("DROP SCHEMA IF EXISTS spark_56939_s2 CASCADE")
+    }
+  }
+
   test("PATH enabled: concurrent SET PATH and unqualified lookups do not deadlock") {
     // SessionCatalog.lookupBuiltinOrTempFunction is intentionally NOT
     // synchronized on SessionCatalog because the path-driven kinds provider acquires
