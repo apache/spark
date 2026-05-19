@@ -124,8 +124,8 @@ case class Scd1BatchProcessor(
    * [[ChangeArgs.columnSelection]] + the CDC metadata column.
    */
   def projectTargetColumnsOntoMicrobatch(microbatchWithCdcMetadataDf: DataFrame): DataFrame = {
-    val ignoreColumnNameCase =
-      !microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitiveColumnComparison =
+      microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.caseSensitiveAnalysis
 
     // Calculate the schema of the microbatch less the system-projected CDC metadata column, i.e.
     // the The user schema is the microbatch's schema after dropping the system columns - i.e the
@@ -142,7 +142,7 @@ case class Scd1BatchProcessor(
           Seq(UnqualifiedColumnName(Scd1BatchProcessor.cdcMetadataColName))
         )
       ),
-      ignoreCase = ignoreColumnNameCase
+      caseSensitive = caseSensitiveColumnComparison
     )
 
     val userSelectedColumnsInMicrobatchSchema =
@@ -150,7 +150,7 @@ case class Scd1BatchProcessor(
         schemaName = "microbatch",
         schema = userColumnsInMicrobatchSchema,
         columnSelection = changeArgs.columnSelection,
-        ignoreCase = ignoreColumnNameCase
+        caseSensitive = caseSensitiveColumnComparison
       )
 
     // In addition to the explicit user-selected columns, re-project the operational CDC metadata
