@@ -140,6 +140,14 @@ class CatalogManager(
     // [[sqlResolutionPathEntries]]; nesting the manager lock outside the catalog lock here
     // would invert that order and deadlock. Snapshot the dispatch decision under the lock,
     // run callbacks outside it, then publish the new namespace under the lock again.
+    //
+    // Concurrency trade-off versus the pre-SPARK-56939 atomic version: the `isSession`
+    // snapshot can drift if a concurrent [[setCurrentCatalog]] switches to a v2 catalog
+    // between this read and the v1 callback below -- the callback would still touch
+    // `v1.currentDb` even though the active catalog is no longer the session catalog. A
+    // later switch back to the session catalog resets `v1.currentDb` to `default` (see
+    // [[setCurrentCatalog]]), so long-term state remains consistent; only the intermediate
+    // observation is novel. Acceptable trade-off against the deadlock alternative.
     val isSession = synchronized(isSessionCatalog(currentCatalog))
     if (isSession && namespace.length == 1) {
       v1SessionCatalog.setCurrentDatabaseWithNameCheck(
@@ -231,6 +239,15 @@ class CatalogManager(
    * When PATH is enabled and a session path is in effect (stored or via
    * [[SQLConf#DEFAULT_PATH]]), formats the resolved entries. Otherwise falls back to the legacy
    * resolutionSearchPath.
+   *
+   * SPARK-56939 note: this is currently the only intentional `CatalogManager.synchronized ->
+   * SessionCatalog.synchronized` nest left in this class. The transitive call into
+   * [[v1SessionCatalog.getCurrentDatabase]] happens via [[currentNamespace]], which fetches
+   * the v1 current database under the CM lock. It is safe today because no code path holds
+   * [[SessionCatalog]]'s intrinsic lock while waiting on [[CatalogManager]]'s -- the
+   * SPARK-56939 fix removed every such SC->CM ordering. Any future change that introduces a
+   * new SC->CM ordering must avoid resurrecting the deadlock by also taking
+   * `currentPathString` (or any other CM->SC nest) into account.
    */
   def currentPathString: String = synchronized {
     import CatalogV2Implicits._
@@ -279,23 +296,29 @@ class CatalogManager(
    * Snapshot the live PATH-derived [[SessionCatalog.SessionFunctionKind]] order used by
    * unqualified function/table-function resolution.
    *
-   * The kinds list is computed by reading the current catalog, current namespace, and the
-   * effective session path together so that a concurrent USE / SET PATH cannot return a
-   * torn snapshot (catalog from one observation, namespace from another). The `v1`
-   * current-database read (used only when `currentCatalog` is the session catalog and no
-   * explicit namespace has been published) is taken OUTSIDE this manager's intrinsic lock
-   * to avoid the SPARK-56939 lock-order inversion with [[SessionCatalog.synchronized]]:
-   * the rest of the snapshot then runs under a single CM critical section.
+   * The `(currentCatalog, _currentNamespace, sessionPath)` triple is read together inside a
+   * single CM critical section so a concurrent `USE` / `SET PATH` cannot return a torn
+   * snapshot for those three fields (e.g. catalog from one observation, explicit namespace
+   * from another).
+   *
+   * The `v1SessionCatalog.getCurrentDatabase` read needed for the default-namespace fallback
+   * is taken OUTSIDE the CM lock and is therefore intentionally racy w.r.t. a concurrent
+   * `USE SCHEMA`. That staleness is harmless for this helper's output: this method consumes
+   * `effectiveNs` only to expand `CURRENT_SCHEMA` markers in the SQL path, and
+   * [[CatalogManager.systemFunctionKindsFromPath]] only retains literal `system.builtin` /
+   * `system.session` entries from the resolved path -- it never inspects any
+   * `(catalog, namespace)` derived from `v1`. So if `v1CurrentDb` lags by one `USE SCHEMA`,
+   * a `CURRENT_SCHEMA` entry might briefly resolve to the previous database, but the kinds
+   * list (the only thing returned here) is unaffected. Lifting the read inside the CM lock
+   * would re-introduce the SPARK-56939 lock-order inversion this helper exists to avoid.
    *
    * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]],
    * [[org.apache.spark.sql.catalyst.analysis.FunctionResolution.isSessionBeforeBuiltinInPath]])
    * MUST NOT hold [[SessionCatalog]]'s intrinsic lock when invoking this method.
    */
   def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionCatalog.SessionFunctionKind] = {
-    // SPARK-56939: read v1's current database before taking the CM lock. We only need it
-    // if there is no explicit `_currentNamespace` AND the current catalog is the session
-    // catalog. The read might be unused; the alternative (reading it from inside
-    // synchronized) would re-introduce the deadlock cycle this helper is designed to avoid.
+    // SPARK-56939: read v1's current database before taking the CM lock; see the method
+    // doc for why the resulting staleness is harmless for the kinds list.
     val v1CurrentDb = v1SessionCatalog.getCurrentDatabase
     val pathEntries = synchronized {
       val catName = currentCatalog.name()
@@ -397,6 +420,15 @@ class CatalogManager(
       // when we switch back to session catalog, the current namespace definitely is ["default"].
       // Run this BEFORE publishing the new catalog name so that if a reader observes the new
       // catalog, the v1 state is already consistent with it.
+      //
+      // Concurrency trade-off versus the pre-SPARK-56939 atomic version: between this v1 write
+      // and the publish below, a concurrent reader of `currentNamespace` sees
+      // `(oldCatalog, v1.currentDb = default)`. When the old catalog is the session catalog
+      // (the common case for `USE CATALOG`), the user's previous namespace is briefly invisible
+      // to that reader until the new name is published. The opposite torn observation
+      // (`newCatalog`, stale `v1.currentDb`) is avoided by this ordering. This trade-off
+      // (transient invisibility instead of transient inconsistency, exchanged for breaking the
+      // deadlock cycle) is accepted; the long-term post-switch state is the same as before.
       v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
       synchronized {
         _currentCatalogName = Some(catalogName)
@@ -411,12 +443,20 @@ class CatalogManager(
   }
 
   // Clear all the registered catalogs. Only used in tests.
-  private[sql] def reset(): Unit = synchronized {
-    catalogs.clear()
-    _currentNamespace = None
-    _currentCatalogName = None
-    _sessionPath = None
-    confDefaultPathCache.set(None)
+  //
+  // SPARK-56939: apply the same split-lock pattern as [[setCurrentNamespace]] /
+  // [[setCurrentCatalog]] so the locking contract is uniform across every CM mutator that
+  // calls back into [[v1SessionCatalog]]. Test-only callers don't race against unqualified
+  // function resolution today, but keeping the contract symmetric prevents future test
+  // helpers (e.g. session reset in a concurrent harness) from reintroducing the cycle.
+  private[sql] def reset(): Unit = {
+    synchronized {
+      catalogs.clear()
+      _currentNamespace = None
+      _currentCatalogName = None
+      _sessionPath = None
+      confDefaultPathCache.set(None)
+    }
     v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 }

@@ -2571,11 +2571,13 @@ class SessionCatalog(
    * Resolution order follows the configured path (e.g. builtin then session).
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
-    // Intentionally not `synchronized` on this [[SessionCatalog]]. Resolution order may call
-    // into [[CatalogManager]] (e.g. [[CatalogManager.sqlResolutionPathEntries]]), which can
-    // synchronize on the manager; another
-    // thread can hold that lock and call into this catalog (e.g. via `setCurrentNamespace`),
-    // which would deadlock if this method also synchronized on `this`.
+    // Intentionally not `synchronized` on this [[SessionCatalog]]: resolution order may call
+    // into [[CatalogManager]] (e.g. [[CatalogManager.sqlResolutionPathEntries]] via
+    // [[sessionFunctionKindsInResolutionOrder]]), which synchronizes on the manager. The
+    // SPARK-56939 fix removed the reverse `CatalogManager -> SessionCatalog` nest from the
+    // `USE`-style mutators that previously closed the deadlock cycle; keeping this method
+    // un-synchronized preserves the `SessionCatalog -> CatalogManager` direction as the
+    // single allowed ordering, so the invariant survives future regressions.
     lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
   }
 
@@ -2730,8 +2732,9 @@ class SessionCatalog(
   def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
     // Intentionally not `synchronized` on this [[SessionCatalog]] (see
     // [[lookupBuiltinOrTempTableFunction]]): unqualified builtin/temp resolution uses
-    // [[sessionFunctionKindsInResolutionOrder]] / [[CatalogManager]] and must not run under
-    // this catalog's intrinsic lock.
+    // [[sessionFunctionKindsInResolutionOrder]] / [[CatalogManager]], and SPARK-56939
+    // requires this catalog's intrinsic lock to NEVER be held when reaching into
+    // [[CatalogManager]] from a function-resolution path.
     if (name.database.isEmpty) {
       lookupBuiltinOrTempFunction(name.funcName)
         .orElse(lookupBuiltinOrTempTableFunction(name.funcName))
