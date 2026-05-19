@@ -141,8 +141,8 @@ object PushDownUtils extends Logging {
    * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
    * pushdown.
    *
-   * Note: Do not call multiple times for the same `scan` instance; [[SupportsRuntimeV2Filtering.filter]]
-   * is mutating.
+   * Note: Do not call multiple times for the same `scan` instance;
+   * [[SupportsRuntimeV2Filtering.filter]] is mutating.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -199,8 +199,8 @@ object PushDownUtils extends Logging {
    * pre-filter partition set.
    *
    * Notes:
-   *  - Do not call multiple times for the same `scan` instance; [[SupportsRuntimeV2Filtering.filter]]
-   *    is mutating.
+   *  - Do not call multiple times for the same `scan` instance;
+   *    [[SupportsRuntimeV2Filtering.filter]] is mutating.
    *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
    *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
    *
