@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class JavaUtilsSuite {
 
@@ -52,6 +53,10 @@ public class JavaUtilsSuite {
     // 4. The parent directory cannot write
     assertTrue(testDir.canWrite());
     assertTrue(testDir.setWritable(false));
+    // Skip when setWritable(false) has no effect (e.g. running as root,
+    // or on a filesystem that ignores POSIX write bits).
+    assumeFalse(testDir.canWrite(),
+      "setWritable(false) had no effect; skipping write-denied scenario");
     assertThrows(IOException.class,
       () -> JavaUtils.createDirectory(testDirPath, "scenario4"));
     assertTrue(testDir.setWritable(true));

@@ -2021,6 +2021,160 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("INT64 DECIMAL -> 32-bit DecimalType narrowing end-to-end via vectorized read path") {
+    // Round-trips a custom-built parquet file with INT64 + DECIMAL(9, 2) annotation read
+    // back as DecimalType(9, 2). DECIMAL(9, _) values fit in int32, so the factory routes
+    // through DowncastLongUpdater (target is 32-bit decimal storage). Spark's own writer
+    // produces INT32-backed decimal for precision <= 9, so we use `parquet-mr`'s low-level
+    // API to force INT64 storage, mirroring the wire format that other writers (e.g. Hive,
+    // Impala) produce.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 v (DECIMAL(9, 2));
+        |}""".stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/dec.parquet")
+        val numRecords = 5000
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val unscaled = i % 5 match {
+            case 0 => -999_999_999L
+            case 1 => -1L
+            case 2 => 0L
+            case 3 => 999_999_999L
+            case _ => i.toLong * 13L - 7L
+          }
+          val record = new SimpleGroup(schema)
+          record.add(0, unscaled)
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val readSchema = new StructType().add("v", DecimalType(9, 2), nullable = false)
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          val expected = (0 until numRecords).map { i =>
+            val unscaled = i % 5 match {
+              case 0 => -999_999_999L
+              case 1 => -1L
+              case 2 => 0L
+              case 3 => 999_999_999L
+              case _ => i.toLong * 13L - 7L
+            }
+            Row(java.math.BigDecimal.valueOf(unscaled, 2))
+          }
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("DATE -> TimestampNTZ widening end-to-end via vectorized read path") {
+    // Round-trips a DATE Parquet file read back as TimestampNTZType, exercising
+    // DateToTimestampNTZUpdater on the vectorized path in CORRECTED rebase mode.
+    // Sample mixes epoch, recent dates, pre-epoch, far-past and far-future days; each
+    // day-count converts to UTC midnight via `DateTimeUtils.daysToMicros`. Both
+    // REQUIRED and OPTIONAL columns are covered so that `readValue` and `readValues`
+    // are both invoked.
+    withSQLConf(
+        SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> "CORRECTED",
+        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+      withTempPath { file =>
+        val n = 5000
+        def sampleAt(i: Int): java.sql.Date = i % 6 match {
+          case 0 => java.sql.Date.valueOf("1970-01-01")
+          case 1 => java.sql.Date.valueOf("1900-01-01")
+          case 2 => java.sql.Date.valueOf("2023-01-01")
+          case 3 => java.sql.Date.valueOf("0001-01-01")
+          case 4 => java.sql.Date.valueOf("4707-11-28")
+          case _ =>
+            // Cover every month (1..12) and a few years to exercise month-boundary
+            // behavior, not just months 1..9 the previous string-formatting allowed.
+            val year = 2020 + (i % 80)
+            val month = 1 + (i % 12)
+            java.sql.Date.valueOf(f"$year%04d-$month%02d-15")
+        }
+
+        val nonNullData = (0 until n).map(i => Row(sampleAt(i)))
+        // Every 7th row is null; mixes value runs and null runs at sub-batch lengths.
+        val nullableData = (0 until n).map { i =>
+          if (i % 7 == 0) Row(null) else Row(sampleAt(i))
+        }
+
+        val nonNullWriteSchema = new StructType().add("v", DateType, nullable = false)
+        val nonNullReadSchema = new StructType().add("v", TimestampNTZType, nullable = false)
+        val nullableWriteSchema = new StructType().add("v", DateType, nullable = true)
+        val nullableReadSchema = new StructType().add("v", TimestampNTZType, nullable = true)
+
+        val nonNullPath = new java.io.File(file, "nonnull").getCanonicalPath
+        val nullablePath = new java.io.File(file, "nullable").getCanonicalPath
+        spark.createDataFrame(spark.sparkContext.parallelize(nonNullData, 4), nonNullWriteSchema)
+          .write.parquet(nonNullPath)
+        spark.createDataFrame(
+          spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
+          .write.parquet(nullablePath)
+
+        def dateToNtz(d: java.sql.Date): java.time.LocalDateTime = {
+          val days = d.toLocalDate.toEpochDay.toInt
+          val micros = DateTimeUtils.daysToMicros(days, java.time.ZoneOffset.UTC)
+          DateTimeUtils.microsToLocalDateTime(micros)
+        }
+        val expectedNonNull = nonNullData.map(r => Row(dateToNtz(r.getDate(0))))
+        val expectedNullable = nullableData.map { r =>
+          if (r.isNullAt(0)) Row(null) else Row(dateToNtz(r.getDate(0)))
+        }
+
+        withAllParquetReaders {
+          checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath), expectedNonNull)
+          checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath), expectedNullable)
+        }
+      }
+    }
+  }
+
+  test("SPARK-56872: INT64 DECIMAL into 32-bit Decimal column with dictionary fallback") {
+    // `DowncastLongUpdater.decodeSingleDictionaryId` only runs when the vectorized reader has
+    // to eagerly drain buffered dictionary IDs, which happens when parquet-mr writes the
+    // column as a mix of dictionary-encoded and PLAIN pages. The mix-cardinality values below
+    // (4-value pool + unique-per-row) force that fallback; uniformly low- or high-cardinality
+    // data bypasses the path. INT64 DECIMAL(p<=9) is built via parquet-mr's low-level writer
+    // because Spark's own writer emits INT32 for that case.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 v (DECIMAL(9, 2));
+        |}""".stripMargin)
+    def unscaledAt(i: Int): Long = i % 5 match {
+      case 0 => -999_999_999L
+      case 1 => -1L
+      case 2 => 0L
+      case 3 => 999_999_999L
+      case _ => i.toLong * 13L - 7L
+    }
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/dec.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = true)
+      val numRecords = 5000
+      (0 until numRecords).foreach { i =>
+        val record = new SimpleGroup(schema)
+        record.add(0, unscaledAt(i))
+        writer.write(record)
+      }
+      writer.close()
+
+      withAllParquetReaders {
+        val readSchema = new StructType().add("v", DecimalType(9, 2), nullable = false)
+        val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+        val expected = (0 until numRecords).map { i =>
+          Row(java.math.BigDecimal.valueOf(unscaledAt(i), 2))
+        }
+        checkAnswer(df, expected)
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

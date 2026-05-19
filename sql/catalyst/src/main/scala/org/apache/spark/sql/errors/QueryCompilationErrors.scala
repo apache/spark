@@ -3432,6 +3432,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "newPath" -> newPath.map(toSQLId).mkString(" -> ")))
   }
 
+  def recursiveFileLookupNotSupportedForPartitionedDataSourceError(): Throwable = {
+    new AnalysisException(
+      errorClass = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+      messageParameters = Map.empty)
+  }
+
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
       viewNameParts: Seq[String],
       attr: Attribute): Throwable = {

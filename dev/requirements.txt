@@ -2,7 +2,7 @@
 py4j>=0.10.9.9
 
 # PySpark dependencies (optional)
-numpy>=1.22
+numpy>=1.23.2
 pyarrow>=18.0.0
 pandas>=2.2.0
 scipy>=1.8.0

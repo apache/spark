@@ -68,6 +68,8 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
+      # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
+      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
@@ -84,6 +86,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Resolve apache/spark HEAD SHA
+      id: resolve-sha
+      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -349,7 +354,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -397,7 +402,7 @@ jobs:
     - name: Install Python packages (Python 3.12)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
+        python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
     # Run the tests.
     - name: Run tests
@@ -467,7 +472,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: ${{ needs.precondition.outputs.head_sha }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -561,7 +566,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -683,7 +688,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -833,7 +838,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -922,7 +927,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -984,7 +989,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -1183,7 +1188,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -1383,7 +1388,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1500,7 +1505,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1568,7 +1573,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: ${{ needs.precondition.outputs.head_sha }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |

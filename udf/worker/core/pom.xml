@@ -51,6 +51,12 @@
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-inprocess</artifactId>
+      <version>${io.grpc.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>

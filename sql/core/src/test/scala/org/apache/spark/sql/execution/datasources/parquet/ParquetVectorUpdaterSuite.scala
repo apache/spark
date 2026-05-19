@@ -27,6 +27,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types._
 
@@ -36,6 +37,8 @@ import org.apache.spark.sql.types._
  *   - `IntegerToLongUpdater` (INT32 -> Long, plus long-decimal dispatch)
  *   - `IntegerToDoubleUpdater` (INT32 -> Double)
  *   - `FloatToDoubleUpdater` (FLOAT -> Double)
+ *   - `DowncastLongUpdater` (INT64 DECIMAL -> 32-bit Decimal via narrowing cast)
+ *   - `DateToTimestampNTZUpdater` (INT32 DATE -> TimestampNTZ micros at UTC)
  *
  * Covers boundary batch lengths, sign-extension on negative INT32 values, the singular
  * `readValue` path, and the factory's long-decimal dispatch
@@ -76,6 +79,13 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     val buf = ByteBuffer.allocate(values.length * 4).order(ByteOrder.LITTLE_ENDIAN)
     var i = 0
     while (i < values.length) { buf.putFloat(values(i)); i += 1 }
+    buf.array()
+  }
+
+  private def plainLongBytes(values: Array[Long]): Array[Byte] = {
+    val buf = ByteBuffer.allocate(values.length * 8).order(ByteOrder.LITTLE_ENDIAN)
+    var i = 0
+    while (i < values.length) { buf.putLong(values(i)); i += 1 }
     buf.array()
   }
 
@@ -260,6 +270,54 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     out
   }
 
+  // ---- DowncastLongUpdater: INT64 DECIMAL(p<=9) -> 32-bit Decimal via narrowing cast ----
+
+  // INT64 column descriptor annotated as DECIMAL(precision, scale); when both source and
+  // target precision are <= 9, the factory routes to DowncastLongUpdater (target is stored
+  // as int32 because `DecimalType.is32BitDecimalType` requires precision <= 9). Parquet
+  // guarantees DECIMAL(p<=9) values fit in int32, so the narrowing `(int) buffer.getLong()`
+  // is non-lossy in practice.
+  private def int64DecimalDescriptor(precision: Int, scale: Int): ColumnDescriptor = {
+    val pt = Types.primitive(PrimitiveTypeName.INT64, Repetition.OPTIONAL)
+      .as(LogicalTypeAnnotation.decimalType(scale, precision))
+      .named("col")
+    new ColumnDescriptor(Array("col"), pt, 0, 1)
+  }
+
+  // Reads `values.length` INT64s through `DowncastLongUpdater.readValues` and returns the
+  // resulting int column. Caller guarantees values fit in int32.
+  private def readViaDowncastLongUpdater(
+      desc: ColumnDescriptor,
+      targetType: DataType,
+      values: Array[Long]): Array[Int] = {
+    val fac = newFactory(desc)
+    val updater = fac.getUpdater(desc, targetType)
+    val out = new OnHeapColumnVector(values.length.max(1), targetType)
+    val reader = newPlainReader(plainLongBytes(values), values.length)
+    updater.readValues(values.length, 0, out, reader)
+    val result = new Array[Int](values.length)
+    var i = 0
+    while (i < values.length) { result(i) = out.getInt(i); i += 1 }
+    result
+  }
+
+  // Sample of INT64 values guaranteed to fit in int32 (within DECIMAL(9, _) range).
+  private def downcastSampleValues(n: Int): Array[Long] = {
+    val out = new Array[Long](n)
+    var i = 0
+    while (i < n) {
+      out(i) = i match {
+        case _ if i % 5 == 0 => -999_999_999L  // min DECIMAL(9, _) value
+        case _ if i % 5 == 1 => -1L
+        case _ if i % 5 == 2 => 0L
+        case _ if i % 5 == 3 => 999_999_999L   // max DECIMAL(9, _) value
+        case _ => i * 13L - 7L
+      }
+      i += 1
+    }
+    out
+  }
+
   // Java's float-to-double widening is exact for finite/infinite values and produces
   // some double NaN for a NaN input (the payload may be canonicalized). Use
   // `java.lang.Double.compare` to give NaN well-defined equality and to distinguish
@@ -309,5 +367,130 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
       java.lang.Double.doubleToRawLongBits(-0.0d))
     assert(java.lang.Double.doubleToRawLongBits(actual(1)) ===
       java.lang.Double.doubleToRawLongBits(0.0d))
+  }
+
+  for (n <- Seq(0, 1, 7, 8, 9, 17, 1024, 4097)) {
+    test(s"DowncastLongUpdater produces correct narrowed output (total=$n)") {
+      val desc = int64DecimalDescriptor(precision = 9, scale = 2)
+      val targetType = DataTypes.createDecimalType(9, 2)
+      val input = downcastSampleValues(n)
+      val actual = readViaDowncastLongUpdater(desc, targetType, input)
+      assert(actual === input.map(_.toInt))
+    }
+  }
+
+  test("DowncastLongUpdater: readValue narrows a single INT64 -> int") {
+    // Same rationale as the IntegerToLongUpdater readValue test: the def-level-decoder's
+    // run-of-1 path calls `readLong()` directly rather than the bulk method.
+    val desc = int64DecimalDescriptor(precision = 9, scale = 2)
+    val targetType = DataTypes.createDecimalType(9, 2)
+    val input = Array(0L, 1L, -1L, 42L, -999_999_999L, 999_999_999L)
+    val fac = newFactory(desc)
+    val updater = fac.getUpdater(desc, targetType)
+    val out = new OnHeapColumnVector(input.length, targetType)
+    val reader = newPlainReader(plainLongBytes(input), input.length)
+    var i = 0
+    while (i < input.length) {
+      updater.readValue(i, out, reader)
+      i += 1
+    }
+    val actual = (0 until input.length).map(out.getInt).toArray
+    assert(actual === input.map(_.toInt))
+  }
+
+  test("DowncastLongUpdater: narrowing cast preserves sign for in-range values") {
+    // Spot-check that `(int) buffer.getLong()` preserves sign for every INT64 value
+    // bounded by DECIMAL(9, _)'s range. Out-of-range INT64 values (i.e., outside
+    // [-999_999_999, 999_999_999]) are not reachable in production because Parquet's
+    // DECIMAL encoding bounds writer-side; the cast would truncate the high 32 bits and
+    // is documented as such on `readLongsAsInts`.
+    val desc = int64DecimalDescriptor(precision = 9, scale = 0)
+    val targetType = DataTypes.createDecimalType(9, 0)
+    val input = Array(-999_999_999L, -1L, 0L, 1L, 999_999_999L)
+    val actual = readViaDowncastLongUpdater(desc, targetType, input)
+    assert(actual === Array[Int](-999_999_999, -1, 0, 1, 999_999_999))
+  }
+
+  // ---- DateToTimestampNTZUpdater: INT32 DATE -> TimestampNTZ micros at UTC ----
+
+  // INT32 column descriptor annotated as DATE; routes the factory through the
+  // `sparkType == TimestampNTZType && isDateTypeMatched(descriptor)` branch.
+  private val int32DateDescriptor: ColumnDescriptor = {
+    val pt = Types.primitive(PrimitiveTypeName.INT32, Repetition.OPTIONAL)
+      .as(LogicalTypeAnnotation.dateType())
+      .named("col")
+    new ColumnDescriptor(Array("col"), pt, 0, 1)
+  }
+
+  // Reads `values.length` INT32 day-counts through `DateToTimestampNTZUpdater.readValues`
+  // and returns the resulting micros column.
+  private def readViaDateToTimestampNTZUpdater(values: Array[Int]): Array[Long] = {
+    val fac = newFactory(int32DateDescriptor)
+    val updater = fac.getUpdater(int32DateDescriptor, DataTypes.TimestampNTZType)
+    val out = new OnHeapColumnVector(values.length.max(1), DataTypes.TimestampNTZType)
+    val reader = newPlainReader(plainIntBytes(values), values.length)
+    updater.readValues(values.length, 0, out, reader)
+    val result = new Array[Long](values.length)
+    var i = 0
+    while (i < values.length) { result(i) = out.getLong(i); i += 1 }
+    result
+  }
+
+  // Realistic day-count sample: epoch, recent dates, pre-epoch, far-past, far-future. All
+  // values are well within `Math.multiplyExact(days * 86400, 1_000_000)`'s safe range.
+  private def dateSampleValues(n: Int): Array[Int] = {
+    val out = new Array[Int](n)
+    var i = 0
+    while (i < n) {
+      out(i) = i % 6 match {
+        case 0 => 0          // 1970-01-01 (epoch)
+        case 1 => -25567     // ~1900-01-01
+        case 2 => 19366      // ~2023-01-01
+        case 3 => -719162    // ~0001-01-01
+        case 4 => 1000000    // ~4707-11-28 (far future, still safe)
+        case _ => i * 37 - 100
+      }
+      i += 1
+    }
+    out
+  }
+
+  private def expectedMicros(values: Array[Int]): Array[Long] =
+    values.map(d => DateTimeUtils.daysToMicros(d, ZoneOffset.UTC))
+
+  for (n <- Seq(0, 1, 7, 8, 9, 17, 1024, 4097)) {
+    test(s"DateToTimestampNTZUpdater produces correct UTC micros (total=$n)") {
+      val input = dateSampleValues(n)
+      assert(readViaDateToTimestampNTZUpdater(input) === expectedMicros(input))
+    }
+  }
+
+  test("DateToTimestampNTZUpdater: readValue converts a single date-day to UTC micros") {
+    // Same rationale as the IntegerToLongUpdater readValue test: the def-level-decoder's
+    // run-of-1 path calls `readInteger()` directly rather than the bulk method.
+    val input = Array(0, 1, -1, 19366, -25567)
+    val fac = newFactory(int32DateDescriptor)
+    val updater = fac.getUpdater(int32DateDescriptor, DataTypes.TimestampNTZType)
+    val out = new OnHeapColumnVector(input.length, DataTypes.TimestampNTZType)
+    val reader = newPlainReader(plainIntBytes(input), input.length)
+    var i = 0
+    while (i < input.length) {
+      updater.readValue(i, out, reader)
+      i += 1
+    }
+    val actual = (0 until input.length).map(out.getLong).toArray
+    assert(actual === input.map(d => DateTimeUtils.daysToMicros(d, ZoneOffset.UTC)))
+  }
+
+  test("DateToTimestampNTZUpdater: epoch and signed day-counts produce expected micros") {
+    // Pins reference micros for a handful of well-known dates so the conversion semantics
+    // are visible at unit-test level without relying on DateTimeUtils for the expected
+    // side.
+    val input = Array(0, 1, -1)
+    val expected = Array(
+      0L,                  // 1970-01-01 00:00:00 UTC
+      86_400_000_000L,     // 1970-01-02 00:00:00 UTC
+      -86_400_000_000L)    // 1969-12-31 00:00:00 UTC
+    assert(readViaDateToTimestampNTZUpdater(input) === expected)
   }
 }

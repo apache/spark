@@ -691,6 +691,12 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
  * `HashPartitioning(B.key2)`. It is also worth noting that `partitionings`
  * in this collection do not need to be equivalent, which is useful for
  * Outer Join operators.
+ *
+ * [[KeyedPartitioning]]s within a `PartitioningCollection` describe the same physical partitioning
+ * and so must share the same `partitionKeys` reference, differing only in their `expressions` (with
+ * matching arity). Use [[PartitioningCollection.fromPartitionings]] to build a collection from
+ * independently-computed partitionings (e.g. join `outputPartitioning`); it interns `partitionKeys`
+ * references (including across nested collections) so the invariant holds.
  */
 case class PartitioningCollection(partitionings: Seq[Partitioning])
   extends Expression with Partitioning with Unevaluable {
@@ -698,6 +704,26 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   require(
     partitionings.map(_.numPartitions).distinct.length == 1,
     s"PartitioningCollection requires all of its partitionings have the same numPartitions.")
+
+  checkKeyedPartitioningInvariant()
+
+  private def checkKeyedPartitioningInvariant(): Unit = {
+    var first: KeyedPartitioning = null
+    foreach {
+      case k: KeyedPartitioning =>
+        if (first == null) {
+          first = k
+        } else {
+          require(k.expressions.length == first.expressions.length,
+            "All KeyedPartitionings in a PartitioningCollection must have matching expression " +
+              "arity")
+          require(k.partitionKeys eq first.partitionKeys,
+            "All KeyedPartitionings in a PartitioningCollection must share the same " +
+              "partitionKeys reference")
+        }
+      case _ =>
+    }
+  }
 
   override def children: Seq[Expression] = partitionings.collect {
     case expr: Expression => expr
@@ -728,6 +754,36 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): PartitioningCollection =
     super.legacyWithNewChildren(newChildren).asInstanceOf[PartitioningCollection]
+}
+
+object PartitioningCollection {
+  /**
+   * Builds a [[PartitioningCollection]], unifying the `partitionKeys` reference across all
+   * [[KeyedPartitioning]]s (including those in nested collections). Use this when combining
+   * independently-computed partitionings (e.g. join `outputPartitioning`) where
+   * `KeyedPartitioning.partitionKeys` are structurally equal but may not be reference-equal.
+   *
+   * Note: this can't be implemented with `TreeNode.transform`.
+   */
+  def fromPartitionings(partitionings: Seq[Partitioning]): PartitioningCollection = {
+    var canonicalKeys: Seq[InternalRowComparableWrapper] = null
+    def intern(p: Partitioning): Partitioning = p match {
+      case k: KeyedPartitioning =>
+        if (canonicalKeys == null) {
+          canonicalKeys = k.partitionKeys
+          k
+        } else if (k.partitionKeys ne canonicalKeys) {
+          require(k.partitionKeys == canonicalKeys,
+            "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
+          k.copy(partitionKeys = canonicalKeys)
+        } else {
+          k
+        }
+      case pc: PartitioningCollection => new PartitioningCollection(pc.partitionings.map(intern))
+      case other => other
+    }
+    new PartitioningCollection(partitionings.map(intern))
+  }
 }
 
 /**
