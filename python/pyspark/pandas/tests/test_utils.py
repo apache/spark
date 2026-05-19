@@ -30,7 +30,6 @@ from pyspark.testing.pandasutils import (
     _assert_pandas_equal,
     _assert_pandas_almost_equal,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.errors import PySparkAssertionError
 
 some_global_variable = 0
@@ -248,7 +247,7 @@ class TestClassForLazyProp:
         return self.some_variable
 
 
-class UtilsTests(UtilsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class UtilsTests(UtilsTestsMixin, PandasOnSparkTestCase):
     pass
 
 

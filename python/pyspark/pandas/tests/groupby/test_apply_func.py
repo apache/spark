@@ -22,7 +22,6 @@ from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyApplyFuncMixin:
@@ -712,7 +711,6 @@ class GroupbyApplyFuncMixin:
 class GroupbyApplyFuncTests(
     GroupbyApplyFuncMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

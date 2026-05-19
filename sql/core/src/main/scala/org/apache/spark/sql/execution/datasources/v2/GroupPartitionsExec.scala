@@ -67,24 +67,14 @@ case class GroupPartitionsExec(
   override def outputPartitioning: Partitioning = {
     child.outputPartitioning match {
       case p: Partitioning with Expression =>
-        // There can be multiple `KeyedPartitioning` in an output partitioning of a join, but they
-        // can only differ in `expressions`. `partitionKeys` must match so we can calculate it only
-        // once via `groupedPartitions`.
-
-        val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
-        if (keyedPartitionings.size > 1) {
-          val first = keyedPartitionings.head
-          keyedPartitionings.tail.foreach { k =>
-            assert(k.partitionKeys == first.partitionKeys,
-              "All KeyedPartitioning nodes must have identical partition keys")
-          }
-        }
-
+        // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
+        // can only differ in `expressions`; their `partitionKeys` reference is shared (enforced by
+        // `PartitioningCollection`), so `groupedPartitions` is computed only once.
+        val partitionKeys = groupedPartitions.map(_._1)
         p.transform {
           case k: KeyedPartitioning =>
             val projectedExpressions = joinKeyPositions.fold(k.expressions)(_.map(k.expressions))
-            KeyedPartitioning(projectedExpressions, groupedPartitions.map(_._1),
-              isGrouped = isGrouped)
+            KeyedPartitioning(projectedExpressions, partitionKeys, isGrouped = isGrouped)
         }.asInstanceOf[Partitioning]
       case o => o
     }
