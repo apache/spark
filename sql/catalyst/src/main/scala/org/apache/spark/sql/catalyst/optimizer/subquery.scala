@@ -109,11 +109,19 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper
     val inConditions = values.zip(subplan.output).map(EqualTo.tupled)
     val (joinCond, rewrittenOuterPlan) =
       rewriteExistentialExpr(inConditions, outerPlan)
-    // Expand each equality to the NULL-aware predicate used by NOT IN:
-    //   a = b  ->  a = b OR ISNULL(a = b)
+    // Expand the NOT IN expression with the NULL-aware semantic
+    // to its full form. That is from:
+    //   (a1,a2,...) = (b1,b2,...)
+    // to
+    //   (a1=b1 OR isnull(a1=b1)) AND (a2=b2 OR isnull(a2=b2)) AND ...
     val baseJoinConds = splitConjunctivePredicates(joinCond.get)
     val nullAwareJoinConds = baseJoinConds.map(c => Or(c, IsNull(c)))
-    // Correlated predicates stay as ordinary join conjuncts beside the NULL-aware key check.
+    // After that, add back the correlated join predicate(s) in the subquery
+    // Example:
+    // SELECT ... FROM A WHERE A.A1 NOT IN
+    // (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
+    // will have the final conditions in the LEFT ANTI as
+    // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
     val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
     Join(
       rewrittenOuterPlan,
