@@ -23,7 +23,6 @@ import numpy as np
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.utils import is_ansi_mode_test
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -141,10 +140,22 @@ class NumOpsTestsMixin:
         self.assert_eq(pdf["int"] == pdf["bool"], psdf["int"] == psdf["bool"])
         self.assert_eq(pdf["bool"] == pdf["int"], psdf["bool"] == psdf["int"])
         self.assert_eq(pdf["int"] == pdf["float"], psdf["int"] == psdf["float"])
-        if is_ansi_mode_test:  # TODO: match non-ansi behavior with pandas
-            self.assert_eq(pdf["int"] == pdf["str"], psdf["int"] == psdf["str"])
+        self.assert_eq(pdf["int"] == pdf["str"], psdf["int"] == psdf["str"])
+        self.assert_eq(pdf["str"] == pdf["int"], psdf["str"] == psdf["int"])
+        self.assert_eq(pdf["int"] != pdf["str"], psdf["int"] != psdf["str"])
+        self.assert_eq(pdf["str"] != pdf["int"], psdf["str"] != psdf["int"])
+        self.assert_eq(pdf["int"] == "1", psdf["int"] == "1")
+        self.assert_eq(pdf["int"] != "1", psdf["int"] != "1")
+        self.assert_eq(pdf["str"] == 1, psdf["str"] == 1)
+        self.assert_eq(pdf["str"] != 1, psdf["str"] != 1)
         self.assert_eq(pdf["float"] == pdf["bool"], psdf["float"] == psdf["bool"])
         self.assert_eq(pdf["str"] == "x", psdf["str"] == "x")
+
+        for op in ["lt", "le", "gt", "ge"]:
+            self.assertRaises(TypeError, lambda: getattr(psdf["int"], op)(psdf["str"]))
+            self.assertRaises(TypeError, lambda: getattr(psdf["str"], op)(psdf["int"]))
+            self.assertRaises(TypeError, lambda: getattr(psdf["int"], op)("1"))
+            self.assertRaises(TypeError, lambda: getattr(psdf["str"], op)(1))
 
     def test_eq(self):
         pdf, psdf = self.pdf, self.psdf
