@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.concurrent.duration._
 
-import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
@@ -27,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.MergeRows
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Discard, Insert, Keep, Split, Update}
 import org.apache.spark.sql.classic.{ClassicConversions, Dataset}
 import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 /**
@@ -46,6 +44,18 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions {
 
   private val N = 20 << 20
+
+  /** Longer warm-up and timed window for stable interpreted (whole-stage off) results. */
+  private def mergeRowsBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
+    codegenBenchmark(
+      name,
+      cardinality,
+      warmupTime = 7.seconds,
+      minTime = 7.seconds,
+      minNumIters = 3,
+      wholestageOffNumIters = 0,
+      wholestageOnNumIters = 0)(f)
+  }
 
   /**
    * Creates a DataFrame simulating the join output from a MERGE operation.
@@ -105,33 +115,6 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
     Dataset.ofRows(spark, mergeRows)
   }
 
-  /**
-   * Like [[codegenBenchmark]], but with JIT warm-up and a longer timed window so interpreted
-   * (whole-stage off) results are more stable when comparing metric caching changes.
-   */
-  private def mergeRowsCodegenBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") { f }
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") { f }
-
-    val benchmark = new Benchmark(
-      name,
-      cardinality,
-      minNumIters = 3,
-      warmupTime = 15.seconds,
-      minTime = 15.seconds,
-      output = output)
-
-    benchmark.addCase(s"$name wholestage off") { _ =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") { f }
-    }
-
-    benchmark.addCase(s"$name wholestage on") { _ =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") { f }
-    }
-
-    benchmark.run()
-  }
-
   private def mergeMatchedUpdateOnly(): Unit = {
     val inputDF = createJoinOutput(N, matchedFraction = 1.0)
     val a = inputDF.queryExecution.analyzed.output
@@ -141,7 +124,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       a(0), a(5), a(6), a(3)
     )))
 
-    mergeRowsCodegenBenchmark("merge - matched update only", N) {
+    mergeRowsBenchmark("merge - matched update only", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -157,7 +140,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       a(4), a(5), a(6), a(7)
     )))
 
-    mergeRowsCodegenBenchmark("merge - not matched insert only", N) {
+    mergeRowsBenchmark("merge - not matched insert only", N) {
       val df = buildMergeRowsDF(inputDF, Seq.empty, notMatchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -175,7 +158,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       a(4), a(5), a(6), a(7)
     )))
 
-    mergeRowsCodegenBenchmark("merge - matched update + not matched insert", N) {
+    mergeRowsBenchmark("merge - matched update + not matched insert", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr, notMatchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -187,7 +170,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
 
     val matchedInstr = Seq(Discard(TrueLiteral))
 
-    mergeRowsCodegenBenchmark("merge - matched delete", N) {
+    mergeRowsBenchmark("merge - matched delete", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -208,7 +191,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       Keep(Insert, GreaterThan(a(5), Literal(500)), Seq(a(4), a(5), a(6), a(7)))
     )
 
-    mergeRowsCodegenBenchmark("merge - conditional clauses", N) {
+    mergeRowsBenchmark("merge - conditional clauses", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr, notMatchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -230,7 +213,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
     )))
     val notMatchedBySourceInstr = Seq(Discard(TrueLiteral))
 
-    mergeRowsCodegenBenchmark("merge - matched + not matched + not matched by source", N) {
+    mergeRowsBenchmark("merge - matched + not matched + not matched by source", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr, notMatchedInstr, notMatchedBySourceInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
@@ -247,7 +230,7 @@ object MergeRowsExecBenchmark extends SqlBasedBenchmark with ClassicConversions 
       Seq(a(0), a(5), a(6), a(3))
     ))
 
-    mergeRowsCodegenBenchmark("merge - split update (delete + insert)", N) {
+    mergeRowsBenchmark("merge - split update (delete + insert)", N) {
       val df = buildMergeRowsDF(inputDF, matchedInstr)
       assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[MergeRowsExec]))
       df.noop()
