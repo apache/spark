@@ -93,7 +93,8 @@ public abstract sealed class StreamingShuffleMessage
     /**
      * Releases any resources associated with this message.
      * In VERY RARE cases when the task fails unexpectedly, this method may be called twice.
-     * Implementations should not panic in such a case.
+     * This method is idempotent — a second call on the same thread is a no-op — but it is
+     * NOT thread-safe.
      */
     public void release() {
         if (ownedBuf != null) {
@@ -111,30 +112,15 @@ public abstract sealed class StreamingShuffleMessage
             StreamingShuffleMessageType.decode(message.readInt());
         long seqNum = message.readLong();
 
-        StreamingShuffleMessage shuffleMessage = null;
-
-        switch (messageType) {
-            case DATA_MESSAGE_UNSAFE_ROW:
-                shuffleMessage = DataMessage.decode(message);
-                break;
-            case CREDIT_CONTROL_MESSAGE:
-                shuffleMessage = CreditControlMessage.decode(message);
-                break;
-            case TERMINATION_CONTROL_MESSAGE:
-                shuffleMessage = TerminationControlMessage.decode(message);
-                break;
-            case TERMINATION_ACK_MESSAGE:
-                shuffleMessage = TerminationAckMessage.decode(message);
-                break;
-            default:
-                // Should not reach here: StreamingShuffleMessageType.decode() above already
-                // throws IllegalArgumentException for any unknown message-type ordinal, so
-                // messageType is guaranteed to be one of the four enum values handled above.
-                throw new IllegalStateException(
-                    "Unexpected StreamingShuffleMessageType: " + messageType);
-        }
-
-        // shuffleMessage cannot be null
+        // Switch expression over the enum is exhaustive; the compiler enforces that every
+        // case is handled, so any future StreamingShuffleMessageType added to the enum will
+        // cause this method to fail compilation until the corresponding case is added here.
+        StreamingShuffleMessage shuffleMessage = switch (messageType) {
+            case DATA_MESSAGE_UNSAFE_ROW -> DataMessage.decode(message);
+            case CREDIT_CONTROL_MESSAGE -> CreditControlMessage.decode(message);
+            case TERMINATION_CONTROL_MESSAGE -> TerminationControlMessage.decode(message);
+            case TERMINATION_ACK_MESSAGE -> TerminationAckMessage.decode(message);
+        };
         shuffleMessage.setSeqNum(seqNum);
 
         return shuffleMessage;

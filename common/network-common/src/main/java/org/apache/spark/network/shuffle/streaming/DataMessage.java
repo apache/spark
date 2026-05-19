@@ -22,11 +22,11 @@ import io.netty.buffer.CompositeByteBuf;
 
 public final class DataMessage extends StreamingShuffleMessage {
 
-    public ByteBuf data;
-    public int shuffleWriterId;
-    public int shuffleReaderId;
-    public int dataSize;
-    public long checksum;
+    public final ByteBuf data;
+    public final int shuffleWriterId;
+    public final int shuffleReaderId;
+    public final int dataSize;
+    public final long checksum;
 
     public DataMessage(int shuffleWriterId, int shuffleReaderId, int dataSize, ByteBuf data,
                        long checksum) {

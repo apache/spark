@@ -21,14 +21,32 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 
 /**
- * Sent from the client to the server to indicate that the client is ready to receive
- * the specified amount of messages from the server.
+ * Reader → writer control message.
+ *
+ * Current function: serves as a connection-establishment and per-consumption "ready"
+ * signal. The writer uses receipt of any CreditControlMessage as the trigger that the
+ * reader is ready to receive, and does not act on the numeric value of {@link
+ * #numMessages}. Backpressure today is handled at the TCP layer via channel autoRead,
+ * not via this message.
+ *
+ * Future function: this message is reserved as the carrier for a future credit-based
+ * flow-control extension. When that extension lands, {@link #numMessages} will carry
+ * the number of additional DataMessages the writer may send beyond any
+ * previously-granted credit (i.e., a credit-grant delta).
  */
 public final class CreditControlMessage extends StreamingShuffleMessage {
-    public int shuffleWriterId;
-    public int shuffleReaderId;
+    public final int shuffleWriterId;
+    public final int shuffleReaderId;
 
-    public int numMessages;
+    /**
+     * In the current protocol revision the writer ignores this value and treats any
+     * CreditControlMessage as a "reader is ready" signal; senders should pass 1.
+     *
+     * Reserved for the future credit-based flow-control extension, in which this field
+     * will carry the number of additional DataMessages the writer may send beyond any
+     * previously-granted credit.
+     */
+    public final int numMessages;
 
     public CreditControlMessage(int shuffleWriterId, int shuffleReaderId, int numMessages) {
         this.shuffleWriterId = shuffleWriterId;

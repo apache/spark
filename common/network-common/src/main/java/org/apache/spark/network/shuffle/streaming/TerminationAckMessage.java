@@ -21,8 +21,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 
 public final class TerminationAckMessage extends StreamingShuffleMessage {
-    public int shuffleWriterId;
-    public int shuffleReaderId;
+    public final int shuffleWriterId;
+    public final int shuffleReaderId;
 
     public TerminationAckMessage(int shuffleWriterId, int shuffleReaderId) {
         this.shuffleWriterId = shuffleWriterId;

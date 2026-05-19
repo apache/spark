@@ -34,17 +34,12 @@ public enum StreamingShuffleMessageType {
     }
 
     public static StreamingShuffleMessageType decode(int givenId) {
-        switch (givenId) {
-            case 1:
-                return DATA_MESSAGE_UNSAFE_ROW;
-            case 2:
-                return CREDIT_CONTROL_MESSAGE;
-            case 3:
-                return TERMINATION_CONTROL_MESSAGE;
-            case 4:
-                return TERMINATION_ACK_MESSAGE;
-            default:
-                throw new IllegalArgumentException("Unknown message type: " + givenId);
-        }
+        return switch (givenId) {
+            case 1 -> DATA_MESSAGE_UNSAFE_ROW;
+            case 2 -> CREDIT_CONTROL_MESSAGE;
+            case 3 -> TERMINATION_CONTROL_MESSAGE;
+            case 4 -> TERMINATION_ACK_MESSAGE;
+            default -> throw new IllegalArgumentException("Unknown message type: " + givenId);
+        };
     }
 }
