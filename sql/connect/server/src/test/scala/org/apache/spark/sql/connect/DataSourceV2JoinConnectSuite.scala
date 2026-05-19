@@ -343,11 +343,13 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       withTable(session, tableName = NC) { serverSession =>
         val df1 = session.table(NC)
 
-        // Two separate alterTable calls: the first deletes salary (and its ID),
-        // the second adds a new salary column with a fresh ID.
+        // A single alterTable call that deletes salary (and its ID) and adds a new salary
+        // column with a fresh ID.
         val cat = serverCatalog[NullTableIdInMemoryTableCatalog](serverSession, "nullidcat")
-        cat.alterTable(ncIdent, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
+        cat.alterTable(
+          ncIdent,
+          TableChange.deleteColumn(Array("salary"), false),
+          TableChange.addColumn(Array("salary"), IntegerType, true))
 
         val df2 = session.table(NC)
 
@@ -369,12 +371,14 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       withTable(session, tableName = NC) { serverSession =>
         val df1 = session.table(NC)
 
-        // Two separate alterTable calls with no column IDs to detect the change.
+        // A single alterTable call with no column IDs to detect the change.
         val cat = serverCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
           serverSession,
           "nullbothidscat")
-        cat.alterTable(ncIdent, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
+        cat.alterTable(
+          ncIdent,
+          TableChange.deleteColumn(Array("salary"), false),
+          TableChange.addColumn(Array("salary"), IntegerType, true))
 
         val df2 = session.table(NC)
 
