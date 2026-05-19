@@ -100,6 +100,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @GuardedBy("CoarseGrainedSchedulerBackend.this")
   private[scheduler] val executorsPendingToRemove = new HashMap[String, Boolean]
 
+  // When a forced driver-side removal should preserve a more specific loss reason, keep it until
+  // the backend reports the executor removed.
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  private val pendingRemovalLossReasons = new HashMap[String, ExecutorLossReason]
+
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   protected val executorsPendingLossReason = new HashSet[String]
 
@@ -467,12 +472,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             executorDataMap -= executorId
             executorsPendingLossReason -= executorId
             val killedByDriver = executorsPendingToRemove.remove(executorId).getOrElse(false)
+            val pendingRemovalLossReason = pendingRemovalLossReasons.remove(executorId)
             val decommissionInfoOpt = executorsPendingDecommission.remove(executorId)
             if (killedByDriver) {
               ExecutorKilled
             } else if (decommissionInfoOpt.isDefined) {
               val decommissionInfo = decommissionInfoOpt.get
               ExecutorDecommission(decommissionInfo.workerHost, decommissionInfo.message)
+            } else if (reason == ExecutorKilled) {
+              pendingRemovalLossReason.getOrElse(reason)
             } else {
               reason
             }
@@ -938,6 +946,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       adjustTargetNumExecutors: Boolean,
       countFailures: Boolean,
       force: Boolean): Seq[String] = {
+    killExecutors(executorIds, adjustTargetNumExecutors, countFailures, force, None)
+  }
+
+  private[spark] def killAndReplaceExecutor(
+      executorId: String,
+      lossReason: ExecutorLossReason): Boolean = {
+    killExecutors(Seq(executorId), adjustTargetNumExecutors = false, countFailures = true,
+      force = true, lossReason = Some(lossReason)).nonEmpty
+  }
+
+  private[spark] def killExecutors(
+      executorIds: Seq[String],
+      adjustTargetNumExecutors: Boolean,
+      countFailures: Boolean,
+      force: Boolean,
+      lossReason: Option[ExecutorLossReason]): Seq[String] = {
     logInfo(
       log"Requesting to kill executor(s) ${MDC(LogKeys.EXECUTOR_IDS, executorIds.mkString(", "))}")
 
@@ -952,7 +976,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val executorsToKill = knownExecutors
         .filter { id => !executorsPendingToRemove.contains(id) }
         .filter { id => force || !scheduler.isExecutorBusy(id) }
-      executorsToKill.foreach { id => executorsPendingToRemove(id) = !countFailures }
+      executorsToKill.foreach { id =>
+        executorsPendingToRemove(id) = !countFailures
+        lossReason.foreach { reason =>
+          pendingRemovalLossReasons(id) = reason
+        }
+      }
 
       logInfo(log"Actual list of executor(s) to be killed is " +
         log"${MDC(LogKeys.EXECUTOR_IDS, executorsToKill.mkString(", "))}")
@@ -975,8 +1004,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       val killResponse = adjustTotalExecutors.flatMap(killExecutors)(ThreadUtils.sameThread)
+      val cleanedKillResponse = killResponse.transform { result =>
+        result match {
+          case scala.util.Success(true) =>
+          case _ =>
+            CoarseGrainedSchedulerBackend.this.synchronized {
+              executorsToKill.foreach(pendingRemovalLossReasons -= _)
+            }
+        }
+        result
+      }(ThreadUtils.sameThread)
 
-      killResponse.flatMap(killSuccessful =>
+      cleanedKillResponse.flatMap(killSuccessful =>
         Future.successful (if (killSuccessful) executorsToKill else Seq.empty[String])
       )(ThreadUtils.sameThread)
     }

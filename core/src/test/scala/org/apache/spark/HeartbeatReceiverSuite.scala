@@ -167,7 +167,12 @@ class HeartbeatReceiverSuite
     val fakeClusterManager = new FakeClusterManager(rpcEnv, conf)
     val fakeClusterManagerRef = rpcEnv.setupEndpoint("fake-cm", fakeClusterManager)
     val fakeSchedulerBackend =
-      new FakeSchedulerBackend(scheduler, rpcEnv, fakeClusterManagerRef, sc.resourceProfileManager)
+      new FakeSchedulerBackend(
+        scheduler,
+        rpcEnv,
+        fakeClusterManagerRef,
+        sc.resourceProfileManager,
+        removeExecutorsOnKillWithReason = Some(ExecutorKilled))
     when(sc.schedulerBackend).thenReturn(fakeSchedulerBackend)
 
     // Register fake executors with our fake scheduler backend
@@ -215,6 +220,51 @@ class HeartbeatReceiverSuite
     eventually(timeout(5.seconds)) {
       assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId1))
       assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId2))
+      verify(scheduler).executorLost(executorId1,
+        ExecutorProcessLost(s"Executor heartbeat timed out after ${executorTimeout * 2} ms"))
+      verify(scheduler).executorLost(executorId2,
+        ExecutorProcessLost(s"Executor heartbeat timed out after ${executorTimeout * 2} ms"))
+    }
+    fakeSchedulerBackend.stop()
+  }
+
+  test("heartbeat timeout should not override a concrete backend loss reason") {
+    val rpcEnv = sc.env.rpcEnv
+    val fakeClusterManager = new FakeClusterManager(rpcEnv, conf)
+    val fakeClusterManagerRef = rpcEnv.setupEndpoint("fake-cm-concrete-loss", fakeClusterManager)
+    val concreteLossReason = ExecutorExited(
+      1,
+      exitCausedByApp = false,
+      "Executor pod was deleted by the cluster manager.")
+    val fakeSchedulerBackend =
+      new FakeSchedulerBackend(
+        scheduler,
+        rpcEnv,
+        fakeClusterManagerRef,
+        sc.resourceProfileManager,
+        removeExecutorsOnKillWithReason = Some(concreteLossReason))
+    when(sc.schedulerBackend).thenReturn(fakeSchedulerBackend)
+
+    fakeSchedulerBackend.start()
+    val dummyExecutorEndpoint = new FakeExecutorEndpoint(rpcEnv)
+    val dummyExecutorEndpointRef =
+      rpcEnv.setupEndpoint("fake-executor-concrete-loss", dummyExecutorEndpoint)
+    fakeSchedulerBackend.driverEndpoint.askSync[RegisterExecutorReply](
+      RegisterExecutor(executorId1, dummyExecutorEndpointRef, "1.2.3.4", 0, Map.empty,
+        Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID))
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+    triggerHeartbeat(executorId1, executorShouldReregister = false)
+
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverClock.advance(executorTimeout * 2)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+    val killThread = heartbeatReceiver.invokePrivate(_killExecutorThread())
+    killThread.shutdown()
+    killThread.awaitTermination(10L, TimeUnit.SECONDS)
+
+    eventually(timeout(5.seconds)) {
+      verify(scheduler).executorLost(executorId1, concreteLossReason)
     }
     fakeSchedulerBackend.stop()
   }
@@ -328,19 +378,23 @@ private class FakeSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     rpcEnv: RpcEnv,
     clusterManagerEndpoint: RpcEndpointRef,
-    resourceProfileManager: ResourceProfileManager)
+    resourceProfileManager: ResourceProfileManager,
+    removeExecutorsOnKillWithReason: Option[ExecutorLossReason] = None)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
-  def this() = this(null, null, null, null)
+  def this() = this(null, null, null, null, removeExecutorsOnKillWithReason = None)
 
   protected override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     clusterManagerEndpoint.ask[Boolean](
       RequestExecutors(resourceProfileToTotalExecs, numLocalityAwareTasksPerResourceProfileId,
         rpHostToLocalTaskCount, Set.empty))
-}
+  }
 
   protected override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
+    removeExecutorsOnKillWithReason.foreach { reason =>
+      executorIds.foreach(removeExecutor(_, reason))
+    }
     clusterManagerEndpoint.ask[Boolean](KillExecutors(executorIds))
   }
 }
