@@ -239,8 +239,18 @@ object DataType {
       case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) => GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
-      case TIMESTAMP_LTZ_NANOS_TYPE(precision) => TimestampLTZNanosType(precision.toInt)
-      case TIMESTAMP_NTZ_NANOS_TYPE(precision) => TimestampNTZNanosType(precision.toInt)
+      case TIMESTAMP_LTZ_NANOS_TYPE(precision) =>
+        try TimestampLTZNanosType(precision.toInt)
+        catch {
+          case _: NumberFormatException =>
+            throw DataTypeErrors.unsupportedTimestampLtzPrecisionError(precision)
+        }
+      case TIMESTAMP_NTZ_NANOS_TYPE(precision) =>
+        try TimestampNTZNanosType(precision.toInt)
+        catch {
+          case _: NumberFormatException =>
+            throw DataTypeErrors.unsupportedTimestampNtzPrecisionError(precision)
+        }
       case "timestamp_ltz" => TimestampType
       case other =>
         otherTypes.getOrElse(

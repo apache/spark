@@ -1518,6 +1518,22 @@ class DataTypeSuite extends SparkFunSuite {
       },
       condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
       parameters = Map("precision" -> "10"))
+
+    // Precision strings that overflow Int should surface as UNSUPPORTED_*_PRECISION
+    // (with the original digit string preserved), not as a raw NumberFormatException.
+    val overflowing = "9" * 20
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson(s"""\"timestamp_ltz($overflowing)\"""")
+      },
+      condition = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
+      parameters = Map("precision" -> overflowing))
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson(s"""\"timestamp_ntz($overflowing)\"""")
+      },
+      condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
+      parameters = Map("precision" -> overflowing))
   }
 
   test("singleton DataType equality after deserialization") {

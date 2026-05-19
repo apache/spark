@@ -36,7 +36,7 @@ case class TimestampLTZNanosType(precision: Int) extends DatetimeType {
 
   if (precision < TimestampLTZNanosType.MIN_PRECISION ||
     precision > TimestampLTZNanosType.MAX_PRECISION) {
-    throw DataTypeErrors.unsupportedTimestampLtzPrecisionError(precision)
+    throw DataTypeErrors.unsupportedTimestampLtzPrecisionError(precision.toString)
   }
 
   /**
