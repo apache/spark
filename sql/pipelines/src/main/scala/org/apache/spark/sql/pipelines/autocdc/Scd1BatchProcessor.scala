@@ -44,7 +44,7 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
   def deduplicateMicrobatch(validatedMicrobatch: DataFrame): DataFrame = {
     // The `max_by` API can only return a single column, so pack/unpack the entire row into a
     // temporary column before and after the `max_by` operation.
-    val winningRowCol = OutOfOrderCdcMergeUtils.tempColName("__winning_row")
+    val winningRowCol = Scd1BatchProcessor.winningRowColName
 
     val allMicrobatchColumns =
       validatedMicrobatch.columns
@@ -59,4 +59,9 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
       )
       .select(F.col(s"$winningRowCol.*"))
   }
+}
+
+object Scd1BatchProcessor {
+  // Columns prefixed with `__spark_autocdc_` are reserved for internal SDP AutoCDC processing.
+  private val winningRowColName = "__spark_autocdc_winning_row"
 }
