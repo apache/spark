@@ -27,7 +27,6 @@ import org.apache.spark.util.ArrayImplicits._
  * configuration.
  */
 case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
-
   /**
    * Deduplicate the incoming CDC microbatch by key, keeping the most recent event per key
    * as ordered by [[ChangeArgs.sequencing]].
@@ -36,19 +35,23 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
    * multiple events share the same key and the same sequence value, the row selected is
    * non-deterministic and undefined.
    *
+   * @param validatedMicrobatch A microbatch that has already been validated such that the
+   *                            sequencing column should not contain null values, and its data type
+   *                            should support ordering.
+   *
    * The schema of the returned dataframe matches the schema of the microbatch exactly.
    */
-  def deduplicateMicrobatch(microbatchDf: DataFrame): DataFrame = {
+  def deduplicateMicrobatch(validatedMicrobatch: DataFrame): DataFrame = {
     // The `max_by` API can only return a single column, so pack/unpack the entire row into a
     // temporary column before and after the `max_by` operation.
     val winningRowCol = OutOfOrderCdcMergeUtils.tempColName("__winning_row")
 
     val allMicrobatchColumns =
-      microbatchDf.columns
+      validatedMicrobatch.columns
         .map(colName => F.col(QuotingUtils.quoteIdentifier(colName)))
         .toImmutableArraySeq
 
-    microbatchDf
+    validatedMicrobatch
       .groupBy(changeArgs.keys.map(k => F.col(k.quoted)): _*)
       .agg(
         F.max_by(F.struct(allMicrobatchColumns: _*), changeArgs.sequencing)

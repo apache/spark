@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.{functions => F, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
+class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   /** Build a microbatch [[DataFrame]] from explicit rows and an explicit schema. */
   private def microbatchOf(schema: StructType)(rows: Row*): DataFrame =
@@ -60,6 +60,112 @@ class Scd1BatchProcessorSuite extends SparkFunSuite with SharedSparkSession {
     checkAnswer(
       df = processor.deduplicateMicrobatch(batch),
       expectedAnswer = Row(1, 30L, "winner")
+    )
+  }
+
+  test("deduplicateMicrobatch is no-op if there's a single event for a key") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("value", StringType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, 10L, "only-row")
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+
+    checkAnswer(
+      df = processor.deduplicateMicrobatch(batch),
+      expectedAnswer = Row(1, 10L, "only-row")
+    )
+  }
+
+  test("deduplicateMicrobatch handles equal sequencing values for the same key") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("value", StringType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, 10L, "first-tied-row"),
+      Row(1, 10L, "second-tied-row")
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+
+    // On equal sequence number events for the same key we provide no guarantee on which event will
+    // survive, but the contract is _one_ event will survive - assert that below.
+    val result = processor.deduplicateMicrobatch(batch).collect()
+    assert(result.length == 1)
+    assert(result.head.getInt(0) == 1)
+    assert(result.head.getLong(1) == 10L)
+    assert(Set("first-tied-row", "second-tied-row").contains(result.head.getString(2)))
+  }
+
+  test("deduplicateMicrobatch ignores rows with null sequencing when a non-null value exists") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("value", StringType)
+
+    val batch = microbatchOf(schema)(
+      // In production the expectation is the microbatch will have been validated to not contain
+      // any null sequence values, but demonstrate that null sequence rows are de-prioritized in
+      // deduplication.
+      Row(1, null, "null-sequence"),
+      Row(1, 10L, "non-null-sequence")
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+
+    checkAnswer(
+      df = processor.deduplicateMicrobatch(batch),
+      expectedAnswer = Row(1, 10L, "non-null-sequence")
+    )
+  }
+
+  test(
+    "deduplicateMicrobatch returns a null row when all sequencing values for a key are null"
+  ) {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("value", StringType)
+    val batch = microbatchOf(schema)(
+      // In production the expectation is the microbatch will have been validated to not contain
+      // any null sequence values, but demonstrate that a null row will be returned by
+      // deduplication if all rows contain a null sequence in the microbatch.
+      Row(1, null, "null-sequence")
+    )
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+    checkAnswer(
+      df = processor.deduplicateMicrobatch(batch),
+      expectedAnswer = Row(null, null, null)
     )
   }
 
