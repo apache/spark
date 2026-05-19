@@ -7305,6 +7305,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val INSERT_INTO_NESTED_TYPE_COERCION_ENABLED =
+    buildConf("spark.sql.insertNestedTypeCoercion.enabled")
+      .internal()
+      .doc("If enabled, allow INSERT INTO WITH SCHEMA EVOLUTION to fill missing nested " +
+        "struct fields with null when the source has fewer nested fields than the target " +
+        "table. Also relaxes by-position column-count enforcement so trailing missing " +
+        "top-level columns are filled with their default value (or null). This is " +
+        "experimental and the semantics may change.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val TIME_TYPE_ENABLED =
     buildConf("spark.sql.timeType.enabled")
       .internal()
@@ -8633,6 +8645,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+
+  def coerceInsertNestedTypes: Boolean =
+    getConf(SQLConf.INSERT_INTO_NESTED_TYPE_COERCION_ENABLED)
 
   def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
 
