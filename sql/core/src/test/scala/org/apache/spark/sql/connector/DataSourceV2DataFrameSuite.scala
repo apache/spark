@@ -2614,8 +2614,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // succeeds because column ID validation is skipped when IDs are null
-      checkAnswer(df, Seq(Row(1, 100)))
+      // succeeds because column ID validation is skipped when IDs are null;
+      // salary is null because the column was physically dropped and re-added
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2663,8 +2664,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
 
-      // succeeds because current column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // succeeds because current column ID is null, so validation is skipped;
+      // salary is null because the column was physically dropped and re-added
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2693,8 +2695,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
 
-      // succeeds because original column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // succeeds because original column ID is null, so validation is skipped;
+      // salary is null because the column was physically dropped and re-added
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
