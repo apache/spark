@@ -2587,6 +2587,48 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def zip(self, other: "DataFrame") -> "DataFrame":
+        """Combines the columns of this :class:`DataFrame` with another :class:`DataFrame`
+        side-by-side, preserving row alignment between the two inputs.
+
+        Both DataFrames must derive from a common source DataFrame through column-only
+        operations (such as :meth:`select` or :meth:`withColumn`) that preserve the
+        row-to-row mapping of the source. Operations that change row identity or count,
+        including :meth:`filter`, :meth:`join`, :meth:`groupBy`, :meth:`distinct`,
+        :meth:`orderBy`, :meth:`limit`, and non-scalar Python UDFs, are not supported on
+        either side. An :class:`AnalysisException` is thrown when the two DataFrames cannot
+        be aligned.
+
+        .. versionadded:: 4.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The DataFrame to combine with, which must derive from the same source as this
+            DataFrame.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame containing the columns of this DataFrame followed by the columns
+            of `other`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
+        >>> left = df.select("a")
+        >>> right = df.select("b")
+        >>> left.zip(right).show()
+        +---+---+
+        |  a|  b|
+        +---+---+
+        |  1|  2|
+        |  4|  5|
+        +---+---+
+        """
+        ...
+
+    @dispatch_df_method
     def join(
         self,
         other: "DataFrame",

@@ -614,6 +614,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.test_nearest_by_join",
+        "pyspark.sql.tests.test_zip",
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_geographytype",

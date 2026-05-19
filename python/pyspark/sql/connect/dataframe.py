@@ -379,6 +379,12 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "zip"},
+        )
+
     def _check_same_session(self, other: ParentDataFrame) -> "DataFrame":
         if (
             not isinstance(other, DataFrame)
