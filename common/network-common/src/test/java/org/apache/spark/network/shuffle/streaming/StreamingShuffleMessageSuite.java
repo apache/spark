@@ -90,23 +90,16 @@ public class StreamingShuffleMessageSuite {
   @Test
   public void testTerminationAckRoundTrip() {
     TerminationAckMessage original = new TerminationAckMessage(4, 8);
-    original.setSeqNum(99);  // echo back last seen seqNum
-    CompositeByteBuf buf = Unpooled.compositeBuffer();
-    buf.capacity(original.headerLength());
-    original.encode(buf);
-    ByteBuf copy = Unpooled.buffer(buf.readableBytes());
-    copy.writeBytes(buf);
-    buf.release();
-
+    ByteBuf encoded = encodeAndSlice(original);
     try {
-      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(copy);
+      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(encoded);
       assertInstanceOf(TerminationAckMessage.class, decoded);
       TerminationAckMessage ack = (TerminationAckMessage) decoded;
-      assertEquals(99, ack.getSeqNum());
+      assertEquals(SEQ_NUM, ack.getSeqNum());
       assertEquals(4, ack.shuffleWriterId);
       assertEquals(8, ack.shuffleReaderId);
     } finally {
-      copy.release();
+      encoded.release();
     }
   }
 
@@ -119,22 +112,14 @@ public class StreamingShuffleMessageSuite {
     long checksum = 0xDEADBEEFL;
 
     DataMessage original = new DataMessage(2, 5, payload.length, payloadBuf, checksum);
-    original.setSeqNum(10);
-    CompositeByteBuf buf = Unpooled.compositeBuffer();
-    buf.capacity(original.headerLength());
-    original.encode(buf);
-    original.release();
+    ByteBuf encoded = encodeAndSlice(original);
     payloadBuf.release();
 
-    ByteBuf copy = Unpooled.buffer(buf.readableBytes());
-    copy.writeBytes(buf);
-    buf.release();
-
     try {
-      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(copy);
+      StreamingShuffleMessage decoded = StreamingShuffleMessage.decode(encoded);
       assertInstanceOf(DataMessage.class, decoded);
       DataMessage dm = (DataMessage) decoded;
-      assertEquals(10, dm.getSeqNum());
+      assertEquals(SEQ_NUM, dm.getSeqNum());
       assertEquals(2, dm.shuffleWriterId);
       assertEquals(5, dm.shuffleReaderId);
       assertEquals(payload.length, dm.dataSize);
@@ -146,8 +131,46 @@ public class StreamingShuffleMessageSuite {
       assertArrayEquals(payload, out);
       dm.release();
     } finally {
-      copy.release();
+      encoded.release();
     }
+  }
+
+  @Test
+  public void testReleaseIsIdempotent() {
+    byte[] payload = "hi".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    // Constructor calls data.retain(), so refcount is now 2 (1 original + 1 retain).
+    DataMessage msg = new DataMessage(0, 0, payload.length, payloadBuf, 0L);
+    assertEquals(2, payloadBuf.refCnt());
+
+    msg.release();
+    assertEquals(1, payloadBuf.refCnt());
+
+    // Second release should be a no-op — refcount must not drop further or throw.
+    msg.release();
+    assertEquals(1, payloadBuf.refCnt());
+
+    payloadBuf.release();
+  }
+
+  @Test
+  public void testReleaseCallbackRunsExactlyOnce() {
+    byte[] payload = "hi".getBytes();
+    ByteBuf payloadBuf = Unpooled.wrappedBuffer(payload);
+    DataMessage msg = new DataMessage(0, 0, payload.length, payloadBuf, 0L);
+
+    java.util.concurrent.atomic.AtomicInteger callbackInvocations =
+        new java.util.concurrent.atomic.AtomicInteger(0);
+    msg.setReleaseCallback(callbackInvocations::incrementAndGet);
+
+    msg.release();
+    assertEquals(1, callbackInvocations.get());
+
+    // Second release: idempotent — callback must NOT fire again.
+    msg.release();
+    assertEquals(1, callbackInvocations.get());
+
+    payloadBuf.release();
   }
 
   @Test
