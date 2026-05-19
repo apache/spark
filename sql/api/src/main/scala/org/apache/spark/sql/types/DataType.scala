@@ -210,11 +210,7 @@ object DataType {
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
       VariantType) ++
-      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)) ++
-      (TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION)
-        .map(TimestampLTZNanosType(_)) ++
-      (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION)
-        .map(TimestampNTZNanosType(_)))
+      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)))
       .map(t => t.typeName -> t)
       .toMap
   }
