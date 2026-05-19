@@ -518,20 +518,18 @@ case class MergeRowsExec(
       private val notMatchedBySourceInstructions: Seq[InstructionExec])
     extends Iterator[InternalRow] {
 
-    // Resolve metrics once per partition; longMetric(name) does a map lookup on each call.
-    // See SPARK-56933.
-    private val numTargetRowsCopied = MergeRowsExec.this.longMetric("numTargetRowsCopied")
-    private val numTargetRowsInserted = MergeRowsExec.this.longMetric("numTargetRowsInserted")
-    private val numTargetRowsDeleted = MergeRowsExec.this.longMetric("numTargetRowsDeleted")
-    private val numTargetRowsUpdated = MergeRowsExec.this.longMetric("numTargetRowsUpdated")
-    private val numTargetRowsMatchedUpdated =
-      MergeRowsExec.this.longMetric("numTargetRowsMatchedUpdated")
-    private val numTargetRowsMatchedDeleted =
-      MergeRowsExec.this.longMetric("numTargetRowsMatchedDeleted")
-    private val numTargetRowsNotMatchedBySourceUpdated =
-      MergeRowsExec.this.longMetric("numTargetRowsNotMatchedBySourceUpdated")
-    private val numTargetRowsNotMatchedBySourceDeleted =
-      MergeRowsExec.this.longMetric("numTargetRowsNotMatchedBySourceDeleted")
+    // Resolve each metric at most once per partition, on first use; longMetric(name) is a map
+    // lookup. See SPARK-56933.
+    private lazy val numTargetRowsCopied = longMetric("numTargetRowsCopied")
+    private lazy val numTargetRowsInserted = longMetric("numTargetRowsInserted")
+    private lazy val numTargetRowsDeleted = longMetric("numTargetRowsDeleted")
+    private lazy val numTargetRowsUpdated = longMetric("numTargetRowsUpdated")
+    private lazy val numTargetRowsMatchedUpdated = longMetric("numTargetRowsMatchedUpdated")
+    private lazy val numTargetRowsMatchedDeleted = longMetric("numTargetRowsMatchedDeleted")
+    private lazy val numTargetRowsNotMatchedBySourceUpdated =
+      longMetric("numTargetRowsNotMatchedBySourceUpdated")
+    private lazy val numTargetRowsNotMatchedBySourceDeleted =
+      longMetric("numTargetRowsNotMatchedBySourceDeleted")
 
     var cachedExtraRow: InternalRow = _
 
