@@ -93,14 +93,14 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   def queryName(queryName: String): this.type
 
   /**
-   * Assigns a name to this streaming sink for sink evolution capability.
-   * When sinks are named, they can be tracked in checkpoint metadata,
-   * enabling query evolution.
+   * Assigns a name to this streaming sink for sink evolution capability. When sinks are named,
+   * they can be tracked in checkpoint metadata, enabling query evolution.
    *
-   * If not specified, sinks are automatically assigned a default name
-   * based on their position in the query, which maintains backward compatibility.
+   * If not specified, sinks are automatically assigned a default name based on their position in
+   * the query, which maintains backward compatibility.
    *
-   * @param sinkName the unique name for this sink (alphanumeric and underscore only)
+   * @param sinkName
+   *   the unique name for this sink (alphanumeric and underscore only)
    * @since 4.1.0
    */
   private[sql] def name(sinkName: String): this.type
