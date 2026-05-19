@@ -21,41 +21,41 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 
 public final class TerminationAckMessage extends StreamingShuffleMessage {
-    public final int shuffleWriterId;
-    public final int shuffleReaderId;
+  public final int shuffleWriterId;
+  public final int shuffleReaderId;
 
-    public TerminationAckMessage(int shuffleWriterId, int shuffleReaderId) {
-        this.shuffleWriterId = shuffleWriterId;
-        this.shuffleReaderId = shuffleReaderId;
-    }
+  public TerminationAckMessage(int shuffleWriterId, int shuffleReaderId) {
+    this.shuffleWriterId = shuffleWriterId;
+    this.shuffleReaderId = shuffleReaderId;
+  }
 
-    @Override
-    public StreamingShuffleMessageType messageType() {
-        return StreamingShuffleMessageType.TERMINATION_ACK_MESSAGE;
-    }
+  @Override
+  public StreamingShuffleMessageType messageType() {
+    return StreamingShuffleMessageType.TERMINATION_ACK_MESSAGE;
+  }
 
-    @Override
-    public int headerLength() {
-        // 4 bytes for the shuffle writer ID, 4 bytes for the shuffle reader ID
-        return super.headerLength() + 8;
-    }
+  @Override
+  public int headerLength() {
+    // 4 bytes for the shuffle writer ID, 4 bytes for the shuffle reader ID
+    return super.headerLength() + 8;
+  }
 
-    @Override
-    public void encode(CompositeByteBuf buf) {
-        super.encode(buf);
+  @Override
+  public void encode(CompositeByteBuf buf) {
+    super.encode(buf);
 
-        // Write the shuffle writer ID
-        buf.writeInt(shuffleWriterId);
-        // Write the shuffle reader ID
-        buf.writeInt(shuffleReaderId);
-    }
+    // Write the shuffle writer ID
+    buf.writeInt(shuffleWriterId);
+    // Write the shuffle reader ID
+    buf.writeInt(shuffleReaderId);
+  }
 
-    public static TerminationAckMessage decode(ByteBuf buf) {
-        // Read the shuffle writer ID
-        int shuffleWriterId = buf.readInt();
-        // Read the shuffle reader ID
-        int shuffleReaderId = buf.readInt();
+  public static TerminationAckMessage decode(ByteBuf buf) {
+    // Read the shuffle writer ID
+    int shuffleWriterId = buf.readInt();
+    // Read the shuffle reader ID
+    int shuffleReaderId = buf.readInt();
 
-        return new TerminationAckMessage(shuffleWriterId, shuffleReaderId);
-    }
+    return new TerminationAckMessage(shuffleWriterId, shuffleReaderId);
+  }
 }

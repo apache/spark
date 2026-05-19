@@ -26,46 +26,46 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 public final class ShuffleChecksum {
-    private final CRC32C crc = new CRC32C();
+  private final CRC32C crc = new CRC32C();
 
-    /**
-     * Updates checksum for a specified portion of a ByteBuf message.
-     *
-     * @param message The ByteBuf to calculate checksum for
-     * @param startIndex The index of the first byte to calculate checksum for
-     * @param dataLength The length of the data to calculate checksum for
-     */
-    public void updateChecksum(ByteBuf message, int startIndex, int dataLength) {
-        if (startIndex < 0) {
-            throw new IllegalArgumentException(
-                "startIndex must be non-negative: " + startIndex);
-        }
-        if (dataLength < 0) {
-            throw new IllegalArgumentException(
-                "dataLength must be non-negative: " + dataLength);
-        }
-        // Bound the range against writerIndex() rather than capacity(): the checksum must
-        // cover actual written data only, never bytes in [writerIndex, capacity) which
-        // may be uninitialized.
-        if (startIndex + dataLength > message.writerIndex()) {
-            throw new IllegalArgumentException(
-                "startIndex + dataLength exceeds writerIndex: " +
-                    startIndex + " + " + dataLength + " > " + message.writerIndex());
-        }
-        if (message.hasArray()) {
-            // heap-based ByteBuf
-            crc.update(message.array(), message.arrayOffset() + startIndex, dataLength);
-        } else {
-            // off-heap ByteBuf
-            crc.update(message.nioBuffer(startIndex, dataLength));
-        }
+  /**
+   * Updates checksum for a specified portion of a ByteBuf message.
+   *
+   * @param message The ByteBuf to calculate checksum for
+   * @param startIndex The index of the first byte to calculate checksum for
+   * @param dataLength The length of the data to calculate checksum for
+   */
+  public void updateChecksum(ByteBuf message, int startIndex, int dataLength) {
+    if (startIndex < 0) {
+      throw new IllegalArgumentException(
+        "startIndex must be non-negative: " + startIndex);
     }
+    if (dataLength < 0) {
+      throw new IllegalArgumentException(
+        "dataLength must be non-negative: " + dataLength);
+    }
+    // Bound the range against writerIndex() rather than capacity(): the checksum must
+    // cover actual written data only, never bytes in [writerIndex, capacity) which
+    // may be uninitialized.
+    if (startIndex + dataLength > message.writerIndex()) {
+      throw new IllegalArgumentException(
+        "startIndex + dataLength exceeds writerIndex: " +
+          startIndex + " + " + dataLength + " > " + message.writerIndex());
+    }
+    if (message.hasArray()) {
+      // heap-based ByteBuf
+      crc.update(message.array(), message.arrayOffset() + startIndex, dataLength);
+    } else {
+      // off-heap ByteBuf
+      crc.update(message.nioBuffer(startIndex, dataLength));
+    }
+  }
 
-    public long getValue() {
-        return crc.getValue();
-    }
+  public long getValue() {
+    return crc.getValue();
+  }
 
-    public void reset() {
-        crc.reset();
-    }
+  public void reset() {
+    crc.reset();
+  }
 }

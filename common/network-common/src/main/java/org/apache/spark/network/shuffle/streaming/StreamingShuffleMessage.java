@@ -49,81 +49,81 @@ import io.netty.buffer.CompositeByteBuf;
  *     how to do this properly.
  */
 public abstract sealed class StreamingShuffleMessage
-    permits CreditControlMessage, DataMessage, TerminationAckMessage, TerminationControlMessage {
-    protected ByteBuf ownedBuf = null;
-    private Runnable releaseCallback = null;
+  permits CreditControlMessage, DataMessage, TerminationAckMessage, TerminationControlMessage {
+  protected ByteBuf ownedBuf = null;
+  private Runnable releaseCallback = null;
 
-    // To prevent any duplicate/out of order/missing messages, each writer will track the current
-    // max sequence number that has been sent to each reader. Similarly, each reader will track
-    // the latest sequence number it has received from each writer. Upon receiving a new message
-    // from any writer, reader will check if the sequence number is expected. When all finish, the
-    // reader will send TerminationAckMessage to the writer with the max sequence number that has
-    // been received, and the writer will check if the latest sequence recorded matches it.
+  // To prevent any duplicate/out of order/missing messages, each writer will track the current
+  // max sequence number that has been sent to each reader. Similarly, each reader will track
+  // the latest sequence number it has received from each writer. Upon receiving a new message
+  // from any writer, reader will check if the sequence number is expected. When all finish, the
+  // reader will send TerminationAckMessage to the writer with the max sequence number that has
+  // been received, and the writer will check if the latest sequence recorded matches it.
 
-    // Thus the sequence number is valid for the following message types:
-    // 1. all message types from a writer to a reader. To make sure that the reader
-    // receive all the messages sent by writer in order without missing or duplicate any.
-    // 2. TerminationAckMessage from a reader to a writer. To make sure at the end of the
-    // shuffle, the reader receives the same number of messages that the writer has sent.
-    // Essentially, other message types from reader to writer won't have a valid sequence number.
-    private long seqNum;
-    public void setSeqNum(long seqNum) {
-        this.seqNum = seqNum;
+  // Thus the sequence number is valid for the following message types:
+  // 1. all message types from a writer to a reader. To make sure that the reader
+  // receive all the messages sent by writer in order without missing or duplicate any.
+  // 2. TerminationAckMessage from a reader to a writer. To make sure at the end of the
+  // shuffle, the reader receives the same number of messages that the writer has sent.
+  // Essentially, other message types from reader to writer won't have a valid sequence number.
+  private long seqNum;
+  public void setSeqNum(long seqNum) {
+    this.seqNum = seqNum;
+  }
+  public long getSeqNum() { return seqNum; }
+
+  /** Returns the type of this message. */
+  public abstract StreamingShuffleMessageType messageType();
+
+  /** Encodes the current message into the provided ByteBuf. */
+  public void encode(CompositeByteBuf buf) {
+    buf.writeInt(messageType().id());
+    buf.writeLong(seqNum);
+  }
+
+  public int headerLength() {
+    // 4 bytes for message type, 8 bytes for the sequence number
+    return 12;
+  }
+
+  public void setReleaseCallback(Runnable releaseCallback) {
+    this.releaseCallback = releaseCallback;
+  }
+
+  /**
+   * Releases any resources associated with this message.
+   * In VERY RARE cases when the task fails unexpectedly, this method may be called twice.
+   * This method is idempotent — a second call on the same thread is a no-op — but it is
+   * NOT thread-safe.
+   */
+  public void release() {
+    if (ownedBuf != null) {
+      ownedBuf.release();
+      ownedBuf = null;
     }
-    public long getSeqNum() { return seqNum; }
-
-    /** Returns the type of this message. */
-    public abstract StreamingShuffleMessageType messageType();
-
-    /** Encodes the current message into the provided ByteBuf. */
-    public void encode(CompositeByteBuf buf) {
-        buf.writeInt(messageType().id());
-        buf.writeLong(seqNum);
+    if (releaseCallback != null) {
+      releaseCallback.run();
+      releaseCallback = null;
     }
+  }
 
-    public int headerLength() {
-        // 4 bytes for message type, 8 bytes for the sequence number
-        return 12;
-    }
+  public static StreamingShuffleMessage decode(ByteBuf message) {
+    StreamingShuffleMessageType messageType =
+      StreamingShuffleMessageType.decode(message.readInt());
+    long seqNum = message.readLong();
 
-    public void setReleaseCallback(Runnable releaseCallback) {
-        this.releaseCallback = releaseCallback;
-    }
+    // Switch expression over the enum is exhaustive; the compiler enforces that every
+    // case is handled, so any future StreamingShuffleMessageType added to the enum will
+    // cause this method to fail compilation until the corresponding case is added here.
+    StreamingShuffleMessage shuffleMessage = switch (messageType) {
+      case DATA_MESSAGE_UNSAFE_ROW -> DataMessage.decode(message);
+      case CREDIT_CONTROL_MESSAGE -> CreditControlMessage.decode(message);
+      case TERMINATION_CONTROL_MESSAGE -> TerminationControlMessage.decode(message);
+      case TERMINATION_ACK_MESSAGE -> TerminationAckMessage.decode(message);
+    };
+    shuffleMessage.setSeqNum(seqNum);
 
-    /**
-     * Releases any resources associated with this message.
-     * In VERY RARE cases when the task fails unexpectedly, this method may be called twice.
-     * This method is idempotent — a second call on the same thread is a no-op — but it is
-     * NOT thread-safe.
-     */
-    public void release() {
-        if (ownedBuf != null) {
-            ownedBuf.release();
-            ownedBuf = null;
-        }
-        if (releaseCallback != null) {
-            releaseCallback.run();
-            releaseCallback = null;
-        }
-    }
-
-    public static StreamingShuffleMessage decode(ByteBuf message) {
-        StreamingShuffleMessageType messageType =
-            StreamingShuffleMessageType.decode(message.readInt());
-        long seqNum = message.readLong();
-
-        // Switch expression over the enum is exhaustive; the compiler enforces that every
-        // case is handled, so any future StreamingShuffleMessageType added to the enum will
-        // cause this method to fail compilation until the corresponding case is added here.
-        StreamingShuffleMessage shuffleMessage = switch (messageType) {
-            case DATA_MESSAGE_UNSAFE_ROW -> DataMessage.decode(message);
-            case CREDIT_CONTROL_MESSAGE -> CreditControlMessage.decode(message);
-            case TERMINATION_CONTROL_MESSAGE -> TerminationControlMessage.decode(message);
-            case TERMINATION_ACK_MESSAGE -> TerminationAckMessage.decode(message);
-        };
-        shuffleMessage.setSeqNum(seqNum);
-
-        return shuffleMessage;
-    }
+    return shuffleMessage;
+  }
 
 }
