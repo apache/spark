@@ -2650,18 +2650,23 @@ class Analyzer(
           // unresolved.
           !f.inputs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
           withPosition(f) {
-            val plan = resolve(f)
-            // Extract the function input project list from the SQL function plan and
-            // inline the SQL function expression.
-            plan match {
-              case Project(body :: Nil, Project(aliases, _: OneRowRelation)) =>
-                val inputs = aliases.map(stripOuterReference)
-                projectList ++= inputs
-                SQLScalarFunction(f.function, inputs.map(_.toAttribute), body)
-              case o =>
-                throw new AnalysisException(
-                  errorClass = "INVALID_SQL_FUNCTION_PLAN_STRUCTURE",
-                  messageParameters = Map("plan" -> o.toString))
+            // Set CurrentOrigin to the SQL function call site so that input-binding
+            // Casts constructed inside makeSQLFunctionPlan capture the call-site
+            // position in their queryContext snapshot (see Cast.initQueryContext).
+            withOrigin(f.origin) {
+              val plan = resolve(f)
+              // Extract the function input project list from the SQL function plan and
+              // inline the SQL function expression.
+              plan match {
+                case Project(body :: Nil, Project(aliases, _: OneRowRelation)) =>
+                  val inputs = aliases.map(stripOuterReference)
+                  projectList ++= inputs
+                  SQLScalarFunction(f.function, inputs.map(_.toAttribute), body)
+                case o =>
+                  throw new AnalysisException(
+                    errorClass = "INVALID_SQL_FUNCTION_PLAN_STRUCTURE",
+                    messageParameters = Map("plan" -> o.toString))
+              }
             }
           }
         case o => o.mapChildren(rewriteSQLFunctions(_, projectList))
