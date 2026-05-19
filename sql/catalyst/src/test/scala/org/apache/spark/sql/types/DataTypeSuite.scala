@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.jackson.JsonMethods
 
@@ -1511,7 +1513,11 @@ class DataTypeSuite extends SparkFunSuite {
       // Malformed precision forms that don't match the regex fall through to
       // INVALID_JSON_DATA_TYPE: negative, empty parens, non-numeric, and uppercase
       // (JSON type-name convention is lowercase).
-      Seq(s"$name(-1)", s"$name()", s"$name(abc)", s"${name.toUpperCase}(7)").foreach { raw =>
+      Seq(
+        s"$name(-1)",
+        s"$name()",
+        s"$name(abc)",
+        s"${name.toUpperCase(Locale.ROOT)}(7)").foreach { raw =>
         checkError(
           exception = intercept[SparkIllegalArgumentException] {
             DataType.fromJson(s"""\"$raw\"""")
