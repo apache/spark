@@ -25,7 +25,6 @@ import java.util.regex.Pattern
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path

@@ -21,7 +21,7 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType}
  * Resolution-level tests (tables/functions resolving via stored frozen path)
  * are covered in SQLViewSuite and SQLFunctionSuite (SPARK-56639).
  */
-class SetPathSuite extends SharedSparkSession {
+class SetPathSuite extends QueryTest with SharedClassicSparkSession {
 
   private def withPathEnabled(f: => Unit): Unit = {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true")(f)

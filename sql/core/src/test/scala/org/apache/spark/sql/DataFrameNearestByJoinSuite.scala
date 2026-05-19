@@ -21,11 +21,11 @@ import org.apache.spark.sql.catalyst.plans.{NearestByDirection, NearestByJoinMod
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class DataFrameNearestByJoinSuite extends QueryTest with SharedSparkSession {
+class DataFrameNearestByJoinSuite extends QueryTest with SharedClassicSparkSession {
 
   private def prepareForNearestByJoin(): (classic.DataFrame, classic.DataFrame) = {
     val users = spark.createDataFrame(
