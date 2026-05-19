@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -356,13 +356,11 @@ case class GetArrayItem(
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
-    if (index >= baseValue.numElements() || index < 0) {
-      if (failOnError) {
-        throw QueryExecutionErrors.invalidArrayIndexError(
-          index, baseValue.numElements(), getContextOrNull())
-      } else {
-        null
-      }
+    if (failOnError) {
+      ArrayExpressionUtils.checkArrayIndex(baseValue.numElements(), index, getContextOrNull())
+      if (baseValue.isNullAt(index)) null else baseValue.get(index, dataType)
+    } else if (index >= baseValue.numElements() || index < 0) {
+      null
     } else if (baseValue.isNullAt(index)) {
       null
     } else {
@@ -371,36 +369,53 @@ case class GetArrayItem(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val index = ctx.freshName("index")
-      val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
-      val nullCheck = if (childArrayElementNullable) {
-        s"""else if ($eval1.isNullAt($index)) {
-               ${ev.isNull} = true;
-            }
-         """
-      } else {
-        ""
-      }
-
-      val indexOutOfBoundBranch = if (failOnError) {
+    // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+    // Order matters: the guarded case must come first.
+    if (failOnError) {
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        val index = ctx.freshName("index")
         val errorContext = getContextOrNullCode(ctx)
-        // scalastyle:off line.size.limit
-        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements(), $errorContext);"
-        // scalastyle:on line.size.limit
-      } else {
-        s"${ev.isNull} = true;"
-      }
-
-      s"""
-        final int $index = (int) $eval2;
-        if ($index >= $eval1.numElements() || $index < 0) {
-          $indexOutOfBoundBranch
-        } $nullCheck else {
-          ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+        val utils = classOf[ArrayExpressionUtils].getName
+        val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
+        val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
+        val body = if (childArrayElementNullable) {
+          s"""
+             |if ($eval1.isNullAt($index)) {
+             |  ${ev.isNull} = true;
+             |} else {
+             |  $assignment
+             |}
+           """.stripMargin
+        } else {
+          assignment
         }
-      """
-    })
+        s"""
+           |int $index = $utils.checkArrayIndex($eval1.numElements(), (int) $eval2, $errorContext);
+           |$body
+         """.stripMargin
+      })
+    } else {
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        val index = ctx.freshName("index")
+        val childArrayElementNullable = child.dataType.asInstanceOf[ArrayType].containsNull
+        val nullCheck = if (childArrayElementNullable) {
+          s"""else if ($eval1.isNullAt($index)) {
+                 ${ev.isNull} = true;
+              }
+           """
+        } else {
+          ""
+        }
+        s"""
+          final int $index = (int) $eval2;
+          if ($index >= $eval1.numElements() || $index < 0) {
+            ${ev.isNull} = true;
+          } $nullCheck else {
+            ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+          }
+        """
+      })
+    }
   }
 
   override protected def withNewChildrenInternal(
