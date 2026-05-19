@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -52,16 +53,21 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
 
   private def canonicalizeCTE(
       plan: LogicalPlan,
-      defIdToNewId: mutable.Map[Long, Long]): LogicalPlan = {
-    plan.transformDownWithSubqueries {
-      // For nested WithCTE, if defIndex didn't contain the cteId,
-      // means it's not current WithCTE's ref.
-      case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
-        ref.copy(cteId = defIdToNewId(ref.cteId))
-      case unionLoop: UnionLoop if defIdToNewId.contains(unionLoop.id) =>
-        unionLoop.copy(id = defIdToNewId(unionLoop.id))
-      case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
-        unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
-    }
+      defIdToNewId: mutable.Map[Long, Long]): LogicalPlan = plan match {
+    // Nested WithCTEs are normalized separately by applyInternal.
+    case _: WithCTE => plan
+    case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
+      ref.copy(cteId = defIdToNewId(ref.cteId))
+    case unionLoop: UnionLoop if defIdToNewId.contains(unionLoop.id) =>
+      unionLoop.copy(id = defIdToNewId(unionLoop.id))
+    case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
+      unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
+    case other =>
+      other
+        .withNewChildren(other.children.map(canonicalizeCTE(_, defIdToNewId)))
+        .transformExpressionsDown {
+          case subqueryExpression: SubqueryExpression =>
+            subqueryExpression.withNewPlan(canonicalizeCTE(subqueryExpression.plan, defIdToNewId))
+        }
   }
 }
