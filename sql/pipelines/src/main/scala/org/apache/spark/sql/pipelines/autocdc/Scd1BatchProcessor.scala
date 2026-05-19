@@ -127,18 +127,23 @@ case class Scd1BatchProcessor(
     val ignoreColumnNameCase =
       !microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.caseSensitiveAnalysis
 
-    // The schema of the microbatch less the system-projected CDC metadata column, i.e. the
-    // original microbatch schema.
-    val userColumnsInMicrobatchSchema =
-      StructType(
-        microbatchWithCdcMetadataDf.schema.fields.filterNot { field =>
-          if (ignoreColumnNameCase) {
-            field.name.equalsIgnoreCase(Scd1BatchProcessor.cdcMetadataColName)
-          } else {
-            field.name.equals(Scd1BatchProcessor.cdcMetadataColName)
-          }
-        }
-      )
+    // Calculate the schema of the microbatch less the system-projected CDC metadata column, i.e.
+    // the The user schema is the microbatch's schema after dropping the system columns - i.e the
+    // CDC metadata column.
+
+    // We project out the system columns before applying user selection and project back in
+    // afterwards, so that users cannot control whether these [necessary] columns show up in the
+    // target table.
+    val userColumnsInMicrobatchSchema = ColumnSelection.applyToSchema(
+      schemaName = "microbatch",
+      schema = microbatchWithCdcMetadataDf.schema,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName(Scd1BatchProcessor.cdcMetadataColName))
+        )
+      ),
+      ignoreCase = ignoreColumnNameCase
+    )
 
     val userSelectedColumnsInMicrobatchSchema =
       ColumnSelection.applyToSchema(
