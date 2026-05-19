@@ -229,6 +229,34 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("deduplicateMicrobatch carries nested columns correctly from the winning row") {
+    val payloadType = new StructType()
+      .add("name", StringType)
+      .add("amount", IntegerType)
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("payload", payloadType)
+
+    val batch = microbatchOf(schema)(
+      Row(1, 10L, Row("old", 100)),
+      Row(1, 20L, Row("new", 200))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+
+    checkAnswer(
+      df = processor.deduplicateMicrobatch(batch),
+      expectedAnswer = Row(1, 20L, Row("new", 200))
+    )
+  }
+
   test("deduplicateMicrobatch supports composite (multi-column) keys") {
     val schema = new StructType()
       .add("region", StringType)
