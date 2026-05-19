@@ -1,0 +1,74 @@
+================================================================================================
+DecimalAggregates SUM widened-cast peel (Aggregate)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+A1 p=7 s=2 p'=8:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1194           1230          57          8.4         119.4       1.0X
+widened cast, peel off                             1421           1433          11          7.0         142.1       0.8X
+widened cast, peel on                              1181           1188           5          8.5         118.1       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+A2 p=7 s=2 p'=17:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1174           1189          12          8.5         117.4       1.0X
+widened cast, peel off                             1401           1414           8          7.1         140.1       0.8X
+widened cast, peel on                              1169           1178           8          8.6         116.9       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+A3 p=5 s=0 p'=6:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1245           1254          10          8.0         124.5       1.0X
+widened cast, peel off                             1498           1503           5          6.7         149.8       0.8X
+widened cast, peel on                              1222           1232          10          8.2         122.2       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+A4 p=5 s=0 p'=15:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1234           1238           3          8.1         123.4       1.0X
+widened cast, peel off                             1473           1478           7          6.8         147.3       0.8X
+widened cast, peel on                              1242           1255          16          8.1         124.2       1.0X
+
+
+================================================================================================
+DecimalAggregates AVG widened-cast peel (Aggregate)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+B1 p=7 s=2 p'=8:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1178           1185           9          8.5         117.8       1.0X
+widened cast, peel off                             1434           1440           8          7.0         143.4       0.8X
+widened cast, peel on                              1232           1235           3          8.1         123.2       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+B2 p=7 s=2 p'=12:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1222           1229           7          8.2         122.2       1.0X
+widened cast, peel off                             1434           1444          10          7.0         143.4       0.9X
+widened cast, peel on                              1216           1223           6          8.2         121.6       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+B3 p=5 s=0 p'=6:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1267           1274           6          7.9         126.7       1.0X
+widened cast, peel off                             1505           1509           4          6.6         150.5       0.8X
+widened cast, peel on                              1272           1277           7          7.9         127.2       1.0X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+B4 p=5 s=0 p'=15:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          1269           1275           5          7.9         126.9       1.0X
+widened cast, peel off                             1494           1501           9          6.7         149.4       0.8X
+widened cast, peel on                              1268           1274           6          7.9         126.8       1.0X
+
+
