@@ -33,13 +33,17 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
- * the caller to look up a catalog by name.
+ * A thread-safe contract for managing [[CatalogPlugin]]s. Implementations resolve catalogs by
+ * name and maintain the current catalog and namespace for a session.
  *
  * There are still many commands (e.g. ANALYZE TABLE) that do not support v2 catalog API. They
  * ignore the current catalog and blindly go to the v1 `SessionCatalog`. To avoid tracking current
- * namespace in both `SessionCatalog` and `CatalogManger`, we let `CatalogManager` to set/get
+ * namespace in both `SessionCatalog` and `CatalogManager`, implementations set/get the
  * current database of `SessionCatalog` when the current catalog is the session catalog.
+ *
+ * Two implementations exist: [[DefaultCatalogManager]] owns the mutable session state;
+ * [[TransactionAwareCatalogManager]] wraps another manager and redirects catalog lookups to the
+ * active transaction's catalog.
  */
 // TODO: all commands should look up table from the current catalog. The `SessionCatalog` doesn't
 //       need to track current database at all.
@@ -75,7 +79,7 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   def currentNamespace: Array[String]
   def setCurrentNamespace(namespace: Array[String]): Unit
 
-  // ---- Session/Path ----
+  // ---- Session path ----
   def sessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
   def storedSessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
   def confDefaultPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
@@ -96,7 +100,7 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
       pinnedEntries: Option[Seq[Seq[String]]],
       viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]]
 
-  // Clear all the registered catalogs. Only used in tests.
+  // Reset the manager to its initial state. Only used in tests.
   private[sql] def reset(): Unit
 }
 
