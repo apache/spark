@@ -2,13 +2,13 @@
 RTM stateless kafka-to-kafka
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.30+7-post-Ubuntu-1ubuntu120.04 on Linux 5.4.0-1157-aws-fips
-Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1157-aws-fips
+Intel(R) Xeon(R) 6975P-C
 Kafka to kafka query e2e_latency in milliseconds is
-p0: 53
-p50: 79
-p90: 88
-p95: 90
-p99: 96
-p100: 497
+p0: 43
+p50: 69
+p90: 78
+p95: 80
+p99: 84
+p100: 553
 

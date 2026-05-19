@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.kafka010.benchmark
 
-import java.nio.file.Files
+import java.io.File
 import java.util.{Properties, Timer, TimerTask}
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
@@ -34,6 +34,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaTestUtils
 import org.apache.spark.sql.streaming.StreamingQueryListener
+import org.apache.spark.util.Utils
 
 /**
  * Stateless Kafka-to-Kafka RTM benchmark. Reads from an input Kafka topic, applies a
@@ -42,6 +43,12 @@ import org.apache.spark.sql.streaming.StreamingQueryListener
  *
  * The benchmark spins up a real local-cluster Spark context and a live embedded Kafka
  * broker, so a single run takes several minutes.
+ *
+ * Unlike most Spark benchmarks, this one does not use `Benchmark.run()` / `addCase`: the
+ * metric of interest is end-to-end latency percentiles across a streaming pipeline, which
+ * does not fit the Best/Avg/Stdev table format. The JVM/OS/processor header that
+ * `Benchmark.run()` would normally emit is therefore written manually in
+ * `printLatenciesTable` for consistency with other benchmark result files.
  *
  * To run this benchmark:
  * {{{
@@ -75,7 +82,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
         .appName(this.getClass.getCanonicalName)
         .getOrCreate()
       runBenchmark("RTM stateless kafka-to-kafka") {
-        benchmark(60.seconds.toMillis, 4)
+        benchmark(5.minutes.toMillis, 4)
       }
     } finally {
       cleanup()
@@ -107,7 +114,20 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
-  def benchmark(longRunningBatchDurationMs: Long, numBatches: Long): Unit = {
+  /**
+   * Local equivalent of `SparkTestSuite.withTempDir`: creates a temp directory, passes it
+   * to `f`, and recursively deletes it afterward. We define it here because this benchmark
+   * extends `BenchmarkBase`, not a ScalaTest suite, so the standard helper is unavailable.
+   */
+  private def withTempDir[T](f: File => T): T = {
+    val dir = Utils.createTempDir()
+    try f(dir) finally {
+      Utils.deleteRecursively(dir)
+    }
+  }
+
+  def benchmark(longRunningBatchDurationMs: Long, numBatches: Long): Unit = withTempDir {
+      checkpointDir =>
     val inputTopic = newTopic()
     testUtils.createTopic(inputTopic, partitions = 5)
 
@@ -124,6 +144,9 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
       .option("kafka.max.partition.fetch.bytes", "10485760") // 10MB
       .load()
 
+    // UDF instead of current_timestamp(): the built-in is evaluated once per batch
+    // for streaming determinism, but we want per-row wall-clock to measure per-record
+    // latency.
     val currentTimestampUDF = udf(() => System.currentTimeMillis())
 
     val streamWithObserved = kafkaStream
@@ -133,11 +156,16 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
         array(
           struct(
             lit("source-timestamp") as "key",
-            unix_millis(col("timestamp")).cast("STRING").cast("BINARY") as "value")))
+            toUnixMillis(col("timestamp")).cast("STRING").cast("BINARY") as "value")))
       .withColumn("temp-timestamp", currentTimestampUDF())
       .withColumn(
         "latency",
-        col("temp-timestamp").cast("long") - unix_millis(col("timestamp")).cast("long"))
+        col("temp-timestamp").cast("long") - toUnixMillis(col("timestamp")).cast("long"))
+      // Kept deliberately even though the latency columns are dropped before the sink:
+      // (1) exercises the observe() API in the hot path so any RTM regression in observe
+      //     overhead is visible in the e2e numbers, and
+      // (2) surfaces per-batch latency metrics on StreamingQueryProgress / Spark UI for
+      //     live monitoring during a run (not written to the result file).
       .observe(
         name = "observedLatency",
         avg(col("latency")).as("avg"),
@@ -152,7 +180,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", outputTopic)
-      .option("checkpointLocation", Files.createTempDirectory("rtm-benchmark").toString)
+      .option("checkpointLocation", checkpointDir.getAbsolutePath)
       .option("kafka.buffer.memory", "67108864") // 64MB
       .option("kafka.compression.type", "snappy")
       .outputMode("update")
@@ -166,6 +194,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     dataGenThread.start()
 
     val latch = new CountDownLatch(1)
+    val batchesCompleted = new AtomicLong(0)
     val listener = new StreamingQueryListener {
       override def onQueryStarted(
           event: StreamingQueryListener.QueryStartedEvent): Unit = {}
@@ -174,7 +203,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
           event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
 
       override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
-        if (event.progress.batchId == numBatches - 1) {
+        if (batchesCompleted.incrementAndGet() >= numBatches) {
           latch.countDown()
         }
       }
@@ -313,13 +342,13 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
       .withColumn("headers-map", map_from_entries(col("headers")))
       .withColumn("source-timestamp",
         col("headers-map.source-timestamp").cast("STRING").cast("BIGINT"))
-      .withColumn("sink-timestamp", unix_millis(col("timestamp")))
+      .withColumn("sink-timestamp", toUnixMillis(col("timestamp")))
 
     val numRecordsInSink = kafkaSinkData.count()
     val minimumSourceTimestamp =
       kafkaSinkData.agg(min("source-timestamp")).collect()(0)(0).asInstanceOf[Long]
 
-    val numBatchesToFilter = 2
+    val numBatchesToFilter = 1
     val timeFilterThresholdMs = longRunningBatchDurationMs * numBatchesToFilter
     val filteredSink = kafkaSinkData
       .withColumn("time", col("source-timestamp") - minimumSourceTimestamp)
@@ -347,7 +376,11 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     printLatenciesTable("sink_with_latencies", "e2e_latency")
   }
 
-  private def unix_millis(column: Column): Column = {
+  // Named to avoid shadowing org.apache.spark.sql.functions.unix_millis (imported above).
+  // Goes through DOUBLE seconds * 1000 cast to LONG, which truncates sub-millisecond precision;
+  // safe here because every call site passes a Kafka record timestamp, already at ms
+  // resolution.
+  private def toUnixMillis(column: Column): Column = {
     (column.cast("timestamp").cast("double") * 1000).cast("long")
   }
 }
