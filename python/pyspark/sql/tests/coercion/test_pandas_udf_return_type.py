@@ -104,7 +104,7 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             np.arange(1, 3).astype("complex128"),
             [np.array([1, 2, 3], dtype=np.int32), np.array([1, 2, 3], dtype=np.int32)],
             pd.date_range("19700101", periods=2).values,
-            pd.date_range("19700101", periods=2, tz="US/Eastern").values,
+            pd.date_range("19700101", periods=2, tz="America/New_York").values,
             [pd.Timedelta("1 day"), pd.Timedelta("2 days")],
             pd.Categorical(["A", "B"]),
             pd.DataFrame({"_1": [1, 2]}),
@@ -160,6 +160,35 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         golden = None
         if not generating:
             golden = self.load_golden_csv(golden_csv)
+            # The golden file was generated under pandas 2, where the default
+            # dtypes differ from pandas >= 3.0 (datetime64[ns] vs [us]; object
+            # vs str for categorical categories). Remap the affected columns
+            # so the same file works under both versions.
+            if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+                rename = {}
+                for value in self.test_data:
+                    if isinstance(value, np.ndarray) and value.dtype.kind == "M":
+                        new_key = self.repr_value(value)
+                        old_key = self.repr_value(value.astype("datetime64[ns]"))
+                    elif (
+                        isinstance(value, pd.Categorical)
+                        and value.categories.dtype != object
+                    ):
+                        new_key = self.repr_value(value)
+                        old_key = self.repr_value(
+                            pd.Categorical(
+                                value.tolist(),
+                                categories=pd.Index(
+                                    value.categories.tolist(), dtype=object
+                                ),
+                            )
+                        )
+                    else:
+                        continue
+                    if old_key != new_key:
+                        rename[old_key] = new_key
+                if rename:
+                    golden = golden.rename(columns=rename)
 
         def work(arg):
             spark_type, value = arg
