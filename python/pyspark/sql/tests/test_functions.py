@@ -146,6 +146,7 @@ class FunctionsTestsMixin:
             "ByteType",  # should be imported from pyspark.sql.types
             "Column",  # should be imported from pyspark.sql
             "DataType",  # should be imported from pyspark.sql.types
+            "MapType",  # should be imported from pyspark.sql.types
             "NumericType",  # should be imported from pyspark.sql.types
             "PySparkTypeError",  # should be imported from pyspark.errors
             "PySparkValueError",  # should be imported from pyspark.errors
