@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -783,6 +785,286 @@ class SetPathSuite extends SharedSparkSession {
       } finally {
         sql("DROP SCHEMA IF EXISTS path_user_before_builtin")
       }
+    }
+  }
+
+  test("path-driven COUNT(*) rewrite gate: temp count shadowing builtin under SET PATH " +
+      "(session-first) suppresses the * -> 1 rewrite") {
+    // `Analyzer.matchesFunctionName` consults
+    // `FunctionResolution.isSessionBeforeBuiltinInPath` to decide whether COUNT(*) is the
+    // builtin (eligible for the COUNT(*) -> COUNT(1) shortcut) or a user-defined override.
+    // Default `sessionFunctionResolutionOrder` is "second", so creating a temp count while
+    // the default PATH is in effect passes the security check. Once SET PATH puts
+    // `system.session` before `system.builtin`, the rewrite must be suppressed and the
+    // star expansion must reach the temp `count`.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
+      try {
+        // PATH still has builtin first: count(*) rewrites to count(1), which resolves to
+        // the builtin count and returns the row count of the input (1).
+        checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(1))
+
+        // Put session before builtin via SET PATH. The rewrite gate now reports
+        // `isSessionBeforeBuiltinInPath = true` AND a temp count exists, so the
+        // analyzer must NOT collapse `count(*)` to `count(1)`. The `*` then expands
+        // against the table's single column to `count(a)`, which resolves through
+        // the temp under the live path: 1 + 100 = 101.
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql("SELECT count(*) FROM VALUES (1) AS t(a)"), Row(101))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+      }
+    }
+  }
+
+  test("path-driven COUNT(*) rewrite gate: rewrite still applies for unrelated builtins") {
+    // The gate fires ONLY when a temp function with the same unqualified
+    // name as the builtin exists. A temp with a different name must not affect the
+    // COUNT(*) -> COUNT(1) shortcut even when session is searched before builtin.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION my_helper(x INT) RETURNS INT RETURN x + 1")
+      try {
+        sql("SET PATH = system.session, system.builtin")
+        // No temp `count` exists; the rewrite still fires and the builtin row counter
+        // returns the row count of the input (3).
+        checkAnswer(sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)"), Row(3))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS my_helper")
+      }
+    }
+  }
+
+  test("path-driven COUNT(*) rewrite gate: single-pass resolver suppresses the rewrite " +
+      "under SET PATH (session-first)") {
+    // The single-pass resolver mirrors the fixed-point gate via
+    // `FunctionResolverUtils.isUnqualifiedCountShadowedByTemp`, which is wired into
+    // `isNonDistinctCount` and consulted by `handleStarInArguments`.
+    //
+    // Setup (`CREATE TEMPORARY FUNCTION`, `SET PATH`) and execution (Dataset collect via
+    // checkAnswer, which inserts a `DeserializeToObject` node the single-pass analyzer
+    // does not yet support) are run under the fixed-point analyzer; only the actual
+    // count(*) analysis is run under the single-pass analyzer, and we assert against the
+    // analyzed plan's output schema. The builtin count returns BIGINT (rewrite applied);
+    // the temp count(INT) returns INT (rewrite suppressed and the star expansion routes
+    // through the temp), so the schema's first-field dataType tells us which branch fired.
+    withPathEnabled {
+      sql("CREATE TEMPORARY FUNCTION count(x INT) RETURNS INT RETURN x + 100")
+      try {
+        val countStarSql = "SELECT count(*) FROM VALUES (1) AS t(a)"
+
+        // PATH builtin-first: the single-pass gate reports
+        // `isUnqualifiedCountShadowedByTemp = false`, the shortcut fires, and the analyzed
+        // output is the BIGINT builtin count.
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+          val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
+          assert(tpe == LongType,
+            s"Expected BIGINT (builtin count rewrite); got: $tpe")
+        }
+
+        sql("SET PATH = system.session, system.builtin")
+
+        // PATH session-first: the gate reports true, the rewrite is suppressed, the star
+        // expands against `a`, and the temp count(INT) wins; analyzed output is INT.
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+          val tpe = spark.sql(countStarSql).queryExecution.analyzed.schema.head.dataType
+          assert(tpe == IntegerType,
+            s"Expected INT (temp count; rewrite suppressed); got: $tpe")
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS count")
+      }
+    }
+  }
+
+  test("SPARK-56939: concurrent USE SCHEMA / USE CATALOG and unqualified function lookups " +
+    "do not deadlock") {
+    // Regression for SPARK-56939. Prior to the fix, [[CatalogManager.setCurrentNamespace]]
+    // (driven by `USE SCHEMA`) and [[CatalogManager.setCurrentCatalog]] (driven by
+    // `USE CATALOG`) both held the manager's intrinsic lock while calling into
+    // [[SessionCatalog.setCurrentDatabase*]] (which takes the catalog's intrinsic lock),
+    // while concurrent unqualified function resolution acquired the catalog's intrinsic lock
+    // and then reached back into the manager via
+    // [[CatalogManager.sqlResolutionPathEntries]]. That lock-order inversion deadlocked the
+    // session whenever a `USE`-style command raced with any unqualified function reference.
+    //
+    // The hazard is independent of [[SQLConf.PATH_ENABLED]] and the resolution-order setting,
+    // so this test exercises the default configuration. Both `setCurrentNamespace` and
+    // `setCurrentCatalog` were rewritten with the same split-lock pattern, so the test
+    // exercises both arms symmetrically: one thread toggles `USE SCHEMA`, another toggles
+    // `USE CATALOG` between the session catalog and a registered v2 catalog.
+    val v2Catalog = "spark_56939_testcat"
+    spark.conf.set(s"spark.sql.catalog.$v2Catalog", classOf[InMemoryCatalog].getName)
+    sql("CREATE SCHEMA IF NOT EXISTS spark_56939_s1")
+    sql("CREATE SCHEMA IF NOT EXISTS spark_56939_s2")
+    try {
+      val budget = 200
+      val iterations = new java.util.concurrent.atomic.AtomicInteger(0)
+      val barrier = new java.util.concurrent.CyclicBarrier(3)
+      val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+      val useSchemaThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            try {
+              sql(if ((i % 2) == 0) "USE SCHEMA spark_56939_s1" else "USE SCHEMA spark_56939_s2")
+            } catch {
+              // A concurrent `USE` from `useCatalogThread` may switch the current catalog
+              // to the v2 testcat, where these schemas don't exist; the resulting
+              // SCHEMA_NOT_FOUND is an expected interleaving and is unrelated to the
+              // deadlock this test guards against.
+              case _: NoSuchNamespaceException => ()
+            }
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-use-schema")
+
+      val useCatalogThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Toggle between the session catalog and a v2 catalog so each iteration
+            // exercises `setCurrentCatalog` -- the arm that previously held the manager
+            // lock across `v1SessionCatalog.setCurrentDatabase(default)`. The grammar
+            // accepts `USE identifierReference`; a single identifier resolves to a
+            // catalog when one is registered under that name.
+            sql(if ((i % 2) == 0) s"USE $v2Catalog" else "USE spark_catalog")
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-use-catalog")
+
+      val lookupThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Unqualified `count(*)` exercises the kinds-order provider that resolves
+            // against the live PATH via [[CatalogManager]] -- the side of the cycle
+            // that previously acquired the catalog lock first and then the manager lock.
+            val n = sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)")
+              .head().getLong(0)
+            assert(n == 3L, s"unexpected count: $n at iteration $i")
+            iterations.incrementAndGet()
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-lookup")
+
+      useSchemaThread.start()
+      useCatalogThread.start()
+      lookupThread.start()
+
+      // Generous join: 30s is plenty for 200 cheap queries per thread and gives a
+      // clear failure signal if the implementation regresses into a deadlock.
+      val joinMillis = 30000L
+      useSchemaThread.join(joinMillis)
+      useCatalogThread.join(joinMillis)
+      lookupThread.join(joinMillis)
+
+      assert(!useSchemaThread.isAlive,
+        "USE SCHEMA thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely regressed (SPARK-56939).")
+      assert(!useCatalogThread.isAlive,
+        "USE CATALOG thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely regressed (SPARK-56939).")
+      assert(!lookupThread.isAlive,
+        "Lookup thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely regressed (SPARK-56939).")
+      assert(errors.isEmpty,
+        s"Concurrent lookups raised unexpected errors: ${errors.toArray.mkString("; ")}")
+      assert(iterations.get() > 0,
+        "Lookup thread never completed a query; suspect contention or deadlock.")
+    } finally {
+      sql("USE spark_catalog")
+      sql("USE SCHEMA default")
+      sql("DROP SCHEMA IF EXISTS spark_56939_s1 CASCADE")
+      sql("DROP SCHEMA IF EXISTS spark_56939_s2 CASCADE")
+      spark.conf.unset(s"spark.sql.catalog.$v2Catalog")
+    }
+  }
+
+  test("PATH enabled: concurrent SET PATH and unqualified lookups do not deadlock") {
+    // SessionCatalog.lookupBuiltinOrTempFunction is intentionally NOT
+    // synchronized on SessionCatalog because the path-driven kinds provider acquires
+    // CatalogManager.synchronized, and another thread holding that lock can call back
+    // into SessionCatalog (e.g. via setCurrentNamespace). This test hammers both sides
+    // concurrently: one thread flips SET PATH while another performs unqualified
+    // function lookups that go through the kinds provider. Within the budget we should
+    // observe no deadlock and no spurious analysis failures.
+    withPathEnabled {
+      val budget = 200
+      val iterations = new java.util.concurrent.atomic.AtomicInteger(0)
+      val barrier = new java.util.concurrent.CyclicBarrier(2)
+      val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+      val setterThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            if ((i % 2) == 0) {
+              sql("SET PATH = spark_catalog.default, system.builtin")
+            } else {
+              sql("SET PATH = system.builtin, system.session, spark_catalog.default")
+            }
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SetPathSuite-setter")
+
+      val lookupThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Forces unqualified function resolution against the live PATH and triggers
+            // the session-kinds provider on the catalog-manager side.
+            val n = sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)")
+              .head().getLong(0)
+            assert(n == 3L, s"unexpected count: $n at iteration $i")
+            iterations.incrementAndGet()
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SetPathSuite-lookup")
+
+      setterThread.start()
+      lookupThread.start()
+
+      // Generous join: 30s is plenty for 200 cheap queries on either side and gives a
+      // clear failure signal if the implementation regresses into a deadlock.
+      val joinMillis = 30000L
+      setterThread.join(joinMillis)
+      lookupThread.join(joinMillis)
+
+      assert(!setterThread.isAlive,
+        "SET PATH thread did not finish; potential deadlock between SessionCatalog and " +
+          "CatalogManager synchronized blocks.")
+      assert(!lookupThread.isAlive,
+        "Lookup thread did not finish; potential deadlock between SessionCatalog and " +
+          "CatalogManager synchronized blocks.")
+      assert(errors.isEmpty,
+        s"Concurrent lookups raised unexpected errors: ${errors.toArray.mkString("; ")}")
+      assert(iterations.get() > 0,
+        "Lookup thread never completed a query; suspect contention or deadlock.")
+      sql("SET PATH = DEFAULT_PATH")
     }
   }
 
