@@ -92,8 +92,23 @@ case class SortMergeAsOfJoinExec(
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
+  // Determine scan direction based on the order expression (distance metric).
+  // This is a performance heuristic only -- if it misclassifies, the scan
+  // still produces the correct result; only the early-termination shortcut
+  // is lost.
+  //
+  // orderExpression is direction-unique by construction:
+  //   Backward: Subtract(leftAsOf, rightAsOf) -> right-to-left
+  //   Forward:  Subtract(rightAsOf, leftAsOf) -> left-to-right
+  //   Nearest:  If(...) -> left-to-right
+  private val scanRightToLeft: Boolean = orderExpression match {
+    case Subtract(l, _, _) if l.semanticEquals(leftAsOfExpr) => true
+    case _ => false
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val scanFromRight = scanRightToLeft
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val scanner = new SortMergeAsOfJoinScanner(
@@ -107,7 +122,8 @@ case class SortMergeAsOfJoinExec(
         orderExpression,
         joinType,
         condition,
-        numOutputRows
+        numOutputRows,
+        scanFromRight
       )
       // Register cleanup to release the right-side buffer on task completion
       TaskContext.get().addTaskCompletionListener[Unit](_ => scanner.close())
@@ -144,7 +160,8 @@ private[joins] class SortMergeAsOfJoinScanner(
     orderExpression: Expression,
     joinType: JoinType,
     residualCondition: Option[Expression],
-    numOutputRows: SQLMetric) {
+    numOutputRows: SQLMetric,
+    scanRightToLeft: Boolean) {
 
   private val joinedOutput = leftOutput ++ rightOutput
   private val joinedRow = new JoinedRow()
@@ -176,23 +193,6 @@ private[joins] class SortMergeAsOfJoinScanner(
   // Ordering for the distance metric
   private val distanceOrdering =
     TypeUtils.getInterpretedOrdering(orderExpression.dataType)
-
-  // Determine scan direction based on the as-of condition.
-  // Backward (left >= right): best match is at end of sorted buffer -> right-to-left
-  // Forward (left <= right): best match is at start -> left-to-right
-  // Nearest / unknown: left-to-right (works correctly, just no early termination
-  // guarantee for the "as-of not satisfied" shortcut)
-  //
-  // This is a performance heuristic only -- if it misclassifies, the scan
-  // still produces the correct result; only the early-termination shortcut
-  // is lost. The tree-wide search tolerates conjunct reordering by the
-  // optimizer.
-  private val scanRightToLeft: Boolean = {
-    asOfCondition.exists {
-      case _: GreaterThanOrEqual | _: GreaterThan => true
-      case _ => false
-    }
-  }
 
   // Null row for LeftOuter when no match is found
   private val nullRightRow = new GenericInternalRow(rightOutput.length)

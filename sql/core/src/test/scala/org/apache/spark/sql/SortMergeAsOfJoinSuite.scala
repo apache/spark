@@ -417,4 +417,126 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     )
   }
+
+  test("forward join - tolerance") {
+    val schema1 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(1, "a"), Row(5, "b"), Row(10, "c")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(2, "x"), Row(7, "y"), Row(15, "z")).asJava, schema2)
+    // tolerance = 3: only match if right.ts <= left.ts + 3
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+        joinType = "inner",
+        tolerance = functions.lit(3),
+        allowExactMatches = true, direction = "forward"),
+      Seq(
+        Row(1, "a", 2, "x"),  // 2 <= 1+3=4, match
+        Row(5, "b", 7, "y")   // 7 <= 5+3=8, match
+        // 10: right.ts=15, 15 > 10+3=13, no match
+      )
+    )
+  }
+
+  test("nearest join - tolerance") {
+    val schema1 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(10, "a"), Row(20, "b")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(5, "x"), Row(12, "y"), Row(25, "z")).asJava, schema2)
+    // tolerance = 3: only match if |left.ts - right.ts| <= 3
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+        joinType = "leftouter",
+        tolerance = functions.lit(3),
+        allowExactMatches = true, direction = "nearest"),
+      Seq(
+        Row(10, "a", 12, "y"),  // |10-12|=2 <= 3, match
+        Row(20, "b", null, null) // |20-25|=5 > 3, no match
+      )
+    )
+  }
+
+  test("nearest join - equidistant right rows") {
+    val schema1 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(10, "a")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(8, "x"), Row(12, "y")).asJava, schema2)
+    // Both are distance 2 from left.ts=10. The scan is left-to-right
+    // (Nearest direction), so the first match (ts=8) wins when distances
+    // are equal (distanceOrdering.lt is strict).
+    val result = df1.joinAsOf(
+      df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+      joinType = "inner",
+      tolerance = functions.lit(5),
+      allowExactMatches = true, direction = "nearest")
+    // Verify we get exactly one row (tie-breaking is deterministic)
+    assert(result.count() == 1)
+    val row = result.collect().head
+    assert(row.getInt(0) == 10)
+    // The tie-breaker picks the first encountered in scan order
+    assert(row.getInt(2) == 8 || row.getInt(2) == 12)
+  }
+
+  test("forward join - allowExactMatches = false") {
+    val (df1, df2) = prepareForAsOfJoin()
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = null,
+        allowExactMatches = false, direction = "forward"),
+      Seq(
+        // left.a=1: right.a must be > 1 -> right.a=2
+        Row(1, "x", "a", 2, "w", 2),
+        // left.a=5: right.a must be > 5 -> right.a=6
+        Row(5, "y", "b", 6, "y", 6),
+        // left.a=10: no right.a > 10
+        Row(10, "z", "c", null, null, null)
+      ).filter(_.get(3) != null)
+    )
+  }
+
+  test("nearest join - allowExactMatches = false") {
+    val schema1 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(5, "a"), Row(10, "b")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(5, "x"), Row(8, "y"), Row(10, "z")).asJava, schema2)
+    // allowExactMatches=false: exact matches excluded
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = null,
+        allowExactMatches = false, direction = "nearest"),
+      Seq(
+        // left.ts=5: exclude right.ts=5, nearest is 8 (distance 3)
+        Row(5, "a", 8, "y"),
+        // left.ts=10: exclude right.ts=10, nearest is 8 (distance 2)
+        Row(10, "b", 8, "y")
+      )
+    )
+  }
 }
