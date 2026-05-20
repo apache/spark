@@ -2,136 +2,139 @@
 RPC Round-Trip Latency - 1 KB payload (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 RPC Latency (1 KB):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 KB payload                                        444            472          20          0.0       88867.8       1.0X
+1 KB payload                                        308            313           7          0.0       61570.4       1.0X
 
 
 ================================================================================================
 RPC Round-Trip Latency - 64 KB payload (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 RPC Latency (64 KB):                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-64 KB payload                                       715            742          25          0.0      143088.4       1.0X
+64 KB payload                                       427            435           5          0.0       85367.2       1.0X
 
 
 ================================================================================================
 RPC Round-Trip Latency - 1 MB payload (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 RPC Latency (1 MB):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 MB payload                                        875            902          23          0.0      874524.5       1.0X
+1 MB payload                                        474            481          10          0.0      474050.5       1.0X
 
 
 ================================================================================================
 RPC Round-Trip Latency - 16 MB payload (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 RPC Latency (16 MB):                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-16 MB payload                                      1327           1390          61          0.0    13268791.8       1.0X
+16 MB payload                                       781            790          11          0.0     7808193.5       1.0X
 
 
 ================================================================================================
 Concurrent RPC Throughput (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Concurrent RPC Throughput:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 client(s)                                        1823           1969         127          0.0       91128.9       1.0X
-4 client(s)                                         768            783          20          0.0       38389.3       2.4X
-8 client(s)                                         512            536          23          0.0       25603.3       3.6X
-16 client(s)                                        459            464           5          0.0       22970.0       4.0X
+1 client(s)                                        1203           1230          37          0.0       60140.4       1.0X
+4 client(s)                                         398            406           8          0.1       19877.3       3.0X
+8 client(s)                                         287            293           7          0.1       14354.1       4.2X
+16 client(s)                                        244            257          11          0.1       12214.6       4.9X
 
 
 ================================================================================================
 IOMode Comparison (Concurrent Throughput)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 IOMode Comparison:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NIO (8 clients)                                     792            840          41          0.0       39614.4       1.0X
-AUTO (8 clients)                                    867            885          19          0.0       43371.9       0.9X
+NIO (8 clients)                                     511            540          28          0.0       25558.0       1.0X
+AUTO (8 clients)                                    490            511          21          0.0       24493.3       1.0X
+IO_URING (8 clients)                                524            528           6          0.0       26186.0       1.0X
 
 
 ================================================================================================
 Server Thread Scaling (IOMode=AUTO, 16 clients)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Server Thread Scaling:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-2 server threads                                    496            502          10          0.0       24789.3       1.0X
-4 server threads                                    405            424          32          0.0       20234.7       1.2X
-8 server threads                                    421            450          27          0.0       21025.0       1.2X
-16 server threads                                   443            458          26          0.0       22142.6       1.1X
-32 server threads                                   455            515          52          0.0       22727.6       1.1X
+2 server threads                                    270            278          10          0.1       13476.7       1.0X
+4 server threads                                    254            258           4          0.1       12692.2       1.1X
+8 server threads                                    273            299          22          0.1       13659.0       1.0X
+16 server threads                                   275            283           9          0.1       13763.1       1.0X
+32 server threads                                   274            288          14          0.1       13707.7       1.0X
 
 
 ================================================================================================
 Multi-Connection Per Peer (IOMode=AUTO, 1MB payload)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Multi-Connection Throughput:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 conn(s), 4 threads                               1702           1871         152          0.0      340467.9       1.0X
-2 conn(s), 4 threads                               1278           1540         227          0.0      255638.3       1.3X
-4 conn(s), 4 threads                               1736           1768          36          0.0      347180.2       1.0X
+1 conn(s), 4 threads                               1617           1707         136          0.0      323385.0       1.0X
+2 conn(s), 4 threads                               1306           1317          13          0.0      261233.6       1.2X
+4 conn(s), 4 threads                               1126           1140          12          0.0      225198.0       1.4X
 
 
 ================================================================================================
 Async Write Pressure (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Async Write Throughput:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-1 KB async burst                                     72            137         112          0.1       14336.3       1.0X
-64 KB async burst                                   147            161          13          0.0       29489.6       0.5X
-1 MB async burst                                   1412           1479          59          0.0      282361.9       0.1X
+1 KB async burst                                     29             35          11          0.2        5742.0       1.0X
+64 KB async burst                                   137            146          10          0.0       27408.7       0.2X
+1 MB async burst                                   1630           1635           5          0.0      325949.8       0.0X
 
 
 ================================================================================================
 Large Block Transfer Throughput (IOMode=AUTO)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 16 MB Block Transfer:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Sequential sends                                    670            895         358          0.0     6695791.0       1.0X
-4-thread parallel sends                             436            451          17          0.0     4358412.5       1.5X
+Sequential sends                                    764            817          60          0.0     7644943.9       1.0X
+4-thread parallel sends                             472            479           6          0.0     4720135.4       1.6X
 
 
 ================================================================================================
-File-Backed Shuffle Block Fetch (NIO vs AUTO, 100x16MB)
+File-Backed Shuffle Block Fetch (100x16MB)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Linux 6.17.0-1008-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 File-Backed Shuffle Fetch:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-NIO, sequential fetch                               384            386           3          0.0     3844405.1       1.0X
-NIO, parallel fetch (4 clients)                     209            217           9          0.0     2091358.0       1.8X
-AUTO, sequential fetch                              362            372          14          0.0     3615964.2       1.1X
-AUTO, parallel fetch (4 clients)                    202            209           6          0.0     2022433.8       1.9X
+NIO, sequential fetch                               353            363           9          0.0     3528829.7       1.0X
+NIO, parallel fetch (4 clients)                     207            241          59          0.0     2074918.0       1.7X
+AUTO, sequential fetch                              333            361          39          0.0     3330254.1       1.1X
+AUTO, parallel fetch (4 clients)                    183            192           8          0.0     1826653.6       1.9X
+IO_URING, sequential fetch                         1382           1419          36          0.0    13817436.0       0.3X
+IO_URING, parallel fetch (4 clients)                324            354          27          0.0     3238954.3       1.1X
 
 
