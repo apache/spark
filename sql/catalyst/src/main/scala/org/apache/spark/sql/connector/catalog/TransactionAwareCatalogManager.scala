@@ -18,47 +18,93 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.catalog.TempVariableManager
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 
 /**
  * A [[CatalogManager]] decorator that redirects catalog lookups to the transaction's catalog
  * instance when names match, ensuring table loads during analysis are scoped to the transaction.
- * All mutable state (current catalog, current namespace, loaded catalogs) is delegated to the
- * wrapped [[CatalogManager]].
+ * All mutable session state is delegated to the wrapped [[CatalogManager]].
  */
-// TODO: Extracting a CatalogManager trait (so this class can implement it instead of extending
-//  CatalogManager) would eliminate the inherited mutable state that this decorator doesn't use.
 private[sql] class TransactionAwareCatalogManager(
     delegate: CatalogManager,
-    txn: Transaction)
-  extends CatalogManager(delegate.defaultSessionCatalog, delegate.v1SessionCatalog) {
+    txn: Transaction) extends CatalogManager {
 
-  override val tempVariableManager: TempVariableManager = delegate.tempVariableManager
+  // ---- Underlying state: pure delegation. ----
+  override def defaultSessionCatalog: CatalogPlugin = delegate.defaultSessionCatalog
+  override def v1SessionCatalog: SessionCatalog = delegate.v1SessionCatalog
+  override def tempVariableManager: TempVariableManager = delegate.tempVariableManager
 
-  override def transaction: Option[Transaction] = Some(txn)
-
-  override def withTransaction(newTxn: Transaction): CatalogManager =
-    throw SparkException.internalError("Cannot nest transactions: a transaction is already active.")
-
+  // ---- Catalog access: redirect to txn catalog when names match. ----
   override def catalog(name: String): CatalogPlugin = {
     val resolved = delegate.catalog(name)
     if (txn.catalog.name() == resolved.name()) txn.catalog else resolved
   }
 
+  override private[sql] def v2SessionCatalog: CatalogPlugin = delegate.v2SessionCatalog
+
+  override def listCatalogs(pattern: Option[String]): Seq[String] =
+    delegate.listCatalogs(pattern)
+
+  // ---- Transactions ----
+  override def transaction: Option[Transaction] = Some(txn)
+
+  override def withTransaction(newTxn: Transaction): CatalogManager =
+    throw SparkException.internalError("Cannot nest transactions: a transaction is already active.")
+
+  // ---- Current catalog / namespace: redirect to txn catalog when names match. ----
   override def currentCatalog: CatalogPlugin = {
     val c = delegate.currentCatalog
     if (txn.catalog.name() == c.name()) txn.catalog else c
   }
+
+  override def setCurrentCatalog(catalogName: String): Unit =
+    delegate.setCurrentCatalog(catalogName)
 
   override def currentNamespace: Array[String] = delegate.currentNamespace
 
   override def setCurrentNamespace(namespace: Array[String]): Unit =
     delegate.setCurrentNamespace(namespace)
 
-  override def setCurrentCatalog(catalogName: String): Unit =
-    delegate.setCurrentCatalog(catalogName)
+  // ---- Session path: pure delegation. ----
+  override def sessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
+    delegate.sessionPathEntries
 
-  override def listCatalogs(pattern: Option[String]): Seq[String] =
-    delegate.listCatalogs(pattern)
+  override def storedSessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
+    delegate.storedSessionPathEntries
+
+  override def confDefaultPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
+    delegate.confDefaultPathEntries
+
+  override def setSessionPath(entries: Seq[CatalogManager.SessionPathEntry]): Unit =
+    delegate.setSessionPath(entries)
+
+  override def clearSessionPath(): Unit = delegate.clearSessionPath()
+
+  override private[sql] def copySessionPathFrom(other: CatalogManager): Unit =
+    delegate.copySessionPathFrom(other)
+
+  override def currentPathString: String = delegate.currentPathString
+
+  override def sqlResolutionPathEntries(
+      pathDefaultCatalog: String,
+      pathDefaultNamespace: Seq[String],
+      expandCatalog: String,
+      expandNamespace: Seq[String]): Seq[Seq[String]] =
+    delegate.sqlResolutionPathEntries(
+      pathDefaultCatalog, pathDefaultNamespace, expandCatalog, expandNamespace)
+
+  override def sqlResolutionPathEntries(
+      currentCatalog: String,
+      currentNamespace: Seq[String]): Seq[Seq[String]] =
+    delegate.sqlResolutionPathEntries(currentCatalog, currentNamespace)
+
+  override def isSystemSessionOnPath: Boolean = delegate.isSystemSessionOnPath
+
+  override def resolutionPathEntriesForAnalysis(
+      pinnedEntries: Option[Seq[Seq[String]]],
+      viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] =
+    delegate.resolutionPathEntriesForAnalysis(pinnedEntries, viewCatalogAndNamespace)
+
+  override private[sql] def reset(): Unit = delegate.reset()
 }
