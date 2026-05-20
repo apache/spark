@@ -47,7 +47,8 @@ public class JavaModuleOptions {
       "-Dio.netty.allocator.type=pooled",
       "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
       "-Dio.netty.noUnsafe=false",
-      "--enable-native-access=ALL-UNNAMED"};
+      "--enable-native-access=ALL-UNNAMED",
+      "--sun-misc-unsafe-memory-access=allow"};
 
     /**
      * Returns the default JVM runtime options used by Spark.
