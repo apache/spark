@@ -104,6 +104,16 @@ case class TranspiledPythonUDF(
       TranspiledPythonUDF =
     copy(pythonUDFExpr = newChildren.head, transpiledOptions = newChildren.tail.toList)
   final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_PYTHON_UDF)
+
+  // True when every direct input to pythonUDFExpr is a plain PythonUDF (not a
+  // TranspiledPythonUDF). Used to decide whether to preserve the UDF batch pipeline
+  // rather than inserting a Catalyst node in the middle of a Python UDF chain.
+  def hasOnlyPythonUDFInputs: Boolean =
+    pythonUDFExpr.children.nonEmpty &&
+    pythonUDFExpr.children.forall {
+      case _: PythonUDF => true
+      case _            => false
+    }
 }
 
 /**
