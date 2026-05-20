@@ -2994,7 +2994,7 @@ class DataSourceV2DataFrameSuite
   // (to demonstrate that the stored plan is non-trivial), and then verifies the view
   // behavior after various table modifications (session or external).
 
-  /** Appends rows to a DSv2 table via the catalog API, bypassing the session. */
+  /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   // The row layout must match the current table column order.
   private def externalAppend(
       catalogName: String,

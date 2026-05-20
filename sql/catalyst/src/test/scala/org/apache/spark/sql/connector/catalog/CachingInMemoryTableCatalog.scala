@@ -30,9 +30,10 @@ import java.util.concurrent.ConcurrentHashMap
  * results may still be stale until [[clearCache]] or REFRESH TABLE (which
  * invokes [[invalidateTable]]) is called.
  *
- * Note: [[dropTable]], [[createTable]], and [[alterTable]] do not invalidate
- * the cache, matching the behavior of real caching connectors like Iceberg's
- * CachingCatalog.
+ * Only the primary [[loadTable(ident:org\.apache\.spark\.sql\.connector\.catalog\.Identifier)*]]
+ * overload is cached. Version and timestamp overloads bypass the cache, matching
+ * time-travel semantics. [[dropTable]], [[createTable]], and [[alterTable]] do not
+ * invalidate the cache, matching the behavior of real caching connectors.
  */
 class CachingInMemoryTableCatalog extends InMemoryTableCatalog {
   private val cachedTables = new ConcurrentHashMap[Identifier, Table]()
