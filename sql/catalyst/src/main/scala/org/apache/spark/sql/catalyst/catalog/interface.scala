@@ -675,7 +675,7 @@ case class CatalogTable(
     if (comment.isDefined) map += "Comment" -> JString(comment.get)
     if (collation.isDefined) map += "Collation" -> JString(collation.get)
 
-    if (isViewLike) {
+    if (tableType == CatalogTableType.VIEW) {
       if (viewText.isDefined) {
         map += "View Text" -> JString(viewText.get)
       }
@@ -710,6 +710,15 @@ case class CatalogTable(
       if (viewQueryOutputColumns != JNull) {
         map += "View Query Output Columns" -> viewQueryOutputColumns
       }
+    } else if (tableType == CatalogTableType.METRIC_VIEW) {
+      // METRIC_VIEW stores a YAML body in `viewText`, not a SQL query. The schema-binding
+      // fields used by plain VIEW (View Schema Mode, View Catalog and Namespace, SQL Path,
+      // View Query Output Columns) do not apply, so emit only `View Text` plus a `Language`
+      // tag so consumers can dispatch on the view_text format.
+      if (viewText.isDefined) {
+        map += "View Text" -> JString(viewText.get)
+      }
+      map += "Language" -> JString("YAML")
     }
     if (tableProperties != JNull) map += "Table Properties" -> tableProperties
     stats.foreach { s =>
