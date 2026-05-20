@@ -141,13 +141,27 @@ class CatalogManager(
     // would invert that order and deadlock. Snapshot the dispatch decision under the lock,
     // run callbacks outside it, then publish the new namespace under the lock again.
     //
-    // Concurrency trade-off versus the pre-SPARK-56939 atomic version: the `isSession`
-    // snapshot can drift if a concurrent [[setCurrentCatalog]] switches to a v2 catalog
-    // between this read and the v1 callback below -- the callback would still touch
-    // `v1.currentDb` even though the active catalog is no longer the session catalog. A
-    // later switch back to the session catalog resets `v1.currentDb` to `default` (see
-    // [[setCurrentCatalog]]), so long-term state remains consistent; only the intermediate
-    // observation is novel. Acceptable trade-off against the deadlock alternative.
+    // Concurrency trade-offs versus the pre-SPARK-56939 atomic version (v1-side and
+    // CM-side drift modes):
+    //
+    // (a) v1-side drift. The `isSession` snapshot can drift if a concurrent
+    //     [[setCurrentCatalog]] switches to a v2 catalog between this read and the v1
+    //     callback below -- the callback would still touch `v1.currentDb` even though
+    //     the active catalog is no longer the session catalog. A later switch back to
+    //     the session catalog resets `v1.currentDb` to `default` (see
+    //     [[setCurrentCatalog]]), so long-term state remains consistent; only the
+    //     intermediate observation is novel.
+    //
+    // (b) CM-side publish-overwrite drift (sticky). Between the v1 callback returning
+    //     and the publish below, a concurrent [[setCurrentCatalog]] can complete fully
+    //     -- switching `_currentCatalogName` to (say) a v2 catalog and clearing
+    //     `_currentNamespace = None` -- before this method's publish overwrites that
+    //     with `Some(namespace)`. End state: `_currentNamespace = Some(namespace)` is
+    //     published under a different `_currentCatalogName` than the one observed when
+    //     [[isSession]] was snapshotted at the top. Unlike (a) there is no analogous
+    //     auto-recovery; the mismatch sticks until the next `USE`. This is still
+    //     last-writer-wins for two racing `USE` commands, which is the conventional
+    //     expectation, so it is accepted as a trade-off against the deadlock alternative.
     val isSession = synchronized(isSessionCatalog(currentCatalog))
     if (isSession && namespace.length == 1) {
       v1SessionCatalog.setCurrentDatabaseWithNameCheck(
@@ -246,8 +260,8 @@ class CatalogManager(
    * the v1 current database under the CM lock. It is safe today because no code path holds
    * [[SessionCatalog]]'s intrinsic lock while waiting on [[CatalogManager]]'s -- the
    * SPARK-56939 fix removed every such SC->CM ordering. Any future change that introduces a
-   * new SC->CM ordering must avoid resurrecting the deadlock by also taking
-   * `currentPathString` (or any other CM->SC nest) into account.
+   * new SC->CM ordering must take `currentPathString` (or any other CM->SC nest) into
+   * account to avoid resurrecting the deadlock.
    */
   def currentPathString: String = synchronized {
     import CatalogV2Implicits._
@@ -309,7 +323,7 @@ class CatalogManager(
    * `system.session` entries from the resolved path -- it never inspects any
    * `(catalog, namespace)` derived from `v1`. So if `v1CurrentDb` lags by one `USE SCHEMA`,
    * a `CURRENT_SCHEMA` entry might briefly resolve to the previous database, but the kinds
-   * list (the only thing returned here) is unaffected. Lifting the read inside the CM lock
+   * list (the only thing returned here) is unaffected. Moving the read inside the CM lock
    * would re-introduce the SPARK-56939 lock-order inversion this helper exists to avoid.
    *
    * Callers (e.g. [[SessionCatalog.sessionFunctionKindsInResolutionOrder]],
