@@ -1091,7 +1091,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "alternative" -> "DROP TABLE",
         "operation" -> "DROP VIEW",
         "foundType" -> "EXTERNAL",
-        "requiredType" -> "VIEW",
+        "requiredType" -> "VIEW or METRIC_VIEW",
         "objectName" -> "spark_catalog.dbx.tab1")
     )
   }
