@@ -51,18 +51,22 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
   /**
    * Runs function `f` with whole stage codegen on and off.
    *
+   * @param minNumIters minimum timed iterations per case when the corresponding
+   *        `wholestageOffNumIters` or `wholestageOnNumIters` is zero.
    * @param warmupTime JIT warm-up duration per case before timed iterations.
-   * @param minTime minimum total timed duration per case when `numIters` is 0.
+   * @param minTime minimum total timed duration per case when the corresponding
+   *        `wholestageOffNumIters` or `wholestageOnNumIters` is zero.
    * @param wholestageOffNumIters if non-zero, run exactly this many timed iterations
-   *        (wholestage off); otherwise use `minNumIters` and `minTime`.
-   * @param wholestageOnNumIters same for wholestage on.
+   *        for the wholestage-off case; otherwise use `minNumIters` and `minTime`.
+   * @param wholestageOnNumIters if non-zero, run exactly this many timed iterations
+   *        for the wholestage-on case; otherwise use `minNumIters` and `minTime`.
    */
   final def codegenBenchmark(
       name: String,
       cardinality: Long,
+      minNumIters: Int = 2,
       warmupTime: FiniteDuration = 2.seconds,
       minTime: FiniteDuration = 2.seconds,
-      minNumIters: Int = 2,
       wholestageOffNumIters: Int = 2,
       wholestageOnNumIters: Int = 5)(f: => Unit): Unit = {
     val benchmark = new Benchmark(
