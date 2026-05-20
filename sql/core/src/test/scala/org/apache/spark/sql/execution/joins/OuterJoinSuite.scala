@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Expression, LessThan}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
@@ -36,6 +36,18 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
   setupTestData()
 
   private val EnsureRequirements = new EnsureRequirements()
+
+  private def extractJoinParts(
+      left: DataFrame,
+      right: DataFrame,
+      condition: Column): ExtractEquiJoinKeys.ReturnType = {
+    val analyzedJoin = left.join(right, condition, "inner")
+      .queryExecution.analyzed
+      .collectFirst { case join: Join => join }
+      .getOrElse(fail("Failed to build analyzed equi-join"))
+    ExtractEquiJoinKeys.unapply(analyzedJoin)
+      .getOrElse(fail("Failed to extract equi-join keys"))
+  }
 
   private lazy val left = spark.createDataFrame(
     sparkContext.parallelize(Seq(
@@ -355,12 +367,8 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val nullableRight = Seq(
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
-    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(nullableLeft, nullableRight, nullableLeft("k") === nullableRight("k"))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -391,12 +399,8 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val nullableRight = Seq(
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
-    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(nullableLeft, nullableRight, nullableLeft("k") === nullableRight("k"))
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "4") {
       val plan = EnsureRequirements.apply(
         SortMergeJoinExec(leftKeys, rightKeys, LeftOuter, boundCondition,
@@ -412,12 +416,11 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
   test("ordinary outer equi-join keeps hash partitioning for non-nullable join keys") {
     val nonNullableLeft = spark.range(3).toDF("k")
     val nonNullableRight = spark.range(3).toDF("k")
-    val joinCondition = (nonNullableLeft("k") === nonNullableRight("k")).expr
-    val join = Join(nonNullableLeft.logicalPlan, nonNullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(
+        nonNullableLeft,
+        nonNullableRight,
+        nonNullableLeft("k") === nonNullableRight("k"))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -440,12 +443,8 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null-1"),
       (null.asInstanceOf[Integer], "right-null-2")).toDF("k", "rv")
-    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      RightOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(nullableLeft, nullableRight, nullableLeft("k") === nullableRight("k"))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -478,12 +477,8 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null-1"),
       (null.asInstanceOf[Integer], "right-null-2")).toDF("k", "rv")
-    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      FullOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(nullableLeft, nullableRight, nullableLeft("k") === nullableRight("k"))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -516,12 +511,8 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val nullableRight = Seq(
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
-    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(nullableLeft, nullableRight, nullableLeft("k") === nullableRight("k"))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -550,14 +541,12 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
       (Integer.valueOf(1), null.asInstanceOf[Integer], "right-match"),
       (Integer.valueOf(2), Integer.valueOf(3), "right-no-match"))
       .toDF("k1", "k2", "rv")
-    val joinCondition = (
-      nullableLeft("k1") === nullableRight("k1") &&
-        nullableLeft("k2").eqNullSafe(nullableRight("k2"))).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(
+        nullableLeft,
+        nullableRight,
+        nullableLeft("k1") === nullableRight("k1") &&
+          nullableLeft("k2").eqNullSafe(nullableRight("k2")))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -588,12 +577,11 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val nullableRight = Seq(
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
-    val joinCondition = nullableLeft("k").eqNullSafe(nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(
+        nullableLeft,
+        nullableRight,
+        nullableLeft("k").eqNullSafe(nullableRight("k")))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -616,12 +604,8 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
     val nullableRight = Seq(
       (Integer.valueOf(1), "right-1"),
       (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
-    val joinCondition = (nullableLeft("k") === nullableRight("k")).expr
-    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(nullableLeft, nullableRight, nullableLeft("k") === nullableRight("k"))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
@@ -649,12 +633,11 @@ class OuterJoinSuite extends SharedSparkSession with SQLTestData {
   test("NullType null-safe outer equi-join remains result-safe with null-aware shuffle") {
     val nullTypeLeft = spark.range(2).selectExpr("NULL AS k", "id AS lv")
     val nullTypeRight = spark.range(1).selectExpr("NULL AS k", "id AS rv")
-    val joinCondition = nullTypeLeft("k").eqNullSafe(nullTypeRight("k")).expr
-    val join = Join(nullTypeLeft.logicalPlan, nullTypeRight.logicalPlan,
-      LeftOuter, Some(joinCondition), JoinHint.NONE)
-
     val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
-      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+      extractJoinParts(
+        nullTypeLeft,
+        nullTypeRight,
+        nullTypeLeft("k").eqNullSafe(nullTypeRight("k")))
     withSQLConf(
         SQLConf.SHUFFLE_PARTITIONS.key -> "4",
         SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
