@@ -28,8 +28,8 @@ import org.apache.spark.sql.connector.catalog.{TableChange, TableWritePrivilege}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
- * Connect-mode equivalent of the repeated-sql() tests added to DataSourceV2DataFrameSuite in the
- * classic path.
+ * Connect-mode counterpart of the repeated-sql() tests in DataSourceV2DataFrameSuite (classic
+ * path).
  *
  * In Connect, every sql() call creates a fresh plan that is re-analyzed on the server, so it
  * always sees the latest data, schema, and table identity.
