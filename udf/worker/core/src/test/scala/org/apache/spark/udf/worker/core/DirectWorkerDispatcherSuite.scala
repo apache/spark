@@ -34,9 +34,6 @@ import org.apache.spark.udf.worker.core.direct.{DirectUnixSocketWorkerDispatcher
   DirectWorkerException, DirectWorkerProcess,
   DirectWorkerTimeoutException}
 
-// Shared test helpers (SocketFileConnection, StubWorkerSession,
-// TestDirectWorkerDispatcher) are in TestDirectWorkerHelpers.scala.
-
 /**
  * Tests for [[DirectWorkerDispatcher]] process lifecycle: spawning workers
  * and terminating them on close.

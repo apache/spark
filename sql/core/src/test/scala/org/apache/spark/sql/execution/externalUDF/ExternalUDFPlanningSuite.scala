@@ -20,29 +20,31 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkConf
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, MapInPandas,
-  MapPartitionsExternalUDF}
-import org.apache.spark.sql.execution.{SparkPlan}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan,
+  MapInPandas, MapPartitionsExternalUDF}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.{MapInPandasExec,
   UserDefinedPythonFunction}
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType,
   StructField, StructType}
 
 /**
- * Tests that the unified UDF execution config gates the correct
- * logical and physical plan nodes for mapInPandas.
+ * Shared UDF fixtures and assertion helpers for planning tests.
  */
-class ExternalUDFPlanningSuite extends SharedSparkSession {
+trait ExternalUDFPlanningTestBase extends SharedSparkSession {
   import testImplicits._
 
-  private val outputSchema = StructType(Seq(
+  protected val outputSchema: StructType = StructType(Seq(
     StructField("a", StringType),
     StructField("b", IntegerType)))
 
-  private def dummyPythonFunction: SimplePythonFunction =
+  protected def dummyPythonFunction: SimplePythonFunction =
     new SimplePythonFunction(
       command = Array.emptyByteArray,
       envVars = Map.empty[String, String].asJava,
@@ -52,82 +54,80 @@ class ExternalUDFPlanningSuite extends SharedSparkSession {
       broadcastVars = null,
       accumulator = null)
 
-  private val mapInPandasUDF = UserDefinedPythonFunction(
-    name = "dummyMapInPandas",
-    func = dummyPythonFunction,
-    dataType = outputSchema,
-    pythonEvalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-    udfDeterministic = true)
+  protected val mapInPandasUDF: UserDefinedPythonFunction =
+    UserDefinedPythonFunction(
+      name = "dummyMapInPandas",
+      func = dummyPythonFunction,
+      dataType = outputSchema,
+      pythonEvalType = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+      udfDeterministic = true)
 
-  private def applyMapInPandas(): org.apache.spark.sql.DataFrame = {
+  protected def applyMapInPandas(): DataFrame = {
     val inputDF = Seq(("hello", 1)).toDF("a", "b")
-    val udfColumn = mapInPandasUDF(
-      inputDF.columns.toIndexedSeq.map(inputDF.col): _*)
-    inputDF.mapInPandas(udfColumn)
+    inputDF.mapInPandas(mapInPandasUDF(col("a"), col("b")))
   }
 
-  /**
-   * Asserts that the logical plan contains a node of the expected
-   * type when the unified UDF execution config is set as specified.
-   */
-  private def assertLogicalNode[T <: LogicalPlan: ClassTag](
-      enabled: Boolean): Unit = {
-    val configValue = enabled.toString
-    withSQLConf(
-        SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key -> configValue) {
-      val result = applyMapInPandas()
-      val tag = implicitly[ClassTag[T]]
-      val node = result.queryExecution.analyzed.collectFirst {
+  protected def assertLogicalNode[T <: LogicalPlan: ClassTag](
+      df: DataFrame): Unit = {
+    val tag = implicitly[ClassTag[T]]
+    val node = df.queryExecution.analyzed.collectFirst {
+      case n if tag.runtimeClass.isInstance(n) => n
+    }
+    assert(node.isDefined,
+      s"Expected ${tag.runtimeClass.getSimpleName}" +
+        " in logical plan")
+  }
+
+  protected def assertPhysicalNode[T <: SparkPlan: ClassTag](
+      df: DataFrame): Unit = {
+    val tag = implicitly[ClassTag[T]]
+    val node =
+      df.queryExecution.executedPlan.collectFirst {
         case n if tag.runtimeClass.isInstance(n) => n
       }
-      assert(node.isDefined,
-        s"Expected ${tag.runtimeClass.getSimpleName} in" +
-          " logical plan")
-    }
+    assert(node.isDefined,
+      s"Expected ${tag.runtimeClass.getSimpleName}" +
+        " in physical plan")
+  }
+}
+
+/**
+ * Tests that the classic Python runner path is used when the
+ * unified UDF execution config is disabled (default).
+ */
+class ClassicUDFPlanningSuite
+    extends ExternalUDFPlanningTestBase {
+
+  test("mapInPandas uses MapInPandas logical node") {
+    val result = applyMapInPandas()
+    assertLogicalNode[MapInPandas](result)
   }
 
-  /**
-   * Asserts that the physical plan contains a node of the expected
-   * type when the unified UDF execution config is set as specified.
-   */
-  private def assertPhysicalNode[T <: SparkPlan: ClassTag](
-      enabled: Boolean): Unit = {
-    val configValue = enabled.toString
-    withSQLConf(
-        SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key -> configValue) {
-      val result = applyMapInPandas()
-      val tag = implicitly[ClassTag[T]]
-      val node = result.queryExecution.executedPlan.collectFirst {
-        case n if tag.runtimeClass.isInstance(n) => n
-      }
-      assert(node.isDefined,
-        s"Expected ${tag.runtimeClass.getSimpleName} in" +
-          " physical plan")
-    }
+  test("mapInPandas uses MapInPandasExec physical node") {
+    val result = applyMapInPandas()
+    assertPhysicalNode[MapInPandasExec](result)
+  }
+}
+
+/**
+ * Tests that the unified external UDF worker framework is used
+ * when the config is enabled.
+ */
+class UnifiedUDFPlanningSuite
+    extends ExternalUDFPlanningTestBase {
+
+  override def sparkConf: SparkConf =
+    super.sparkConf.set(
+      SQLConf.UNIFIED_UDF_EXECUTION_ENABLED.key, "true")
+
+  test("mapInPandas uses MapPartitionsExternalUDF logical node") {
+    val result = applyMapInPandas()
+    assertLogicalNode[MapPartitionsExternalUDF](result)
   }
 
-  // -- Logical plan tests ---------------------------------------------------
-
-  test("mapInPandas uses MapInPandas logical node" +
-      " when config disabled") {
-    assertLogicalNode[MapInPandas](enabled = false)
-  }
-
-  test("mapInPandas uses MapPartitionsExternalUDF logical node" +
-      " when config enabled") {
-    assertLogicalNode[MapPartitionsExternalUDF](enabled = true)
-  }
-
-  // -- Physical plan tests --------------------------------------------------
-
-  test("mapInPandas uses MapInPandasExec physical node" +
-      " when config disabled") {
-    assertPhysicalNode[MapInPandasExec](enabled = false)
-  }
-
-  test("mapInPandas uses MapPartitionsExternalUDFExec physical" +
-      " node when config enabled") {
-    assertPhysicalNode[MapPartitionsExternalUDFExec](
-      enabled = true)
+  test("mapInPandas uses MapPartitionsExternalUDFExec" +
+      " physical node") {
+    val result = applyMapInPandas()
+    assertPhysicalNode[MapPartitionsExternalUDFExec](result)
   }
 }

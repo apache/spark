@@ -126,10 +126,10 @@ class SparkEnv (
   /**
    * :: Experimental ::
    * Dispatcher factory to generate UDF worker dispatchers
-   * using the new UDF framework proposed in SPARK-55278
+   * using the new UDF framework proposed in SPARK-55278.
+   * Initialized on first use via [[getExternalUDFDispatcher]].
    */
-  private lazy val udfDispatcherManager: UDFDispatcherManager =
-    createUDFDispatcherManager()
+  @volatile private var udfDispatcherManager: Option[UDFDispatcherManager] = None
 
   private def createUDFDispatcherManager(): UDFDispatcherManager = {
     val factory = new UDFDispatcherFactory {
@@ -153,7 +153,16 @@ class SparkEnv (
    */
   private[spark] def getExternalUDFDispatcher(
       workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
-    udfDispatcherManager.getDispatcher(workerSpec)
+    val manager : UDFDispatcherManager = udfDispatcherManager.getOrElse {
+      synchronized {
+        // Get or Else synchronized to protect
+        // against concurrent creation requests.
+        udfDispatcherManager.getOrElse {
+          createUDFDispatcherManager()
+        }
+      }
+    }
+    manager.getDispatcher(workerSpec)
   }
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
@@ -170,7 +179,7 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
-      udfDispatcherManager.close()
+      udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
       if (shuffleManager != null) {
         shuffleManager.stop()

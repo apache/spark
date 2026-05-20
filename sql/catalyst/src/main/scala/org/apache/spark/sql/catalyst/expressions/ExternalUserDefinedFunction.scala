@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.DataType
  * operator (e.g. [[org.apache.spark.sql.execution.externalUDF.MapPartitionsExternalUDFExec]])
  * to execute.
  *
- * @param name             Name of the UDF.
+ * @param name             Optional name of the UDF.
  * @param payload          Opaque serialized function definition.
  * @param dataType         Return type of the UDF.
  * @param children         Input argument expressions.
@@ -47,7 +47,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 case class ExternalUserDefinedFunction(
-    name: String,
+    name: Option[String],
     payload: Array[Byte],
     dataType: DataType,
     children: Seq[Expression],
@@ -55,7 +55,7 @@ case class ExternalUserDefinedFunction(
     udfDeterministic: Boolean,
     udfNullable: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with NonSQLExpression with UserDefinedExpression with Unevaluable {
+  extends Expression with NonSQLExpression with Unevaluable {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

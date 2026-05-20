@@ -49,7 +49,6 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag, TreePattern}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -61,7 +60,6 @@ import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConver
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.{ExtractV2ScanInfo, ExtractV2Table, FileTable}
-import org.apache.spark.sql.execution.externalUDF.PythonUDFWorkerSpecification
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -1521,37 +1519,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
-    val output = toAttributes(func.dataType.asInstanceOf[StructType])
-
-    if (SQLConf.get.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED)) {
-      // If enabled, use the new, unified UDF execution path
-      val pythonUdf = func.asInstanceOf[PythonUDF]
-      val workerSpec =
-        PythonUDFWorkerSpecification.fromPythonFunction(
-          pythonUdf.func,
-          sparkSession.sparkContext.conf)
-      val udf = ExternalUserDefinedFunction(
-        name = pythonUdf.name,
-        payload = pythonUdf.func.command.toArray,
-        dataType = pythonUdf.dataType,
-        children = Seq.empty,
-        udfDeterministic = pythonUdf.udfDeterministic,
-        udfNullable = true)
-      Dataset.ofRows(
-        sparkSession,
-        MapPartitionsExternalUDF(
-          workerSpec, udf, isBarrier, logicalPlan))
-    } else {
-      Dataset.ofRows(
-        sparkSession,
-      MapInPandas(
-        func,
-        output,
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
-    }
+    Dataset.ofRows(
+      sparkSession,
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInPandas(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /**
@@ -1563,15 +1534,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInArrow(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInArrow(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /** @inheritdoc */

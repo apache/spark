@@ -18,31 +18,34 @@ package org.apache.spark.udf.worker.core
 
 import java.io.File
 
-import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.{Init, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.direct.{
   DirectUnixSocketWorkerDispatcher, DirectWorkerProcess,
   DirectWorkerSession}
-import org.apache.spark.udf.worker.Init
 
-/** A [[WorkerConnection]] test implementation that considers the connection
-  * active as long as the socket file exists on disk. Inherits socket-file
-  * deletion from [[UnixSocketWorkerConnection.close]].
-  */
+/**
+ * A [[WorkerConnection]] test implementation that considers the
+ * connection active as long as the socket file exists on disk.
+ * Inherits socket-file deletion from
+ * [[UnixSocketWorkerConnection.close]].
+ */
 class SocketFileConnection(socketPath: String)
     extends UnixSocketWorkerConnection(socketPath) {
   override def isActive: Boolean = new File(socketPath).exists()
 }
 
-/** A stub [[DirectWorkerSession]] for process-lifecycle tests that don't need
-  * actual data transmission.
-  *
-  * TODO: [[cancel]] is a no-op here. Once a concrete [[DirectWorkerSession]]
-  * with real data-plane wiring lands, add tests exercising cancel() in
-  * particular: cancel from a different thread than process(), cancel after
-  * process() has returned, and cancel before init (should be a no-op). See the
-  * thread-safety contract in the docstring on
-  * [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
-  */
+/**
+ * A stub [[DirectWorkerSession]] for process-lifecycle tests
+ * that don't need actual data transmission.
+ *
+ * TODO: [[cancel]] is a no-op here. Once a concrete
+ * [[DirectWorkerSession]] with real data-plane wiring lands, add
+ * tests exercising cancel() in particular: cancel from a
+ * different thread than process(), cancel after process() has
+ * returned, and cancel before init (should be a no-op). See the
+ * thread-safety contract in the docstring on
+ * [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
+ */
 class StubWorkerSession(workerProcess: DirectWorkerProcess)
     extends DirectWorkerSession(workerProcess) {
 
@@ -56,10 +59,11 @@ class StubWorkerSession(workerProcess: DirectWorkerProcess)
   override def cancel(): Unit = {}
 }
 
-/** A [[DirectUnixSocketWorkerDispatcher]] subclass for testing that uses a
-  * socket-file connection and stub sessions instead of a real protocol
-  * implementation.
-  */
+/**
+ * A [[DirectUnixSocketWorkerDispatcher]] subclass for testing
+ * that uses a socket-file connection and stub sessions instead
+ * of a real protocol implementation.
+ */
 class TestDirectWorkerDispatcher(spec: UDFWorkerSpecification)
     extends DirectUnixSocketWorkerDispatcher(spec) {
 

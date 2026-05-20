@@ -61,7 +61,7 @@ trait ExternalUDFExec extends UnaryExecNode {
   /**
    * Creates a [[WorkerSession]] via [[SparkEnv#getExternalUDFDispatcher]].
    * Registers session cancellation on task failure and session termination
-   * on task completion. The provided function receives the session 
+   * on task completion. The provided function receives the session
    * and must return the result iterator. The function CAN but MUST NOT
    * cancel or close the session.
    */
@@ -80,7 +80,7 @@ trait ExternalUDFExec extends UnaryExecNode {
     }
 
     // Make sure to close the session once we are done
-    taskContext.addTaskCompletionListener[Unit] { _ => 
+    taskContext.addTaskCompletionListener[Unit] { _ =>
       session.close()
     }
 

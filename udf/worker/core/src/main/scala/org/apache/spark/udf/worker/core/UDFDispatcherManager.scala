@@ -19,6 +19,8 @@ package org.apache.spark.udf.worker.core
 import java.util.HashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 
@@ -107,7 +109,13 @@ class UDFDispatcherManager(
         "UDFDispatcherManager closing" +
         s" (${dispatchers.size()} dispatchers)")
       dispatchers.forEach { (_, dispatcher) =>
-        dispatcher.close()
+        try {
+          dispatcher.close()
+        } catch {
+          case NonFatal(e) =>
+            workerLogger.warn(
+              "Error closing dispatcher during shutdown", e)
+        }
       }
       dispatchers.clear()
       workerLogger.info("UDFDispatcherManager closed")
