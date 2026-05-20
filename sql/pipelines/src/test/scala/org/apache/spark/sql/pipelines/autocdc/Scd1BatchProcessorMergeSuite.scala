@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.{functions => F, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  * tests in [[Scd1BatchProcessorSuite]].
  */
 class Scd1BatchProcessorMergeSuite
-    extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
+    extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
   private val auxCatalogName = "cat"
   private val auxNamespace = "ns1"
