@@ -345,6 +345,21 @@ def get_json(url):
         sys.exit(-1)
 
 
+def close_pr(pr_num):
+    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"state": "closed"}).encode("utf-8")
+    request = Request(url, data=data, method="PATCH")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
+
+
 def fail(msg):
     print_error(msg)
     clean_up()
@@ -952,6 +967,14 @@ def main():
     merged_refs = [target_ref]
 
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
+
+    # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
+    # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
+    # PRs), GitHub leaves the PR open, so close it explicitly through the API.
+    pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+    if pr_state != "closed":
+        print("PR #%s is still open after push; closing it explicitly." % pr_num)
+        close_pr(pr_num)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
