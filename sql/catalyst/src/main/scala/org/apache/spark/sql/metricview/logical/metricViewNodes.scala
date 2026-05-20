@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{METRIC_VIEW_PLACEHOLDER,
 import org.apache.spark.sql.types.Metadata
 
 /**
- * A parsed metric-view column, populated by [[org.apache.spark.sql.metricview.util.MetricViewPlanner]]
- * from the YAML definition before the placeholder is handed to the analyzer. Carrying the parsed
- * [[Expression]] (rather than the raw YAML descriptor) lets downstream resolution rules read
- * a stable, analyzer-friendly representation without re-parsing.
+ * A parsed metric-view column, populated by
+ * [[org.apache.spark.sql.metricview.util.MetricViewPlanner]] from the YAML definition before the
+ * placeholder is handed to the analyzer. Carrying the parsed [[Expression]] (rather than the raw
+ * YAML descriptor) lets downstream resolution rules read a stable, analyzer-friendly
+ * representation without re-parsing.
  */
 sealed trait InputColumn {
   def name: String

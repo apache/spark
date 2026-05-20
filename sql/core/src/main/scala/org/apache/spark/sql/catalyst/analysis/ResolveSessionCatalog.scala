@@ -34,9 +34,9 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.SparkStringUtils
 
@@ -578,7 +578,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
 
-    // CREATE VIEW ... WITH METRICS on the session catalog → V1 runnable command. Non-session
+    // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
     // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
     // to `CreateV2MetricViewExec`.
     case cm @ CreateMetricView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _)
