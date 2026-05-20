@@ -50,6 +50,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
     NumericType,
+    MapType
     _from_numpy_type,
 )
 
@@ -21041,10 +21042,11 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
 
+
 @_try_remote_functions
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, Column, str,MapType],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
