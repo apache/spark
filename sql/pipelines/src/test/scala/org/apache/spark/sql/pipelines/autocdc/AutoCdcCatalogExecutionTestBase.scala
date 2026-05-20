@@ -51,22 +51,18 @@ trait AutoCdcCatalogExecutionTestBase {
   protected val auxTableName: String = "aux_table"
   protected val targetTableName: String = "target_table"
 
-  // The four identifiers below are convenience defaults that suites may pass to [[createTable]]
-  // and other helpers; nothing in this trait is coupled to them. Suites are free to construct
-  // their own identifiers (e.g. with different table names or namespaces) and use those instead.
-
-  /** Default v2 [[Identifier]] for the auxiliary table. */
+  /** Default DSv2 [[Identifier]] for the auxiliary table. */
   protected val defaultAuxIdent: Identifier = Identifier.of(Array(namespace), auxTableName)
-  /** Default v2 [[Identifier]] for the target table. */
+  /** Default DSv2 [[Identifier]] for the target table. */
   protected val defaultTargetIdent: Identifier = Identifier.of(Array(namespace), targetTableName)
 
-  /** Default three-part [[TableIdentifier]] for the auxiliary table. */
+  /** Default catalyst three-part [[TableIdentifier]] for the auxiliary table. */
   protected val defaultAuxTableIdentifier: TableIdentifier = TableIdentifier(
     table = auxTableName,
     database = Some(namespace),
     catalog = Some(catalogName)
   )
-  /** Default three-part [[TableIdentifier]] for the target table. */
+  /** Default catalyst three-part [[TableIdentifier]] for the target table. */
   protected val defaultTargetTableIdentifier: TableIdentifier = TableIdentifier(
     table = targetTableName,
     database = Some(namespace),
@@ -98,18 +94,12 @@ trait AutoCdcCatalogExecutionTestBase {
   /**
    * Build a [[Row]] matching the [[Scd1BatchProcessor.cdcMetadataColName]] struct's two fields,
    * in the order produced by [[Scd1BatchProcessor.constructCdcMetadataCol]]:
-   * `(deleteSequence, upsertSequence)`. Pass `None` for the side that does not apply.
-   *
-   * The type parameter `T` lets test suites use any sequencing-value type (`Long`, `Int`, ...)
-   * without forcing the trait to expose an `Any`-typed surface. Note that to align with the
-   * default sequencing type of [[cdcMetadataColSchemaType]], call sites should typically pass
-   * `Long` literals (e.g. `Some(10L)`) so the resulting [[Row]] matches expected `Long` values.
    */
   protected def cdcMetadataRow[T](deleteSeq: Option[T], upsertSeq: Option[T]): Row =
     Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null))
 
   /**
-   * Create a table in the test catalog under the given v2 [[Identifier]] using `schema`,
+   * Create a table in the test catalog under the given DSv2 [[Identifier]] using `schema`,
    * optionally seeding it with `seedRows`. Pass no rows to create an empty table.
    */
   protected def createTable(
