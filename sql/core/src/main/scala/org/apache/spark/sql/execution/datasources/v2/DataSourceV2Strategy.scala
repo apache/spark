@@ -44,7 +44,8 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
-import org.apache.spark.sql.execution.command.{CommandUtils, CreateMetricViewCommand, MetricViewHelper}
+import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -326,8 +327,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // CREATE VIEW ... WITH METRICS on a non-session v2 catalog. Routes the metric-view path
     // through `CreateV2MetricViewExec`, which extends `V2ViewPreparation` to share the
     // `IF NOT EXISTS` short-circuit, `OR REPLACE`, and cross-type-collision decoding with
-    // `CreateV2ViewExec`. Session-catalog dispatch stays in `CreateMetricViewCommand.run`.
-    case CreateMetricViewCommand(
+    // `CreateV2ViewExec`. Session-catalog dispatch happens earlier in `ResolveSessionCatalog`,
+    // which rewrites `CreateMetricView` (the parser's v1/v2-agnostic logical plan) to
+    // `CreateMetricViewCommand` for v1 execution.
+    case CreateMetricView(
         ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment, properties,
         originalText, allowExisting, replace) if !CatalogV2Util.isSessionCatalog(catalog) =>
       val viewCatalog = catalog match {
