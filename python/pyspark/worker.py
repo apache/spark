@@ -432,7 +432,9 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
     )
 
 
-def _verify_column_schema(actual_names, expected_names, *, assign_cols_by_name):
+def _verify_column_schema(
+    actual_names: list, expected_names: list, *, assign_cols_by_name: bool
+) -> None:
     """Check column names (by-name) or count (by-position) match the expected schema."""
     if assign_cols_by_name:
         actual_set = set(actual_names)
@@ -457,7 +459,12 @@ def _verify_column_schema(actual_names, expected_names, *, assign_cols_by_name):
         )
 
 
-def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_return_schema):
+def verify_pandas_result(
+    result: Any,
+    return_type: DataType,
+    assign_cols_by_name: bool,
+    truncate_return_schema: bool,
+) -> None:
     import pandas as pd
 
     if not isinstance(return_type, StructType):
@@ -502,7 +509,11 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), return_type)]
 
 
-def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
+def verify_arrow_result(
+    result: Any,
+    assign_cols_by_name: bool,
+    expected_cols_and_types: Union[dict[str, Any], list[tuple[str, Any]]],
+) -> None:
     # Skip schema check on a fully empty result (no rows and no columns).
     if result.num_columns == 0 and result.num_rows == 0:
         return
