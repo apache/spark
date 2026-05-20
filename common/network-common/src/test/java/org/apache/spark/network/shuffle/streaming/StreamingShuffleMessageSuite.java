@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class StreamingShuffleMessageSuite {
 
-  private static final int SEQ_NUM = 42;
+  private static final long SEQ_NUM = 42L;
 
   // ---- helpers ---------------------------------------------------------------
 
