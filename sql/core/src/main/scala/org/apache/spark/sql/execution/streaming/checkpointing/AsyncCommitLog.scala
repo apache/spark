@@ -53,7 +53,7 @@ class AsyncCommitLog(
    *         the async write of the batch is completed.  Future may also be completed exceptionally
    *         to indicate some write error.
    */
-  def addAsync(batchId: Long, metadata: CommitMetadata): CompletableFuture[Long] = {
+  def addAsync(batchId: Long, metadata: CommitMetadataBase): CompletableFuture[Long] = {
     require(metadata != null, "'null' metadata cannot be written to a metadata log")
     val future: CompletableFuture[Long] = addNewBatchByStreamAsync(batchId) { output =>
       serialize(metadata, output)
@@ -77,7 +77,7 @@ class AsyncCommitLog(
    * @param metadata metadata of batch to write
    * @return true if operation is successful otherwise false.
    */
-  def addInMemory(batchId: Long, metadata: CommitMetadata): Boolean = {
+  def addInMemory(batchId: Long, metadata: CommitMetadataBase): Boolean = {
     if (batchCache.containsKey(batchId)) {
       false
     } else {

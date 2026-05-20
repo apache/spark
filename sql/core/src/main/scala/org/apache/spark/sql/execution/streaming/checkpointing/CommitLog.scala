@@ -26,6 +26,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -50,39 +51,99 @@ class CommitLog(
     sparkSession: SparkSession,
     path: String,
     readOnly: Boolean = false)
-  extends HDFSMetadataLog[CommitMetadata](sparkSession, path, readOnly) {
+  extends HDFSMetadataLog[CommitMetadataBase](sparkSession, path, readOnly) {
 
   import CommitLog._
 
-  private val VERSION: Int = sparkSession.conf.get(
+  // The configured commit log format version. Used as the default version when callers
+  // construct metadata through [[createMetadata]].
+  private[sql] val VERSION: Int = sparkSession.conf.get(
     SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
 
-  override protected[sql] def deserialize(in: InputStream): CommitMetadata = {
-    // called inside a try-finally where the underlying stream is closed in the caller
-    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
-    if (!lines.hasNext) {
-      throw new IllegalStateException("Incomplete log file in the offset commit log")
-    }
-    // TODO [SPARK-49462] This validation should be relaxed for a stateless query.
-    // TODO [SPARK-50653] This validation should be relaxed to support reading
-    //  a V1 log file when VERSION is V2
-    validateVersionExactMatch(lines.next().trim, VERSION)
-    val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
-    CommitMetadata(metadataJson)
+  override protected[sql] def deserialize(in: InputStream): CommitMetadataBase = {
+    CommitLog.readCommitMetadata(in)
   }
 
-  override protected[sql] def serialize(metadata: CommitMetadata, out: OutputStream): Unit = {
+  override protected[sql] def serialize(metadata: CommitMetadataBase, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(s"v${VERSION}".getBytes(UTF_8))
+    out.write(s"v${metadata.version}".getBytes(UTF_8))
     out.write('\n')
 
     // write metadata
     out.write(metadata.json.getBytes(UTF_8))
   }
+
+  /**
+   * Factory for creating a [[CommitMetadataBase]] for the requested wire format version.
+   * Defaults to the version configured via [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]].
+   */
+  def createMetadata(
+      nextBatchWatermarkMs: Long = 0,
+      stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
+      commitLogFormatVersion: Int = VERSION): CommitMetadataBase = {
+    commitLogFormatVersion match {
+      case VERSION_2 =>
+        CommitMetadataV2(nextBatchWatermarkMs, stateUniqueIds)
+      case VERSION_1 =>
+        CommitMetadata(nextBatchWatermarkMs)
+      case v =>
+        throw QueryExecutionErrors.logVersionGreaterThanSupported(v, CommitLog.MAX_VERSION)
+    }
+  }
 }
 
 object CommitLog {
   private val EMPTY_JSON = "{}"
+  val VERSION_1 = 1
+  val VERSION_2 = 2
+  val MAX_VERSION: Int = VERSION_2
+
+  /**
+   * Reads a single commit log entry and dispatches to the matching
+   * [[CommitMetadataBase]] subclass based on the wire format version recorded in the file.
+   */
+  private[spark] def readCommitMetadata(in: InputStream): CommitMetadataBase = {
+    val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
+    if (!lines.hasNext) {
+      throw new IllegalStateException("Incomplete log file in the offset commit log")
+    }
+    val version = MetadataVersionUtil.validateVersion(lines.next().trim, MAX_VERSION)
+    val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
+    version match {
+      case VERSION_2 => CommitMetadataV2(metadataJson)
+      case VERSION_1 => CommitMetadata(metadataJson)
+      case v => throw QueryExecutionErrors.logVersionGreaterThanSupported(v, MAX_VERSION)
+    }
+  }
+}
+
+/**
+ * Base trait for commit log metadata. Concrete subclasses correspond to wire format versions
+ * and override [[version]] accordingly.
+ */
+trait CommitMetadataBase extends Serializable {
+  def version: Int
+  def nextBatchWatermarkMs: Long
+  def stateUniqueIds: Option[Map[Long, Array[Array[String]]]]
+
+  def json: String = Serialization.write(this)(CommitMetadata.format)
+}
+
+/**
+ * Commit log metadata for [[CommitLog.VERSION_1]]. Records the watermark for the next batch only.
+ *
+ * @param nextBatchWatermarkMs The watermark of the next batch.
+ */
+case class CommitMetadata(
+    nextBatchWatermarkMs: Long = 0) extends CommitMetadataBase {
+  override def version: Int = CommitLog.VERSION_1
+  override def stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None
+}
+
+object CommitMetadata {
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): CommitMetadata = Serialization.read[CommitMetadata](json)
 }
 
 /**
@@ -104,19 +165,19 @@ object CommitLog {
  *          +--- ......
  * In the commit log, in addition to nextBatchWatermarkMs, we also store the unique ids of the
  * state store files.
+ *
  * @param nextBatchWatermarkMs The watermark of the next batch.
  * @param stateUniqueIds Map[Long, Array[Array[String]]] of map
  *                       OperatorId -> (partitionID -> array of uniqueID)
  */
-
-case class CommitMetadata(
+case class CommitMetadataV2(
     nextBatchWatermarkMs: Long = 0,
-    stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None) {
-  def json: String = Serialization.write(this)(CommitMetadata.format)
+    stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None) extends CommitMetadataBase {
+  override def version: Int = CommitLog.VERSION_2
 }
 
-object CommitMetadata {
+object CommitMetadataV2 {
   implicit val format: Formats = Serialization.formats(NoTypeHints)
 
-  def apply(json: String): CommitMetadata = Serialization.read[CommitMetadata](json)
+  def apply(json: String): CommitMetadataV2 = Serialization.read[CommitMetadataV2](json)
 }

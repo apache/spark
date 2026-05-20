@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.{col, window}
@@ -237,11 +237,11 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
 
       // Start version: treated as v1 (no operator unique ids)
-      val startMetadata = CommitMetadata(0, None)
+      val startMetadata = CommitMetadata(0)
       assert(commitLog.add(0, startMetadata))
 
       // End version: treated as v2 (operator 0 has unique ids)
-      val endMetadata = CommitMetadata(0,
+      val endMetadata = CommitMetadataV2(0,
         Some(Map[Long, Array[Array[String]]](0L -> Array(Array("uid")))))
       assert(commitLog.add(1, endMetadata))
 
