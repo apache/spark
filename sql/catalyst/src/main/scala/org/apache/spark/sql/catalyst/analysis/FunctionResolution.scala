@@ -83,12 +83,12 @@ class FunctionResolution(
    * `count` shadows the builtin) and the `SessionCatalog` security check that blocks creating
    * a temp function with a builtin's name. Reads the live PATH via `CatalogManager` and
    * applies the same kinds extraction that drives `SessionCatalog`'s fast-path provider, so
-   * the predicate stays in sync with the lookup loop's actual order.
+   * the predicate stays in sync with the lookup loop's actual order. Uses the consolidated
+   * snapshot helper (SPARK-56939) so the (catalog, namespace, path) triple is observed
+   * atomically.
    */
   def isSessionBeforeBuiltinInPath: Boolean = {
-    val path = catalogManager.sqlResolutionPathEntries(
-      catalogManager.currentCatalog.name(), catalogManager.currentNamespace.toSeq)
-    CatalogManager.systemFunctionKindsFromPath(path).headOption
+    catalogManager.sessionFunctionKindsForUnqualifiedResolution().headOption
       .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
   }
 
