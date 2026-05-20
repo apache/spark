@@ -53,7 +53,7 @@ private[client] object HiveClientBuilder {
       hadoopConf: Configuration,
       extraConf: Map[String, String] = Map.empty): HiveClient = {
     val sparkConf = new SparkConf()
-    ivySettingsPath.foreach(sparkConf.set(MavenUtils.JAR_IVY_SETTING_PATH_KEY, _))
+    ivySettingsPath.foreach(sparkConf.setIfMissing(MavenUtils.JAR_IVY_SETTING_PATH_KEY, _))
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = version,
       hadoopVersion = VersionInfo.getVersion,
