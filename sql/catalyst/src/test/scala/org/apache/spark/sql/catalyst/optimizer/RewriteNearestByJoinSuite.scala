@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateStruct, Inline, Literal, Rand, Uuid}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, First, MaxMinByK}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, JoinHint, LocalRelation, NearestByJoin, Project}
 import org.apache.spark.sql.types.IntegerType
 
@@ -41,10 +41,10 @@ class RewriteNearestByJoinSuite extends PlanTest {
       numResults: Int,
       ranking: org.apache.spark.sql.catalyst.expressions.Expression,
       reverse: Boolean,
-      outer: Boolean) = {
+      joinType: JoinType) = {
     val qidAlias = Alias(Uuid(Some(0L)), "__qid")()
     val taggedLeft = Project(left.output :+ qidAlias, left)
-    val join = Join(taggedLeft, right, LeftOuter, None, JoinHint.NONE)
+    val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
     val rightStruct = CreateStruct(right.output)
     val topKAgg = MaxMinByK(
@@ -66,7 +66,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val generate = Generate(
       Inline(matchesAlias.toAttribute),
       unrequiredChildIndex = Seq(aggregate.output.indexOf(matchesAlias.toAttribute)),
-      outer = outer,
+      outer = joinType == LeftOuter,
       qualifier = None,
       generatorOutput = generatorOutput,
       child = aggregate)
@@ -89,7 +89,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, 5,
       ranking = left.output(0) + right.output(0),
-      reverse = false, outer = false)
+      reverse = false, joinType = Inner)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -106,7 +106,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, 3,
       ranking = left.output(0) - right.output(0),
-      reverse = true, outer = false)
+      reverse = true, joinType = Inner)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -123,7 +123,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, 1,
       ranking = left.output(0) + right.output(0),
-      reverse = false, outer = true)
+      reverse = false, joinType = LeftOuter)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -140,7 +140,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, 2,
       ranking = left.output(0) - right.output(0),
-      reverse = true, outer = true)
+      reverse = true, joinType = LeftOuter)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -160,7 +160,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, 5,
       ranking = left.output(0) + right.output(0),
-      reverse = false, outer = false)
+      reverse = false, joinType = Inner)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -177,7 +177,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, 1,
       ranking = left.output(0) + right.output(0),
-      reverse = false, outer = false)
+      reverse = false, joinType = Inner)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -194,7 +194,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       left, right, NearestByJoin.MaxNumResults,
       ranking = left.output(0) + right.output(0),
-      reverse = false, outer = false)
+      reverse = false, joinType = Inner)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
@@ -214,7 +214,7 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val expected = expectedRewrite(
       t, tDup, 1,
       ranking = t.output(0) + tDup.output(0),
-      reverse = false, outer = false)
+      reverse = false, joinType = Inner)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }

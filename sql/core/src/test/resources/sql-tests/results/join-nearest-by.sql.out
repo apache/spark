@@ -286,7 +286,7 @@ AdaptiveSparkPlan isFinalPlan=false
                   +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
                      +- Sort [__qid#x ASC NULLS FIRST], false, 0
                         +- Project [user_id#x, __qid#x, product#x, pscore#x, (rand(0) + cast(pscore#x as double)) AS __ranking__#x]
-                           +- BroadcastNestedLoopJoin BuildRight, LeftOuter
+                           +- BroadcastNestedLoopJoin BuildRight, Inner
                               :- Project [col1#x AS user_id#x, uuid(Some(x)) AS __qid#x]
                               :  +- LocalTableScan [col1#x, col2#x]
                               +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
@@ -313,7 +313,7 @@ AdaptiveSparkPlan isFinalPlan=false
                +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
                   +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
                      +- Sort [__qid#x ASC NULLS FIRST], false, 0
-                        +- BroadcastNestedLoopJoin BuildRight, LeftOuter
+                        +- BroadcastNestedLoopJoin BuildRight, Inner
                            :- Filter (user_id#x > 1)
                            :  +- Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]
                            :     +- LocalTableScan [col1#x, col2#x]
@@ -342,7 +342,7 @@ AdaptiveSparkPlan isFinalPlan=false
                   +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
                      +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
                         +- Sort [__qid#x ASC NULLS FIRST], false, 0
-                           +- BroadcastNestedLoopJoin BuildRight, LeftOuter
+                           +- BroadcastNestedLoopJoin BuildRight, Inner
                               :- Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]
                               :  +- LocalTableScan [col1#x, col2#x]
                               +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
