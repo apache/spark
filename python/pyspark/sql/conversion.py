@@ -166,6 +166,8 @@ class ArrowBatchTransformer:
             batch has missing or extra column names.
             ``RESULT_COLUMN_TYPES_MISMATCH`` when any column's type does not match
             the target (and either ``arrow_cast=False`` or the cast itself fails).
+            ``RESULT_COLUMN_SCHEMA_MISMATCH`` when ``reorder_by_name=False`` and the
+            batch has a different number of columns than the target schema.
         """
         import pyarrow as pa
 
