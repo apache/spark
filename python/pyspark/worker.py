@@ -583,6 +583,14 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
             actual_cols_and_types = [
                 (name, dataType) for name, dataType in zip(result.schema.names, result.schema.types)
             ]
+            if len(actual_cols_and_types) != len(expected_cols_and_types):
+                raise PySparkRuntimeError(
+                    errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
+                    messageParameters={
+                        "expected": str(len(expected_cols_and_types)),
+                        "actual": str(len(actual_cols_and_types)),
+                    },
+                )
             column_types = [
                 (expected_name, expected_type, actual_type)
                 for (expected_name, expected_type), (actual_name, actual_type) in zip(

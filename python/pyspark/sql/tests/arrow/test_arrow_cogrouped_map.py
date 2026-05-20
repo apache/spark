@@ -230,6 +230,34 @@ class CogroupedMapInArrowTestsMixin:
                 # stats returns three columns while here we set schema with two columns
                 self.cogrouped.applyInArrow(stats, schema="id long, m double").collect()
 
+    def test_apply_in_arrow_returning_wrong_column_count_positional_assignment(self):
+        def too_many_cols(key, left, right):
+            return pa.Table.from_pydict(
+                {
+                    "a": [key[0].as_py()],
+                    "b": [pc.mean(left.column("v")).as_py()],
+                    "c": [pc.mean(right.column("v")).as_py()],
+                }
+            )
+
+        def too_few_cols(key, left, right):
+            return pa.Table.from_pydict({"a": [key[0].as_py()]})
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
+        ):
+            with self.quiet():
+                for func, expected, actual in [
+                    (too_many_cols, 2, 3),
+                    (too_few_cols, 2, 1),
+                ]:
+                    with self.subTest(func=func.__name__):
+                        with self.assertRaisesRegex(
+                            PythonException,
+                            rf"Expected: {expected}.*Actual: {actual}",
+                        ):
+                            self.cogrouped.applyInArrow(func, schema="a long, b double").collect()
+
     def test_apply_in_arrow_returning_empty_dataframe(self):
         def odd_means(key, left, right):
             if key[0].as_py() == 0:

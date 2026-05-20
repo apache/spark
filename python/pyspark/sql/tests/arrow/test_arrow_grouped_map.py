@@ -254,6 +254,39 @@ class ApplyInArrowTestsMixin:
                         func_variation, schema="id long, m double"
                     ).collect()
 
+    def test_apply_in_arrow_returning_wrong_column_count_positional_assignment(self):
+        df = self.data
+
+        def too_many_cols(key, table):
+            return pa.Table.from_pydict(
+                {
+                    "a": [key[0].as_py()],
+                    "b": [pc.mean(table.column("v")).as_py()],
+                    "c": [pc.stddev(table.column("v")).as_py()],
+                }
+            )
+
+        def too_few_cols(key, table):
+            return pa.Table.from_pydict({"a": [key[0].as_py()]})
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
+        ):
+            with self.quiet():
+                for func, expected, actual in [
+                    (too_many_cols, 2, 3),
+                    (too_few_cols, 2, 1),
+                ]:
+                    with self.subTest(func=func.__name__):
+                        for func_variation in function_variations(func):
+                            with self.assertRaisesRegex(
+                                PythonException,
+                                rf"Expected: {expected}.*Actual: {actual}",
+                            ):
+                                df.groupby("id").applyInArrow(
+                                    func_variation, schema="a long, b double"
+                                ).collect()
+
     def test_apply_in_arrow_returning_empty_dataframe(self):
         df = self.data
 
