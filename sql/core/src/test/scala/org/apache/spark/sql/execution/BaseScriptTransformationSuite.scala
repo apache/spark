@@ -34,12 +34,12 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.ClassicSQLTestUtils
+import org.apache.spark.sql.test.ClassicQueryTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
-abstract class BaseScriptTransformationSuite extends SparkPlanTest with ClassicSQLTestUtils {
+abstract class BaseScriptTransformationSuite extends SparkPlanTest with ClassicQueryTest {
   import classicTestImplicits._
   import ScriptTransformationIOSchema._
 

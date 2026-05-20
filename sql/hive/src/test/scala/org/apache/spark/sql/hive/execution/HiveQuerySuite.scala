@@ -37,7 +37,7 @@ import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive, TestUDTFJar}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.ClassicSQLTestUtils
+import org.apache.spark.sql.test.ClassicQueryTest
 import org.apache.spark.tags.SlowHiveTest
 
 case class TestData(a: Int, b: String)
@@ -47,7 +47,7 @@ case class TestData(a: Int, b: String)
  * included in the hive distribution.
  */
 @SlowHiveTest
-class HiveQuerySuite extends HiveComparisonTest with ClassicSQLTestUtils with BeforeAndAfter {
+class HiveQuerySuite extends HiveComparisonTest with ClassicQueryTest with BeforeAndAfter {
   import classicTestImplicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled

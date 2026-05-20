@@ -63,7 +63,7 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
  */
 trait SharedClassicSparkSession
   extends SharedSparkSession
-    with ClassicSQLTestUtils
+    with ClassicQueryTest
     with classic.SparkSessionProvider {
   override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 

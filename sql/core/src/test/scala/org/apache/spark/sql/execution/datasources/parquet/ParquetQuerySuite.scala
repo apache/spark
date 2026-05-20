@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ClassicSQLTestUtils, SharedClassicSparkSession}
+import org.apache.spark.sql.test.{ClassicQueryTest, SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  * A test suite that tests various Parquet queries.
  */
 abstract class ParquetQuerySuite extends QueryTest with ParquetTest
-  with ClassicSQLTestUtils
+  with ClassicQueryTest
   with SharedClassicSparkSession {
   import testImplicits._
 

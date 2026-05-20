@@ -18,9 +18,9 @@
 package org.apache.spark.sql.pipelines.utils
 
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, DatasetManager, PipelineUpdateContext}
-import org.apache.spark.sql.test.ClassicSQLTestUtils
+import org.apache.spark.sql.test.ClassicQueryTest
 
-trait BaseCoreExecutionTest extends ExecutionTest with ClassicSQLTestUtils {
+trait BaseCoreExecutionTest extends ExecutionTest with ClassicQueryTest {
 
   /**
    * Materializes the given graph using the provided context.

@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql.test.ClassicSQLTestUtils
+import org.apache.spark.sql.test.ClassicQueryTest
 
-trait AlterTableDirHelper extends ClassicSQLTestUtils {
+trait AlterTableDirHelper extends ClassicQueryTest {
   def withTableDir(tableName: String)(f: (FileSystem, Path) => Unit): Unit = {
     val location = sql(s"DESCRIBE TABLE EXTENDED $tableName")
       .where("col_name = 'Location'")
