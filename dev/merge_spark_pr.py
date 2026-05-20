@@ -345,6 +345,21 @@ def get_json(url):
         sys.exit(-1)
 
 
+def close_pr(pr_num):
+    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"state": "closed"}).encode("utf-8")
+    request = Request(url, data=data, method="PATCH")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
+
+
 def fail(msg):
     print_error(msg)
     clean_up()
@@ -383,7 +398,7 @@ def clean_up():
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
+def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors, default_branch):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -452,6 +467,14 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
+
+    # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
+    # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
+    # PRs), close the PR explicitly through the API.
+    if target_ref != default_branch:
+        print("Target branch %s is not the default branch; closing PR #%s." % (target_ref, pr_num))
+        close_pr(pr_num)
+
     return merge_hash
 
 
@@ -818,6 +841,7 @@ def main():
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
     branch_iter = iter(branch_names)
+    default_branch = get_json(GITHUB_API_BASE)["default_branch"]
 
     if len(sys.argv) == 1:
         pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
@@ -951,7 +975,9 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
+    merge_hash = merge_pr(
+        pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors, default_branch
+    )
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
