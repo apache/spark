@@ -179,20 +179,6 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    // Compute the intermediate schema that only reflects column deletions.
-    // [[InMemoryBaseTable.alterTableWithData]] decides which old-row fields to keep by
-    // matching names against its newSchema argument. Passing this post-drop schema
-    // (rather than the final schema that may re-add a same-named column) ensures that
-    // dropped column values are physically removed from existing data.
-    val deletedTopLevelNames = changes.collect {
-      case d: TableChange.DeleteColumn if d.fieldNames.length == 1 => d.fieldNames.head
-    }.toSet
-    val schemaAfterDrops = if (deletedTopLevelNames.nonEmpty) {
-      StructType(table.schema.fields.filterNot(f => deletedTopLevelNames(f.name)))
-    } else {
-      table.schema
-    }
-
     table.increaseVersion()
     val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
@@ -207,14 +193,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
           properties = properties,
           constraints = constraints,
           id = table.id)
-          .alterTableWithData(table.data, schemaAfterDrops)
+          .alterTableWithData(table.data, schema)
       case _: InMemoryTableWithV2Filter =>
         new InMemoryTableWithV2Filter(
           name = table.name,
           columns = columnsWithIds,
           partitioning = finalPartitioning,
           properties = properties)
-          .alterTableWithData(table.data, schemaAfterDrops)
+          .alterTableWithData(table.data, schema)
       case other =>
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")

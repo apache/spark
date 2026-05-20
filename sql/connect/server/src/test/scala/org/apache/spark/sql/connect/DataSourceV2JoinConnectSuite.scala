@@ -344,10 +344,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val df1 = session.table(NC)
 
         val cat = serverCatalog[NullTableIdInMemoryTableCatalog](serverSession, "nullidcat")
-        cat.alterTable(
-          ncIdent, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(
-          ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
+        cat.alterTable(ncIdent, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
         val df2 = session.table(NC)
 
@@ -372,10 +370,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val cat = serverCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
           serverSession,
           "nullbothidscat")
-        cat.alterTable(
-          ncIdent, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(
-          ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
+        cat.alterTable(ncIdent, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
         val df2 = session.table(NC)
 
@@ -397,10 +393,8 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
         val df1 = session.table(T)
 
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        cat.alterTable(
-          ident, TableChange.deleteColumn(Array("salary"), false))
-        cat.alterTable(
-          ident, TableChange.addColumn(Array("salary"), StringType, true))
+        cat.alterTable(ident, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(ident, TableChange.addColumn(Array("salary"), StringType, true))
 
         // external writer adds (2, "high") with new schema
         externalAppend(
