@@ -154,6 +154,12 @@ trait V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
 }
 
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait V2StreamingWriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): V2StreamingWriteCommand
+}
+
 trait V2PartitionCommand extends UnaryCommand {
   def table: LogicalPlan
   def allowPartialPartitionSpec: Boolean = false
@@ -1085,7 +1091,6 @@ case class MergeIntoTable(
     with SupportsSubquery
     with TransactionalWrite {
 
-  // Implements WriteWithSchemaEvolution.table and TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1353,12 +1358,6 @@ case class Assignment(key: Expression, value: Expression) extends Expression
  */
 trait TransactionalWrite extends LogicalPlan {
   def table: LogicalPlan
-}
-
-/** Trait for streaming write commands that participate in DSv2 transactions. */
-trait StreamingV2WriteCommand extends TransactionalWrite {
-  override def table: NamedRelation
-  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
 }
 
 /**

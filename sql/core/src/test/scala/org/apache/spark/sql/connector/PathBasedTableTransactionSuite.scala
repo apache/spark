@@ -19,9 +19,11 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SessionConfigSupport, SupportsCatalogOptions}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SessionConfigSupport, SharedTablesInMemoryRowLevelOperationTableCatalog, SupportsCatalogOptions}
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -32,6 +34,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
 
+  import testImplicits._
+
   private val tablePath = "`/path/to/t`"
   private val tablePathWithFormat = "pathformat.`/path/to/t`"
 
@@ -39,16 +43,23 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     super.beforeEach()
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key,
-      classOf[InMemoryRowLevelOperationTableCatalog].getName)
+      classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName)
   }
 
   override def afterEach(): Unit = {
+    SharedTablesInMemoryRowLevelOperationTableCatalog.reset()
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     super.afterEach()
   }
 
   override protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     spark.sessionState.catalogManager.v2SessionCatalog
+      .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+  }
+
+  private def streamSessionCatalog(query: StreamingQuery): InMemoryRowLevelOperationTableCatalog = {
+    val session = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
+    session.sessionState.catalogManager.v2SessionCatalog
       .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
   }
 
@@ -113,6 +124,64 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
         assert(txnCat.lastTransaction.currentState === Committed)
         assert(txnCat.lastTransaction.isClosed)
       }
+    }
+  }
+
+  test("streaming write to path-based table participates in transaction") {
+    sql(s"CREATE TABLE $tablePathWithFormat (value INT)")
+
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val query = inputData.toDF()
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .toTable(tablePathWithFormat)
+
+      inputData.addData(1, 2, 3)
+      query.processAllAvailable()
+      query.stop()
+
+      val streamCat = streamSessionCatalog(query)
+      val txn = streamCat.lastTransaction
+      assert(txn != null, "expected a transaction to have been committed")
+      assert(txn.currentState === Committed)
+      assert(txn.isClosed)
+      // Streaming must not add transactions to the main session catalog.
+      assert(catalog.observedTransactions.isEmpty)
+      checkAnswer(spark.table(tablePathWithFormat), Row(1) :: Row(2) :: Row(3) :: Nil)
+    }
+  }
+
+  test("streaming self-join on path-based table is tracked as a scan event") {
+    sql(s"CREATE TABLE $tablePathWithFormat (value INT)")
+    sql(s"INSERT INTO $tablePathWithFormat VALUES (1), (2), (3)")
+
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val staticData = spark.read.table(tablePathWithFormat)
+
+      val query = inputData.toDF()
+        .join(staticData, "value")
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .toTable(tablePathWithFormat)
+
+      inputData.addData(1, 2, 3)
+      query.processAllAvailable()
+      query.stop()
+
+      val streamCat = streamSessionCatalog(query)
+      val txn = streamCat.lastTransaction
+      assert(txn != null, "expected a transaction to have been committed")
+      assert(txn.currentState === Committed)
+      assert(txn.isClosed)
+      // The path-based table is both the write target and a batch source in the same transaction.
+      assert(txn.catalog.txnTables.size === 1)
+      val txnTable = txn.catalog.txnTables.values.head
+      assert(txnTable.scanEvents.size === 1)
+      // Streaming must not add transactions to the main session catalog beyond the pre-existing
+      // INSERT transaction.
+      assert(catalog.observedTransactions.size === 1)
     }
   }
 

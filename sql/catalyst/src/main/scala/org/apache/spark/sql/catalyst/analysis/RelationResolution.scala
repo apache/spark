@@ -476,7 +476,11 @@ class RelationResolution(
   }
 
   def resolveReference(ref: V2TableReference): LogicalPlan = {
-    val relation = getOrLoadRelation(ref)
+    val relation = if (ref.context.cacheable) {
+      getOrLoadRelation(ref)
+    } else {
+      loadRelation(ref)
+    }
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
     cloneWithPlanId(relation, planId)
   }
