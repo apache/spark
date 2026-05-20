@@ -4751,6 +4751,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMESTAMP_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9], or parameterless <type> for precision <= 6."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIMEZONE" : {
     "message" : [
       "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
@@ -8533,18 +8539,6 @@
       "The table change <change> is not supported for the JDBC catalog on table <tableName>. Supported changes include: AddColumn, RenameColumn, DeleteColumn, UpdateColumnType, UpdateColumnNullability."
     ],
     "sqlState" : "42000"
-  },
-  "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION" : {
-    "message" : [
-      "The seconds precision <precision> of TIMESTAMP_LTZ is out of the supported range [7, 9]."
-    ],
-    "sqlState" : "0A001"
-  },
-  "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION" : {
-    "message" : [
-      "The seconds precision <precision> of TIMESTAMP_NTZ is out of the supported range [7, 9]."
-    ],
-    "sqlState" : "0A001"
   },
   "UNSUPPORTED_TIME_PRECISION" : {
     "message" : [

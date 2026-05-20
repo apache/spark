@@ -276,17 +276,10 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       cause = null)
   }
 
-  def unsupportedTimestampNtzPrecisionError(precision: String): Throwable = {
+  def invalidTimestampPrecisionError(precision: String, typeName: String): Throwable = {
     new SparkException(
-      errorClass = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
-      messageParameters = Map("precision" -> precision),
-      cause = null)
-  }
-
-  def unsupportedTimestampLtzPrecisionError(precision: String): Throwable = {
-    new SparkException(
-      errorClass = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
-      messageParameters = Map("precision" -> precision),
+      errorClass = "INVALID_TIMESTAMP_PRECISION",
+      messageParameters = Map("precision" -> precision, "type" -> typeName),
       cause = null)
   }
 }

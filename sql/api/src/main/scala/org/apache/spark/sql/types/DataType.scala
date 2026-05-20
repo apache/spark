@@ -239,13 +239,13 @@ object DataType {
         try TimestampLTZNanosType(precision.toInt)
         catch {
           case _: NumberFormatException =>
-            throw DataTypeErrors.unsupportedTimestampLtzPrecisionError(precision)
+            throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
         }
       case TIMESTAMP_NTZ_NANOS_TYPE(precision) =>
         try TimestampNTZNanosType(precision.toInt)
         catch {
           case _: NumberFormatException =>
-            throw DataTypeErrors.unsupportedTimestampNtzPrecisionError(precision)
+            throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
         }
       case "timestamp_ltz" => TimestampType
       case other =>

@@ -1472,25 +1472,25 @@ class DataTypeSuite extends SparkFunSuite {
         exception = intercept[SparkException] {
           TimestampLTZNanosType(p)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION",
-        parameters = Map("precision" -> p.toString))
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_LTZ"))
       checkError(
         exception = intercept[SparkException] {
           TimestampNTZNanosType(p)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION",
-        parameters = Map("precision" -> p.toString))
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_NTZ"))
     }
   }
 
   test("SPARK-56876: parse timestamp with nanosecond precision from JSON") {
-    // (json-type-name, precision-error-condition, factory)
+    // (json-type-name, sql-type-name-in-error, factory)
     val variants = Seq[(String, String, Int => DataType)](
-      ("timestamp_ltz", "UNSUPPORTED_TIMESTAMP_LTZ_PRECISION", TimestampLTZNanosType(_)),
-      ("timestamp_ntz", "UNSUPPORTED_TIMESTAMP_NTZ_PRECISION", TimestampNTZNanosType(_)))
+      ("timestamp_ltz", "TIMESTAMP_LTZ", TimestampLTZNanosType(_)),
+      ("timestamp_ntz", "TIMESTAMP_NTZ", TimestampNTZNanosType(_)))
     val overflowing = "9" * 20
 
-    variants.foreach { case (name, precisionError, factory) =>
+    variants.foreach { case (name, sqlTypeName, factory) =>
       // Happy path across valid precisions, tolerant of surrounding whitespace.
       TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
         assert(DataType.fromJson(s"""\"$name($n)\"""") === factory(n))
@@ -1498,7 +1498,7 @@ class DataTypeSuite extends SparkFunSuite {
         assert(DataType.fromJson(s"""\"$name($n )\"""") === factory(n))
       }
 
-      // Out-of-range precisions surface as UNSUPPORTED_TIMESTAMP_*_PRECISION. The overflowing
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION. The overflowing
       // case verifies the original digit string is preserved instead of leaking
       // NumberFormatException.
       Seq("0", "6", "10", overflowing).foreach { p =>
@@ -1506,8 +1506,8 @@ class DataTypeSuite extends SparkFunSuite {
           exception = intercept[SparkException] {
             DataType.fromJson(s"""\"$name($p)\"""")
           },
-          condition = precisionError,
-          parameters = Map("precision" -> p))
+          condition = "INVALID_TIMESTAMP_PRECISION",
+          parameters = Map("precision" -> p, "type" -> sqlTypeName))
       }
 
       // Malformed precision forms that don't match the regex fall through to
