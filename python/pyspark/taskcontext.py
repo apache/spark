@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
+from typing import Any, ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
 
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
@@ -130,7 +130,7 @@ class TaskContext:
     _cpus: Optional[int] = None
     _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
-    def __new__(cls: Type["TaskContext"], **kwargs: Dict) -> "TaskContext":
+    def __new__(cls: Type["TaskContext"], **kwargs: Any) -> "TaskContext":
         """
         Even if users construct :class:`TaskContext` instead of using get, give them the singleton.
         """
@@ -142,7 +142,7 @@ class TaskContext:
 
     def __init__(
         self,
-        **kwargs: Dict,
+        **kwargs: Any,
     ) -> None:
         # Set attributes only if they are passed in and not None
         # The kwargs are auto-mapped to the private attributes of TaskContext

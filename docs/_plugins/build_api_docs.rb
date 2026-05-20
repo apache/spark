@@ -45,13 +45,11 @@ def build_spark_if_necessary
 
   print_header "Building Spark."
   cd(SPARK_PROJECT_ROOT)
-  # Maven may leave POM-only org.hamcrest:hamcrest-core trees under ~/.m2; SBT/Coursier then
-  # fails with "file:.../hamcrest-core-*.jar: not found". Clear before invoking SBT.
-  hamcrest_m2 = File.join(Dir.home, '.m2/repository/org/hamcrest/hamcrest-core')
-  FileUtils.rm_rf(hamcrest_m2)
   command = "NO_PROVIDED_SPARK_JARS=0 build/sbt -Phive -Pkinesis-asl clean package"
   puts "Running '#{command}'; this may take a few minutes..."
   system(command) || raise("Failed to build Spark")
+  # SPARK-53327: Use the modified ResourceImpl.class in spark-catalyst which is compatible with Java 25
+  system("zip -d assembly/target/scala-2.13/jars/datasketches-memory-3.0.2.jar org/apache/datasketches/memory/internal/ResourceImpl.class")
   $spark_package_is_built = true
 end
 
@@ -133,101 +131,147 @@ def build_spark_scala_and_java_docs_if_necessary
 
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
-  # Tee sbt output to a log file so we can diagnose failures. The most common
-  # unidoc failure is a javadoc crash mid-stream while generating HTML for a
-  # specific class, buried under ~100 benign errors on genjavadoc-generated
-  # Java stubs (e.g. target/java/org/apache/spark/ErrorInfo.java). Without the
-  # diagnostic below, the real culprit -- the source whose doc tripped javadoc
-  # -- is effectively invisible in the CI log.
-  log_file = File.join(SPARK_PROJECT_ROOT, "target", "unidoc-build.log")
-  mkdir_p(File.dirname(log_file))
-  success = stream_and_capture(command, log_file)
-  unless success
-    diagnose_unidoc_failure(log_file)
-    raise("Unidoc generation failed")
-  end
-end
 
-# Runs `command`, streaming every line to both stdout and `log_file`. Returns
-# true iff the command exited 0. Ruby-only; no shell pipefail reliance.
-def stream_and_capture(command, log_file)
-  File.open(log_file, 'w') do |f|
-    IO.popen("#{command} 2>&1", 'r') do |pipe|
-      pipe.each_line do |line|
+  # Two filter passes on the unidoc output, plus an additive fatal-error summary:
+  #
+  # 1. Genjavadoc-stub diagnostic blocks (~28 `[error]` lines on stubs under
+  #    `target/java/`, plus 3-5 continuation lines each). Inert because
+  #    `--ignore-source-errors` is set; matched by message text so legitimate
+  #    doclint diagnostics on stub paths still pass through.
+  #
+  # 2. `-verbose` progress lines (~13K total): `Loading source file ...`,
+  #    `[parsing started/completed ...]`, `[loading /path/X.class]`,
+  #    `Generating .../X.html`. These are dominant in the log when `-verbose`
+  #    is set (which it is in `JavaUnidoc / unidoc / javacOptions` to surface
+  #    per-file `error: reference not found` diagnostics) but carry no signal
+  #    of their own. Suppressing them brings the visible log from ~17K to ~5K
+  #    lines on a typical run while leaving every diagnostic untouched.
+  #
+  # 3. Fatal-error summary (additive, drops no log lines). The filtered log is
+  #    still ~4K lines and most `error:` text in it is non-fatal source-loading
+  #    chatter, so the build-failing diagnostics are hard to spot. After the
+  #    pipe closes, we print a `Fatal javadoc errors (N): ...` block and emit
+  #    `::error file=,line=::` GitHub Actions annotations so they surface in the
+  #    PR check panel. Captured strictly within the Standard Doclet phase
+  #    bracketed by `Building tree for all the packages and classes...` and
+  #    `Building index for all classes...`, which is where doclint diagnostics
+  #    are emitted -- this matches what javadoc counts toward exit code 1.
+  #    Self-checked against javadoc's own `N errors` summary line; a mismatch
+  #    emits a `::warning::` so future phase-marker drift is visible.
+  ansi = /\e\[[0-9;]*[A-Za-z]/
+  stub_header = %r{
+    \[(?:error|warn)\]\s+
+    \S*?/target/java/\S+\.java:\d+(?::\d+)?:\s+
+    error:\s+
+    (?:cannot\s+find\s+symbol
+     |illegal\s+combination\s+of\s+modifiers
+     |non-static\s+type\s+variable\b
+     |.*?\s+is\s+not\s+public\s+in\s+\S+;\s+cannot\s+be\s+accessed\s+from\s+outside\s+package)
+  }x
+  stub_cont = %r{\A\s*\[(?:error|warn)\]\s+(?!/\S+\.java:\d+(?::\d+)?:\s)}
+  verbose_line = %r{
+    \[(?:error|warn)\]\s+
+    (?:Loading\s+source\s+file\s
+     |\[parsing\s+(?:started|completed)\s
+     |\[loading\s
+     |\[checking\s
+     |\[wrote\s
+     |Generating\s+\S+\.html
+    )
+  }x
+
+  # Doclint phase tracking for the trailing summary. Standard Doclet bookends the
+  # phase that produces build-failing diagnostics with these marker lines; any
+  # `error:` outside this window is source-loading noise that does not contribute
+  # to javadoc's exit code. The summary below captures only the fatal ones and
+  # re-emits them as GitHub Actions annotations so they surface in the PR check
+  # panel instead of being buried in a 4K-line log.
+  doclint_start   = %r{\bBuilding\s+tree\s+for\s+all\s+the\s+packages\s+and\s+classes\b}
+  doclint_end     = %r{\bBuilding\s+index\s+for\s+all\s+classes\b}
+  doclint_diag    = %r{\A\[warn\]\s+(?<path>\S+):(?<lineno>\d+)(?::\d+)?:\s+error:\s+(?<msg>.+?)\s*\z}
+  doclint_cont    = %r{\A\[warn\]\s(?!\S+:\d+(?::\d+)?:\s+error:)(?<content>.*?)\s*\z}
+  doclint_summary = %r{\A\[warn\]\s+(?<count>[\d,]+)\s+errors?\s*\z}
+
+  in_stub = false
+  in_doclint = false
+  fatal_diagnostics = []
+  pending_context_lines = 0  # snippet + caret lines that follow each diag header
+  reported_error_count = nil
+
+  IO.popen("#{command} 2>&1", 'r') do |pipe|
+    pipe.each_line do |line|
+      plain = line.gsub(ansi, '')
+
+      if plain =~ doclint_start
+        in_doclint = true
+      elsif in_doclint && plain =~ doclint_end
+        in_doclint = false
+        pending_context_lines = 0
+      end
+
+      if in_doclint && (m = plain.match(doclint_diag))
+        fatal_diagnostics << {
+          path: m[:path], line: m[:lineno], msg: m[:msg], context: []
+        }
+        pending_context_lines = 2
+      elsif in_doclint && pending_context_lines > 0 &&
+            (m = plain.match(doclint_cont)) && !fatal_diagnostics.empty?
+        fatal_diagnostics.last[:context] << m[:content]
+        pending_context_lines -= 1
+      end
+
+      if reported_error_count.nil? && (m = plain.match(doclint_summary))
+        reported_error_count = m[:count].delete(',').to_i
+      end
+
+      if plain =~ verbose_line
+        in_stub = false
+        # suppress -verbose progress line
+      elsif plain =~ stub_header
+        in_stub = true
+      elsif in_stub && plain =~ stub_cont
+        # continuation of a stub block; suppress
+      else
+        in_stub = false
         $stdout.write(line)
         $stdout.flush
-        f.write(line)
       end
     end
   end
-  $?.success?
-end
 
-# Scans the captured unidoc log and prints a pointer to the most likely
-# culprit source file. The heuristic: when javadoc dies mid-HTML-generation,
-# the last "Generating .../X.html" line before "javadoc exited with exit code"
-# names the class that tripped it. Prints nothing actionable if the failure
-# mode doesn't match (e.g. a scaladoc error), in which case the full log above
-# already shows what's wrong.
-def diagnose_unidoc_failure(log_file)
-  return unless File.exist?(log_file)
-  begin
-    lines = File.readlines(log_file)
-
-    javadoc_exit_idx = lines.rindex { |l| l.include?("javadoc exited with exit code") }
-    last_generating = nil
-    if javadoc_exit_idx
-      # Strip ANSI color codes so the regex matches sbt-coloured output too.
-      ansi = /\e\[[0-9;]*[A-Za-z]/
-      lines[0...javadoc_exit_idx].reverse_each do |line|
-        if line.gsub(ansi, '') =~ %r{Generating .+/javaunidoc/(\S+?\.html)\.\.\.}
-          last_generating = $1
-          break
-        end
-      end
+  unless fatal_diagnostics.empty?
+    bar = "=" * 72
+    puts ""
+    puts bar
+    puts "Fatal javadoc errors (#{fatal_diagnostics.size}):"
+    puts bar
+    fatal_diagnostics.each_with_index do |d, i|
+      puts "  #{i + 1}. #{d[:path]}:#{d[:line]}: #{d[:msg]}"
+      d[:context].each { |c| puts "       #{c}" }
     end
+    puts bar
+    puts ""
 
-    banner = "=" * 78
-    $stderr.puts ""
-    $stderr.puts banner
-    $stderr.puts "Unidoc failed -- diagnostic summary"
-    $stderr.puts banner
-    if last_generating
-      class_path = last_generating.sub(/\.html$/, '')
-      class_name = class_path.tr('/', '.')
-      $stderr.puts ""
-      $stderr.puts "  Javadoc crashed while generating: #{last_generating}"
-      $stderr.puts "  Likely culprit: doc comment in #{class_name}"
-      $stderr.puts ""
-      $stderr.puts "  Javadoc can hard-exit (not just warn) on specific scaladoc"
-      $stderr.puts "  patterns once they have been passed through genjavadoc --"
-      $stderr.puts "  wiki-style `[[Class]]` / `[[method]]` links or inline-backticked"
-      $stderr.puts "  code refs in the Scala source for the class above are common"
-      $stderr.puts "  triggers. Start by auditing any recent doc-string changes in"
-      $stderr.puts "  that source file."
-      $stderr.puts ""
-      $stderr.puts "  NOTE: the '[error]' lines above on files under"
-      $stderr.puts "  target/java/... are benign genjavadoc stubs -- every PR"
-      $stderr.puts "  emits them and they do not cause the exit. Ignore them."
-    elsif javadoc_exit_idx
-      $stderr.puts ""
-      $stderr.puts "  Javadoc exited but no class HTML generation was in progress;"
-      $stderr.puts "  the crash predates HTML output -- likely a CLI / classpath /"
-      $stderr.puts "  setup issue. See the full sbt output above."
-    else
-      $stderr.puts ""
-      $stderr.puts "  Could not locate a 'javadoc exited with exit code' marker in"
-      $stderr.puts "  the log; the failure is likely outside the javaunidoc step"
-      $stderr.puts "  (scaladoc / sbt / build env). See the full sbt output above."
+    # GitHub Actions inline annotations. `%`, `\r`, `\n` require URL-style
+    # escaping per the workflow command spec; newlines render as multiple
+    # lines inside the annotation, so the source snippet and caret display
+    # under the error message in the PR check panel.
+    project_root = SPARK_PROJECT_ROOT + '/'
+    fatal_diagnostics.each do |d|
+      rel = d[:path].start_with?(project_root) ? d[:path][project_root.length..] : d[:path]
+      full = ([d[:msg]] + d[:context]).join("\n")
+      enc = full.gsub(/[%\r\n]/, '%' => '%25', "\r" => '%0D', "\n" => '%0A')
+      puts "::error file=#{rel},line=#{d[:line]},title=javadoc::#{enc}"
     end
-    $stderr.puts banner
-    $stderr.puts ""
-  rescue => e
-    # Never let the diagnostic helper itself obscure the underlying unidoc
-    # failure: if anything here goes wrong (e.g. encoding error reading the
-    # log), report it briefly and let the caller raise the real error.
-    $stderr.puts "(diagnostic helper failed: #{e.class}: #{e.message})"
   end
+
+  if reported_error_count && reported_error_count != fatal_diagnostics.size
+    puts "::warning::Javadoc reported #{reported_error_count} errors but " \
+         "build_api_docs.rb captured #{fatal_diagnostics.size}. The doclint " \
+         "phase markers may have shifted; please update build_api_docs.rb."
+  end
+
+  raise("Unidoc generation failed") unless $?.success?
 end
 
 def build_scala_and_java_docs

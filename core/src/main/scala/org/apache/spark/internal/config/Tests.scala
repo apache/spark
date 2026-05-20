@@ -39,6 +39,13 @@ private[spark] object Tests {
     .booleanConf
     .createOptional
 
+  val INJECT_SHUFFLE_FETCH_FAILURES =
+    ConfigBuilder("spark.testing.injectShuffleFetchFailures")
+      .doc("Injecting fetch failures for shuffle stages by providing an invalid BlockManager " +
+        "location for the first stage attempt. Testing only flag!")
+      .booleanConf
+      .createWithDefault(false)
+
   val TEST_NO_STAGE_RETRY = ConfigBuilder("spark.test.noStageRetry")
     .version("1.2.0")
     .booleanConf

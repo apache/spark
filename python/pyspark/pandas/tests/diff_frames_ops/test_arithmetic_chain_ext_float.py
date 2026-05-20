@@ -20,7 +20,6 @@ import pandas as pd
 
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import extension_float_dtypes_available
 from pyspark.pandas.tests.diff_frames_ops.test_arithmetic_chain import (
     ArithmeticChainTestingFuncMixin,
@@ -104,7 +103,6 @@ class ArithmeticChainExtFloatMixin(ArithmeticChainTestingFuncMixin):
 class ArithmeticChainExtFloatTests(
     ArithmeticChainExtFloatMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

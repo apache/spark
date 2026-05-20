@@ -16,7 +16,6 @@
 #
 
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
 
 
@@ -31,7 +30,6 @@ class GroupbySplitApplyCountMixin(GroupbySplitApplyTestingFuncMixin):
 class GroupbySplitApplyCountTests(
     GroupbySplitApplyCountMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

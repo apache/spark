@@ -22,7 +22,9 @@ import java.util.Locale
 
 import scala.util.Random
 
+import org.scalacheck.Gen
 import org.scalatest.matchers.must.Matchers.the
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
@@ -47,7 +49,8 @@ case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Doub
 
 @SlowSQLTest
 class DataFrameAggregateSuite extends SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper
+  with ScalaCheckDrivenPropertyChecks {
   import testImplicits._
 
   val absTol = 1e-8
@@ -4815,6 +4818,193 @@ class DataFrameAggregateSuite extends SharedSparkSession
       .collect()(0)(0)
     assert(estimate != null)
     assert(estimate.asInstanceOf[Double] == 2.0)
+  }
+
+  // Numerical-equivalence property (sql-core layer).
+  //
+  // Sweeps the (p, p', s, n) lattice where the widened-cast peel fires,
+  // asserting that SUM(CAST(x AS DECIMAL(p', s))) on an on-vs-off SQLConf
+  // pair returns bit-equal java.math.BigDecimal (same unscaled value AND
+  // same scale). Domain is restricted to the non-overflow regime so the
+  // peeled LONG accumulator cannot wrap.
+  //
+  // Non-overflow bound: with |unscaled(x)| < 10^p, p <= 8, n <= 1000,
+  // worst-case accumulator is 1000 * (10^8 - 1) < 10^12 << 2^63.
+  //
+  // A wide-target-scale fixed witness (p=8, p'=30, s=2) is exercised below
+  // as a unit case to guarantee a hand-enumerated boundary even if the
+  // property generator shrinks.
+
+  private case class PeelDomain(p: Int, pPrime: Int, s: Int)
+
+  private val peelDomainGen: Gen[PeelDomain] = (for {
+    p <- Gen.choose(1, 8)
+    pPrime <- Gen.choose(math.max(p + 1, 9), 28)
+    s <- Gen.choose(0, p)
+  } yield PeelDomain(p, pPrime, s))
+    .retryUntil(d => d.p + 10 <= 18 && d.p < d.pPrime && d.pPrime + 10 <= 38)
+
+  // Reference SUM via java.math.BigDecimal at the widened target scale.
+  // Inside the non-overflow domain (|sum unscaled| < 10^(p+10)) this is
+  // bit-exact equivalent to both the peeled and the baseline plan, so we
+  // can pin the peeled result against an external oracle without depending
+  // on a baseline plan we no longer exercise.
+  private def referenceSum(
+      unscaledLongs: Seq[Long], d: PeelDomain): java.math.BigDecimal = {
+    if (unscaledLongs.isEmpty) {
+      null
+    } else {
+      val acc = unscaledLongs
+        .map(u => java.math.BigDecimal.valueOf(u, d.s))
+        .foldLeft(java.math.BigDecimal.ZERO)(_.add(_))
+      acc.setScale(d.s)
+    }
+  }
+
+  private def sumCastResult(
+      unscaledLongs: Seq[Long], d: PeelDomain): java.math.BigDecimal = {
+    // Use an explicit DecimalType(p, s) schema rather than Scala-tuple
+    // inference. createDataFrame on Tuple1[java.math.BigDecimal] infers
+    // DecimalType.SYSTEM_DEFAULT (38, 18), which would force the subsequent
+    // CAST to widen from (38, 18) -> (pPrime, s) rather than from the
+    // intended narrow (p, s) -> (pPrime, s) widening, defeating the
+    // WidenedDecimalChild trigger and silently exercising the wrong rule arm.
+    val rows = unscaledLongs.map(u => Row(java.math.BigDecimal.valueOf(u, d.s)))
+    val schema = StructType(StructField("x", DecimalType(d.p, d.s)) :: Nil)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    assert(df.schema("x").dataType == DecimalType(d.p, d.s),
+      s"expected inner schema DecimalType(${d.p}, ${d.s}), got ${df.schema("x").dataType}")
+    df.select(sum(col("x").cast(DecimalType(d.pPrime, d.s))).as("s"))
+      .collect()(0).getDecimal(0)
+  }
+
+  test("SPARK-56627: DecimalAggregates widened-Cast SUM peel -- numerical " +
+      "equivalence property (sql-core layer)") {
+    val combinedGen: Gen[(PeelDomain, List[Long])] = for {
+      d <- peelDomainGen
+      upper = math.pow(10, d.p).toLong - 1
+      n <- Gen.choose(1, 1000)
+      xs <- Gen.listOfN(n, Gen.choose(-upper, upper))
+    } yield (d, xs)
+    forAll(combinedGen, minSuccessful(20), sizeRange(0)) { case (d, xs) =>
+      val r = sumCastResult(xs, d)
+      val ref = referenceSum(xs, d)
+      assert(r.compareTo(ref) == 0,
+        s"peel result diverges from BigDecimal reference for " +
+          s"PeelDomain(p=${d.p}, pPrime=${d.pPrime}, s=${d.s}), n=${xs.size}, " +
+          s"sample=${xs.take(3)}, got=$r ref=$ref")
+    }
+  }
+
+  // Wide target-scale fixed witness: (p=8, p'=30, s=2). Hand-enumerated so a
+  // wide target scale case is always exercised even if property shrinks.
+  test("SPARK-56627: SUM(CAST(dec(8,2) AS dec(30,2))) matches BigDecimal " +
+      "reference (wide-target-scale fixed witness, sql-core)") {
+    val d = PeelDomain(8, 30, 2)
+    val xs = Seq(0L, 1L, -1L, 99999999L, -99999999L, 12345678L, -87654321L)
+    val r = sumCastResult(xs, d)
+    val ref = referenceSum(xs, d)
+    assert(r.compareTo(ref) == 0, s"got=$r ref=$ref")
+  }
+
+  // AVG widened-Cast peel: equivalence property (sql-core layer).
+  //
+  // Oracle: peel(AVG(CAST(x AS dec(pPrime, s)))) must be observationally
+  // identical to the existing fast path on AVG(x) directly. Both arms in
+  // Optimizer.DecimalAggregates produce
+  //   Cast(Divide(Avg(UnscaledValue(<inner>)), Lit(10^s, Double)),
+  //        DecimalType.bounded(<outerP>, s + 4))
+  // and the peel arm makes <inner> equal to the user's column, so the
+  // Double-divide dividends are bit-identical between the two paths; only
+  // the outer Cast target precision differs (pPrime+4 vs p+4), a widening
+  // precision Cast that preserves numerical value. We therefore assert
+  // BigDecimal.compareTo == 0 (value equality across differing precisions).
+  //
+  // Domain: inner p in [1, 7] (the AVG strict-subset guard
+  // `AVG_PEEL_MAX_INNER_PRECISION = 7`), pPrime in [8, 11] (the band where
+  // the existing `Average(DecimalExpression)` arm would intercept on the
+  // outer Cast type if not for our prepended arm), s in [0, p],
+  // n <= 1000 rows. The inner DataFrame schema is constructed as
+  // DecimalType(p, s) explicitly (NOT via tuple-inference, which would
+  // infer DecimalType.SYSTEM_DEFAULT and silently route through a DIFFERENT
+  // rule arm than intended -- the failure mode this PBT must lock down).
+  private case class AvgDomain(p: Int, pPrime: Int, s: Int)
+
+  private val avgDomainGen: Gen[AvgDomain] = (for {
+    p <- Gen.choose(1, 7)
+    pPrime <- Gen.choose(8, 11)
+    s <- Gen.choose(0, p)
+  } yield AvgDomain(p, pPrime, s))
+    .retryUntil(d => d.p < d.pPrime)
+
+  private def avgInputDf(unscaledLongs: Seq[Long], d: AvgDomain) = {
+    val rows = unscaledLongs.map(u => Row(java.math.BigDecimal.valueOf(u, d.s)))
+    val schema = StructType(StructField("x", DecimalType(d.p, d.s)) :: Nil)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    assert(df.schema("x").dataType == DecimalType(d.p, d.s),
+      s"expected inner schema DecimalType(${d.p}, ${d.s}), got ${df.schema("x").dataType}")
+    df
+  }
+
+  private def avgCastResult(
+      unscaledLongs: Seq[Long], d: AvgDomain): java.math.BigDecimal = {
+    avgInputDf(unscaledLongs, d)
+      .select(avg(col("x").cast(DecimalType(d.pPrime, d.s))).as("a"))
+      .collect()(0).getDecimal(0)
+  }
+
+  private def avgDirectResult(
+      unscaledLongs: Seq[Long], d: AvgDomain): java.math.BigDecimal = {
+    avgInputDf(unscaledLongs, d)
+      .select(avg(col("x")).as("a"))
+      .collect()(0).getDecimal(0)
+  }
+
+  test("SPARK-56627: DecimalAggregates widened-Cast AVG peel -- " +
+      "equivalence vs unpeeled AVG (sql-core)") {
+    val combinedGen: Gen[(AvgDomain, List[Long])] = for {
+      d <- avgDomainGen
+      upper = math.pow(10, d.p).toLong - 1
+      n <- Gen.choose(1, 1000)
+      xs <- Gen.listOfN(n, Gen.choose(-upper, upper))
+    } yield (d, xs)
+    forAll(combinedGen, minSuccessful(20), sizeRange(0)) { case (d, xs) =>
+      val peeled = avgCastResult(xs, d)
+      val direct = avgDirectResult(xs, d)
+      // BigDecimal.compareTo ignores trailing-zero precision differences:
+      // peeled has output DecimalType.bounded(pPrime+4, s+4), direct has
+      // DecimalType(p+4, s+4). Both wrap the same Double-divide bit pattern
+      // so the underlying value is identical.
+      assert(peeled.compareTo(direct) == 0,
+        s"peeled AVG diverges from unpeeled AVG for " +
+          s"AvgDomain(p=${d.p}, pPrime=${d.pPrime}, s=${d.s}), n=${xs.size}, " +
+          s"sample=${xs.take(3)}, peeled=$peeled direct=$direct")
+    }
+  }
+
+  // Wider-pPrime regime shape witness: (p=4, p'=20, s=2). The equivalence
+  // PBT above only covers pPrime in [8, 11] (where the existing AVG arm
+  // would otherwise intercept and provide a comparable oracle). For pPrime
+  // outside that band the new arm still fires (only constrained by inner
+  // p <= 7), but the comparison oracle "AVG(x) directly" is no longer
+  // available because the existing arm targets a narrower output type.
+  // This witness asserts non-null result and the expected widened output
+  // schema, locking the rule's shape contract without claiming an
+  // unreachable oracle.
+  test("SPARK-56627: AVG(CAST(dec(4,2) AS dec(20,2))) peels and yields " +
+      "widened output schema (wider-pPrime regime shape witness)") {
+    val rows = Seq(123L, -456L, 789L, 0L)
+      .map(u => Row(java.math.BigDecimal.valueOf(u, 2)))
+    val schema = StructType(StructField("x", DecimalType(4, 2)) :: Nil)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+      .select(avg(col("x").cast(DecimalType(20, 2))).as("a"))
+    val row = df.collect()(0)
+    assert(!row.isNullAt(0), s"expected non-null AVG, got null; df schema = ${df.schema}")
+    val outType = df.schema("a").dataType.asInstanceOf[DecimalType]
+    // Widened-arm output Cast target = DecimalType.bounded(pPrime + 4, s + 4)
+    // = DecimalType.bounded(24, 6).
+    assert(outType.precision == 24 && outType.scale == 6,
+      s"expected DecimalType(24, 6) from widened-arm peel, got $outType")
   }
 }
 

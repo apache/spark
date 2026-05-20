@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import java.util.Properties
 
-import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, If, SortArray, SparkPartitionID, SpecificInternalRow}
@@ -32,8 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Test suite for [[AggregatingAccumulator]].
  */
 class AggregatingAccumulatorSuite
-  extends SparkFunSuite
-  with SharedSparkSession
+  extends SharedSparkSession
   with ExpressionEvalHelper {
   private val a = $"a".long
   private val b = $"b".string

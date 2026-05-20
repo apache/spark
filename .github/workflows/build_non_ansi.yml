@@ -21,7 +21,7 @@ name: "Build / Non-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 1 */2 * *'
   workflow_dispatch:
 
 jobs:

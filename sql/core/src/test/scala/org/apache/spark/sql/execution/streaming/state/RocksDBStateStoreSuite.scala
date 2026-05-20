@@ -1856,6 +1856,88 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  test("SPARK-56539: prefixScan triggers validateStateRowFormat on schema mismatch") {
+    // Write data with correct schema, then reopen with a mismatched valueSchema.
+    // prefixScan should trigger validateStateRowFormat and throw on the first iteration.
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    // Step 1: Write data with correct schema and commit
+    val provider1 = new RocksDBStateStoreProvider()
+    provider1.init(storeId, keySchema, valueSchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1), useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store1 = provider1.getStore(0)
+    store1.put(dataToKeyRow("a", 1), dataToValueRow(1))
+    store1.commit()
+    provider1.close()
+
+    // Step 2: Reopen with a wrong valueSchema (StringType instead of IntegerType)
+    // The stored IntegerType value bytes will be misinterpreted as a variable-length
+    // StringType offset/size, causing structural integrity validation to fail.
+    val wrongValueSchema = StructType(Seq(StructField("v1", StringType, true)))
+    val provider2 = new RocksDBStateStoreProvider()
+    provider2.init(storeId, keySchema, wrongValueSchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1), useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store2 = provider2.getStore(1)
+    try {
+      // prefixScan should trigger validation and throw because stored value bytes
+      // are not structurally valid for the declared StringType schema
+      intercept[StateStoreValueRowFormatValidationFailure] {
+        store2.prefixScan(dataToPrefixKeyRow("a")).toSeq
+      }
+    } finally {
+      store2.abort()
+      provider2.close()
+    }
+  }
+
+  test("SPARK-56539: rangeScan triggers validateStateRowFormat on schema mismatch") {
+    // Write data with correct schema, then reopen with a mismatched valueSchema.
+    // rangeScan should trigger validateStateRowFormat and throw on the first iteration.
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    // Step 1: Write data with correct schema and commit
+    val provider1 = new RocksDBStateStoreProvider()
+    provider1.init(storeId, keySchemaWithRangeScan, valueSchema,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store1 = provider1.getStore(0)
+    store1.put(dataToKeyRowWithRangeScan(10L, "a"), dataToValueRow(10))
+    store1.commit()
+    provider1.close()
+
+    // Step 2: Reopen with a wrong valueSchema (StringType instead of IntegerType)
+    val wrongValueSchema = StructType(Seq(StructField("v1", StringType, true)))
+    val provider2 = new RocksDBStateStoreProvider()
+    provider2.init(storeId, keySchemaWithRangeScan, wrongValueSchema,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store2 = provider2.getStore(1)
+    try {
+      // rangeScan should trigger validation and throw because stored value bytes
+      // are not structurally valid for the declared StringType schema
+      intercept[StateStoreValueRowFormatValidationFailure] {
+        store2.rangeScan(
+          Some(dataToKeyRowWithRangeScan(10L, "a")),
+          Some(dataToKeyRowWithRangeScan(20L, "a"))).toSeq
+      }
+    } finally {
+      store2.abort()
+      provider2.close()
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb key and value schema encoders for column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>

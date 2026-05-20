@@ -1345,6 +1345,108 @@ class LateralJoin(LogicalPlan):
         """
 
 
+# Acceptance lists for `nearestByJoin`. Must stay aligned with `NearestByJoinValidation` in
+# `sql/api/.../catalyst/plans/NearestByJoinValidation.scala`.
+_NEAREST_BY_JOIN_MAX_NUM_RESULTS = 100000
+_NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPES = frozenset({"inner", "leftouter", "left"})
+_NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPE_DISPLAY = "'INNER', 'LEFT OUTER'"
+_NEAREST_BY_JOIN_SUPPORTED_MODES = ("approx", "exact")
+_NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS = ("distance", "similarity")
+
+
+class NearestByJoin(LogicalPlan):
+    def __init__(
+        self,
+        left: Optional[LogicalPlan],
+        right: LogicalPlan,
+        ranking_expression: Column,
+        num_results: int,
+        join_type: str,
+        mode: str,
+        direction: str,
+    ) -> None:
+        super().__init__(left, self._collect_references([ranking_expression]))
+        self.left = cast(LogicalPlan, left)
+        self.right = right
+        self.ranking_expression = ranking_expression
+        # Mirror of the Scala `Dataset.validateNearestByJoinArgs` validator -- raises the same
+        # `NEAREST_BY_JOIN.*` error classes the server would, so the user sees a consistent
+        # error regardless of where the check fires.
+        if num_results < 1 or num_results > _NEAREST_BY_JOIN_MAX_NUM_RESULTS:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+                messageParameters={
+                    "numResults": str(num_results),
+                    "min": "1",
+                    "max": str(_NEAREST_BY_JOIN_MAX_NUM_RESULTS),
+                },
+            )
+        if join_type.lower().replace("_", "") not in _NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPES:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+                messageParameters={
+                    "joinType": join_type,
+                    "supported": _NEAREST_BY_JOIN_SUPPORTED_JOIN_TYPE_DISPLAY,
+                },
+            )
+        if mode.lower() not in _NEAREST_BY_JOIN_SUPPORTED_MODES:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+                messageParameters={
+                    "mode": mode,
+                    "supported": "'" + "', '".join(_NEAREST_BY_JOIN_SUPPORTED_MODES) + "'",
+                },
+            )
+        if direction.lower() not in _NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS:
+            raise AnalysisException(
+                errorClass="NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
+                messageParameters={
+                    "direction": direction,
+                    "supported": "'" + "', '".join(_NEAREST_BY_JOIN_SUPPORTED_DIRECTIONS) + "'",
+                },
+            )
+        self.num_results = int(num_results)
+        self.join_type = join_type
+        self.mode = mode
+        self.direction = direction
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.nearest_by_join.left.CopyFrom(self.left.plan(session))
+        plan.nearest_by_join.right.CopyFrom(self.right.plan(session))
+        plan.nearest_by_join.ranking_expression.CopyFrom(self.ranking_expression.to_plan(session))
+        plan.nearest_by_join.num_results = self.num_results
+        plan.nearest_by_join.join_type = self.join_type
+        plan.nearest_by_join.mode = self.mode
+        plan.nearest_by_join.direction = self.direction
+        return self._with_relations(plan, session)
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return {**super().observations, **self.right.observations}
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return (
+            f"{i}<NearestByJoin numResults={self.num_results} joinType={self.join_type} "
+            f"mode={self.mode} direction={self.direction}>\n{o}"
+            f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>NearestByJoin</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </uL>
+        """
+
+
 class SetOperation(LogicalPlan):
     def __init__(
         self,
@@ -2002,6 +2104,7 @@ class WriteOperation(LogicalPlan):
         self.options: Dict[str, Optional[str]] = {}
         self.num_buckets: int = -1
         self.bucket_cols: List[str] = []
+        self.with_schema_evolution: bool = False
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
@@ -2013,6 +2116,7 @@ class WriteOperation(LogicalPlan):
         plan.write_operation.sort_column_names.extend(self.sort_cols)
         plan.write_operation.partitioning_columns.extend(self.partitioning_cols)
         plan.write_operation.clustering_columns.extend(self.clustering_cols)
+        plan.write_operation.with_schema_evolution = self.with_schema_evolution
 
         if self.num_buckets > 0:
             plan.write_operation.bucket_by.bucket_column_names.extend(self.bucket_cols)
@@ -2104,6 +2208,7 @@ class WriteOperationV2(LogicalPlan):
         self.table_properties: dict[str, Optional[str]] = {}
         self.mode: Optional[str] = None
         self.overwrite_condition: Optional[Column] = None
+        self.with_schema_evolution: bool = False
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
@@ -2118,6 +2223,7 @@ class WriteOperationV2(LogicalPlan):
             [c.to_plan(session) for c in self.partitioning_columns]
         )
         plan.write_operation_v2.clustering_columns.extend(self.clustering_columns)
+        plan.write_operation_v2.with_schema_evolution = self.with_schema_evolution
 
         for k in self.options:
             if self.options[k] is None:

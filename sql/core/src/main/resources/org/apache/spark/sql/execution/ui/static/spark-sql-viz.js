@@ -19,12 +19,24 @@
 
 var PlanVizConstants = {
   svgMarginX: 16,
-  svgMarginY: 16
+  svgMarginY: 16,
+  zoomMin: 0.1,
+  zoomMax: 16,
+  zoomStep: 1.25
 };
 
 // Track selected node for re-rendering the detail panel on checkbox toggle
 var selectedNodeId = null;
 var cachedNodeDetails = null;
+
+// d3.zoom behavior for the current SVG; reinitialized on each (re)render.
+var planVizZoom = null;
+
+// Current dagre graph; kept so node search can re-iterate names without re-parsing dot.
+var currentPlanGraph = null;
+
+// Node search state. matches[] is in DOM (top-down) order, index is the active match.
+var planVizSearchState = { query: "", matches: [], index: -1 };
 
 function shouldRenderPlanViz() {
   return planVizContainer().selectAll("svg").empty();
@@ -33,13 +45,15 @@ function shouldRenderPlanViz() {
 function renderPlanViz() {
   var svg = planVizContainer()
     .append("svg")
-    .attr("width", window.innerWidth || 1920)
-    .attr("height", 1000);
+    .attr("width", "100%")
+    .attr("height", "70vh");
   var metadata = d3.select("#plan-viz-metadata");
   var dot = metadata.select(".dot-file").text().trim();
-  var graph = svg.append("g");
+  var zoomLayer = svg.append("g").attr("class", "zoom-layer");
+  var graph = zoomLayer.append("g");
 
   var g = graphlibDot.read(dot);
+  currentPlanGraph = g;
   preprocessGraphLayout(g);
   var renderer = new dagreD3.render();
   renderer(graph, g);
@@ -56,6 +70,8 @@ function renderPlanViz() {
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
   setupDetailedLabelsToggle();
+  setupZoomAndPan(svg, zoomLayer);
+  reapplyPlanVizSearch();
 }
 
 /* -------------------- *
@@ -167,7 +183,9 @@ function preprocessGraphLayout(g) {
 }
 
 /*
- * Helper function to size the SVG appropriately such that all elements are displayed.
+ * Helper function to compute the SVG viewBox so that all elements fit.
+ * The SVG element itself uses CSS sizing (width: 100%, height: 70vh),
+ * so we only set the viewBox here; pan/zoom is applied to the inner zoom-layer.
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {
@@ -192,9 +210,7 @@ function resizeSvg(svg) {
     }));
   var width = endX - startX;
   var height = endY - startY;
-  svg.attr("viewBox", startX + " " + startY + " " + width + " " + height)
-     .attr("width", width)
-     .attr("height", height);
+  svg.attr("viewBox", startX + " " + startY + " " + width + " " + height);
 }
 
 /* Helper function to convert attributes to numeric values. */
@@ -596,6 +612,16 @@ document.getElementById("plan-viz-download-btn").addEventListener("click", async
       console.error("Failed to fetch CSS for SVG download", e);
     }
     d3.select(svg).insert("style", ":first-child").text(css);
+    // Reset any pan/zoom transform on the cloned SVG so the exported file
+    // shows the natural plan, independent of the user's current view state.
+    d3.select(svg).select("g.zoom-layer").attr("transform", null);
+    // Make the standalone SVG self-sized using the viewBox dimensions so
+    // external viewers render at the natural plan size.
+    const viewBox = (svg.getAttribute("viewBox") || "").split(/\s+/).map(parseFloat);
+    if (viewBox.length === 4 && viewBox.every((v) => !isNaN(v))) {
+      svg.setAttribute("width", String(viewBox[2]));
+      svg.setAttribute("height", String(viewBox[3]));
+    }
     const svgData = new XMLSerializer().serializeToString(svg);
     blob = new Blob([svgData], { type: "image/svg+xml" });
   } else if (format === "dot") {
@@ -655,11 +681,13 @@ function rerenderWithDetailedLabels() {
 
   var svg = container
     .append("svg")
-    .attr("width", window.innerWidth || 1920)
-    .attr("height", 1000);
-  var graph = svg.append("g");
+    .attr("width", "100%")
+    .attr("height", "70vh");
+  var zoomLayer = svg.append("g").attr("class", "zoom-layer");
+  var graph = zoomLayer.append("g");
 
   var g = graphlibDot.read(dot);
+  currentPlanGraph = g;
 
   // If detailed mode, inject HTML labels with metrics tables
   var detailed = document.getElementById("detailed-labels-checkbox");
@@ -694,11 +722,363 @@ function rerenderWithDetailedLabels() {
   setupTooltipForSparkPlanNode(g);
   resizeSvg(svg);
   postprocessForAdditionalMetrics();
+  setupZoomAndPan(svg, zoomLayer);
+  reapplyPlanVizSearch();
 }
+
+/* ---------------------- *
+ * | Zoom and pan        | *
+ * ---------------------- */
+
+/*
+ * Wire d3-zoom to the SVG: apply transforms to the inner zoom-layer group,
+ * fit the graph to the viewport on load, and bind toolbar/keyboard controls.
+ */
+function setupZoomAndPan(svg, zoomLayer) {
+  var svgNode = svg.node();
+  if (!svgNode || !zoomLayer || zoomLayer.empty()) return;
+
+  planVizZoom = d3.zoom()
+    .scaleExtent([PlanVizConstants.zoomMin, PlanVizConstants.zoomMax])
+    .filter(function (event) {
+      // Suppress pan/zoom when the user interacts with HTML labels
+      // (foreignObject) so text inside metrics tables remains selectable.
+      // Also ignore right-click to leave the browser context menu intact.
+      if (event.button === 2) return false;
+      var target = event.target;
+      while (target && target !== svgNode) {
+        if (target.nodeName === "foreignObject") return false;
+        target = target.parentNode;
+      }
+      return true;
+    })
+    .on("start", function () { svg.classed("grabbing", true); })
+    .on("zoom", function (event) {
+      zoomLayer.attr("transform", event.transform);
+      updateZoomLevelLabel(event.transform.k);
+    })
+    .on("end", function () { svg.classed("grabbing", false); });
+
+  svg.call(planVizZoom);
+
+  // Initialize the toolbar label; the SVG's viewBox + xMidYMid meet already
+  // provides the natural fit, and the zoom-layer has no transform, so no
+  // explicit transform is required here.
+  updateZoomLevelLabel(1);
+}
+
+function updateZoomLevelLabel(scale) {
+  var el = document.getElementById("plan-viz-zoom-level");
+  if (el) el.textContent = Math.round(scale * 100) + "%";
+}
+
+function planVizZoomBy(factor) {
+  var svg = planVizContainer().select("svg");
+  if (!svg.empty() && planVizZoom) {
+    svg.transition().duration(150).call(planVizZoom.scaleBy, factor);
+  }
+}
+
+function planVizZoomReset() {
+  var svg = planVizContainer().select("svg");
+  if (!svg.empty() && planVizZoom) {
+    svg.transition().duration(150).call(planVizZoom.transform, d3.zoomIdentity);
+  }
+}
+
+/* ---------------------- *
+ * | Node search         | *
+ * ---------------------- */
+
+/*
+ * Wire the search toolbar (toggle, input, navigation, close) and the global
+ * `/` shortcut. Idempotent: subsequent calls do nothing.
+ */
+function setupPlanVizSearch() {
+  var toggle = document.getElementById("plan-viz-search-toggle");
+  var input = document.getElementById("plan-viz-search-input");
+  var prevBtn = document.getElementById("plan-viz-search-prev");
+  var nextBtn = document.getElementById("plan-viz-search-next");
+  var closeBtn = document.getElementById("plan-viz-search-close");
+  if (!toggle || !input || !prevBtn || !nextBtn || !closeBtn) return;
+  if (toggle.dataset.searchWired === "true") return;
+  toggle.dataset.searchWired = "true";
+
+  toggle.addEventListener("click", function () {
+    expandPlanVizSearch();
+  });
+  closeBtn.addEventListener("click", function () {
+    collapsePlanVizSearch();
+  });
+
+  var debounceTimer = null;
+  input.addEventListener("input", function () {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () {
+      runPlanVizSearch(input.value, true);
+    }, 80);
+  });
+
+  input.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      planVizSearchGoTo(event.shiftKey ? -1 : 1);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      collapsePlanVizSearch();
+    }
+  });
+
+  prevBtn.addEventListener("click", function () { planVizSearchGoTo(-1); });
+  nextBtn.addEventListener("click", function () { planVizSearchGoTo(1); });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key !== "/") return;
+    var tag = event.target && event.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || event.target.isContentEditable) {
+      return;
+    }
+    var graphEl = document.getElementById("plan-viz-graph");
+    if (!graphEl || !graphEl.matches(":hover")) return;
+    event.preventDefault();
+    expandPlanVizSearch();
+  });
+}
+
+function expandPlanVizSearch() {
+  var collapsed = document.getElementById("plan-viz-search-collapsed");
+  var expanded = document.getElementById("plan-viz-search-expanded");
+  var input = document.getElementById("plan-viz-search-input");
+  if (!collapsed || !expanded || !input) return;
+  collapsed.classList.add("d-none");
+  expanded.classList.remove("d-none");
+  input.value = planVizSearchState.query;
+  input.focus();
+  input.select();
+}
+
+function collapsePlanVizSearch() {
+  var collapsed = document.getElementById("plan-viz-search-collapsed");
+  var expanded = document.getElementById("plan-viz-search-expanded");
+  var input = document.getElementById("plan-viz-search-input");
+  clearPlanVizSearchHighlights();
+  planVizSearchState.query = "";
+  planVizSearchState.matches = [];
+  planVizSearchState.index = -1;
+  updatePlanVizSearchCount();
+  if (input) input.value = "";
+  if (collapsed) collapsed.classList.remove("d-none");
+  if (expanded) expanded.classList.add("d-none");
+}
+
+/*
+ * Recompute matches against the current query, update DOM classes, and zoom
+ * to the first match. When `zoomToFirst` is false (e.g. re-applying after a
+ * detailed-mode rerender), the viewport is left untouched.
+ */
+function runPlanVizSearch(rawQuery, zoomToFirst) {
+  var query = (rawQuery || "").trim();
+  planVizSearchState.query = query;
+  planVizSearchState.matches = [];
+  planVizSearchState.index = -1;
+
+  clearPlanVizSearchHighlights();
+
+  if (query === "" || !currentPlanGraph) {
+    updatePlanVizSearchCount();
+    return;
+  }
+
+  var lower = query.toLowerCase();
+  var nodeDetails = getNodeDetails();
+  var matchedDomIds = Object.create(null);
+  var ancestorsOfMatch = Object.create(null);
+
+  currentPlanGraph.nodes().forEach(function (v) {
+    var node = currentPlanGraph.node(v);
+    if (!node) return;
+    var domId = node.id || (node.isCluster ? v : "node" + v);
+    var displayName;
+    if (nodeDetails[domId] && nodeDetails[domId].name) {
+      displayName = String(nodeDetails[domId].name);
+    } else {
+      displayName = String(node.label || "");
+    }
+    if (displayName.toLowerCase().indexOf(lower) >= 0) {
+      matchedDomIds[domId] = true;
+      // Walk up the compound-graph hierarchy so we don't dim a cluster that
+      // contains a match (which would visually hide the matched child).
+      var parent = currentPlanGraph.parent(v);
+      while (parent) {
+        var parentNode = currentPlanGraph.node(parent);
+        var parentDomId = (parentNode && parentNode.id) || parent;
+        ancestorsOfMatch[parentDomId] = true;
+        parent = currentPlanGraph.parent(parent);
+      }
+    }
+  });
+
+  var svg = planVizContainer().select("svg");
+  var nodeEls = svg.selectAll("g.node, g.cluster").nodes();
+  var orderedMatches = [];
+  var anyMatch = false;
+  Object.keys(matchedDomIds).forEach(function () { anyMatch = true; });
+  nodeEls.forEach(function (el) {
+    if (matchedDomIds[el.id]) {
+      orderedMatches.push(el.id);
+      var rect = el.querySelector(":scope > rect");
+      if (rect) rect.classList.add("search-match");
+      if (el.classList.contains("cluster")) el.classList.add("search-match");
+    } else if (anyMatch && !ancestorsOfMatch[el.id]) {
+      // Only dim when at least one match exists; otherwise leave the plan
+      // fully visible so the user can adjust their query without obscuring
+      // context (matches familiar find-in-page UX).
+      el.classList.add("search-dimmed");
+    }
+  });
+
+  planVizSearchState.matches = orderedMatches;
+  if (orderedMatches.length > 0) {
+    planVizSearchState.index = 0;
+    markActiveMatch(orderedMatches[0]);
+    if (zoomToFirst) zoomToNode(orderedMatches[0]);
+  }
+  updatePlanVizSearchCount();
+}
+
+function planVizSearchGoTo(delta) {
+  var matches = planVizSearchState.matches;
+  if (matches.length === 0) return;
+  var idx = (planVizSearchState.index + delta + matches.length) % matches.length;
+  planVizSearchState.index = idx;
+  markActiveMatch(matches[idx]);
+  zoomToNode(matches[idx]);
+  updatePlanVizSearchCount();
+}
+
+function markActiveMatch(domId) {
+  planVizContainer().selectAll("rect.search-active")
+    .classed("search-active", false);
+  if (!domId) return;
+  var el = document.getElementById(domId);
+  if (!el) return;
+  var rect = el.querySelector(":scope > rect");
+  if (rect) rect.classList.add("search-active");
+}
+
+function clearPlanVizSearchHighlights() {
+  var container = planVizContainer();
+  container.selectAll(".search-match").classed("search-match", false);
+  container.selectAll(".search-active").classed("search-active", false);
+  container.selectAll(".search-dimmed").classed("search-dimmed", false);
+}
+
+function updatePlanVizSearchCount() {
+  var el = document.getElementById("plan-viz-search-count");
+  if (!el) return;
+  var matches = planVizSearchState.matches;
+  if (planVizSearchState.query === "") {
+    el.textContent = "";
+    el.classList.remove("no-match");
+  } else if (matches.length === 0) {
+    el.textContent = "0/0";
+    el.classList.add("no-match");
+  } else {
+    el.textContent = (planVizSearchState.index + 1) + "/" + matches.length;
+    el.classList.remove("no-match");
+  }
+}
+
+/* Center and scale the viewport on the given DOM element using d3-zoom. */
+function zoomToNode(domId) {
+  var el = document.getElementById(domId);
+  if (!el || !planVizZoom) return;
+  var svg = planVizContainer().select("svg");
+  var svgNode = svg.node();
+  if (!svgNode) return;
+  var vb = svgNode.viewBox && svgNode.viewBox.baseVal;
+  if (!vb || vb.width === 0 || vb.height === 0) return;
+
+  var bbox;
+  try {
+    bbox = el.getBBox();
+  } catch (e) {
+    return;
+  }
+  if (!bbox || bbox.width === 0 || bbox.height === 0) return;
+
+  // Aim to fill ~50% of the viewport so the matched node is prominent but
+  // still in context. Clamp to the configured zoom range.
+  var scale = Math.min(
+    vb.width / bbox.width / 2,
+    vb.height / bbox.height / 2,
+    PlanVizConstants.zoomMax
+  );
+  scale = Math.max(scale, PlanVizConstants.zoomMin);
+
+  var bcx = bbox.x + bbox.width / 2;
+  var bcy = bbox.y + bbox.height / 2;
+  var vcx = vb.x + vb.width / 2;
+  var vcy = vb.y + vb.height / 2;
+  var transform = d3.zoomIdentity
+    .translate(vcx - bcx * scale, vcy - bcy * scale)
+    .scale(scale);
+
+  svg.transition().duration(400).call(planVizZoom.transform, transform);
+}
+
+/*
+ * After a render or detailed-mode toggle, reapply the active query against the
+ * fresh DOM so highlights survive re-layout. No-ops when no search is active.
+ */
+function reapplyPlanVizSearch() {
+  if (!planVizSearchState.query) return;
+  runPlanVizSearch(planVizSearchState.query, false);
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   if (shouldRenderPlanViz()) {
     renderPlanViz();
   }
+
+  var zoomInBtn = document.getElementById("plan-viz-zoom-in");
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener("click", function () {
+      planVizZoomBy(PlanVizConstants.zoomStep);
+    });
+  }
+  var zoomOutBtn = document.getElementById("plan-viz-zoom-out");
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener("click", function () {
+      planVizZoomBy(1 / PlanVizConstants.zoomStep);
+    });
+  }
+  var zoomResetBtn = document.getElementById("plan-viz-zoom-reset");
+  if (zoomResetBtn) {
+    zoomResetBtn.addEventListener("click", planVizZoomReset);
+  }
+
+  setupPlanVizSearch();
+
+  // Keyboard shortcuts when the SVG is focused or the user hovers over it.
+  document.addEventListener("keydown", function (event) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    var tag = event.target && event.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || event.target.isContentEditable) return;
+    var graphEl = document.getElementById("plan-viz-graph");
+    if (!graphEl || !graphEl.matches(":hover")) return;
+    if (event.key === "+" || event.key === "=") {
+      planVizZoomBy(PlanVizConstants.zoomStep);
+      event.preventDefault();
+    } else if (event.key === "-" || event.key === "_") {
+      planVizZoomBy(1 / PlanVizConstants.zoomStep);
+      event.preventDefault();
+    } else if (event.key === "0") {
+      planVizZoomReset();
+      event.preventDefault();
+    }
+  });
 
   // Copy physical plan text to clipboard
   var copyPlanBtn = document.getElementById("copy-plan-btn");

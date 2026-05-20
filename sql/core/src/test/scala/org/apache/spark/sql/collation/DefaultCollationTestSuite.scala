@@ -1556,6 +1556,29 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
     }
   }
 
+  testString("ALTER VIEW AS picks up the namespace's default collation when the existing " +
+      "view has none") {
+    _ =>
+    // The view is created in a schema with no default collation, so the stored
+    // `CatalogTable.collation` is `None`. After the schema gains a default, the next
+    // `ALTER VIEW AS` must fold that default into both the analyzed plan's literal types
+    // (so `assertTableColumnCollation` sees it on read) and the persisted CatalogTable so
+    // the AnalysisContext fallback fires on every subsequent read.
+    withDatabase(testSchema) {
+      sql(s"CREATE SCHEMA $testSchema")
+      sql(s"USE $testSchema")
+      withView(testView) {
+        sql(s"CREATE VIEW $testView AS SELECT 'a' AS c1")
+        assertTableColumnCollation(testView, "c1", "UTF8_BINARY")
+
+        sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION UTF8_LCASE")
+        sql(s"ALTER VIEW $testView AS SELECT 'x' AS c1, 'y' AS c2")
+        assertTableColumnCollation(testView, "c1", "UTF8_LCASE")
+        assertTableColumnCollation(testView, "c2", "UTF8_LCASE")
+      }
+    }
+  }
+
   private def testCreateViewWithSchemaLevelCollation(
       dataType: String,
       schemaDefaultCollation: String,

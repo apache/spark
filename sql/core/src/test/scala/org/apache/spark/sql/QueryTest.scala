@@ -301,6 +301,28 @@ trait QueryTestBase
   }
 
   /**
+   * Temporarily sets SparkContext configuration values for testing.
+   * This is for configs that must be set on the SparkContext (not
+   * SQLConf), such as testing flags.
+   */
+  protected def withSparkContextConf[T](
+      pairs: (String, String)*)(f: => T): T = {
+    val sc = spark.sparkContext
+    val oldValues = pairs.map { case (k, _) =>
+      k -> sc.conf.getOption(k)
+    }
+    try {
+      pairs.foreach { case (k, v) => sc.conf.set(k, v) }
+      f
+    } finally {
+      oldValues.foreach {
+        case (k, Some(v)) => sc.conf.set(k, v)
+        case (k, None) => sc.conf.remove(k)
+      }
+    }
+  }
+
+  /**
    * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
    */
   protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
@@ -692,7 +714,7 @@ trait QueryTestBase
  * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
-trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
+trait QueryTest extends SparkFunSuite with QueryTestBase {
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
@@ -1051,14 +1073,13 @@ object QueryTest extends Assertions {
       }
     }
 
-    val classicSession = spark.asInstanceOf[classic.SparkSession]
-    classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
-    classicSession.listenerManager.register(listener)
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
     try {
       thunk
-      classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
     } finally {
-      classicSession.listenerManager.unregister(listener)
+      spark.listenerManager.unregister(listener)
     }
 
     capturedQueryExecutions

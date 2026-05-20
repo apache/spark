@@ -30,6 +30,19 @@ import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.cloud.PathOutputCommitProtocol.{CAPABILITY_DYNAMIC_PARTITIONING, OUTPUTCOMMITTER_FACTORY_SCHEME}
 import org.apache.spark.network.util.JavaUtils
 
+/**
+ * Subclass that exposes the protected `partitionPaths` field so tests can
+ * assert on it without going through the full `commitTask` path (which
+ * requires `SparkEnv`).
+ */
+private class PathOutputCommitProtocolForTest(
+    jobId: String,
+    dest: String,
+    dynamicPartitionOverwrite: Boolean)
+  extends PathOutputCommitProtocol(jobId, dest, dynamicPartitionOverwrite) {
+  def capturedPartitionPaths: Set[String] = partitionPaths.toSet
+}
+
 class CommitterBindingSuite extends SparkFunSuite {
 
   private val jobId = "2007071202143_0101"
@@ -264,5 +277,107 @@ class CommitterBindingSuite extends SparkFunSuite {
       "org.apache.hadoop.mapreduce.lib.output.FileOutputCommitterFactory")
   }
 
-}
+  /**
+   * With dynamicPartitionOverwrite=true and a FileOutputCommitter, newTaskTempFile must route
+   * output through the staging directory (not the final output path) and must record the partition
+   * in partitionPaths so that commitJob can delete the old partition directory and rename the
+   * staged one into place.
+   */
+  test("SPARK-56588: FileOutputCommitter dynamic partition overwrite stages output and tracks " +
+      "partitions") {
+    val jobCommitDir = File.createTempFile("dyn-part-overwrite-staging", "")
+    try {
+      jobCommitDir.delete()
+      val jobUri = jobCommitDir.toURI
+      val path = new Path(jobUri)
+      val job = newJob(path)
+      val conf = job.getConfiguration
+      conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
+      conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
+      bindToFileOutputCommitterFactory(conf, "file")
+      val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+      val committer = new PathOutputCommitProtocolForTest(jobId, jobUri.toString, true)
+      committer.setupJob(tContext)
+      committer.setupTask(tContext)
 
+      val spec = FileNameSpec("", ".parquet")
+      val partition = "a=1/b=2"
+      val tempPath = committer.newTaskTempFile(tContext, Some(partition), spec)
+
+      // The temp file must be under the staging directory, not the final output path.
+      assert(tempPath.contains(".spark-staging-"),
+        s"Expected temp path under staging dir, got: $tempPath")
+      assert(!tempPath.startsWith(path.toUri.toString.stripSuffix("/") + "/" + partition),
+        s"Temp path must not point directly to the final output location: $tempPath")
+
+      // The partition must have been recorded so commitJob can overwrite it.
+      assert(committer.capturedPartitionPaths === Set(partition),
+        s"Expected partitionPaths = {$partition}, got: ${committer.capturedPartitionPaths}")
+    } finally {
+      jobCommitDir.delete()
+    }
+  }
+
+  /**
+   * A cloud committer that handles dynamic partitioning natively (via StreamCapabilities) must NOT
+   * have its partitions tracked in Spark's partitionPaths set: the committer takes care of
+   * overwriting itself, and the commitJob rename loop must not interfere.
+   */
+  test("SPARK-56588: Cloud committer with dynamic partition support does not track partitions in " +
+      "partitionPaths") {
+    val path = new Path("http://example/data")
+    val job = newJob(path)
+    val conf = job.getConfiguration
+    conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
+    conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
+    StubPathOutputCommitterBinding.bindWithDynamicPartitioning(conf, "http")
+    val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+    val committer = new PathOutputCommitProtocolForTest(jobId, path.toUri.toString, true)
+    committer.setupJob(tContext)
+    committer.setupTask(tContext)
+
+    val tempPath = committer.newTaskTempFile(tContext, Some("a=1"), FileNameSpec("", ".parquet"))
+
+    // The temp file must be under the committer's own work dir (path/_temporary),
+    // not written directly to the final output location.
+    val expectedWorkDir = path.toUri.toString.stripSuffix("/") + "/_temporary"
+    assert(tempPath.startsWith(expectedWorkDir),
+      s"Expected temp path under committer work dir ($expectedWorkDir), got: $tempPath")
+
+    assert(committer.capturedPartitionPaths.isEmpty,
+      s"partitionPaths must stay empty for cloud committers that handle " +
+        s"dynamic partition overwrite natively, " +
+        s"got: ${committer.capturedPartitionPaths}")
+  }
+
+  /**
+   * Without dynamicPartitionOverwrite, partitionPaths must remain empty even for
+   * FileOutputCommitter (baseline: existing behaviour must not regress).
+   */
+  test("SPARK-56588: FileOutputCommitter without dynamicPartitionOverwrite does not track " +
+      "partitions") {
+    val jobCommitDir = File.createTempFile("no-dyn-part-overwrite", "")
+    try {
+      jobCommitDir.delete()
+      val jobUri = jobCommitDir.toURI
+      val path = new Path(jobUri)
+      val job = newJob(path)
+      val conf = job.getConfiguration
+      conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
+      conf.setInt(MRJobConfig.APPLICATION_ATTEMPT_ID, 1)
+      bindToFileOutputCommitterFactory(conf, "file")
+      val tContext = new TaskAttemptContextImpl(conf, taskAttemptId0)
+      val committer = new PathOutputCommitProtocolForTest(jobId, jobUri.toString, false)
+      committer.setupJob(tContext)
+      committer.setupTask(tContext)
+
+      committer.newTaskTempFile(tContext, Some("a=1"), FileNameSpec("", ".parquet"))
+
+      assert(committer.capturedPartitionPaths.isEmpty,
+        s"partitionPaths must be empty when dynamicPartitionOverwrite=false, " +
+          s"got: ${committer.capturedPartitionPaths}")
+    } finally {
+      jobCommitDir.delete()
+    }
+  }
+}

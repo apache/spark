@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
 import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.sources
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
@@ -175,6 +177,66 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     sql(s"DELETE FROM $tableNameAsString WHERE id <= 1")
 
     checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with literal false condition") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE false")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with literal true condition") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE true")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+  }
+
+  test("delete with NULL equality on VOID column") {
+    createAndInitTable("pk INT NOT NULL, v VOID, dep STRING",
+      """{ "pk": 1, "v": null, "dep": "hr" }
+        |{ "pk": 2, "v": null, "dep": "software" }
+        |{ "pk": 3, "v": null, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE v = NULL")
+
+    checkAnswer(
+      sql(s"SELECT pk, dep FROM $tableNameAsString"),
+      Row(1, "hr") :: Row(2, "software") :: Row(3, "hr") :: Nil)
+
+    checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
+  }
+
+  test("delete with NULL condition on non-null column") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE pk = NULL")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
 
     checkDeleteMetrics(numDeletedRows = 0, numCopiedRows = 0)
   }
@@ -710,6 +772,213 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Seq(
           Row(9),
           Row(8)))
+    }
+  }
+
+  test("delete with analysis failure and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    val exception = intercept[AnalysisException] {
+      sql(s"DELETE FROM $tableNameAsString WHERE invalid_column = 1")
+    }
+
+    assert(exception.getMessage.contains("invalid_column"))
+    assert(catalog.lastTransaction.currentState == Aborted)
+    assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("delete with transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // simple predicate delete: goes through SupportsDelete.deleteWhere (no Spark-side scan)
+    val (txn, _) = executeTransaction {
+      sql(s"DELETE FROM $tableNameAsString WHERE dep = 'hr'")
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(table.version() == "2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(Row(2, 200, "software")))
+  }
+
+  test("delete with subquery on source table and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""DELETE FROM $tableNameAsString
+           |WHERE pk IN (SELECT pk FROM $sourceNameAsString WHERE dep = 'hr')
+           |""".stripMargin)
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    val expectedNumSourceScans = if (deltaDelete) 1 else 2
+    assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+    val numSubquerySourceScans = sourceTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    }
+    assert(numSubquerySourceScans == expectedNumSourceScans)
+
+    val targetTxnTable = txnTables(tableNameAsString)
+    val expectedNumTargetScans = if (deltaDelete) 1 else 2
+    assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(2, 200, "software"), // unchanged
+        Row(3, 300, "hr")))      // unchanged (pk 3 not in subquery result)
+  }
+
+  test("delete with CTE and transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+    sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+    val (txn, txnTables) = executeTransaction {
+      sql(
+        s"""WITH cte AS (
+           |  SELECT pk FROM $sourceNameAsString WHERE dep = 'hr'
+           |)
+           |DELETE FROM $tableNameAsString
+           |WHERE pk IN (SELECT pk FROM cte)
+           |""".stripMargin)
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 2)
+    assert(table.version() == "2")
+
+    val targetTxnTable = txnTables(tableNameAsString)
+    val expectedNumTargetScans = if (deltaDelete) 1 else 2
+    assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+    val sourceTxnTable = txnTables(sourceNameAsString)
+    val expectedNumSourceScans = if (deltaDelete) 1 else 2
+    assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+    val numCteSourceScans = sourceTxnTable.scanEvents.flatten.count {
+      case sources.EqualTo("dep", "hr") => true
+      case _ => false
+    }
+    assert(numCteSourceScans == expectedNumSourceScans)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(2, 200, "software"), // unchanged
+        Row(3, 300, "hr")))      // unchanged (pk 3 not in source)
+  }
+
+  test("delete using view with transactional checks") {
+    withView("temp_view") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (4, 400, 'finance')")
+
+      sql(
+        s"""CREATE VIEW temp_view AS
+           |SELECT pk FROM $sourceNameAsString WHERE dep = 'hr'
+           |""".stripMargin)
+
+      val (txn, txnTables) = executeTransaction {
+        sql(s"DELETE FROM $tableNameAsString WHERE pk IN (SELECT pk FROM temp_view)")
+      }
+
+      assert(txn.currentState == Committed)
+      assert(txn.isClosed)
+      assert(txnTables.size == 2)
+      assert(table.version() == "2")
+
+      val targetTxnTable = txnTables(tableNameAsString)
+      val expectedNumTargetScans = if (deltaDelete) 1 else 2
+      assert(targetTxnTable.scanEvents.size == expectedNumTargetScans)
+
+      val sourceTxnTable = txnTables(sourceNameAsString)
+      val expectedNumSourceScans = if (deltaDelete) 1 else 2
+      assert(sourceTxnTable.scanEvents.size == expectedNumSourceScans)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2, 200, "software"), // unchanged
+          Row(3, 300, "hr")))      // unchanged (pk 3 not in source)
+    }
+  }
+
+  test("EXPLAIN DELETE SQL with transactional checks") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"EXPLAIN DELETE FROM $tableNameAsString WHERE dep = 'hr'")
+
+    // EXPLAIN should not start a new transaction
+    assert(catalog.transaction === null)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr"),
+        Row(2, 200, "software")))
+  }
+
+  test("delete with NOT IN over empty subquery") {
+    withTempView("empty_subq") {
+      createAndInitTable("pk INT NOT NULL, id INT NOT NULL, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hr" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq.empty[Int].toDF("v").createOrReplaceTempView("empty_subq")
+
+      sql(
+        s"""DELETE FROM $tableNameAsString
+           |WHERE id NOT IN (SELECT v FROM empty_subq)
+           |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+      // The filter gets replaced by an EmptyRelation in the ReplaceData executed plan, which hides
+      // the executed BatchScan and prevents computing numDeletedRows using numOutputRows of the
+      // scan node.
+      checkDeleteMetrics(numDeletedRows = if (deltaDelete) 3 else -1, numCopiedRows = 0)
     }
   }
 

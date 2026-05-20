@@ -1163,7 +1163,7 @@ private[hive] object HiveClientImpl extends Logging {
     catalogTableType match {
       case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE
       case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t if CatalogTable.isViewLike(t) => HiveTableType.VIRTUAL_VIEW
       case t =>
         throw new IllegalArgumentException(
           s"Unknown table type is found at toHiveTableType: $t")
