@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.SparkConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MavenUtils, Utils}
 
 private[client] object HiveClientBuilder {
   // In order to speed up test execution during development or in Jenkins, you can specify the path
@@ -32,6 +32,11 @@ private[client] object HiveClientBuilder {
     sys.env.get("SPARK_VERSIONS_SUITE_IVY_PATH").orElse(
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
+
+  // Path to a custom Ivy settings file for testing in environments that require
+  // authenticated access to private repositories:
+  private val ivySettingsPath: Option[String] =
+    sys.env.get("SPARK_VERSIONS_SUITE_IVY_SETTINGS")
 
   private[client] def buildConf(extraConf: Map[String, String]): Map[String, String] = {
     lazy val warehousePath = Utils.createTempDir()
@@ -47,10 +52,12 @@ private[client] object HiveClientBuilder {
       version: String,
       hadoopConf: Configuration,
       extraConf: Map[String, String] = Map.empty): HiveClient = {
+    val sparkConf = new SparkConf()
+    ivySettingsPath.foreach(sparkConf.set(MavenUtils.JAR_IVY_SETTING_PATH_KEY, _))
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = version,
       hadoopVersion = VersionInfo.getVersion,
-      sparkConf = new SparkConf(),
+      sparkConf = sparkConf,
       hadoopConf = hadoopConf,
       config = buildConf(extraConf),
       ivyPath = ivyPath).createClient()
