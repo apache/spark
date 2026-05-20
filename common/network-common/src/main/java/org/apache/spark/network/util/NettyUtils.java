@@ -68,7 +68,7 @@ public class NettyUtils {
 
   /**
    * Cached result of probing whether io_uring can actually allocate the rings Spark needs on
-   * this JVM. `null` means not yet probed; non-null is the probed value.
+   * this JVM. {@code null} means not yet probed; non-null is the probed value.
    *
    * <p>{@link IoUring#isAvailable()} only checks that the JNI library loaded and basic syscalls
    * work; it does not detect environments where the kernel allows io_uring but
@@ -93,8 +93,9 @@ public class NettyUtils {
    * the submission/completion queues (common in containers, GitHub Actions runners, and other
    * restricted environments).
    *
-   * <p>Used by AUTO mode and by tests that gate execution on io_uring being usable. An explicit
-   * {@link IOMode#IO_URING} mode does not consult this and surfaces the underlying error.
+   * <p>Used by tests that gate execution on io_uring being usable. AUTO mode does not consult
+   * this; io_uring is opt-in only via {@link IOMode#IO_URING}, which surfaces the underlying
+   * error when ring allocation fails.
    */
   public static boolean isIoUringUsable() {
     Boolean cached = ioUringUsable;
@@ -116,10 +117,8 @@ public class NettyUtils {
         ioUringUsable = true;
       } catch (Throwable t) {
         logger.warn("io_uring is reported as available but allocation of " +
-            MAX_DEFAULT_NETTY_THREADS + " rings failed; " +
-            "AUTO will fall back to EPOLL on this JVM. " +
-            "Common cause: RLIMIT_MEMLOCK too low (containers, restricted environments). " +
-            "To force io_uring, set spark.shuffle.io.mode=IO_URING explicitly.", t);
+            MAX_DEFAULT_NETTY_THREADS + " rings failed. " +
+            "Common cause: RLIMIT_MEMLOCK too low (containers, restricted environments).", t);
         ioUringUsable = false;
       } finally {
         if (probe != null) {
@@ -145,9 +144,7 @@ public class NettyUtils {
       case KQUEUE -> KQueueIoHandler.newFactory();
       case IO_URING -> IoUringIoHandler.newFactory();
       case AUTO -> {
-        if (isIoUringUsable()) {
-          yield IoUringIoHandler.newFactory();
-        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollIoHandler.newFactory();
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueIoHandler.newFactory();
@@ -167,9 +164,7 @@ public class NettyUtils {
       case KQUEUE -> KQueueSocketChannel.class;
       case IO_URING -> IoUringSocketChannel.class;
       case AUTO -> {
-        if (isIoUringUsable()) {
-          yield IoUringSocketChannel.class;
-        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueSocketChannel.class;
@@ -188,9 +183,7 @@ public class NettyUtils {
       case KQUEUE -> KQueueServerSocketChannel.class;
       case IO_URING -> IoUringServerSocketChannel.class;
       case AUTO -> {
-        if (isIoUringUsable()) {
-          yield IoUringServerSocketChannel.class;
-        } else if (JavaUtils.isLinux && Epoll.isAvailable()) {
+        if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollServerSocketChannel.class;
         } else if (JavaUtils.isMac && KQueue.isAvailable()) {
           yield KQueueServerSocketChannel.class;

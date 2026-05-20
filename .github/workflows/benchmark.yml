@@ -189,9 +189,11 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
       run: |
-        # Raise RLIMIT_MEMLOCK so the Netty io_uring transport (used by AUTO
-        # on Linux 5.10+) can allocate its submission/completion queue rings.
-        # Without this, NettyTransportBenchmark silently falls back to EPOLL.
+        # Raise RLIMIT_MEMLOCK so explicit IO_URING benchmark scenarios and
+        # tests can allocate the Netty io_uring transport's submission/completion
+        # queue rings on Linux 5.10+. The default 64 KiB is not enough for the
+        # eight rings Spark allocates by default, causing NettyUtils.isIoUringUsable
+        # to return false and io_uring scenarios to skip.
         sudo prlimit --pid $$ --memlock=unlimited:unlimited 2>/dev/null || true
         ./build/sbt -Pscala-${{ inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
         # Make less noisy

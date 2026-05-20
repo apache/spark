@@ -406,10 +406,11 @@ jobs:
       run: |
         # Fix for TTY related issues when launching the Ammonite REPL in tests.
         export TERM=vt100
-        # Raise RLIMIT_MEMLOCK so the Netty io_uring transport can allocate
-        # its submission/completion queue rings. Without this, AUTO transport
-        # selection silently falls back to EPOLL on the default 64KB memlock,
-        # leaving io_uring code paths untested.
+        # Raise RLIMIT_MEMLOCK so the explicit IO_URING test suites
+        # (e.g. ShuffleNettyIoUringSuite) can allocate the Netty io_uring transport's
+        # submission/completion queue rings. The default 64 KiB is not enough for
+        # the eight rings Spark allocates by default, causing
+        # NettyUtils.isIoUringUsable to return false and io_uring suites to skip.
         sudo prlimit --pid $$ --memlock=unlimited:unlimited 2>/dev/null || true
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi

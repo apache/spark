@@ -38,11 +38,11 @@ public enum IOMode {
    */
   IO_URING,
   /**
-   * Prefer to use a native transport when available. On Linux, io_uring is preferred over EPOLL
-   * when the running kernel supports it AND the JVM can actually allocate an io_uring ring
-   * (probed once via {@link NettyUtils#isIoUringUsable()}; environments with low
-   * {@code RLIMIT_MEMLOCK} fall through to EPOLL). On MacOS/BSD, KQUEUE is used. Falls back to
-   * NIO when no native transport is available.
+   * Prefer to use a native transport when available. On Linux, EPOLL is used; on MacOS/BSD,
+   * KQUEUE is used. Falls back to NIO when no native transport is available.
+   *
+   * <p>{@link #IO_URING} is opt-in only and is not selected by AUTO; set the IO mode to
+   * {@code IO_URING} explicitly to use it.
    */
   AUTO
 }
