@@ -201,6 +201,8 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -248,8 +250,9 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def load(
@@ -1433,6 +1436,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         """
 
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1483,8 +1488,9 @@ class DataFrameWriter(OptionUtils):
         |100|Hyukjin Kwon|
         +---+------------+
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
@@ -2469,6 +2475,8 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
+        if value is None:
+            return self
         self._jwriter.option(key, to_str(value))
         return self
 
@@ -2478,7 +2486,7 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
-        options = {k: to_str(v) for k, v in options.items()}
+        options = {k: to_str(v) for k, v in options.items() if v is not None}
         self._jwriter.options(options)
         return self
 

@@ -25,10 +25,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Random, Success, Try}
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode._
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   HybridAnalyzer,
@@ -50,7 +51,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{View => _, _}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -139,10 +140,15 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              even if a temp view `t` has been created.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
+ * @param resolutionPathEntries When resolving a view or SQL function body, the ordered frozen
+ *                              path for unqualified relation/function names (if persisted in
+ *                              metadata). Outside views/functions, compute from session
+ *                              [[CatalogManager.sqlResolutionPathEntries]].
  */
 case class AnalysisContext(
     isDefault: Boolean = false,
     catalogAndNamespace: Seq[String] = Nil,
+    resolutionPathEntries: Option[Seq[Seq[String]]] = None,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[(Seq[String], Option[TimeTravelSpec]), LogicalPlan] =
@@ -198,7 +204,6 @@ object AnalysisContext {
   def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
-      // Here we start to resolve views, get `maxNestedViewDepth` from configs.
       SQLConf.get.maxNestedViewDepth
     } else {
       originContext.maxNestedViewDepth
@@ -206,6 +211,9 @@ object AnalysisContext {
     val context = AnalysisContext(
       isDefault = false,
       catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
+      resolutionPathEntries = viewDesc.viewStoredResolutionPath
+        .map(CatalogManager.deserializePathEntriesOrFail(
+          _, "view", viewDesc.identifier.unquotedString)),
       nestedViewDepth = originContext.nestedViewDepth + 1,
       maxNestedViewDepth = maxNestedViewDepth,
       relationCache = originContext.relationCache,
@@ -219,7 +227,12 @@ object AnalysisContext {
 
   def withAnalysisContext[A](function: SQLFunction)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(collation = function.collation)
+    // Function body analysis should not inherit any caller-pinned path; use only function metadata.
+    val context = originContext.copy(
+      resolutionPathEntries = function.functionStoredResolutionPath
+        .map(CatalogManager.deserializePathEntriesOrFail(
+          _, "SQL function", function.name.unquotedString)),
+      collation = function.collation)
     set(context)
     try f finally { set(originContext) }
   }
@@ -290,12 +303,14 @@ object Analyzer {
  */
 class Analyzer(
     override val catalogManager: CatalogManager,
-    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty)
+    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty,
+    private[sql] val sessionConf: Option[SQLConf] = None)
   extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with AliasHelper with SQLConfHelper with ColumnResolutionHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
-  private val relationResolution = new RelationResolution(catalogManager, sharedRelationCache)
+  private val relationResolution =
+    new RelationResolution(catalogManager, sharedRelationCache)
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
 
   override protected def validatePlanChanges(
@@ -317,11 +332,13 @@ class Analyzer(
     if (plan.analyzed) {
       plan
     } else {
+      def runAnalysis(): LogicalPlan = HybridAnalyzer.fromLegacyAnalyzer(
+        legacyAnalyzer = this, tracker = tracker).apply(plan)
       if (AnalysisContext.get.isDefault) {
         AnalysisContext.reset()
         try {
           AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
+            runWithSessionConf(runAnalysis())
           }
         } finally {
           AnalysisContext.reset()
@@ -329,10 +346,53 @@ class Analyzer(
       } else {
         AnalysisContext.withNewAnalysisContext {
           AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
+            runWithSessionConf(runAnalysis())
           }
         }
       }
+    }
+  }
+
+  /**
+   * Runs `thunk` under the analyzer's [[sessionConf]] for analyzer isolation, but yields to any
+   * outer [[SQLConf.withExistingConf]] scope (e.g. a SQL UDF / view body that pinned the
+   * creation-time configs). Falls through unchanged when [[sessionConf]] is unset, or when the
+   * outer scope already installed a different conf -- otherwise the outer scope's conf would be
+   * silently clobbered.
+   */
+  private def runWithSessionConf[T](thunk: => T): T = sessionConf match {
+    case None => thunk
+    case Some(c) =>
+      SQLConf.getExistingConfIfSet match {
+        case Some(outer) if outer ne c => thunk
+        case _ => SQLConf.withExistingConf(c) { thunk }
+      }
+  }
+
+  /**
+   * Returns a copy of this analyzer that uses the given [[CatalogManager]] for all catalog
+   * lookups. All other configuration (extended rules, checks, etc.) is preserved. Used by
+   * [[QueryExecution]] to create a per-query analyzer for transactional operations for
+   * transaction-aware catalog resolution.
+   *
+   * IMPORTANT: any new extension point added to Analyzer must also be copied here, otherwise
+   * transaction-aware analyzer clones (created by QueryExecution) will silently miss those rules.
+   */
+  def withCatalogManager(newCatalogManager: CatalogManager): Analyzer = {
+    val self = this
+    new Analyzer(newCatalogManager, sharedRelationCache) {
+      override val hintResolutionRules: Seq[Rule[LogicalPlan]] = self.hintResolutionRules
+      override val extendedResolutionRules: Seq[Rule[LogicalPlan]] = self.extendedResolutionRules
+      override val postHocResolutionRules: Seq[Rule[LogicalPlan]] = self.postHocResolutionRules
+      override val extendedCheckRules: Seq[LogicalPlan => Unit] = self.extendedCheckRules
+      override val singlePassResolverExtensions: Seq[ResolverExtension] =
+        self.singlePassResolverExtensions
+      override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
+        self.singlePassMetadataResolverExtensions
+      override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] =
+        self.singlePassPostHocResolutionRules
+      override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] =
+        self.singlePassExtendedResolutionChecks
     }
   }
 
@@ -342,7 +402,8 @@ class Analyzer(
     }
   }
 
-  private def executeSameContext(plan: LogicalPlan): LogicalPlan = super.execute(plan)
+  private def executeSameContext(plan: LogicalPlan): LogicalPlan =
+    runWithSessionConf(super.execute(plan))
 
   def resolver: Resolver = conf.resolver
 
@@ -437,7 +498,9 @@ class Analyzer(
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs)
+      KeepLegacyOutputs),
+    Batch("Unresolve Relations", Once,
+      new UnresolveRelationsInTransaction(catalogManager))
   )
 
   override def batches: Seq[Batch] = earlyBatches ++ Seq(
@@ -445,6 +508,7 @@ class Analyzer(
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       ResolveRelations ::
+      ResolveChangelogTable ::
       ResolvePartitionSpec ::
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
@@ -585,17 +649,12 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child, forPipeSQL) =>
-        val resolveWindowExpression: PartialFunction[Expression, Expression] = {
+      case WithWindowDefinition(windowDefinitions, child) =>
+        child.resolveExpressions {
           case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
             val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
               throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
             WindowExpression(c, windowSpecDefinition)
-        }
-        if (forPipeSQL) {
-          child.transformExpressions(resolveWindowExpression)
-        } else {
-          child.resolveExpressions(resolveWindowExpression)
         }
     }
   }
@@ -981,7 +1040,8 @@ class Analyzer(
     // This is done by keeping the catalog and namespace in `AnalysisContext`, and analyzer will
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
-    // with it, instead of current catalog and namespace.
+    // with it, instead of current catalog and namespace. For views/functions with persisted frozen
+    // PATH, `AnalysisContext.resolutionPathEntries` drives unqualified relation lookup order.
     private def resolveViews(
         plan: LogicalPlan,
         options: CaseInsensitiveStringMap): LogicalPlan = plan match {
@@ -992,7 +1052,7 @@ class Analyzer(
       // DataSourceV2Relation on each view access. Only dataframe temp view may contain it
       // as it stores resolved plans directly.
       case view: View if view.isTempViewStoringAnalyzedPlan =>
-        view.copy(child = resolveTableReferences(view.child))
+        view.copy(child = resolveTableReferencesInTempView(view.child))
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
       case _ => plan
@@ -1001,17 +1061,43 @@ class Analyzer(
     // Unwrap temp views storing analyzed plans and resolve V2TableReference nodes in the child.
     private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
       EliminateSubqueryAliases(plan) match {
-        case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferences(v.child)
+        case v: View if v.isTempViewStoringAnalyzedPlan => resolveTableReferencesInTempView(v.child)
         case other => other
       }
     }
 
-    // Resolve V2TableReference nodes in a plan. V2TableReference is only created for temp views
-    // (via V2TableReference.createForTempView), so we only need to resolve it when returning
+    // Resolve the write target of a V2 write command (batch or streaming).
+    private def resolveWriteTarget(
+        write: LogicalPlan,
+        table: NamedRelation,
+        withNewTable: NamedRelation => LogicalPlan): LogicalPlan = {
+      table match {
+        case u: UnresolvedRelation if !u.isStreaming =>
+          resolveRelation(u).map(unwrapRelationPlan).map {
+            case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+              v.desc.identifier, write)
+            case u: UnresolvedCatalogRelation =>
+              throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
+                u.tableMeta.identifier, write)
+            case r: DataSourceV2Relation => withNewTable(r)
+            case _ =>
+              throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                u.multipartIdentifier.quoted)
+          }.getOrElse(write)
+        case _ => write
+      }
+    }
+
+    // Resolve V2TableReference nodes inside temp view plans. These are created by
+    // V2TableReference.createForTempView. We only need to resolve it when returning
     // the plan of temp views (in resolveViews and unwrapRelationPlan).
-    private def resolveTableReferences(plan: LogicalPlan): LogicalPlan = {
+    private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference => relationResolution.resolveReference(r)
+        case r: V2TableReference =>
+          assert(r.context.isInstanceOf[V2TableReference.TemporaryViewContext],
+            s"""Expected TemporaryViewContext in temp view but got
+               |${r.context.getClass.getSimpleName}""".stripMargin)
+          relationResolution.resolveReference(r)
       }
     }
 
@@ -1034,23 +1120,11 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: StreamingV2WriteCommand =>
+        resolveWriteTarget(write, write.table, write.withNewTable)
+
       case write: V2WriteCommand =>
-        write.table match {
-          case u: UnresolvedRelation if !u.isStreaming =>
-            resolveRelation(u).map(unwrapRelationPlan).map {
-              case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                v.desc.identifier, write)
-              case u: UnresolvedCatalogRelation =>
-                throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
-                  u.tableMeta.identifier, write)
-              case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ =>
-                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                  u.multipartIdentifier.quoted)
-            }.getOrElse(write)
-          case _ => write
-        }
+        resolveWriteTarget(write, write.table, write.withNewTable)
 
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
@@ -1090,7 +1164,7 @@ class Analyzer(
           case other => other
         }.getOrElse(u)
 
-      case u @ UnresolvedTableOrView(identifier, cmd, allowTempView) =>
+      case u @ UnresolvedTableOrView(identifier, cmd, allowTempView, _) =>
         lookupTableOrView(identifier).map {
           case _: ResolvedTempView if !allowTempView =>
             throw QueryCompilationErrors.expectPermanentViewNotTempViewError(
@@ -1101,7 +1175,19 @@ class Analyzer(
 
     /**
      * Resolves relations to `ResolvedTable` or `Resolved[Temp/Persistent]View`. This is
-     * for resolving DDL and misc commands.
+     * for resolving DDL and misc commands. UnresolvedView callers reject non-view results
+     * downstream via `expectViewNotTableError`.
+     *
+     * When `viewOnly=true`, non-session catalogs that do not implement [[ViewCatalog]] are
+     * rejected up front with MISSING_CATALOG_ABILITY.VIEWS -- they cannot host views at all,
+     * so surfacing a downstream "view not found" would hide the real reason.
+     *
+     * Lookup order against a non-session catalog:
+     *   1. If the catalog is a [[TableViewCatalog]], [[TableViewCatalog.loadTableOrView]] is called
+     *      once. A returned [[MetadataTable]] wrapping a [[ViewInfo]] is interpreted as a
+     *      view; other results are tables.
+     *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
+     *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
      */
     private def lookupTableOrView(
         identifier: Seq[String],
@@ -1111,18 +1197,58 @@ class Analyzer(
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
-            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog)) {
-              throw QueryCompilationErrors.catalogOperationNotSupported(catalog, "views")
+            if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
+                !catalog.isInstanceOf[ViewCatalog]) {
+              throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
-            CatalogV2Util.loadTable(catalog, ident).map {
-              case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
-                v1Table.v1Table.tableType == CatalogTableType.VIEW =>
-                val v1Ident = v1Table.catalogTable.identifier
-                val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
-                ResolvedPersistentView(
-                  catalog, v2Ident, v1Table.catalogTable)
-              case table =>
-                ResolvedTable.create(catalog.asTableCatalog, ident, table)
+            catalog match {
+              case mc: TableViewCatalog =>
+                // Single-RPC perf path: loadTableOrView returns a Table for a table or a
+                // MetadataTable wrapping a ViewInfo for a view. NoSuchTable means
+                // neither exists.
+                try {
+                  Some(mc.loadTableOrView(ident) match {
+                    case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
+                      ResolvedPersistentView(
+                        catalog, ident, t.getTableInfo.asInstanceOf[ViewInfo])
+                    case table =>
+                      ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                  })
+                } catch {
+                  case _: NoSuchTableException => None
+                }
+              case _ =>
+                // Skip the table-side lookup entirely for view-only catalogs (no
+                // `TableCatalog` mixin): `CatalogV2Util.loadTable` would call `asTableCatalog`
+                // and throw MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-
+                // resolution path.
+                val tableResolved: Option[LogicalPlan] = if (
+                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+                ) {
+                  CatalogV2Util.loadTable(catalog, ident).map {
+                    case v1Table: V1Table if CatalogV2Util.isSessionCatalog(catalog) &&
+                      v1Table.v1Table.isViewLike =>
+                      val v1Ident = v1Table.catalogTable.identifier
+                      val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
+                      ResolvedPersistentView(
+                        catalog, v2Ident, new V1ViewInfo(v1Table.catalogTable))
+                    case table =>
+                      ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                  }
+                } else {
+                  None
+                }
+                tableResolved.orElse {
+                  catalog match {
+                    case vc: ViewCatalog =>
+                      try {
+                        Some(ResolvedPersistentView(catalog, ident, vc.loadView(ident)))
+                      } catch {
+                        case _: NoSuchViewException => None
+                      }
+                    case _ => None
+                  }
+                }
             }
           case _ => None
         }
@@ -1810,12 +1936,25 @@ class Analyzer(
       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => expand(s, child)
+        case s: Star => expand(s, child).map(aliasIfOuterReference)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => expand(s, child)
+        case UnresolvedAlias(s: Star, _) => expand(s, child).map(aliasIfOuterReference)
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * Wrap an outer-scope star expansion result in [[Alias]] so that the [[OuterReference]]
+     * attribute gets a fresh ExprId in the subquery's scope. This prevents the outer ExprId from
+     * leaking through [[Project.output]] when the expansion goes through a derived table.
+     * Struct star expansion already produces [[Alias]] nodes, so those are left unchanged.
+     */
+    private def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
+      case _: Alias => e
+      case outerReference: OuterReference =>
+        Alias(outerReference, toPrettySQL(outerReference.e))()
+      case _ => e
     }
 
     /**
@@ -1838,14 +1977,15 @@ class Analyzer(
      * This is used for special syntax transformations (e.g., COUNT(*) -> COUNT(1)) that
      * should only apply to builtin functions, not to user-defined functions.
      *
-     * In legacy mode (sessionOrder="first"), temp functions shadow builtins, so an
-     * unqualified name that matches a temp function should NOT be treated as builtin.
+     * When the effective SQL PATH puts `system.session` before `system.builtin`, temp
+     * functions shadow builtins, so an unqualified name that matches a temp function
+     * should NOT be treated as builtin.
      */
     private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
       if (!FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, expectedName)) {
         return false
       }
-      if (nameParts.size == 1 && conf.sessionFunctionResolutionOrder == "first") {
+      if (nameParts.size == 1 && functionResolution.isSessionBeforeBuiltinInPath) {
         val v1Catalog = catalogManager.v1SessionCatalog
         !v1Catalog.isTemporaryFunction(FunctionIdentifier(nameParts.head))
       } else {
@@ -1974,7 +2114,7 @@ class Analyzer(
     }
 
     private def containUnresolvedPipeAggregateOrdinal(e: Expression): Boolean = e match {
-      case UnresolvedAlias(_: UnresolvedPipeAggregateOrdinal, _) => true
+      case _: UnresolvedPipeAggregateOrdinal => true
       case _ => false
     }
 
@@ -2005,7 +2145,7 @@ class Analyzer(
   private def resolvePipeAggregateExpressionOrdinal(
       expr: NamedExpression,
       inputs: Seq[Attribute]): NamedExpression = expr match {
-    case UnresolvedAlias(UnresolvedPipeAggregateOrdinal(index), _) =>
+    case UnresolvedPipeAggregateOrdinal(index) =>
       // In this case, the user applied the SQL pipe aggregate operator ("|> AGGREGATE") and used
       // ordinals in its GROUP BY clause. This expression then refers to the i-th attribute of the
       // child operator (one-based). Here we resolve the ordinal to the corresponding attribute.
@@ -2078,10 +2218,8 @@ class Analyzer(
                   throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
 
                 case FunctionType.NotFound =>
-                  val catalogPath =
-                    catalogManager.currentCatalog.name +: catalogManager.currentNamespace
-                  val searchPath = SQLConf.get.resolutionSearchPath(catalogPath.toSeq)
-                    .map(_.quoted)
+                  val searchPath =
+                    functionResolution.sqlResolutionPathEntriesForAnalysis.map(_.quoted)
                   throw QueryCompilationErrors.unresolvedRoutineError(
                     nameParts,
                     searchPath,
@@ -2278,20 +2416,8 @@ class Analyzer(
   object ResolveProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
-      case UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)) =>
-        val procedureCatalog = catalog.asProcedureCatalog
-        val procedure = load(procedureCatalog, ident)
-        ResolvedProcedure(procedureCatalog, ident, procedure)
-    }
-
-    private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {
-      try {
-        catalog.loadProcedure(ident)
-      } catch {
-        case e: Exception if !e.isInstanceOf[SparkThrowable] =>
-          val nameParts = catalog.name +: ident.asMultipartIdentifier
-          throw QueryCompilationErrors.failedToLoadRoutineError(nameParts, e)
-      }
+      case u: UnresolvedProcedure =>
+        functionResolution.resolveProcedure(u)
     }
   }
 
@@ -2525,18 +2651,23 @@ class Analyzer(
           // unresolved.
           !f.inputs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
           withPosition(f) {
-            val plan = resolve(f)
-            // Extract the function input project list from the SQL function plan and
-            // inline the SQL function expression.
-            plan match {
-              case Project(body :: Nil, Project(aliases, _: OneRowRelation)) =>
-                val inputs = aliases.map(stripOuterReference)
-                projectList ++= inputs
-                SQLScalarFunction(f.function, inputs.map(_.toAttribute), body)
-              case o =>
-                throw new AnalysisException(
-                  errorClass = "INVALID_SQL_FUNCTION_PLAN_STRUCTURE",
-                  messageParameters = Map("plan" -> o.toString))
+            // Set CurrentOrigin to the SQL function call site so that input-binding
+            // Casts constructed inside makeSQLFunctionPlan capture the call-site
+            // position in their queryContext snapshot (see Cast.initQueryContext).
+            withOrigin(f.origin) {
+              val plan = resolve(f)
+              // Extract the function input project list from the SQL function plan and
+              // inline the SQL function expression.
+              plan match {
+                case Project(body :: Nil, Project(aliases, _: OneRowRelation)) =>
+                  val inputs = aliases.map(stripOuterReference)
+                  projectList ++= inputs
+                  SQLScalarFunction(f.function, inputs.map(_.toAttribute), body)
+                case o =>
+                  throw new AnalysisException(
+                    errorClass = "INVALID_SQL_FUNCTION_PLAN_STRUCTURE",
+                    messageParameters = Map("plan" -> o.toString))
+              }
             }
           }
         case o => o.mapChildren(rewriteSQLFunctions(_, projectList))
@@ -3659,9 +3790,16 @@ class Analyzer(
         validateStoreAssignmentPolicy()
         TableOutputResolver.suitableForByNameCheck(v2Write.isByName,
           expected = v2Write.table.output, queryOutput = v2Write.query.output)
+        // With schema evolution + coercion flag, missing top-level columns AND missing nested
+        // struct fields are filled with defaults/null (RECURSE mode). Otherwise, only missing
+        // top-level columns are filled via FILL mode; missing nested struct fields still cause
+        // schema enforcement errors.
+        val defaultValueFillMode =
+          if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
+          else FILL
         val projection = TableOutputResolver.resolveOutputColumns(
           v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
-          supportColDefaultValue = true)
+          defaultValueFillMode)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>

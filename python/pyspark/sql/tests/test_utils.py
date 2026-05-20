@@ -1872,7 +1872,7 @@ class UtilsTestsMixin:
             assertSchemaEqual(s1, s2)
 
 
-class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
 
 

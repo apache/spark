@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
@@ -29,7 +30,10 @@ import org.apache.spark.util.SparkClassUtils
  * Helper class for conversions between [[DataType]] and [[proto.DataType]].
  */
 object DataTypeProtoConverter {
-  def toCatalystType(t: proto.DataType): DataType = {
+  def toCatalystType(t: proto.DataType): DataType =
+    ConnectTypeOps.toCatalystType(t).getOrElse(toCatalystTypeDefault(t))
+
+  private def toCatalystTypeDefault(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.NULL => NullType
 
@@ -174,7 +178,12 @@ object DataTypeProtoConverter {
     toConnectProtoTypeInternal(t, bytesToBinary)
   }
 
-  private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType = {
+  private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType =
+    ConnectTypeOps(t)
+      .map(_.toConnectProtoType)
+      .getOrElse(toConnectProtoTypeDefault(t, bytesToBinary))
+
+  private def toConnectProtoTypeDefault(t: DataType, bytesToBinary: Boolean): proto.DataType = {
     t match {
       case NullType => ProtoDataTypes.NullType
 

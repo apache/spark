@@ -961,7 +961,7 @@ class MultiIndex(Index):
         with ps.option_context("compute.default_index_type", "distributed"):
             # The attached index caused by `reset_index` below is used for sorting only,
             # and it will be dropped soon,
-            # so we enforce “distributed” default index type
+            # so we enforce "distributed" default index type
             psdf = self.to_frame().reset_index(drop=True)
         return ps.MultiIndex.from_frame(psdf.drop_duplicates(keep=keep).sort_index())
 

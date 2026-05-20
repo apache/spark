@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.util.Locale
+
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.analysis.SQLScalarFunction
 import org.apache.spark.sql.catalyst.catalog.{
   CatalogStorageFormat,
@@ -31,6 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.{
 }
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, View}
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -169,6 +173,106 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
     assert(sqlConf.settings.get("spark.sql.ansi.enabled") == "false")
   }
 
+  test("Current schema marker is materialized in persisted view path") {
+    withView(testViewName) {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql("CREATE DATABASE IF NOT EXISTS path_materialized_view")
+        try {
+          sql("USE path_materialized_view")
+          sql("SET PATH = current_schema, system.builtin")
+          sql(s"CREATE VIEW $testViewName AS SELECT 1")
+          val metadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
+          val storedPath = metadata.viewStoredResolutionPath.getOrElse(
+            fail("Expected persisted view resolution path to be set"))
+          val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
+            fail(s"Expected a valid serialized path, got: $storedPath"))
+          assert(parsed.head == Seq("spark_catalog", "path_materialized_view"))
+          assert(!storedPath.toLowerCase(Locale.ROOT).contains("current_schema"))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql(s"DROP VIEW IF EXISTS path_materialized_view.$testViewName")
+          sql(s"DROP VIEW IF EXISTS $testViewName")
+          sql("USE default")
+          sql("DROP DATABASE IF EXISTS path_materialized_view")
+        }
+      }
+    }
+  }
+
+  test("Current schema marker is materialized in persisted function path") {
+    withUserDefinedFunction(testFunctionName -> false) {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql("CREATE DATABASE IF NOT EXISTS path_materialized_fn")
+        try {
+          sql("USE path_materialized_fn")
+          sql("SET PATH = current_schema, system.builtin")
+          sql(
+            s"""
+               |CREATE OR REPLACE FUNCTION $testFunctionName()
+               |RETURN SELECT 1
+               |""".stripMargin)
+          val function = analyzedSqlFunction(testFunctionName)
+          val storedPath = function.functionStoredResolutionPath.getOrElse(
+            fail("Expected persisted function resolution path to be set"))
+          val parsed = CatalogManager.deserializePathEntries(storedPath).getOrElse(
+            fail(s"Expected a valid serialized path, got: $storedPath"))
+          assert(parsed.head == Seq("spark_catalog", "path_materialized_fn"))
+          assert(!storedPath.toLowerCase(Locale.ROOT).contains("current_schema"))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql(s"DROP FUNCTION IF EXISTS path_materialized_fn.$testFunctionName")
+          sql(s"DROP FUNCTION IF EXISTS $testFunctionName")
+          sql("USE default")
+          sql("DROP DATABASE IF EXISTS path_materialized_fn")
+        }
+      }
+    }
+  }
+
+  test("Session-only path is omitted from persisted view metadata and remains queryable") {
+    withTable("default.path_empty_src") {
+      withView(testViewName) {
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          sql("CREATE TABLE default.path_empty_src (id INT) USING parquet")
+          sql("INSERT INTO default.path_empty_src VALUES (1)")
+          try {
+            // Persisted objects strip system.session; a session-only path should not be persisted.
+            sql("SET PATH = system.session")
+            sql(
+              s"CREATE VIEW $testViewName AS SELECT id FROM spark_catalog.default.path_empty_src")
+            val metadata =
+              spark.sessionState.catalog.getTableMetadata(TableIdentifier(testViewName))
+            assert(metadata.viewStoredResolutionPath.isEmpty)
+            checkAnswer(sql(s"SELECT id FROM default.$testViewName"), Row(1))
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+          }
+        }
+      }
+    }
+  }
+
+  test("Malformed persisted SQL function path fails analysis context setup") {
+    withUserDefinedFunction(testFunctionName -> false) {
+      withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+        sql(
+          s"""
+             |CREATE OR REPLACE FUNCTION $testFunctionName()
+             |RETURN SELECT 1
+             |""".stripMargin)
+        val function = analyzedSqlFunction(testFunctionName)
+        val broken = function.copy(
+          properties = function.properties + (SQLFunction.FUNCTION_RESOLUTION_PATH -> "{bad-json"))
+        val e = intercept[AnalysisException] {
+          AnalysisContext.withAnalysisContext(broken) {
+            ()
+          }
+        }
+        assert(e.getMessage.contains("Invalid stored SQL path metadata for SQL function"))
+      }
+    }
+  }
+
   private def testView(confName: String, expectedValue: String): Unit = {
     sql(s"CREATE VIEW $testViewName AS SELECT CAST('string' AS BIGINT) AS alias")
 
@@ -185,21 +289,19 @@ class AlwaysPersistedConfigsSuite extends SharedSparkSession {
          |RETURN SELECT CAST('string' AS BIGINT) AS alias
          |""".stripMargin)
 
-    val df = sql(s"select $testFunctionName()")
+    assert(analyzedSqlFunction(testFunctionName).properties.get(confName).get == expectedValue)
+  }
 
-    assert(
-      df.queryExecution.analyzed
-        .asInstanceOf[Project]
-        .projectList
-        .head
-        .asInstanceOf[Alias]
-        .child
-        .asInstanceOf[SQLScalarFunction]
-        .function
-        .asInstanceOf[SQLFunction]
-        .properties
-        .get(confName)
-        .get == expectedValue
-    )
+  private def analyzedSqlFunction(functionName: String): SQLFunction = {
+    val df = sql(s"select $functionName()")
+    df.queryExecution.analyzed
+      .asInstanceOf[Project]
+      .projectList
+      .head
+      .asInstanceOf[Alias]
+      .child
+      .asInstanceOf[SQLScalarFunction]
+      .function
+      .asInstanceOf[SQLFunction]
   }
 }

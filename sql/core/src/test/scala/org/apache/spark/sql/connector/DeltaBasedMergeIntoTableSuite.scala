@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.Exists
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -35,6 +36,177 @@ class DeltaBasedMergeIntoTableSuite extends DeltaBasedMergeIntoTableSuiteBase {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")
     props
+  }
+
+  test("merge runtime filtering is disabled with NOT MATCHED BY SOURCE clauses") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |{ "pk": 5, "salary": 500, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      executeAndCheckScans(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET t.salary = t.salary + 1
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
+           |WHEN NOT MATCHED BY SOURCE THEN
+           | DELETE
+           |""".stripMargin,
+        primaryScanSchema = "pk INT, salary INT, dep STRING, _partition STRING",
+        groupFilterScanSchema = None)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 201, "hr"), // update
+          Row(3, 301, "hr"), // update
+          Row(6, 0, "hr"))) // insert
+    }
+  }
+
+  test("merge runtime group filtering (DPP enabled)") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      checkMergeRuntimeGroupFiltering()
+    }
+  }
+
+  test("merge runtime group filtering (DPP disabled)") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+      checkMergeRuntimeGroupFiltering()
+    }
+  }
+
+  test("merge runtime group filtering (AQE enabled)") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      checkMergeRuntimeGroupFiltering()
+    }
+  }
+
+  test("merge runtime group filtering (AQE disabled)") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkMergeRuntimeGroupFiltering()
+    }
+  }
+
+  private def checkMergeRuntimeGroupFiltering(): Unit = {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "hr" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |{ "pk": 5, "salary": 500, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2, 3, 6).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      executeAndCheckScans(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET t.salary = t.salary + 1
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'hr')
+           |""".stripMargin,
+        primaryScanSchema = "pk INT, salary INT, dep STRING, _partition STRING",
+        groupFilterScanSchema = Some("pk INT, dep STRING"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 201, "hr"), // update
+          Row(3, 301, "hr"), // update
+          Row(4, 400, "software"), // unchanged
+          Row(5, 500, "software"), // unchanged
+          Row(6, 0, "hr"))) // insert
+    }
+  }
+
+  test("merge does not double plan table (group filter enabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |""".stripMargin)
+
+        sql(
+          s"""CREATE TEMP VIEW source AS
+             |SELECT pk, salary FROM $tableNameAsString WHERE salary > 150
+             |""".stripMargin)
+
+        val (_, groupFilterCond) = executeAndKeepConditions {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET t.salary = s.salary + 1
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'new')
+               |""".stripMargin)
+        }
+
+        groupFilterCond match {
+          case Some(p: Exists) => assertNoScanPlanning(p.plan)
+          case _ => fail(s"unexpected group filter: $groupFilterCond")
+        }
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(Row(1, 100, "hr"), Row(2, 201, "software"), Row(3, 301, "hr")))
+      }
+    }
+  }
+
+  test("merge does not double plan table (group filter disabled)") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |""".stripMargin)
+
+        sql(
+          s"""CREATE TEMP VIEW source AS
+             |SELECT pk, salary FROM $tableNameAsString WHERE salary > 150
+             |""".stripMargin)
+
+        val (_, groupFilterCond) = executeAndKeepConditions {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET t.salary = s.salary + 1
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, s.salary, 'new')
+               |""".stripMargin)
+        }
+
+        assert(groupFilterCond.isEmpty, "group filter must be disabled")
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(Row(1, 100, "hr"), Row(2, 201, "software"), Row(3, 301, "hr")))
+      }
+    }
   }
 
   test("merge handles metadata columns correctly") {

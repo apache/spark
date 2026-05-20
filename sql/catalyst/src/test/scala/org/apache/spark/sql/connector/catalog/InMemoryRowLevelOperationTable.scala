@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.time.Instant
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,26 +25,44 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class InMemoryRowLevelOperationTable(
+class InMemoryRowLevelOperationTable private (
     name: String,
-    schema: StructType,
+    columns: Array[Column],
     partitioning: Array[Transform],
     properties: util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty)
+    constraints: Array[Constraint],
+    tableId: String)
   extends InMemoryTable(
     name,
-    CatalogV2Util.structTypeToV2Columns(schema),
+    columns,
     partitioning,
     properties,
-    constraints)
+    constraints,
+    id = tableId)
   with SupportsRowLevelOperations {
+
+  def this(
+      name: String,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString) = {
+    this(
+      name = name,
+      columns = CatalogV2Util.structTypeToV2Columns(schema),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = tableId)
+  }
 
   private final val PARTITION_COLUMN_REF = FieldReference(PartitionKeyColumn.name)
   private final val INDEX_COLUMN_REF = FieldReference(IndexColumn.name)
@@ -125,18 +142,11 @@ class InMemoryRowLevelOperationTable(
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
-
-    override def commit(messages: Array[WriterCommitMessage], metrics: WriteSummary): Unit = {
-      commit(messages)
-      commits += Commit(Instant.now().toEpochMilli, Some(metrics))
-    }
-  }
-
   private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
-    extends RowLevelOperationBatchWrite {
+    extends TestBatchWrite {
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
@@ -198,12 +208,12 @@ class InMemoryRowLevelOperationTable(
     }
   }
 
-  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
+  private object TestDeltaBatchWrite extends TestBatchWrite with DeltaBatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       new DeltaBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    override protected def doCommit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
       withData(newData, columns())
@@ -263,4 +273,17 @@ private class DeltaBufferWriter(schema: StructType) extends BufferWriter(schema)
   }
 
   override def commit(): WriterCommitMessage = buffer
+}
+
+object InMemoryRowLevelOperationTable {
+  def withColumns(
+      name: String,
+      columns: Array[Column],
+      partitioning: Array[Transform],
+      properties: util.Map[String, String],
+      constraints: Array[Constraint] = Array.empty,
+      tableId: String = java.util.UUID.randomUUID().toString): InMemoryRowLevelOperationTable = {
+    new InMemoryRowLevelOperationTable(
+      name, columns, partitioning, properties, constraints, tableId)
+  }
 }

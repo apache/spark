@@ -29,7 +29,6 @@ from pyspark.pandas.frame import CachedDataFrame
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.frame import MissingPandasLikeDataFrame
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_ENABLED
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Spark-related'
@@ -306,7 +305,6 @@ class FrameSparkMixin:
 class FrameSparkTests(
     FrameSparkMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

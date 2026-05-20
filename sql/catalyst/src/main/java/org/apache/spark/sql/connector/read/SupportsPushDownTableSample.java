@@ -29,11 +29,28 @@ import org.apache.spark.annotation.Evolving;
 public interface SupportsPushDownTableSample extends ScanBuilder {
 
   /**
-   * Pushes down SAMPLE to the data source.
+   * Pushes down BERNOULLI (row-level) SAMPLE to the data source.
    */
   boolean pushTableSample(
       double lowerBound,
       double upperBound,
       boolean withReplacement,
       long seed);
+
+  /**
+   * Pushes down SAMPLE to the data source with the specified sampling method.
+   */
+  default boolean pushTableSample(
+      double lowerBound,
+      double upperBound,
+      boolean withReplacement,
+      long seed,
+      SampleMethod sampleMethod) {
+    if (sampleMethod == SampleMethod.SYSTEM) {
+      // If the data source hasn't overridden this method, it must not have added support
+      // for SYSTEM sampling. Don't apply sample pushdown.
+      return false;
+    }
+    return pushTableSample(lowerBound, upperBound, withReplacement, seed);
+  }
 }

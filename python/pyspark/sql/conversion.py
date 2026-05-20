@@ -90,6 +90,20 @@ class ArrowBatchTransformer:
         struct = batch.column(column_index)
         return pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))
 
+    @classmethod
+    def select_columns(cls, batch: "pa.RecordBatch", column_indices: list[int]) -> "pa.RecordBatch":
+        """
+        Select a subset of columns from a RecordBatch by index.
+
+        Used by: SQL_COGROUPED_MAP_ARROW_UDF handler in worker.py
+        """
+        import pyarrow as pa
+
+        return pa.RecordBatch.from_arrays(
+            [batch.columns[i] for i in column_indices],
+            [batch.schema.names[i] for i in column_indices],
+        )
+
     @staticmethod
     def wrap_struct(batch: "pa.RecordBatch") -> "pa.RecordBatch":
         """

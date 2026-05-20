@@ -48,6 +48,12 @@ class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
   private val sessionId = UUID.randomUUID.toString()
   private val sessionKey = SessionKey("c1", sessionId)
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    SparkConnectService.sessionManager.invalidateAllSessions()
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
+  }
+
   class DummyStreamObserver(p: Promise[AddArtifactsResponse])
       extends StreamObserver[AddArtifactsResponse] {
     override def onNext(v: AddArtifactsResponse): Unit = p.success(v)

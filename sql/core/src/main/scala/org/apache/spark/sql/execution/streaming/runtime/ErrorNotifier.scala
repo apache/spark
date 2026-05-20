@@ -28,10 +28,20 @@ class ErrorNotifier extends Logging {
 
   private val error = new AtomicReference[Throwable]
 
-  /** To indicate any errors that have occurred */
+  /**
+   * Record a fatal error. Only the first error is retained - subsequent calls
+   * are no-ops so cascading failures cannot mask the original cause.
+   */
   def markError(th: Throwable): Unit = {
-    logError("A fatal error has occurred.", th)
-    error.set(th)
+    if (error.compareAndSet(null, th)) {
+      logError("A fatal error has occurred.", th)
+    } else {
+      // Attach subsequent errors as suppressed so they're not silently lost.
+      val existing = error.get()
+      if (existing != null && existing != th) {
+        existing.addSuppressed(th)
+      }
+    }
   }
 
   /** Get any errors that have occurred */

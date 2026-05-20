@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkFunSuite, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
  * to `Thread.interrupt()`; closing the JDBC connection from the `TaskInterruptListener`
  * unblocks the thread by causing the socket to throw.
  */
-class JdbcTaskInterruptSuite extends SparkFunSuite with SharedSparkSession {
+class JdbcTaskInterruptSuite extends SharedSparkSession {
 
   private val testJdbcUrl = "jdbc:taskinterrupt:test"
 

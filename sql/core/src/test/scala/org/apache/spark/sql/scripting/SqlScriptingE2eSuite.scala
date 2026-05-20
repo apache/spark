@@ -21,8 +21,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, Identifier, InMemoryRowLevelOperationTableCatalog, Txn, TxnTable, TxnTableCatalog}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -47,6 +49,27 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
   }
 
   // Helpers
+  private def withCatalog(
+      name: String)(
+      f: InMemoryRowLevelOperationTableCatalog => Unit): Unit = {
+    withSQLConf(s"spark.sql.catalog.$name" ->
+        classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager
+        .catalog(name)
+        .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+      try f(catalog) finally spark.sessionState.catalogManager.reset()
+    }
+  }
+
+  private def loadTxnTable(
+      txn: Txn,
+      tableName: String,
+      namespace: Array[String] = Array("ns1")): TxnTable =
+    txn.catalog
+      .asInstanceOf[TxnTableCatalog]
+      .loadTable(Identifier.of(namespace, tableName))
+      .asInstanceOf[TxnTable]
+
   private def verifySqlScriptResult(
       sqlText: String,
       expected: Seq[Row],
@@ -171,6 +194,188 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
           |END
           |""".stripMargin
       verifySqlScriptResult(sqlScript, Seq(Row(1)))
+    }
+  }
+
+  test("multi statement with transactional checks - insert then delete") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  CREATE TABLE cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr'), (2, 200, 'software');
+            |  DELETE FROM cat.ns1.t
+            |    WHERE pk IN (SELECT pk FROM cat.ns1.t WHERE dep = 'hr');
+            |  SELECT * FROM cat.ns1.t;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(sqlScript, Seq(Row(2, 200, "software")))
+
+        // Each DML statement in a script runs in its own independent QE and transaction.
+        assert(catalog.observedTransactions.size === 2)
+        assert(catalog.observedTransactions.forall(t =>
+          t.currentState === Committed && t.isClosed))
+
+        // The DELETE subquery scans the table with a dep='hr' predicate; verify it was tracked.
+        val deleteTxnTable = loadTxnTable(catalog.observedTransactions(1), "t")
+        assert(deleteTxnTable.scanEvents.flatten.exists {
+          case sources.EqualTo("dep", "hr") => true
+          case _ => false
+        })
+      }
+    }
+  }
+
+  test("multi statement with transactional checks - second statement fails") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  CREATE TABLE cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr'), (2, 200, 'software');
+            |  DELETE FROM cat.ns1.t WHERE nonexistent_column = 1;
+            |END
+            |""".stripMargin
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.sql(sqlScript).collect()
+          },
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map(
+            "objectName" -> "`nonexistent_column`",
+            "proposal" -> ".*"),
+          matchPVals = true,
+          queryContext = Array(ExpectedContext("nonexistent_column")))
+
+        // INSERT committed; DELETE was aborted because analysis failed on the bad column.
+        assert(catalog.observedTransactions.size === 2)
+        assert(catalog.observedTransactions(0).currentState === Committed)
+        assert(catalog.observedTransactions(0).isClosed)
+        assert(catalog.observedTransactions(1).currentState === Aborted)
+        assert(catalog.observedTransactions(1).isClosed)
+        assert(catalog.lastTransaction.currentState === Aborted)
+      }
+    }
+  }
+
+  test("multi statement with transactional checks - insert, merge, update") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t", "cat.ns1.src") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  CREATE TABLE cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  CREATE TABLE cat.ns1.src (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr'), (2, 200, 'software'), (3, 300, 'hr');
+            |  INSERT INTO cat.ns1.src VALUES (1, 150, 'hr'), (4, 400, 'finance');
+            |  MERGE INTO cat.ns1.t AS t
+            |    USING cat.ns1.src AS s
+            |    ON t.pk = s.pk
+            |    WHEN MATCHED THEN UPDATE SET salary = s.salary
+            |    WHEN NOT MATCHED THEN INSERT (pk, salary, dep)
+            |      VALUES (s.pk, s.salary, s.dep);
+            |  UPDATE cat.ns1.t SET salary = salary + 50 WHERE dep = 'software';
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(
+            Row(1, 150, "hr"),
+            Row(2, 250, "software"),
+            Row(3, 300, "hr"),
+            Row(4, 400, "finance")))
+
+        // INSERT (x2), MERGE, and UPDATE each run in their own independent QE and transaction.
+        assert(catalog.observedTransactions.size === 4)
+        assert(catalog.observedTransactions.forall(t => t.currentState === Committed && t.isClosed))
+
+        def txnTable(txnIdx: Int): TxnTable =
+          loadTxnTable(catalog.observedTransactions(txnIdx), "t")
+
+        // Both inserts are pure writes - no scan.
+        assert(txnTable(0).scanEvents.isEmpty)
+        assert(txnTable(1).scanEvents.isEmpty)
+
+        // MERGE scans the full target table. The join is on pk (not the partition column).
+        assert(txnTable(2).scanEvents.nonEmpty)
+        assert(txnTable(2).scanEvents.flatten.isEmpty)
+
+        // UPDATE with WHERE dep='software' pushes an equality predicate on the partition column.
+        assert(txnTable(3).scanEvents.flatten.exists {
+          case sources.EqualTo("dep", "software") => true
+          case _ => false
+        })
+      }
+    }
+  }
+
+  test("loop with transactional checks - each iteration runs in its own transaction") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE i INT = 1;
+            |  CREATE TABLE
+            |    cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  WHILE i <= 3 DO
+            |    INSERT INTO cat.ns1.t VALUES (i, i * 100, 'hr');
+            |    SET i = i + 1;
+            |  END WHILE;
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(Row(1, 100, "hr"), Row(2, 200, "hr"), Row(3, 300, "hr")))
+
+        // Each loop iteration's INSERT runs in its own independent transaction.
+        assert(catalog.observedTransactions.size === 3)
+        assert(catalog.observedTransactions.forall(t => t.currentState === Committed && t.isClosed))
+      }
+    }
+  }
+
+  test("continue handler with transactional checks - handler DML runs in its own transaction") {
+    withCatalog("cat") { catalog =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+            |  BEGIN
+            |    INSERT INTO cat.ns1.t VALUES (-1, -1, 'error');
+            |  END;
+            |  CREATE TABLE
+            |    cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr');
+            |  SELECT 1/0;
+            |  INSERT INTO cat.ns1.t VALUES (2, 200, 'software');
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(Row(-1, -1, "error"), Row(1, 100, "hr"), Row(2, 200, "software")))
+
+        // INSERT(1), handler INSERT(-1), INSERT(2) - each in its own transaction.
+        assert(catalog.observedTransactions.size === 3)
+        assert(catalog.observedTransactions.forall(t => t.currentState === Committed && t.isClosed))
+      }
     }
   }
 

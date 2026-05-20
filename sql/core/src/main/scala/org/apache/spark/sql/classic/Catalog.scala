@@ -272,12 +272,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
             if (isExternal) CatalogTableType.EXTERNAL.name
             else CatalogTableType.MANAGED.name,
           isTemporary = false)
-      case ResolvedPersistentView(catalog, identifier, metadata) =>
+      case ResolvedPersistentView(catalog, identifier, info) =>
         new Table(
           name = identifier.name(),
           catalog = catalog.name(),
           namespace = identifier.namespace(),
-          description = metadata.comment.orNull,
+          description = info.properties().get(TableCatalog.PROP_COMMENT),
           tableType = "VIEW",
           isTemporary = false
         )
@@ -409,10 +409,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
         val catalogPath =
           (Seq(currentCatalog()) ++
             sparkSession.sessionState.catalogManager.currentNamespace).toSeq
-        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(catalogPath)
+        val searchPath = sparkSession.sessionState.catalogManager
+          .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
+          .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           ident,
-          searchPath.map(_.quoted),
+          searchPath,
           plan.origin)
     }
   }
@@ -459,8 +461,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
         schemaToColumns(schema, partitionColumnNames.contains, bucketColumnNames.contains,
           clusteringColumnNames.contains)
 
-      case ResolvedPersistentView(_, _, metadata) =>
-        schemaToColumns(metadata.schema)
+      case ResolvedPersistentView(_, _, info) =>
+        schemaToColumns(info.schema)
 
       case ResolvedTempView(_, metadata) =>
         schemaToColumns(metadata.schema)

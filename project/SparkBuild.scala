@@ -125,6 +125,11 @@ object SparkBuild extends PomBuild {
           "The Java version used to build the project is outdated. " +
             s"Please use Java $minimumVersion or later.")
       }
+      if (currentVersionFeature == 25 && currentVersionUpdate < 3) {
+        throw new MessageOnlyException(
+          s"Java 25 requires update 3 or later due to JDK-8377811. " +
+            s"Current version: $currentVersion. Please use Java 25.0.3 or later.")
+      }
     },
     (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
     (Test / compile) := ((Test / compile) dependsOn checkJavaVersion).value
@@ -242,19 +247,18 @@ object SparkBuild extends PomBuild {
     Set(file)
   }
 
+  // Defines the standalone `scalaStyleOnCompile` / `scalaStyleOnTest` tasks
+  // invoked by `dev/lint-scala`. Style is intentionally NOT attached to
+  // `(Compile / compile)` -- a violation in one module would otherwise abort
+  // compile for that module and every transitive dependent, cascading style
+  // failures into every job that recompiles those sources (Build modules,
+  // Documentation generation, Java 17/25 Maven build, sparkr, ...). Each
+  // cascaded job then surfaces only a generic "exit code 1" with no file/line.
+  // After decoupling, the dedicated lint job is the single place style
+  // violations surface, with file/line annotations from `dev/scalastyle`.
   def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
     scalaStyleOnCompile := cachedScalaStyle(Compile).value,
-    scalaStyleOnTest := cachedScalaStyle(Test).value,
-    (scalaStyleOnCompile / logLevel) := Level.Warn,
-    (scalaStyleOnTest / logLevel) := Level.Warn,
-    (Compile / compile) := {
-      scalaStyleOnCompile.value
-      (Compile / compile).value
-    },
-    (Test / compile) := {
-      scalaStyleOnTest.value
-      (Test / compile).value
-    }
+    scalaStyleOnTest := cachedScalaStyle(Test).value
   )
 
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
@@ -290,18 +294,18 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
-      !sys.env.get("NOLINT_ON_COMPILE").contains("false")
   lazy val sharedSettings = checkJavaVersionSettings ++
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
-      (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
+                            enableScalaStyle ++ Seq(
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
       .orElse(sys.props.get("java.home"))
       .map(file),
     publishMavenStyle := true,
+    packageDoc / publishArtifact := false,
+    packageSrc / publishArtifact := (if (sys.env.contains("PUBLISH_PACKAGE_SRC")) true else false),
     unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
@@ -401,7 +405,7 @@ object SparkBuild extends PomBuild {
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
     .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings ++ (if (noLintOnCompile) Nil else Checkstyle.settings) ++
+      ExcludedDependencies.settings ++ Checkstyle.settings ++
       ExcludeShims.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
@@ -1088,25 +1092,10 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  import BuildCommons.protoVersion
-  lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
-
-    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
-
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-sources"
-    ),
-
-    (assembly / test) := { },
-
-    (assembly / logLevel) := Level.Info,
-
-    // Exclude `scala-library` from assembly.
-    (assembly / assemblyPackageScala / assembleArtifact) := false,
-
-    // Include only the proto module jar and protobuf-java in the assembly.
+  // Reuses SparkConnectCommon for proto + gRPC codegen wiring; overrides
+  // only the assembly fields that need the UDF-worker namespace.
+  lazy val settings = SparkConnectCommon.settings ++ Seq(
+    // Include only this module's jar and protobuf-java in the assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
@@ -1117,27 +1106,9 @@ object UDFWorkerProto {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
-    ),
-
-    (assembly / assemblyMergeStrategy) := {
-      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
-        MergeStrategy.filterDistinctLines
-      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      case _ => MergeStrategy.first
-    }
-  ) ++ {
-    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
-      Seq(
-        PB.protocExecutable := file(sparkProtocExecPath.get)
-      )
-    } else {
-      Seq.empty
-    }
-  }
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
+    )
+  )
 }
 
 object Unsafe {
@@ -1291,7 +1262,8 @@ object ExcludedDependencies {
       ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
       ExclusionRule("io.netty", "netty-codec-protobuf"),
-      ExclusionRule("io.netty", "netty-codec-marshalling"))
+      ExclusionRule("io.netty", "netty-codec-marshalling"),
+      ExclusionRule("junit", "junit"))
   )
 }
 
@@ -1699,7 +1671,10 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
-        "--ignore-source-errors", "-notree"
+        "--ignore-source-errors", "-notree",
+        "-Xmaxerrs", "0",
+        "-verbose",
+        "-Xdoclint:all", "-Xdoclint:-missing"
       )
     },
 
@@ -1947,7 +1922,8 @@ object TestSettings {
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
         "-Dio.netty.noUnsafe=false",
-        "--enable-native-access=ALL-UNNAMED").mkString(" ")
+        "--enable-native-access=ALL-UNNAMED",
+        "-XX:+EnableDynamicAgentLoading").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

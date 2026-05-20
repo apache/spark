@@ -266,5 +266,6 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
     assert(driverServicePorts(2).getTargetPort.getIntVal === drierUIPort)
     assert(driverServicePorts(3).getPort.intValue() === driverConnectServerPort)
     assert(driverServicePorts(3).getTargetPort.getIntVal === driverConnectServerPort)
+    assert(driverServicePorts(3).getAppProtocol === "grpc")
   }
 }

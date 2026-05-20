@@ -25,8 +25,13 @@ Spark SQL supports **GEOMETRY** and **GEOGRAPHY** types for spatial data, as def
 
 | Type | Coordinate system | Typical use and notes |
 |------|-------------------|------------------------|
-| **GEOMETRY** | Cartesian (planar) | Projected or local coordinates; planar calculations. Represents points, lines, polygons in a flat coordinate system. Suitable for Web Mercator (SRID 3857), UTM, or local grids (e.g. engineering/CAD). Default SRID in Spark is 4326. |
-| **GEOGRAPHY** | Geographic (latitude/longitude) | Earth-based data; distances and areas on the sphere/ellipsoid. Coordinates in longitude and latitude (degrees). Edge interpolation is always **SPHERICAL**. Default SRID is 4326 (WGS 84). |
+| **GEOMETRY** | Cartesian (planar) | Projected or local coordinates; planar calculations. Represents points, lines, polygons in a flat coordinate system. Suitable for Web Mercator (SRID 3857), UTM, or local grids (e.g. engineering/CAD). Accepts any SRID in the registry, including SRID 0 (unspecified CRS). |
+| **GEOGRAPHY** | Geographic (latitude/longitude) | Earth-based data; distances and areas on the sphere/ellipsoid. Coordinates in longitude and latitude (degrees). Edge interpolation is always **SPHERICAL**. Only geographic SRIDs are accepted; the most common is 4326 (WGS 84). |
+
+In SQL, `GEOMETRY` and `GEOGRAPHY` columns must always be declared with an explicit SRID
+(or `ANY`); see [Type Syntax in SQL](#type-syntax-in-sql) below. When a value is constructed
+via `ST_GeomFromWKB(wkb)` without an explicit SRID, the value's SRID is `0` (unspecified),
+while `ST_GeogFromWKB(wkb)` always returns a value with SRID 4326.
 
 #### When to use GEOMETRY vs GEOGRAPHY
 
@@ -113,22 +118,27 @@ When parsing WKB, Spark applies the following rules. Violations result in a pars
 
 ### Built-in Geospatial (ST) Functions
 
-Spark SQL provides scalar functions for working with GEOMETRY and GEOGRAPHY values. They are grouped under **st_funcs** in the [Built-in Functions](sql-ref-functions-builtin.html) API.
+Spark SQL provides scalar functions for working with GEOMETRY and GEOGRAPHY values. The full list,
+with detailed argument descriptions and examples, is on the
+[Built-in Functions](sql-ref-functions-builtin.html#geospatial-st-functions) page under
+**Geospatial ST Functions**. The functions provided in the current release are summarized here:
 
 | Function | Description |
 |----------|-------------|
-| `ST_AsBinary(geo)` | Returns the GEOMETRY or GEOGRAPHY value as WKB (BINARY). |
-| `ST_GeomFromWKB(wkb)` | Parses WKB and returns a GEOMETRY with default SRID 0. |
-| `ST_GeomFromWKB(wkb, srid)` | Parses WKB and returns a GEOMETRY with the given SRID. |
+| `ST_AsBinary(geo[, endianness])` | Returns the GEOMETRY or GEOGRAPHY value as WKB (BINARY). The optional `endianness` argument is `'NDR'` for little-endian (default) or `'XDR'` for big-endian. |
+| `ST_GeomFromWKB(wkb[, srid])` | Parses WKB and returns a GEOMETRY. The optional `srid` argument sets the SRID; if omitted, the SRID is `0`. |
 | `ST_GeogFromWKB(wkb)` | Parses WKB and returns a GEOGRAPHY with SRID 4326. |
 | `ST_Srid(geo)` | Returns the SRID of the GEOMETRY or GEOGRAPHY value (NULL if input is NULL). |
-| `ST_SetSrid(geo, srid)` | Returns a new GEOMETRY or GEOGRAPHY with the given SRID. |
+| `ST_SetSrid(geo, srid)` | Returns a new GEOMETRY or GEOGRAPHY with the given SRID. The new SRID must be valid for the value's type. |
 
 **Examples:**
 
 ```sql
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')));
 -- 0101000000000000000000F03F0000000000000040
+
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'));
+-- 00000000013FF00000000000004000000000000000
 
 SELECT ST_Srid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'));
 -- 4326
@@ -139,9 +149,68 @@ SELECT ST_Srid(ST_SetSrid(ST_GeomFromWKB(X'0101000000000000000000F03F00000000000
 
 ### SRID and Stored Values
 
-* **Fixed-SRID columns**: Every value in the column must have the same SRID as the column type. Inserting a value with a different SRID can raise an error (or you can use `ST_SetSrid` to set the value’s SRID to match the column).
-* **Mixed-SRID columns** (`GEOMETRY(ANY)` or `GEOGRAPHY(ANY)`): Values can have different SRIDs. Only valid SRIDs are allowed.
-* **Storage**: Parquet, Delta, and Iceberg store geometry/geography with a fixed SRID per column; mixed-SRID types are for in-memory/query use. When writing to these formats, a concrete (fixed) SRID is required.
+* **Fixed-SRID columns**: Every value in the column must have the same SRID as the column type. Inserting a value with a different SRID raises a `GEO_ENCODER_SRID_MISMATCH_ERROR`. Use `ST_SetSrid` to change a value's SRID to match the column.
+* **Mixed-SRID columns** (`GEOMETRY(ANY)` or `GEOGRAPHY(ANY)`): Values can have different SRIDs per row. Each value must still have a valid SRID for the type; an invalid SRID raises `ST_INVALID_SRID_VALUE`.
+* **Storage**: Parquet, Delta, and Iceberg store geometry/geography with a fixed SRID per column. They do not support persisting `GEOMETRY(ANY)` or `GEOGRAPHY(ANY)`; mixed-SRID types exist for in-memory/query use only.
+
+### Supported SRIDs
+
+Spark includes a pre-built SRID registry that combines coordinate systems from the PROJ database with OGC standard overrides. This registry enables validation and proper handling of coordinate systems for geospatial data.
+
+**SRID Compatibility Rules:**
+- **GEOMETRY** accepts all SRIDs in the registry (geographic + projected + SRID 0)
+- **GEOGRAPHY** only accepts geographic SRIDs (latitude/longitude coordinate systems)
+
+#### PROJ Version by Spark Release
+
+| Spark Version | PROJ Version |
+|---------------|--------------|
+| 4.2.0 | 9.8.1 |
+
+The SRID registry is pinned to the PROJ version shown above and is not synced live with external databases.
+
+#### OGC Standard Overrides
+
+Spark applies the following OGC standard overrides to specific SRIDs from the PROJ database:
+
+| SRID | PROJ CRS Identifier | OGC CRS Identifier | Description |
+|------|---------------------|-------------------|-------------|
+| 4326 | `EPSG:4326` | `OGC:CRS84` | WGS 84 (longitude/latitude order per OGC standard) |
+| 4267 | `EPSG:4267` | `OGC:CRS27` | NAD27 |
+| 4269 | `EPSG:4269` | `OGC:CRS83` | NAD83 |
+
+
+#### Commonly Used SRIDs
+
+| SRID | CRS Identifier | Name | CRS Type | Description |
+|------|----------------|------|----------|-------------|
+| 0 | `SRID:0` | Unspecified | Cartesian | Coordinates with no defined CRS (default for `ST_GeomFromWKB(wkb)`) |
+| 4326 | `OGC:CRS84` | WGS 84 | Geographic | World Geodetic System 1984 (longitude/latitude), GPS coordinates, global data (default for GEOGRAPHY) |
+| 4267 | `OGC:CRS27` | NAD27 | Geographic | North American Datum 1927 |
+| 4269 | `OGC:CRS83` | NAD83 | Geographic | North American Datum 1983 |
+| 3857 | `EPSG:3857` | Web Mercator | Projected | Pseudo-Mercator projection used by web mapping services |
+
+**Notes:**
+* `GEOMETRY(0)` means a fixed SRID of 0. For mixed per-row SRIDs, use `GEOMETRY(ANY)`.
+* [Parquet](https://github.com/apache/parquet-format/blob/master/Geospatial.md)
+  and [Iceberg](https://github.com/apache/iceberg/blob/main/format/spec.md) geospatial
+  specifications require a fixed SRID per column, so they do not support persisting
+  `GEOMETRY(ANY)` or `GEOGRAPHY(ANY)`.
+
+#### SRID Validation
+
+**Invalid SRID (not in registry):**
+```sql
+SELECT ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 99999);
+-- Throws [ST_INVALID_SRID_VALUE]
+```
+
+**Projected SRID with GEOGRAPHY type:**
+```sql
+CREATE TABLE invalid_geo (id BIGINT, loc GEOGRAPHY(3857));
+-- Throws [ST_INVALID_SRID_VALUE] (3857 is projected, not geographic)
+```
+
 
 ### Data Types Reference
 

@@ -29,7 +29,9 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -2312,5 +2314,320 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ),
       null
     )
+  }
+
+  test("time_bucket: day-time interval") {
+    // Pin session zone to UTC so the whole-day TIMESTAMP (LTZ) case is deterministic; the
+    // session-zone behavior is exercised by the dedicated test below.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+      Seq(TimestampType, TimestampNTZType).foreach { dt =>
+        // 15-minute bucket with epoch origin
+        checkEvaluation(
+          TimeBucket(
+            Literal(Duration.ofMinutes(15)),
+            timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          timestampAnswer("2024-01-01 11:15:00.000", sdf, dt))
+        // 1-hour bucket with custom origin (:05 alignment)
+        checkEvaluation(
+          TimeBucket(
+            Literal(Duration.ofHours(1)),
+            timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:05:00.000", sdf, dt)),
+          timestampAnswer("2024-01-01 11:05:00.000", sdf, dt))
+        // Pre-epoch ts
+        checkEvaluation(
+          TimeBucket(
+            Literal(Duration.ofDays(1)),
+            timestampLiteral("1969-12-31 23:30:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          timestampAnswer("1969-12-31 00:00:00.000", sdf, dt))
+        // NULL ts -> NULL
+        checkEvaluation(
+          TimeBucket(
+            Literal(Duration.ofHours(1)),
+            Literal.create(null, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          null)
+        // NULL bucketSize -> NULL
+        checkEvaluation(
+          TimeBucket(
+            Literal.create(null, DayTimeIntervalType()),
+            timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          null)
+        // NULL origin -> NULL
+        checkEvaluation(
+          TimeBucket(
+            Literal(Duration.ofHours(1)),
+            timestampLiteral("2024-01-01 11:27:00.000", sdf, dt),
+            Literal.create(null, dt)),
+          null)
+      }
+    }
+  }
+
+  test("time_bucket: day-time interval honors session time zone for TIMESTAMP") {
+    // For TIMESTAMP (LTZ), the calendar-day component of a day-time bucket aligns to
+    // the session time zone. Sub-day remainders are zone-independent.
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val laOriginMicros = DateTimeUtils.daysToMicros(0, getZoneId("America/Los_Angeles"))
+      val laOrigin = Literal(laOriginMicros, TimestampType)
+
+      // Winter ts in LA: 2024-02-15 10:00 PST. Bucket = 2024-02-15 00:00 PST.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofDays(1)),
+          timestampLiteral("2024-02-15 10:00:00.000", sdf, TimestampType),
+          laOrigin),
+        timestampAnswer("2024-02-15 00:00:00.000", sdf, TimestampType))
+
+      // Spring-forward day in LA (2024-03-10): the day has only 23 UTC hours but the
+      // bucket still covers the local calendar day.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofDays(1)),
+          timestampLiteral("2024-03-10 12:00:00.000", sdf, TimestampType),
+          laOrigin),
+        timestampAnswer("2024-03-10 00:00:00.000", sdf, TimestampType))
+
+      // Summer ts in LA: 2024-07-15 10:00 PDT. Bucket = 2024-07-15 00:00 PDT.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofDays(1)),
+          timestampLiteral("2024-07-15 10:00:00.000", sdf, TimestampType),
+          laOrigin),
+        timestampAnswer("2024-07-15 00:00:00.000", sdf, TimestampType))
+
+      // Fall-back day in LA (2024-11-03): the day spans 25 UTC hours but the bucket
+      // still covers the local calendar day. ts at 18:00 PST buckets to 00:00 PDT.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofDays(1)),
+          timestampLiteral("2024-11-03 18:00:00.000", sdf, TimestampType),
+          laOrigin),
+        timestampAnswer("2024-11-03 00:00:00.000", sdf, TimestampType))
+
+      // Compound DT (36h = 1 day + 12h) across spring-forward: exercises the
+      // estimate-and-adjust step-forward path. Origin = 2024-03-08 00:00 PST; ts on the
+      // 4th bucket boundary lands 1 hour later than a UTC-linear estimate would predict.
+      val springOrigin = Literal(
+        DateTimeUtils.daysToMicros(
+          java.time.LocalDate.of(2024, 3, 8).toEpochDay.toInt, getZoneId("America/Los_Angeles")),
+        TimestampType)
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofHours(36)),
+          timestampLiteral("2024-03-12 12:00:00.000", sdf, TimestampType),
+          springOrigin),
+        timestampAnswer("2024-03-12 12:00:00.000", sdf, TimestampType))
+
+      // Compound DT (36h) across fall-back: exercises step-back. Origin = 2024-11-01
+      // 00:00 PDT; ts at 2024-11-05 11:30 PST buckets back to 2024-11-04 00:00 PST
+      // (= origin + INTERVAL '72' HOUR; linear estimate would land on 2024-11-05 11:00).
+      val fallOrigin = Literal(
+        DateTimeUtils.daysToMicros(
+          java.time.LocalDate.of(2024, 11, 1).toEpochDay.toInt, getZoneId("America/Los_Angeles")),
+        TimestampType)
+      checkEvaluation(
+        TimeBucket(
+          Literal(Duration.ofHours(36)),
+          timestampLiteral("2024-11-05 11:30:00.000", sdf, TimestampType),
+          fallOrigin),
+        timestampAnswer("2024-11-04 00:00:00.000", sdf, TimestampType))
+    }
+  }
+
+  test("time_bucket: year-month interval") {
+    // Pin session zone to UTC; the LTZ session-zone behavior is covered by the test below.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+      Seq(TimestampType, TimestampNTZType).foreach { dt =>
+        // 1-month bucket
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(1)),
+            timestampLiteral("2024-03-15 11:27:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          timestampAnswer("2024-03-01 00:00:00.000", sdf, dt))
+        // 3-month (quarterly) bucket
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(3)),
+            timestampLiteral("2024-05-15 10:00:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          timestampAnswer("2024-04-01 00:00:00.000", sdf, dt))
+        // End-of-month capping with step-back: origin on 1970-01-31, 1-month bucket,
+        // ts in early March of a leap year -> 2024-02-29.
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(1)),
+            timestampLiteral("2024-03-01 12:00:00.000", sdf, dt),
+            timestampLiteral("1970-01-31 00:00:00.000", sdf, dt)),
+          timestampAnswer("2024-02-29 00:00:00.000", sdf, dt))
+        // NULL bucketSize (YM) -> NULL
+        checkEvaluation(
+          TimeBucket(
+            Literal.create(null, YearMonthIntervalType()),
+            timestampLiteral("2024-03-15 11:27:00.000", sdf, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          null)
+        // NULL ts (YM) -> NULL
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(1)),
+            Literal.create(null, dt),
+            timestampLiteral("1970-01-01 00:00:00.000", sdf, dt)),
+          null)
+        // NULL origin (YM) -> NULL
+        checkEvaluation(
+          TimeBucket(
+            Literal(Period.ofMonths(1)),
+            timestampLiteral("2024-03-15 11:27:00.000", sdf, dt),
+            Literal.create(null, dt)),
+          null)
+      }
+    }
+  }
+
+  test("time_bucket: year-month interval honors session time zone for TIMESTAMP") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val laOriginMicros = DateTimeUtils.daysToMicros(0, getZoneId("America/Los_Angeles"))
+      val laOrigin = Literal(laOriginMicros, TimestampType)
+
+      // Winter ts in LA: 2024-02-15 10:00 PST. Bucket = 2024-02-01 00:00 PST.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(1)),
+          timestampLiteral("2024-02-15 10:00:00.000", sdf, TimestampType),
+          laOrigin),
+        timestampAnswer("2024-02-01 00:00:00.000", sdf, TimestampType))
+
+      // Summer ts in LA: 2024-07-15 10:00 PDT. Bucket = 2024-07-01 00:00 PDT.
+      checkEvaluation(
+        TimeBucket(
+          Literal(Period.ofMonths(1)),
+          timestampLiteral("2024-07-15 10:00:00.000", sdf, TimestampType),
+          laOrigin),
+        timestampAnswer("2024-07-01 00:00:00.000", sdf, TimestampType))
+    }
+  }
+
+  test("time_bucket: ExpressionBuilder") {
+    // Pin session zone to UTC so the LTZ default origin resolves to 0L. The non-UTC case
+    // is covered by the dedicated test below.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+      val hour = Literal(Duration.ofHours(1))
+      val ts = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampType)
+      val tsNtz = timestampLiteral("2024-01-01 11:27:00.000", sdf, TimestampNTZType)
+      val ntzOrigin = timestampLiteral("1970-01-01 00:00:00.000", sdf, TimestampNTZType)
+
+      // 2-arg: default origin is epoch with ts's type (TIMESTAMP)
+      val built1 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts))
+        .asInstanceOf[TimeBucket]
+      assert(built1.originTs == Literal(0L, TimestampType))
+
+      // 2-arg with TIMESTAMP_NTZ ts: default origin is epoch with TIMESTAMP_NTZ
+      val built2 = TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, tsNtz))
+        .asInstanceOf[TimeBucket]
+      assert(built2.originTs == Literal(0L, TimestampNTZType))
+
+      // NULL ts + TIMESTAMP_NTZ origin: ts retyped to TIMESTAMP_NTZ to match origin
+      val built3 = TimeBucketExpressionBuilder.build(
+        "time_bucket", Seq(hour, Literal(null, NullType), ntzOrigin))
+        .asInstanceOf[TimeBucket]
+      assert(built3.ts.dataType == TimestampNTZType)
+
+      // NULL origin + TIMESTAMP_NTZ ts: origin retyped to TIMESTAMP_NTZ to match ts
+      val built4 = TimeBucketExpressionBuilder.build(
+        "time_bucket", Seq(hour, tsNtz, Literal(null, NullType)))
+        .asInstanceOf[TimeBucket]
+      assert(built4.originTs.dataType == TimestampNTZType)
+
+      // Bare NULL as bucketSize: retyped to DayTimeIntervalType
+      val built5 = TimeBucketExpressionBuilder.build(
+        "time_bucket", Seq(Literal(null, NullType), ts))
+        .asInstanceOf[TimeBucket]
+      assert(built5.bucketSize.dataType == DayTimeIntervalType())
+
+      // Wrong arg count
+      intercept[AnalysisException] {
+        TimeBucketExpressionBuilder.build("time_bucket", Seq(hour))
+      }
+      intercept[AnalysisException] {
+        TimeBucketExpressionBuilder.build("time_bucket", Seq(hour, ts, ts, ts))
+      }
+    }
+  }
+
+  test("time_bucket: ExpressionBuilder in non-UTC session") {
+    // In a non-UTC session, the 2-arg form's default origin shifts to the UTC instant of
+    // local 1970-01-01 00:00 so monthly/yearly buckets land at local calendar boundaries.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+      sdf.setTimeZone(TimeZone.getTimeZone("America/Los_Angeles"))
+      val ts = timestampLiteral("2024-07-15 10:00:00.000", sdf, TimestampType)
+      val tsNtz = timestampLiteral("2024-07-15 10:00:00.000", sdf, TimestampNTZType)
+      val month = Literal(Period.ofMonths(1))
+
+      // LTZ: default origin is local 1970-01-01 00:00 PST (= 28800000000L UTC micros).
+      val builtLtz = TimeBucketExpressionBuilder.build("time_bucket", Seq(month, ts))
+        .asInstanceOf[TimeBucket]
+      val expectedOriginMicros =
+        DateTimeUtils.daysToMicros(0, getZoneId("America/Los_Angeles"))
+      assert(builtLtz.originTs == Literal(expectedOriginMicros, TimestampType))
+
+      // NTZ: default origin still 0L wall-clock (session zone irrelevant).
+      val builtNtz = TimeBucketExpressionBuilder.build("time_bucket", Seq(month, tsNtz))
+        .asInstanceOf[TimeBucket]
+      assert(builtNtz.originTs == Literal(0L, TimestampNTZType))
+    }
+  }
+
+  test("time_bucket: checkInputDataTypes") {
+    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    sdf.setTimeZone(TimeZone.getTimeZone(UTC))
+    val tsLit = timestampLiteral("2024-01-01 00:00:00.000", sdf, TimestampType)
+    val originLit = tsLit
+    val hour = Literal(Duration.ofHours(1))
+
+    // Non-foldable bucketSize
+    val nonFoldableBucket = AttributeReference("bs", DayTimeIntervalType())()
+    val expr1 = TimeBucket(nonFoldableBucket, tsLit, originLit)
+    val r1 = expr1.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r1.errorSubClass == "NON_FOLDABLE_INPUT")
+    assert(r1.messageParameters("inputName") == "`bucketSize`")
+
+    // Non-foldable origin
+    val nonFoldableOrigin = AttributeReference("o", TimestampType)()
+    val expr2 = TimeBucket(hour, tsLit, nonFoldableOrigin)
+    val r2 = expr2.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r2.errorSubClass == "NON_FOLDABLE_INPUT")
+    assert(r2.messageParameters("inputName") == "`origin`")
+
+    // Non-positive DT bucketSize
+    val expr3 = TimeBucket(Literal(Duration.ofMinutes(0)), tsLit, originLit)
+    val r3 = expr3.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r3.errorSubClass == "VALUE_OUT_OF_RANGE")
+
+    // Non-positive YM bucketSize
+    val expr4 = TimeBucket(Literal(Period.ofMonths(-1)), tsLit, originLit)
+    val r4 = expr4.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r4.errorSubClass == "VALUE_OUT_OF_RANGE")
+
+    // ts/origin type mismatch: TIMESTAMP ts vs TIMESTAMP_NTZ origin
+    val ntzOrigin = Literal(LocalDateTime.of(1970, 1, 1, 0, 0, 0))
+    val expr5 = TimeBucket(hour, tsLit, ntzOrigin)
+    val r5 = expr5.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(r5.errorSubClass == "UNEXPECTED_INPUT_TYPE")
   }
 }
