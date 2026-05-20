@@ -4136,6 +4136,29 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LINE_SEPARATOR" : {
+    "message" : [
+      "Invalid line separator configuration."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The 'lineSep' option cannot be an empty string."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "The 'lineSep' option cannot be a null value."
+        ]
+      },
+      "TOO_LONG" : {
+        "message" : [
+          "The 'lineSep' option can contain at most 2 characters, but got <length> characters."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_LOG_VERSION" : {
     "message" : [
       "UnsupportedLogVersion."

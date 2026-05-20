@@ -3349,4 +3349,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "expectedFamily" -> expectedFamily,
         "actualFamily" -> actualFamily))
   }
+
+  def lineSepCannotBeNullError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.NULL")
+  }
+
+  def lineSepCannotBeEmptyError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.EMPTY")
+  }
+
+  def lineSepTooLongError(length: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.TOO_LONG",
+      messageParameters = Map("length" -> length.toString))
+  }
 }
