@@ -22,7 +22,7 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
@@ -50,6 +50,13 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
+
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
+      val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
+      val write = writeBuilder.build()
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
+      m.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(
         r: DataSourceV2Relation, deleteExpr, query, options, _, _, None, _) =>
@@ -91,17 +98,18 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       o.copy(write = Some(write), query = newQuery)
 
     case WriteToMicroBatchDataSource(
-        relationOpt, table, query, queryId, options, outputMode, Some(batchId)) =>
-      val writeOptions = mergeOptions(
-        options,
-        relationOpt.map(r => r.options.asCaseSensitiveMap.asScala.toMap).getOrElse(Map.empty))
-      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId = queryId)
-      val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
+        relation, query, queryId, options, outputMode, Some(batchId)) =>
+      val v2Relation = relation.asInstanceOf[DataSourceV2Relation]
+      val writeOptions = mergeOptions(options, v2Relation.options.asCaseSensitiveMap.asScala.toMap)
+      // Guaranteed to support writes since it is a strict requirement to construct
+      // WriteToMicroBatchDataSource.
+      val writeTable = v2Relation.table.asInstanceOf[SupportsWrite]
+      val writeBuilder = newWriteBuilder(writeTable, writeOptions, query.schema, queryId = queryId)
+      val write = buildWriteForMicroBatch(writeTable, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
-      val funCatalogOpt = relationOpt.flatMap(_.funCatalog)
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, funCatalogOpt)
-      WriteToDataSourceV2(relationOpt, microBatchWrite, newQuery, customMetrics)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, v2Relation.funCatalog)
+      WriteToDataSourceV2(Some(v2Relation), microBatchWrite, newQuery, customMetrics)
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val rowSchema = projections.rowProjection.schema
@@ -112,7 +120,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       rd.copy(write = Some(write), query = newQuery)
 
-    case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, None) =>
+    case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
       val deltaWrite = deltaWriteBuilder.build()

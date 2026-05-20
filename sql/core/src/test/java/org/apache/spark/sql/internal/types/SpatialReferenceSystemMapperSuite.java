@@ -61,6 +61,11 @@ public class SpatialReferenceSystemMapperSuite {
     Assertions.assertEquals("EPSG:32601", CartesianSpatialReferenceSystemMapper.getStringId(32601));
     Assertions.assertEquals(
         "ESRI:102013", CartesianSpatialReferenceSystemMapper.getStringId(102013));
+    // GEOMETRY: PROJ 9.8.1+ registry additions (projected ESRI CRS).
+    Assertions.assertEquals(
+        "ESRI:102964", CartesianSpatialReferenceSystemMapper.getStringId(102964));
+    Assertions.assertEquals(
+        "ESRI:105604", CartesianSpatialReferenceSystemMapper.getStringId(105604));
     // GEOGRAPHY: Spark-specific and OGC override entries.
     Assertions.assertEquals("OGC:CRS84", GeographicSpatialReferenceSystemMapper.getStringId(4326));
     Assertions.assertEquals("OGC:CRS27", GeographicSpatialReferenceSystemMapper.getStringId(4267));
@@ -69,6 +74,9 @@ public class SpatialReferenceSystemMapperSuite {
     Assertions.assertEquals("EPSG:4612", GeographicSpatialReferenceSystemMapper.getStringId(4612));
     Assertions.assertEquals(
         "ESRI:37001", GeographicSpatialReferenceSystemMapper.getStringId(37001));
+    // GEOGRAPHY: PROJ 9.8.1+ registry additions (geographic ESRI CRS).
+    Assertions.assertEquals(
+        "ESRI:104030", GeographicSpatialReferenceSystemMapper.getStringId(104030));
   }
 
   @Test
@@ -103,8 +111,11 @@ public class SpatialReferenceSystemMapperSuite {
     Assertions.assertEquals(4267, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4267"));
     Assertions.assertEquals(4269, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:4269"));
     Assertions.assertEquals(32601, CartesianSpatialReferenceSystemMapper.getSrid("EPSG:32601"));
+    Assertions.assertEquals(102964, CartesianSpatialReferenceSystemMapper.getSrid("ESRI:102964"));
+    Assertions.assertEquals(105604, CartesianSpatialReferenceSystemMapper.getSrid("ESRI:105604"));
     // GEOGRAPHY.
     Assertions.assertEquals(4326, GeographicSpatialReferenceSystemMapper.getSrid("OGC:CRS84"));
+    Assertions.assertEquals(104030, GeographicSpatialReferenceSystemMapper.getSrid("ESRI:104030"));
   }
 
   @Test
@@ -190,9 +201,9 @@ public class SpatialReferenceSystemMapperSuite {
     Assertions.assertEquals(1, emptyAuthoritySrid0, "SRID:0 (empty authority)");
     Assertions.assertEquals(3, ogc, "OGC CRS string IDs");
     Assertions.assertEquals(7720, epsg, "EPSG CRS string IDs");
-    Assertions.assertEquals(2919, esri, "ESRI CRS string IDs");
+    Assertions.assertEquals(2990, esri, "ESRI CRS string IDs");
     Assertions.assertEquals(
-        10643,
+        10714,
         sridToSrs.size(),
         "total SRID entries (SRID:0 + OGC + EPSG + ESRI)");
   }

@@ -21,7 +21,6 @@ import pandas as pd
 from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin, using_pandas3
 
 
@@ -177,7 +176,6 @@ class GroupbyStatAdvMixin(GroupbyStatTestingFuncMixin):
 class GroupbyStatAdvTests(
     GroupbyStatAdvMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

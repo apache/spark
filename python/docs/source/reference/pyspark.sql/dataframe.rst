@@ -84,6 +84,7 @@ DataFrame
     DataFrame.metadataColumn
     DataFrame.melt
     DataFrame.na
+    DataFrame.nearestByJoin
     DataFrame.observe
     DataFrame.offset
     DataFrame.orderBy

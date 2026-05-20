@@ -176,6 +176,13 @@ class CodegenContext extends Logging {
   var currentVars: Seq[ExprCode] = null
 
   /**
+   * Java expression used by leaf operators (e.g. `RangeExec`, `SampleExec`)
+   * in place of the stage's `partitionIndex` field. `UnionExec` overrides
+   * this per child so that fused children observe their child-local index.
+   */
+  var currentPartitionIndexVar: String = "partitionIndex"
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:

@@ -666,6 +666,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def stInvalidArgumentErrorInvalidEndiannessValue(
+      endianness: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_ENDIANNESS_VALUE",
+      messageParameters = Map("endianness" -> endianness)
+    )
+  }
+
   def stInvalidSridValueError(srid: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "ST_INVALID_SRID_VALUE",
@@ -1123,7 +1131,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def failedToMergeIncompatibleSchemasError(
-      left: StructType, right: StructType, e: Throwable): Throwable = {
+      left: StructType, right: StructType, e: Throwable = null): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2095",
       messageParameters = Map("left" -> left.toString(), "right" -> right.toString()),
@@ -1192,6 +1200,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkOutOfMemoryError(
       "_LEGACY_ERROR_TEMP_2107",
       new java.util.HashMap[String, String]())
+  }
+
+  def cannotAcquireMemoryForWindowAggregateError(
+      requestedBytes: Long,
+      receivedBytes: Long): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "UNABLE_TO_ACQUIRE_MEMORY",
+      java.util.Map.of(
+        "requestedBytes", requestedBytes.toString,
+        "receivedBytes", receivedBytes.toString))
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {

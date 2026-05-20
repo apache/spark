@@ -1633,6 +1633,311 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     }
   }
 
+  private val diverseTimestamps = Seq(931L, 8000L, 452300L, 4200L, -1L, 90L, 1L, 2L, 8L,
+    -230L, -14569L, -92L, -7434253L, 35L, 6L, 9L, -323L, 5L,
+    -32L, -64L, -256L, 64L, 32L, 1024L, 4096L, 0L)
+
+  testWithColumnFamiliesAndEncodingTypes("rocksdb range scan - rangeScan",
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+        }
+
+        diverseTimestamps.foreach { ts =>
+          store.put(dataToKeyRowWithRangeScan(ts, "a"), dataToValueRow(ts.toInt), cfName)
+        }
+
+        // Bounded positive range [0, 100)
+        val boundedIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(0L, "a")),
+          Some(dataToKeyRowWithRangeScan(100L, "a")), cfName)
+        val boundedResults = boundedIter.map { pair =>
+          (pair.key.getLong(0), pair.value.getInt(0))
+        }.toList
+        boundedIter.close()
+        val expectedBoundedTs = diverseTimestamps.filter(ts => ts >= 0 && ts < 100).sorted
+        assert(boundedResults.map(_._1) === expectedBoundedTs)
+        assert(boundedResults.map(_._2) === expectedBoundedTs.map(_.toInt))
+
+        // Exact bound: startKey is inclusive, endKey is exclusive.
+        // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
+        // Scan [9, 90) should include 9 but exclude 90.
+        val exactIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(9L, "a")),
+          Some(dataToKeyRowWithRangeScan(90L, "a")), cfName)
+        val exactResults = exactIter.map(_.key.getLong(0)).toList
+        exactIter.close()
+        assert(exactResults === diverseTimestamps.filter(ts => ts >= 9 && ts < 90).sorted)
+        assert(exactResults.contains(9L))
+        assert(!exactResults.contains(90L))
+
+        // None startKey scans from beginning to 0
+        val noneStartIter = store.rangeScan(
+          None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+        val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
+        noneStartIter.close()
+        assert(noneStartResults === diverseTimestamps.filter(_ < 0).sorted)
+
+        // None endKey scans from 1000 to end
+        val noneEndIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
+        val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
+        noneEndIter.close()
+        assert(noneEndResults === diverseTimestamps.filter(_ >= 1000).sorted)
+
+        // Empty range [10, 31) - no entries between 9 and 32
+        val emptyIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(10L, "a")),
+          Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
+        assert(!emptyIter.hasNext)
+        emptyIter.close()
+
+        // Bounded negative range [-300, 0)
+        val negIter = store.rangeScan(
+          Some(dataToKeyRowWithRangeScan(-300L, "a")),
+          Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+        val negResults = negIter.map(_.key.getLong(0)).toList
+        negIter.close()
+        assert(negResults === diverseTimestamps.filter(ts => ts >= -300 && ts < 0).sorted)
+
+        // Both None: scan entire column family
+        val allIter = store.rangeScan(None, None, cfName)
+        val allResults = allIter.map(_.key.getLong(0)).toList
+        allIter.close()
+        assert(allResults === diverseTimestamps.sorted)
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "rocksdb range scan - scan with multiple key2 values within same key1 range",
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
+
+    tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      colFamiliesEnabled)) { provider =>
+      val store = provider.getStore(0)
+      try {
+        val cfName = if (colFamiliesEnabled) "testColFamily" else "default"
+        if (colFamiliesEnabled) {
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)))
+        }
+
+        Seq("a", "b", "c").foreach { key2 =>
+          Seq(100L, 200L, 300L).foreach { ts =>
+            store.put(dataToKeyRowWithRangeScan(ts, key2), dataToValueRow(ts.toInt), cfName)
+          }
+        }
+
+        val startKey = dataToKeyRowWithRangeScan(100L, "a")
+        val endKey = dataToKeyRowWithRangeScan(201L, "a")
+        val iter = store.rangeScan(Some(startKey), Some(endKey), cfName)
+        val results = iter.map { pair =>
+          (pair.key.getLong(0), pair.key.getUTF8String(1).toString)
+        }.toList
+        iter.close()
+
+        val expectedResults = Seq(
+          (100L, "a"), (100L, "b"), (100L, "c"),
+          (200L, "a"), (200L, "b"), (200L, "c"))
+        assert(results === expectedResults)
+      } finally {
+        if (!store.hasCommitted) store.abort()
+      }
+    }
+  }
+
+  testWithColumnFamiliesAndEncodingTypes(
+    "rocksdb range scan - rangeScanWithMultiValues",
+    TestWithChangelogCheckpointingDisabled) { colFamiliesEnabled =>
+
+    if (colFamiliesEnabled) {
+      tryWithProviderResource(newStoreProvider(
+        StateStoreId(newDir(), Random.nextInt(), 0),
+        RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        keySchema = keySchemaWithRangeScan,
+        useColumnFamilies = colFamiliesEnabled,
+        useMultipleValuesPerKey = true)) { provider =>
+        val store = provider.getStore(0)
+        try {
+          val cfName = "testColFamily"
+          store.createColFamilyIfAbsent(cfName,
+            keySchemaWithRangeScan, valueSchema,
+            RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+            useMultipleValuesPerKey = true)
+
+          diverseTimestamps.zipWithIndex.foreach { case (ts, idx) =>
+            store.putList(dataToKeyRowWithRangeScan(ts, "a"),
+              Array(dataToValueRow(idx * 10), dataToValueRow(idx * 10 + 1)), cfName)
+          }
+
+          // Bounded range [0, 1001)
+          val boundedIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(0L, "a")),
+            Some(dataToKeyRowWithRangeScan(1001L, "a")), cfName)
+          val boundedResults = boundedIter.map { pair =>
+            (pair.key.getLong(0), pair.value.getInt(0))
+          }.toList
+          boundedIter.close()
+
+          val expectedTimestamps = diverseTimestamps.filter(ts => ts >= 0 && ts <= 1000).sorted
+          assert(boundedResults.map(_._1).distinct === expectedTimestamps)
+          val expectedValues = diverseTimestamps.zipWithIndex
+            .filter { case (ts, _) => ts >= 0 && ts <= 1000 }
+            .sortBy(_._1)
+            .flatMap { case (_, idx) => Seq(idx * 10, idx * 10 + 1) }
+          assert(boundedResults.map(_._2) === expectedValues)
+
+          // Exact bound: startKey is inclusive, endKey is exclusive.
+          // 9 exists in diverseTimestamps, 90 exists in diverseTimestamps.
+          val exactIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(9L, "a")),
+            Some(dataToKeyRowWithRangeScan(90L, "a")), cfName)
+          val exactResults = exactIter.map(_.key.getLong(0)).toList
+          exactIter.close()
+          val exactResultsDistinct = exactResults.distinct
+          assert(exactResultsDistinct === diverseTimestamps
+            .filter(ts => ts >= 9 && ts < 90).sorted)
+          assert(exactResultsDistinct.contains(9L))
+          assert(!exactResultsDistinct.contains(90L))
+
+          // None startKey scans from beginning to 0
+          val noneStartIter = store.rangeScanWithMultiValues(
+            None, Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+          val noneStartResults = noneStartIter.map(_.key.getLong(0)).toList
+          noneStartIter.close()
+          assert(noneStartResults.distinct === diverseTimestamps.filter(_ < 0).sorted)
+
+          // None endKey scans from 1000 to end
+          val noneEndIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(1000L, "a")), None, cfName)
+          val noneEndResults = noneEndIter.map(_.key.getLong(0)).toList
+          noneEndIter.close()
+          assert(noneEndResults.distinct === diverseTimestamps.filter(_ >= 1000).sorted)
+
+          // Empty range [10, 31) - no entries between 9 and 32
+          val emptyIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(10L, "a")),
+            Some(dataToKeyRowWithRangeScan(31L, "a")), cfName)
+          assert(!emptyIter.hasNext)
+          emptyIter.close()
+
+          // Bounded negative range [-300, 0)
+          val negIter = store.rangeScanWithMultiValues(
+            Some(dataToKeyRowWithRangeScan(-300L, "a")),
+            Some(dataToKeyRowWithRangeScan(0L, "a")), cfName)
+          val negResults = negIter.map(_.key.getLong(0)).toList
+          negIter.close()
+          assert(negResults.distinct === diverseTimestamps
+            .filter(ts => ts >= -300 && ts < 0).sorted)
+
+          // Both None: scan entire column family
+          val allIter = store.rangeScanWithMultiValues(None, None, cfName)
+          val allResults = allIter.map(_.key.getLong(0)).toList
+          allIter.close()
+          assert(allResults.distinct === diverseTimestamps.sorted)
+        } finally {
+          if (!store.hasCommitted) store.abort()
+        }
+      }
+    }
+  }
+
+  test("SPARK-56539: prefixScan triggers validateStateRowFormat on schema mismatch") {
+    // Write data with correct schema, then reopen with a mismatched valueSchema.
+    // prefixScan should trigger validateStateRowFormat and throw on the first iteration.
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    // Step 1: Write data with correct schema and commit
+    val provider1 = new RocksDBStateStoreProvider()
+    provider1.init(storeId, keySchema, valueSchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1), useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store1 = provider1.getStore(0)
+    store1.put(dataToKeyRow("a", 1), dataToValueRow(1))
+    store1.commit()
+    provider1.close()
+
+    // Step 2: Reopen with a wrong valueSchema (StringType instead of IntegerType)
+    // The stored IntegerType value bytes will be misinterpreted as a variable-length
+    // StringType offset/size, causing structural integrity validation to fail.
+    val wrongValueSchema = StructType(Seq(StructField("v1", StringType, true)))
+    val provider2 = new RocksDBStateStoreProvider()
+    provider2.init(storeId, keySchema, wrongValueSchema,
+      PrefixKeyScanStateEncoderSpec(keySchema, 1), useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store2 = provider2.getStore(1)
+    try {
+      // prefixScan should trigger validation and throw because stored value bytes
+      // are not structurally valid for the declared StringType schema
+      intercept[StateStoreValueRowFormatValidationFailure] {
+        store2.prefixScan(dataToPrefixKeyRow("a")).toSeq
+      }
+    } finally {
+      store2.abort()
+      provider2.close()
+    }
+  }
+
+  test("SPARK-56539: rangeScan triggers validateStateRowFormat on schema mismatch") {
+    // Write data with correct schema, then reopen with a mismatched valueSchema.
+    // rangeScan should trigger validateStateRowFormat and throw on the first iteration.
+    val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
+    val conf = new Configuration
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
+    // Step 1: Write data with correct schema and commit
+    val provider1 = new RocksDBStateStoreProvider()
+    provider1.init(storeId, keySchemaWithRangeScan, valueSchema,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store1 = provider1.getStore(0)
+    store1.put(dataToKeyRowWithRangeScan(10L, "a"), dataToValueRow(10))
+    store1.commit()
+    provider1.close()
+
+    // Step 2: Reopen with a wrong valueSchema (StringType instead of IntegerType)
+    val wrongValueSchema = StructType(Seq(StructField("v1", StringType, true)))
+    val provider2 = new RocksDBStateStoreProvider()
+    provider2.init(storeId, keySchemaWithRangeScan, wrongValueSchema,
+      RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+      useColumnFamilies = false,
+      new StateStoreConf(SQLConf.get), conf, useMultipleValuesPerKey = false,
+      stateSchemaProvider = Some(new TestStateSchemaProvider))
+    val store2 = provider2.getStore(1)
+    try {
+      // rangeScan should trigger validation and throw because stored value bytes
+      // are not structurally valid for the declared StringType schema
+      intercept[StateStoreValueRowFormatValidationFailure] {
+        store2.rangeScan(
+          Some(dataToKeyRowWithRangeScan(10L, "a")),
+          Some(dataToKeyRowWithRangeScan(20L, "a"))).toSeq
+      }
+    } finally {
+      store2.abort()
+      provider2.close()
+    }
+  }
+
   testWithColumnFamiliesAndEncodingTypes(
     "rocksdb key and value schema encoders for column families",
     TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>

@@ -30,14 +30,12 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.functions.{col, count_distinct, first, lit, max, percentile_approx => pa}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 
 @SlowHiveTest
 class ObjectHashAggregateSuite
   extends QueryTest
-  with SQLTestUtils
   with TestHiveSingleton
   with ExpressionEvalHelper
   with AdaptiveSparkPlanHelper {

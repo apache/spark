@@ -661,6 +661,29 @@
     ],
     "sqlState" : "42P08"
   },
+  "CHANGELOG_CONTRACT_VIOLATION" : {
+    "message" : [
+      "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
+    ],
+    "subClass" : {
+      "NULL_COMMIT_TIMESTAMP" : {
+        "message" : [
+          "Connector emitted a row with a NULL `_commit_timestamp` on a streaming read engaging post-processing. The `Changelog` contract requires `_commit_timestamp` to be non-NULL for streaming reads, since post-processing uses it as event time to advance the watermark."
+        ]
+      },
+      "UNEXPECTED_CHANGE_TYPE" : {
+        "message" : [
+          "Connector emitted a row with a `_change_type` value that is not one of the four supported types (`insert`, `delete`, `update_preimage`, `update_postimage`). The `Changelog` contract requires every emitted row to carry one of these four values."
+        ]
+      },
+      "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
+        "message" : [
+          "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
+  },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
       "Checksum verification failed, the file may be corrupted. File: <fileName>",
@@ -1363,6 +1386,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "COUNTER_DIFF_NEGATIVE_COUNTER_VALUE" : {
+    "message" : [
+      "A negative counter value <value> was provided to function <function>. Negative counter values are not allowed."
+    ],
+    "sqlState" : "22003"
+  },
+  "COUNTER_DIFF_START_TIME_DECREASED" : {
+    "message" : [
+      "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
+    ],
+    "sqlState" : "22023"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -2060,6 +2095,12 @@
       "Found duplicate column(s) in the RETURNS clause column list of the user-defined routine <routineName>: <columns>."
     ],
     "sqlState" : "42711"
+  },
+  "DUPLICATE_SQL_PATH_ENTRY" : {
+    "message" : [
+      "Duplicate SQL path entry <pathEntry>. The session SQL path cannot contain the same namespace more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
+    ],
+    "sqlState" : "42732"
   },
   "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
@@ -2779,6 +2820,12 @@
           "<errors>"
         ]
       },
+      "COLUMN_ID_MISMATCH" : {
+        "message" : [
+          "Column IDs have changed:",
+          "<errors>"
+        ]
+      },
       "METADATA_COLUMNS_MISMATCH" : {
         "message" : [
           "Metadata columns have changed:",
@@ -2961,6 +3008,13 @@
       "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
     ],
     "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED" : {
+    "message" : [
+      "Table alias is not allowed with INSERT INTO ... REPLACE WHERE because the WHERE condition is evaluated against the target table directly.",
+      "Use INSERT INTO ... REPLACE ON if you need to reference the target table via an alias."
+    ],
+    "sqlState" : "42000"
   },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
@@ -3271,6 +3325,34 @@
       "MISSING_STARTING_VERSION" : {
         "message" : [
           "`startingVersion` is required when `endingVersion` is specified for CDC queries."
+        ]
+      },
+      "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
+        "message" : [
+          "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
+  "INVALID_CHANGELOG_SCHEMA" : {
+    "message" : [
+      "The Change Data Capture (CDC) schema returned by connector <changelogName> is invalid."
+    ],
+    "subClass" : {
+      "INVALID_COLUMN_TYPE" : {
+        "message" : [
+          "Column `<columnName>` has type <actualType>, expected <expectedType>."
+        ]
+      },
+      "MISSING_COLUMN" : {
+        "message" : [
+          "Required column `<columnName>` is missing."
+        ]
+      },
+      "MISSING_ROW_ID" : {
+        "message" : [
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array."
         ]
       }
     },
@@ -4060,6 +4142,12 @@
     },
     "sqlState" : "KD002"
   },
+  "INVALID_METRIC_VIEW_YAML" : {
+    "message" : [
+      "Failed to parse metric view YAML: <message>"
+    ],
+    "sqlState" : "42K0L"
+  },
   "INVALID_NAME_IN_USE_COMMAND" : {
     "message" : [
       "Invalid name '<name>' in <command> command. Reason: <reason>"
@@ -4474,6 +4562,12 @@
       "<plan>"
     ],
     "sqlState" : "XXKD0"
+  },
+  "INVALID_SQL_PATH_SCHEMA_REFERENCE" : {
+    "message" : [
+      "Invalid schema reference in SET PATH: <qualifiedName>. Use at least two name parts (catalog.schema); multi-level namespaces are allowed."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
@@ -5194,6 +5288,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "MULTIPLE_EVENT_TIME_COLUMNS" : {
+    "message" : [
+      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ],
+    "sqlState" : "42K09"
+  },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
       "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
@@ -5249,6 +5349,54 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NEAREST_BY_JOIN" : {
+    "message" : [
+      "Invalid nearest-by join."
+    ],
+    "subClass" : {
+      "CROSS_JOIN_NOT_ENABLED" : {
+        "message" : [
+          "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
+        ]
+      },
+      "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
+        "message" : [
+          "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
+        ]
+      },
+      "NON_ORDERABLE_RANKING_EXPRESSION" : {
+        "message" : [
+          "The ranking expression <expression> of type <type> is not orderable. Provide an expression that returns an orderable type, such as a numeric distance like abs(a.col - b.col) or a numeric similarity score."
+        ]
+      },
+      "NUM_RESULTS_OUT_OF_RANGE" : {
+        "message" : [
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
+        ]
+      },
+      "STREAMING_NOT_SUPPORTED" : {
+        "message" : [
+          "Nearest-by join is not supported with streaming DataFrames/Datasets."
+        ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported nearest-by join direction '<direction>'. Supported nearest-by join directions include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_JOIN_TYPE" : {
+        "message" : [
+          "Unsupported nearest-by join type <joinType>. Supported types: <supported>."
+        ]
+      },
+      "UNSUPPORTED_MODE" : {
+        "message" : [
+          "Unsupported nearest-by join mode '<mode>'. Supported modes include: <supported>."
+        ]
+      }
+    },
+    "sqlState" : "42604"
   },
   "NEGATIVE_SCALE_DISALLOWED" : {
     "message" : [
@@ -5874,6 +6022,18 @@
     ],
     "sqlState" : "38000"
   },
+  "QUALIFY_AGGREGATE_NOT_ALLOWED" : {
+    "message" : [
+      "Aggregate functions are not supported in QUALIFY: <aggregateExpr>."
+    ],
+    "sqlState" : "42903"
+  },
+  "QUALIFY_REQUIRES_WINDOW_FUNCTION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function in the current SELECT list or the QUALIFY condition."
+    ],
+    "sqlState" : "42903"
+  },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
       "Recursion level limit <levelLimit> reached but query has not exhausted, try increasing it like 'WITH RECURSIVE t(col) MAX RECURSION LEVEL 200'."
@@ -5897,6 +6057,12 @@
       "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
+  },
+  "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE" : {
+    "message" : [
+      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table)."
+    ],
+    "sqlState" : "0A000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -6870,6 +7036,11 @@
           "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
           "Enable <configKey> as a workaround to skip null values."
         ]
+      },
+      "RANGE_SCAN_TIMESTAMP_OUT_OF_RANGE" : {
+        "message" : [
+          "Range scan returned a row with timestamp <timestamp> outside the expected range [<minTimestamp>, <maxTimestamp>]."
+        ]
       }
     },
     "sqlState" : "XXKST"
@@ -6889,6 +7060,12 @@
   "ST_INVALID_CRS_VALUE" : {
     "message" : [
       "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_ENDIANNESS_VALUE" : {
+    "message" : [
+      "Endianness '<endianness>' must be either 'NDR' (little-endian) or 'XDR' (big-endian)."
     ],
     "sqlState" : "22023"
   },
@@ -7757,6 +7934,11 @@
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
         ]
       },
+      "LATERAL_JOIN_NEAREST_BY" : {
+        "message" : [
+          "LATERAL correlation with NEAREST BY clause."
+        ]
+      },
       "LATERAL_JOIN_USING" : {
         "message" : [
           "JOIN USING with LATERAL correlation."
@@ -7884,6 +8066,11 @@
           "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "SET_PATH_WHEN_DISABLED" : {
+        "message" : [
+          "SET PATH is disabled. Set <config> to true to enable it."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
@@ -7937,6 +8124,26 @@
       "STORE_BACKEND_NOT_SUPPORTED_FOR_TWS" : {
         "message" : [
           "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM is only supported by data sources that implement block-level sampling."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_NO_SCAN" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM requires a direct reference to a data source table that supports block-level sampling. It cannot be applied to subqueries, views, or tables with intervening operations."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_REPEATABLE" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support the REPEATABLE clause. Use TABLESAMPLE BERNOULLI for repeatable sampling with a seed."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_SAMPLE_METHOD" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support <sampleMethod> sampling. Only PERCENT sampling is supported."
         ]
       },
       "TABLE_OPERATION" : {
@@ -8137,6 +8344,29 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this write."
+    ],
+    "subClass" : {
+      "CREATE_TABLE" : {
+        "message" : [
+          "Creating a new table does not support schema evolution."
+        ]
+      },
+      "REPLACE_TABLE" : {
+        "message" : [
+          "Replacing a table does not support schema evolution."
+        ]
+      },
+      "V1_TABLE" : {
+        "message" : [
+          "Writes to V1 tables or V1 data sources do not support schema evolution."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SHOW_CREATE_TABLE" : {
     "message" : [
       "Unsupported a SHOW CREATE TABLE command."
@@ -8145,6 +8375,11 @@
       "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
         "message" : [
           "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
+        ]
+      },
+      "ON_METRIC_VIEW" : {
+        "message" : [
+          "The command is not supported on a metric view <tableName>."
         ]
       },
       "ON_TEMPORARY_VIEW" : {
@@ -8508,6 +8743,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_FRAME_NOT_ORDERED" : {
+    "message" : [
+      "Window function <wf_name> requires the window to be ordered. You need to add an ORDER BY clause. For example: SELECT <wf_expr> OVER (PARTITION BY window_partition ORDER BY window_ordering) FROM table."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
     "message" : [
       "It is not allowed to use window functions inside <clauseName> clause."
@@ -8779,11 +9020,6 @@
       "Window Frame <wf> must match the required frame <required>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1037" : {
-    "message" : [
-      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1039" : {
     "message" : [
       "Multiple time/session window expressions would result in a cartesian product of rows, therefore they are currently not supported."
@@ -8942,11 +9178,6 @@
   "_LEGACY_ERROR_TEMP_1110" : {
     "message" : [
       "Cannot delete from table <table> where <filters>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1111" : {
-    "message" : [
-      "DESCRIBE does not support partition for v2 tables."
     ]
   },
   "_LEGACY_ERROR_TEMP_1114" : {
@@ -10715,11 +10946,6 @@
   "_LEGACY_ERROR_TEMP_3076" : {
     "message" : [
       "Redefining watermark is disallowed. You can set the config '<config>' to 'false' to restore the previous behavior. Note that multiple stateful operators will be disallowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3077" : {
-    "message" : [
-      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3079" : {

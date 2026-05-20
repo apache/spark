@@ -87,6 +87,22 @@ class InMemoryTableWithV2Filter(
                 })
               }
             }
+          case p : Predicate if p.name().equals("=") =>
+            if (p.children().length == 2) {
+              val filterRef = p.children()(0).asInstanceOf[FieldReference].references.head
+              if (filterRef.toString.equals(ref.toString)) {
+                val matchingKey = p.children()(1).asInstanceOf[LiteralValue[_]].value
+                if (matchingKey != null) {
+                  data = data.filter(partition => {
+                    val key = partition.asInstanceOf[BufferedRows].keyString()
+                    key == matchingKey.toString
+                  })
+                } else {
+                  data = Seq.empty // NULL = anything is always false
+                }
+              }
+            }
+          case _ => // Ignore unsupported predicate types
         }
       }
     }
@@ -124,7 +140,8 @@ class InMemoryTableWithV2Filter(
 
   private class Overwrite(predicates: Array[Predicate]) extends TestBatchWrite {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val deleteKeys = InMemoryTableWithV2Filter.filtersToKeys(
         dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, predicates)
       dataMap --= deleteKeys

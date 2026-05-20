@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one
  * sorted by a reference implementation ([[ReferenceSort]]).
  */
-class SortSuite extends SparkPlanTest with SharedSparkSession {
+class SortSuite extends SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 

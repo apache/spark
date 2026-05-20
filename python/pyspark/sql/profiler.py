@@ -51,20 +51,60 @@ from pyspark.profiler import (
 )
 
 if TYPE_CHECKING:
-    from pyspark.sql._typing import ProfileResults
+    from pyspark.sql._typing import ProfileResults, ProfileResultsV2
 
 
-class _ProfileResultsParam(AccumulatorParam["ProfileResults"]):
+class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
     """
     AccumulatorParam for profilers.
     """
 
     @staticmethod
-    def zero(value: "ProfileResults") -> "ProfileResults":
+    def zero(value: Optional["ProfileResults"]) -> Optional["ProfileResults"]:
+        return value
+
+    @staticmethod
+    def addInPlace(
+        value1: Optional["ProfileResults"], value2: Optional["ProfileResults"]
+    ) -> Optional["ProfileResults"]:
+        if value1 is None or len(value1) == 0:
+            value1 = {}
+        if value2 is None or len(value2) == 0:
+            value2 = {}
+
+        value = value1.copy()
+        for key, (perf, mem, *_) in value2.items():
+            if key in value1:
+                orig_perf, orig_mem, *_ = value1[key]
+            else:
+                orig_perf, orig_mem = (PStatsParam.zero(None), MemUsageParam.zero(None))
+            value[key] = (
+                PStatsParam.addInPlace(orig_perf, perf),
+                MemUsageParam.addInPlace(orig_mem, mem),
+            )
+        return value
+
+
+ProfileResultsParam = _ProfileResultsParam()
+
+
+# _ProfileResultsParam uses (perf, memory) tuple which is very difficult
+# to extend. However, this is shared code between the server and the client
+# for spark connect. In order to gradually migrate to dict implementation,
+# we create a new AccumulatorParam on a new channel SQL_UDF_PROFIER_V2.
+# We started this in 4.2.0. When we drop support for all versions before 4.2.0,
+# we can remove _ProfileResultsParam and other old content.
+class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
+    """
+    AccumulatorParam for profilers.
+    """
+
+    @staticmethod
+    def zero(value: "ProfileResultsV2") -> "ProfileResultsV2":
         return {}
 
     @staticmethod
-    def addInPlace(value1: "ProfileResults", value2: "ProfileResults") -> "ProfileResults":
+    def addInPlace(value1: "ProfileResultsV2", value2: "ProfileResultsV2") -> "ProfileResultsV2":
         for key, result in value2.items():
             if key not in value1:
                 value1[key] = result
@@ -82,7 +122,7 @@ class _ProfileResultsParam(AccumulatorParam["ProfileResults"]):
         return value1
 
 
-ProfileResultsParam = _ProfileResultsParam()
+ProfileResultsParamV2 = _ProfileResultsParamV2()
 
 
 class WorkerPerfProfiler:
@@ -91,9 +131,13 @@ class WorkerPerfProfiler:
     """
 
     def __init__(
-        self, accumulator: Accumulator["ProfileResults"], result_key: Union[int, str]
+        self,
+        accumulator: Accumulator[Optional["ProfileResults"]],
+        accumulator_v2: Accumulator["ProfileResultsV2"],
+        result_key: Union[int, str],
     ) -> None:
         self._accumulator = accumulator
+        self._accumulator_v2 = accumulator_v2
         self._profiler = cProfile.Profile()
         self._result_key = result_key
 
@@ -108,7 +152,13 @@ class WorkerPerfProfiler:
         # make it picklable
         st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
-        self._accumulator.add({self._result_key: {"perf": st}})
+        self._accumulator.add({self._result_key: (st, None)})
+
+        st = pstats.Stats(self._profiler, stream=None)
+        # make it picklable
+        st.stream = None  # type: ignore[attr-defined]
+        st.strip_dirs()
+        self._accumulator_v2.add({self._result_key: {"perf": st}})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -131,13 +181,15 @@ class WorkerMemoryProfiler:
 
     def __init__(
         self,
-        accumulator: Accumulator["ProfileResults"],
+        accumulator: Accumulator[Optional["ProfileResults"]],
+        accumulator_v2: Accumulator["ProfileResultsV2"],
         result_key: Union[int, str],
         func_or_code: Union[Callable, CodeType],
     ) -> None:
         from pyspark.memory_profiler_ext import UDFLineProfilerV2
 
         self._accumulator = accumulator
+        self._accumulator_v2 = accumulator_v2
         self._profiler = UDFLineProfilerV2()
         if isinstance(func_or_code, CodeType):
             self._profiler.add_code(func_or_code)
@@ -156,7 +208,8 @@ class WorkerMemoryProfiler:
             filename: list(line_iterator)
             for filename, line_iterator in self._profiler.code_map.items()
         }
-        self._accumulator.add({self._result_key: {"memory": codemap_dict}})
+        self._accumulator.add({self._result_key: (None, codemap_dict)})
+        self._accumulator_v2.add({self._result_key: {"memory": codemap_dict}})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
@@ -276,7 +329,7 @@ class ProfilerCollector(ABC):
 
     @property
     @abstractmethod
-    def _profile_results(self) -> "ProfileResults":
+    def _profile_results(self) -> "ProfileResultsV2":
         """
         Get the profile results.
         """
@@ -402,15 +455,16 @@ class ProfilerCollector(ABC):
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
         super().__init__()
-        if SpecialAccumulatorIds.SQL_UDF_PROFIER in _accumulatorRegistry:
-            self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER]
+
+        if SpecialAccumulatorIds.SQL_UDF_PROFIER_V2 in _accumulatorRegistry:
+            self._accumulator = _accumulatorRegistry[SpecialAccumulatorIds.SQL_UDF_PROFIER_V2]
         else:
             self._accumulator = Accumulator(
-                SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+                SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
             )
 
     @property
-    def _profile_results(self) -> "ProfileResults":
+    def _profile_results(self) -> "ProfileResultsV2":
         with self._lock:
             value = self._accumulator.value
             return value if value is not None else {}

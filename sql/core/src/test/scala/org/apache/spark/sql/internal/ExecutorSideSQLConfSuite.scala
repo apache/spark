@@ -21,8 +21,9 @@ import java.util.UUID
 
 import org.scalatest.Assertions._
 
-import org.apache.spark.{SparkFunSuite, SparkNoSuchElementException, TaskContext}
+import org.apache.spark.{SparkNoSuchElementException, TaskContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -31,11 +32,10 @@ import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
-class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
+class ExecutorSideSQLConfSuite extends QueryTest {
   import testImplicits._
 
   protected var spark: SparkSession = null

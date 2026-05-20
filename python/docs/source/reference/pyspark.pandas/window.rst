@@ -39,6 +39,7 @@ Standard moving window functions
    Rolling.max
    Rolling.mean
    Rolling.quantile
+   Rolling.median
 
 Standard expanding window functions
 -----------------------------------
@@ -52,6 +53,7 @@ Standard expanding window functions
    Expanding.max
    Expanding.mean
    Expanding.quantile
+   Expanding.median
 
 Exponential moving window functions
 -----------------------------------

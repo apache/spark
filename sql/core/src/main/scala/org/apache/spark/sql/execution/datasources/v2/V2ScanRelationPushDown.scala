@@ -21,13 +21,14 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
@@ -150,6 +151,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
+        // Do not push down join if either side has a pushed sample, because
+        // the merged scan builder would silently discard it.
+        // TODO(SPARK-56504): Extend SupportsPushDownJoin to accept pushed
+        //   samples so sources supporting both can handle the composition.
+        leftHolder.pushedSample.isEmpty && rightHolder.pushedSample.isEmpty &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
@@ -808,9 +814,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       // Remap pushed filter attributes to the pruned output schema and drop filters
-      // whose references are no longer in the pruned output.
-      val remappedPushedFilters = sHolder.pushedFilterExpressions.map(projectionFunc)
-        .filter(_.references.subsetOf(AttributeSet(output)))
+      // whose references are no longer in the pruned output. Catch FIELD_NOT_FOUND
+      // because ProjectionOverSchema throws when a pushed filter references a nested
+      // struct field that was pruned from the schema.
+      val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
+        try Some(projectionFunc(filter))
+        catch {
+          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
+            None
+        }
+      }.filter(_.references.subsetOf(AttributeSet(output)))
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
         pushedFilters = remappedPushedFilters)
 
@@ -837,15 +850,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
-          sample.seed.getOrElse((math.random() * 1000).toLong))
+          // TODO(SPARK-56573): The * 1000 limits the seed to only 1000 distinct values.
+          //   Kept here for consistency with SampleExec.resolvedSeed; will be fixed
+          //   across all call sites in SPARK-56573.
+          sample.seed.getOrElse((math.random() * 1000).toLong),
+          sampleMethod = sample.sampleMethod)
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {
           sHolder.pushedSample = Some(tableSample)
           sample.child
+        } else if (sample.sampleMethod == SampleMethod.System) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM",
+            messageParameters = Map.empty)
         } else {
           sample
         }
-
+      case _ if sample.sampleMethod == SampleMethod.System =>
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_NO_SCAN",
+          messageParameters = Map.empty)
       case _ => sample
     }
   }

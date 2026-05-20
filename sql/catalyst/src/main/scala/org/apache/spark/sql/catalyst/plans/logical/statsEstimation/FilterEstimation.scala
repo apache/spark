@@ -325,39 +325,44 @@ case class FilterEstimation(plan: Filter) extends Logging {
     }
     val colStat = colStatsMap(attr)
 
-    // decide if the value is in [min, max] of the column.
-    // We currently don't store min/max for binary/string type.
-    // Hence, we assume it is in boundary for binary/string type.
-    val statsInterval = ValueInterval(colStat.min, colStat.max, attr.dataType)
-    if (statsInterval.contains(literal)) {
-      if (update) {
-        // We update ColumnStat structure after apply this equality predicate:
-        // Set distinctCount to 1, nullCount to 0, and min/max values (if exist) to the literal
-        // value.
-        val newStats = attr.dataType match {
-          case StringType | BinaryType =>
-            colStat.copy(distinctCount = Some(1), nullCount = Some(0))
-          case _ =>
-            colStat.copy(distinctCount = Some(1), min = Some(literal.value),
-              max = Some(literal.value), nullCount = Some(0))
-        }
-        colStatsMap.update(attr, newStats)
-      }
-
-      if (colStat.histogram.isEmpty) {
-        if (!colStat.distinctCount.isEmpty) {
-          // returns 1/ndv if there is no histogram
-          Some(1.0 / colStat.distinctCount.get.toDouble)
-        } else {
-          None
-        }
-      } else {
-        Some(computeEqualityPossibilityByHistogram(literal, colStat))
-      }
-
-    } else {  // not in interval
-      Some(0.0)
+    // Decide if the value is in [min, max] of the column.
+    // We currently don't store min/max for binary/string type. For other types, if min/max are
+    // missing, treat the range as unknown (instead of "all nulls") and fall back to NDV/histogram.
+    val valueInRange = attr.dataType match {
+      case StringType | BinaryType =>
+        true
+      case _ if !colStat.hasMinMaxStats =>
+        true
+      case _ =>
+        ValueInterval(colStat.min, colStat.max, attr.dataType).contains(literal)
     }
+
+    if (!valueInRange) return Some(0.0)
+
+    val percent = if (colStat.histogram.isDefined) {
+      if (colStat.hasMinMaxStats) {
+        Some(computeEqualityPossibilityByHistogram(literal, colStat))
+      } else {
+        None
+      }
+    } else {
+      colStat.distinctCount.filter(_ > 0).map(ndv => 1.0 / ndv.toDouble)
+    }
+
+    if (update && percent.isDefined) {
+      // We update ColumnStat structure after apply this equality predicate:
+      // Set distinctCount to 1, nullCount to 0, and min/max values (if exist) to the literal value.
+      val newStats = attr.dataType match {
+        case StringType | BinaryType =>
+          colStat.copy(distinctCount = Some(1), nullCount = Some(0))
+        case _ =>
+          colStat.copy(distinctCount = Some(1), min = Some(literal.value),
+            max = Some(literal.value), nullCount = Some(0))
+      }
+      colStatsMap.update(attr, newStats)
+    }
+
+    percent
   }
 
   /**
@@ -409,8 +414,11 @@ case class FilterEstimation(plan: Filter) extends Logging {
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
+        if (ndv.toDouble == 0) {
           return Some(0.0)
+        }
+        if (colStat.min.isEmpty || colStat.max.isEmpty) {
+          return None
         }
 
         val statsInterval =

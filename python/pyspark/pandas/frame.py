@@ -7988,7 +7988,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
         ignore_index : bool, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -9646,7 +9646,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         random_state : int, optional
             Seed for the random number generator (if int).
         ignore_index : bool, default False
-            If True, the resulting index will be labeled 0, 1, …, n - 1.
+            If True, the resulting index will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -10249,7 +10249,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace : boolean, default False
             Whether to drop duplicates in place or to return a copy.
         ignore_index : boolean, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -13351,7 +13351,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         column : str or tuple
             Column to explode.
         ignore_index : bool, default False
-            If True, the resulting index will be labeled 0, 1, …, n - 1.
+            If True, the resulting index will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------

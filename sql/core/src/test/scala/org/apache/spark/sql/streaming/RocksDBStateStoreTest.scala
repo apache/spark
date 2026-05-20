@@ -20,13 +20,13 @@ package org.apache.spark.sql.streaming
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.streaming.state.{RocksDBConf, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-trait RocksDBStateStoreTest extends SQLTestUtils {
+trait RocksDBStateStoreTest extends QueryTest {
 
   val rocksdbChangelogCheckpointingConfKey: String = RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX +
     ".changelogCheckpointing.enabled"

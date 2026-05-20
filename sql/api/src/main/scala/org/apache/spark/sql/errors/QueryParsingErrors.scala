@@ -72,6 +72,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def insertReplaceWhereTableAliasNotAllowed(ctx: TableAliasContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
       errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
@@ -200,6 +207,33 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.LATERAL_WITHOUT_SUBQUERY_OR_TABLE_VALUED_FUNC",
+      ctx)
+  }
+
+  def nearestByJoinWithLateralUnsupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_NEAREST_BY",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def unsupportedNearestByJoinTypeError(
+      ctx: ParserRuleContext,
+      joinType: String,
+      supported: String): Throwable = {
+    new ParseException(
+      errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      messageParameters = Map("joinType" -> toSQLStmt(joinType), "supported" -> supported),
+      ctx)
+  }
+
+  def nearestByJoinNumResultsOutOfRangeError(
+      ctx: ParserRuleContext,
+      numResults: String,
+      max: Int): Throwable = {
+    new ParseException(
+      errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      messageParameters = Map("numResults" -> numResults, "min" -> "1", "max" -> max.toString),
       ctx)
   }
 
@@ -479,6 +513,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0035",
       messageParameters = Map("message" -> message),
+      ctx)
+  }
+
+  def tableSampleSystemRepeatableError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_REPEATABLE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def tableSampleSystemSampleMethodError(
+      sampleMethod: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      messageParameters = Map("sampleMethod" -> sampleMethod),
       ctx)
   }
 

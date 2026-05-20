@@ -250,11 +250,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * A deterministic scope ID for RDDs created by this SparkPlan,
+   * used by LastAttemptAccumulator to track which RDD belongs
+   * to which SparkPlan node.
+   */
+  private[spark] def rddScopeId: String =
+    "spark_plan_" + id.toString
+
+  /**
    * Executes a query after preparing the query and adding query plan information to created RDDs
    * for visualization.
    */
   protected final def executeQuery[T](query: => T): T = {
-    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+    RDDOperationScope.withScope(
+        sparkContext, nodeName, false, true, rddScopeId) {
       prepare()
       waitForSubqueries()
       query
@@ -375,6 +384,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(
       n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, ChunkedByteBuffer)] = {
+    // Wrap in the plan's RDD scope so that the wrapper RDD created by mapPartitionsInternal
+    // inherits this plan's deterministic scope ID rather than getting an anonymous auto-generated
+    // one.
+    val rdd = RDDOperationScope.withScope(
+        sparkContext, nodeName, false, true, rddScopeId) {
     execute().mapPartitionsInternal { iter =>
       var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
@@ -409,8 +423,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       out.writeInt(-1)
       out.flush()
       out.close()
-      Iterator((count, cbbos.toChunkedByteBuffer))
+      Iterator((count.toLong, cbbos.toChunkedByteBuffer))
     }
+    }
+    rdd
   }
 
   /**

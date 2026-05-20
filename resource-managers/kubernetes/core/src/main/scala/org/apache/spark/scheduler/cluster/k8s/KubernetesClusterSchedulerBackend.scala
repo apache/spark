@@ -47,7 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    kubernetesClient: KubernetesClient,
+    private[k8s] val kubernetesClient: KubernetesClient,
     executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,

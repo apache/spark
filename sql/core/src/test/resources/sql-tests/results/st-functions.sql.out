@@ -574,7 +574,7 @@ struct<result:string>
 -- !query
 SELECT ST_AsBinary(ST_GeogFromWKB(NULL))
 -- !query schema
-struct<st_asbinary(st_geogfromwkb(NULL)):binary>
+struct<st_asbinary(st_geogfromwkb(NULL), NDR):binary>
 -- !query output
 NULL
 
@@ -582,7 +582,7 @@ NULL
 -- !query
 SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')))
 -- !query schema
-struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string>
+struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR)):string>
 -- !query output
 0101000000000000000000F03F0000000000000040
 
@@ -622,7 +622,7 @@ struct<count(1):bigint>
 -- !query
 SELECT ST_AsBinary(ST_GeomFromWKB(NULL))
 -- !query schema
-struct<st_asbinary(st_geomfromwkb(NULL, 0)):binary>
+struct<st_asbinary(st_geomfromwkb(NULL, 0), NDR):binary>
 -- !query output
 NULL
 
@@ -630,7 +630,7 @@ NULL
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040')))
 -- !query schema
-struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0))):string>
+struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR)):string>
 -- !query output
 0101000000000000000000F03F0000000000000040
 
@@ -638,7 +638,7 @@ struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F00000000000000
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 0)))
 -- !query schema
-struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0))):string>
+struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR)):string>
 -- !query output
 0101000000000000000000F03F0000000000000040
 
@@ -646,7 +646,7 @@ struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F00000000000000
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 3857)))
 -- !query schema
-struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 3857))):string>
+struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 3857), NDR)):string>
 -- !query output
 0101000000000000000000F03F0000000000000040
 
@@ -654,7 +654,7 @@ struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F00000000000000
 -- !query
 SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040', 4326)))
 -- !query schema
-struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326))):string>
+struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 4326), NDR)):string>
 -- !query output
 0101000000000000000000F03F0000000000000040
 
@@ -764,6 +764,200 @@ org.apache.spark.SparkIllegalArgumentException
   "sqlState" : "22023",
   "messageParameters" : {
     "srid" : "1"
+  }
+}
+
+
+-- !query
+SELECT ST_AsBinary(NULL)
+-- !query schema
+struct<st_asbinary(NULL, NDR):binary>
+-- !query output
+NULL
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040')))
+-- !query schema
+struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR)):string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'00000000013FF00000000000004000000000000000'), 'NDR'))
+-- !query schema
+struct<hex(st_asbinary(st_geogfromwkb(X'00000000013FF00000000000004000000000000000'), NDR)):string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'))
+-- !query schema
+struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), XDR)):string>
+-- !query output
+00000000013FF00000000000004000000000000000
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040')))
+-- !query schema
+struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR)):string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'00000000013FF00000000000004000000000000000'), 'NDR'))
+-- !query schema
+struct<hex(st_asbinary(st_geomfromwkb(X'00000000013FF00000000000004000000000000000', 0), NDR)):string>
+-- !query output
+0101000000000000000000F03F0000000000000040
+
+
+-- !query
+SELECT hex(ST_AsBinary(ST_GeomFromWKB(X'0101000000000000000000F03F0000000000000040'), 'XDR'))
+-- !query schema
+struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), XDR)):string>
+-- !query output
+00000000013FF00000000000004000000000000000
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), '')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_ENDIANNESS_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "endianness" : ""
+  }
+}
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'ABC')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_ENDIANNESS_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "endianness" : "ABC"
+  }
+}
+
+
+-- !query
+SELECT ST_AsBinary(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 'big-endian')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_ENDIANNESS_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "endianness" : "big-endian"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb)) <> wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'NDR') <> wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'XDR') = wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb)) <> wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb), 'NDR') <> wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeomFromWKB(wkb), 'XDR') = wkb
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), '') IS NOT NULL
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_ENDIANNESS_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "endianness" : ""
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'ABC') IS NOT NULL
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_ENDIANNESS_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "endianness" : "ABC"
+  }
+}
+
+
+-- !query
+SELECT COUNT(*) FROM geodata WHERE ST_AsBinary(ST_GeogFromWKB(wkb), 'big-endian') IS NOT NULL
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ST_INVALID_ENDIANNESS_VALUE",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "endianness" : "big-endian"
   }
 }
 

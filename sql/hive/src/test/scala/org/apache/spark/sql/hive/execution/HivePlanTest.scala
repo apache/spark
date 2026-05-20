@@ -26,7 +26,6 @@ import org.apache.spark.tags.SlowHiveTest
 
 @SlowHiveTest
 class HivePlanTest extends QueryTest with TestHiveSingleton {
-  import spark.sql
   import spark.implicits._
 
   test("udf constant folding") {
