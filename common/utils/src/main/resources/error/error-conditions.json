@@ -209,6 +209,29 @@
     ],
     "sqlState" : "42703"
   },
+  "AUTOCDC_MICROBATCH_VALIDATION" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> in batch <batchId> failed microbatch validation."
+    ],
+    "subClass" : {
+      "NON_ORDERABLE_SEQUENCE" : {
+        "message" : [
+          "The sequencing column has non-orderable type <dataType>. The sequencing column must be of a type that supports ordering."
+        ]
+      },
+      "NULL_KEY" : {
+        "message" : [
+          "The microbatch contains rows with null values in the following key column(s): <nullKeyCounts>. All rows must have non-null values for every key column."
+        ]
+      },
+      "NULL_SEQUENCE" : {
+        "message" : [
+          "The microbatch contains <nullCount> row(s) with a null sequencing value. All rows must have a non-null sequencing value."
+        ]
+      }
+    },
+    "sqlState" : "22000"
+  },
   "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the column `<columnName>` in the <schemaName> schema conflicts with the reserved AutoCDC column name `<reservedColumnName>`. Rename or remove the column."

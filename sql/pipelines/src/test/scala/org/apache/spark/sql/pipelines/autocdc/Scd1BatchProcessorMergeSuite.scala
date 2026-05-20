@@ -21,48 +21,22 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.{functions => F, AnalysisException, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
-import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTableCatalog, TableInfo}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
  * Tests for [[Scd1BatchProcessor]] methods that perform a `MERGE INTO` against a registered
  * v2 table. These tests require a v2 catalog that supports row-level operations
- * ([[InMemoryRowLevelOperationTableCatalog]]) and run actual writes through Catalyst's
+ * (set up by [[AutoCdcCatalogExecutionTestBase]]) and run actual writes through Catalyst's
  * row-level-operations machinery, so they are kept separate from the pure-DataFrame-transform
  * tests in [[Scd1BatchProcessorSuite]].
  */
 class Scd1BatchProcessorMergeSuite
-    extends QueryTest with SharedSparkSession with BeforeAndAfter {
-
-  private val auxCatalogName = "cat"
-  private val auxNamespace = "ns1"
-  private val auxTableName = "aux_table"
-  private val targetTableName = "target_table"
-
-  /** v2 [[Identifier]] used for direct catalog API calls (CREATE TABLE). */
-  private val auxIdent = Identifier.of(Array(auxNamespace), auxTableName)
-  private val targetIdent = Identifier.of(Array(auxNamespace), targetTableName)
-
-  /** Three-part [[TableIdentifier]] passed to the function under test. */
-  private val auxTableIdentifier = TableIdentifier(
-    table = auxTableName,
-    database = Some(auxNamespace),
-    catalog = Some(auxCatalogName)
-  )
-  private val targetTableIdentifier = TableIdentifier(
-    table = targetTableName,
-    database = Some(auxNamespace),
-    catalog = Some(auxCatalogName)
-  )
-
-  private val cdcMetadataColSchemaType = new StructType()
-    .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
-    .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+    extends QueryTest
+    with SharedSparkSession
+    with BeforeAndAfter
+    with AutoCdcCatalogExecutionTestBase {
 
   /**
    * Minimal valid shape for both the auxiliary table and microbatch inputs in these tests:
@@ -73,13 +47,13 @@ class Scd1BatchProcessorMergeSuite
    */
   private val minimalSchema: StructType = new StructType()
     .add("id", IntegerType)
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
 
   /** Minimal target-table shape: one key, one data column, and CDC metadata. */
   private val targetSchema: StructType = new StructType()
     .add("id", IntegerType)
     .add("value", StringType)
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
 
   /**
    * A processor with a single key column `id`. `sequencing` is irrelevant for
@@ -95,17 +69,13 @@ class Scd1BatchProcessorMergeSuite
     resolvedSequencingType = LongType
   )
 
-  before {
-    spark.conf.set(
-      s"spark.sql.catalog.$auxCatalogName",
-      classOf[InMemoryRowLevelOperationTableCatalog].getName
-    )
-  }
+  /** Create the auxiliary table using [[minimalSchema]], optionally seeded with `seedRows`. */
+  private def createAuxTable(seedRows: Row*): Unit =
+    createTable(defaultAuxIdent, defaultAuxTableIdentifier, minimalSchema, seedRows: _*)
 
-  after {
-    spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$auxCatalogName")
-  }
+  /** Create the target table using [[targetSchema]], optionally seeded with `seedRows`. */
+  private def createTargetTable(seedRows: Row*): Unit =
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, targetSchema, seedRows: _*)
 
   /**
    * Build an auxiliary-table schema with the given key columns followed by the standard CDC
@@ -115,71 +85,15 @@ class Scd1BatchProcessorMergeSuite
     val withKeys = keyColumns.foldLeft(new StructType()) { case (s, (name, dt)) =>
       s.add(name, dt)
     }
-    withKeys.add(
-      Scd1BatchProcessor.cdcMetadataColName,
-      new StructType()
-        .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
-        .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
-    )
+    withKeys.add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
   }
 
   /**
-   * Create an auxiliary table in the test catalog using `schema` and seed it with `seedRows`.
-   * The table is unpartitioned and supports row-level operations. Pass no rows to create an
-   * empty table.
+   * Create the auxiliary table at [[defaultAuxIdent]] using `schema` and optionally seed it
+   * with `seedRows`. Used by tests that need a non-trivial key shape (composite or dotted).
    */
-  private def createAuxTableWithSchema(schema: StructType, seedRows: Row*): Unit = {
-    val tableInfo = new TableInfo.Builder()
-      .withSchema(schema)
-      .build()
-    spark.sessionState.catalogManager
-      .catalog(auxCatalogName)
-      .asTableCatalog
-      .createTable(auxIdent, tableInfo)
-
-    if (seedRows.nonEmpty) {
-      val df = spark.createDataFrame(spark.sparkContext.parallelize(seedRows), schema)
-      df.writeTo(auxTableIdentifier.quotedString).append()
-    }
-  }
-
-  /** Create an auxiliary table using [[minimalSchema]] (single `id` key). */
-  private def createAuxTable(seedRows: Row*): Unit =
-    createAuxTableWithSchema(minimalSchema, seedRows: _*)
-
-  /** Create a target table in the test catalog using [[targetSchema]]. */
-  private def createTargetTable(seedRows: Row*): Unit = {
-    val tableInfo = new TableInfo.Builder()
-      .withSchema(targetSchema)
-      .build()
-    spark.sessionState.catalogManager
-      .catalog(auxCatalogName)
-      .asTableCatalog
-      .createTable(targetIdent, tableInfo)
-
-    if (seedRows.nonEmpty) {
-      val df = spark.createDataFrame(spark.sparkContext.parallelize(seedRows), targetSchema)
-      df.writeTo(targetTableIdentifier.quotedString).append()
-    }
-  }
-
-  /** Read the current contents of the auxiliary table. */
-  private def readAuxTable(): DataFrame = spark.read.table(auxTableIdentifier.quotedString)
-
-  /** Read the current contents of the target table. */
-  private def readTargetTable(): DataFrame = spark.read.table(targetTableIdentifier.quotedString)
-
-  /** Build a microbatch [[DataFrame]] from explicit `rows` and an explicit `schema`. */
-  private def microbatchOf(schema: StructType)(rows: Row*): DataFrame =
-    spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
-
-  /**
-   * Build a row matching the [[Scd1BatchProcessor.cdcMetadataColName]] struct's two fields, in
-   * the order produced by [[Scd1BatchProcessor.constructCdcMetadataCol]]:
-   * `(deleteSequence, upsertSequence)`. Pass `None` for the side that doesn't apply.
-   */
-  private def cdcMetadataRow(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =
-    Row(deleteSeq.getOrElse(null), upsertSeq.getOrElse(null))
+  private def createAuxTableWithSchema(schema: StructType, seedRows: Row*): Unit =
+    createTable(defaultAuxIdent, defaultAuxTableIdentifier, schema, seedRows: _*)
 
   /**
    * `(name, dataType)` pairs of `schema`'s fields, used to compare two schemas for structural
@@ -192,7 +106,7 @@ class Scd1BatchProcessorMergeSuite
 
   test("mergeMicrobatchOntoAuxiliaryTable replaces an existing tombstone with a newer " +
     "microbatch tombstone, dropping any microbatch-only data columns") {
-    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)))
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
 
     // The microbatch carries an extra `value` data column that has no place in the auxiliary
     // table. mergeMicrobatchOntoAuxiliaryTable must project it away before merging, both to
@@ -208,29 +122,30 @@ class Scd1BatchProcessorMergeSuite
           .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
       )
     val microbatch = microbatchOf(microbatchSchema)(
-      Row(1, "data-leak", cdcMetadataRow(deleteSeq = Some(20), upsertSeq = None))
+      Row(1, "data-leak", cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    val result = readAuxTable()
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     // Tombstone advanced to delete=20, with exactly one row per key (no duplicate tombstones).
-    checkAnswer(result, Row(1, Row(20L, null)))
+    checkAnswer(resultAuxTable, Row(1, Row(20L, null)))
     // Schema strictly matches minimalSchema; the `value` column was dropped, not smuggled in.
-    assert(columnNamesAndDataTypes(result.schema) == columnNamesAndDataTypes(minimalSchema))
+    assert(columnNamesAndDataTypes(resultAuxTable.schema) == columnNamesAndDataTypes(minimalSchema))
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable deletes an existing tombstone when superseded by a " +
     "newer microbatch upsert") {
-    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)))
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
 
     val microbatch = microbatchOf(minimalSchema)(
-      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    assert(readAuxTable().collect().isEmpty)
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    assert(resultAuxTable.collect().isEmpty)
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable inserts a new tombstone for a previously-untracked " +
@@ -238,26 +153,28 @@ class Scd1BatchProcessorMergeSuite
     createAuxTable()
 
     val microbatch = microbatchOf(minimalSchema)(
-      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Row(1, Row(10L, null)))
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(resultAuxTable, Row(1, Row(10L, null)))
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable leaves rows for unrelated keys untouched") {
-    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)))
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
 
     // Microbatch event affects a different key entirely; the existing tombstone for id=1 must
     // not be touched even though the new tombstone's sequence is much larger.
     val microbatch = microbatchOf(minimalSchema)(
-      Row(2, cdcMetadataRow(deleteSeq = Some(100), upsertSeq = None))
+      Row(2, cdcMetadataRow(deleteSeq = Some(100L), upsertSeq = None))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Seq(
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(resultAuxTable, Seq(
       Row(1, Row(10L, null)),
       Row(2, Row(100L, null))
     ))
@@ -268,28 +185,30 @@ class Scd1BatchProcessorMergeSuite
     // This documents that mergeMicrobatchOntoAuxiliaryTable's contract is stronger than just
     // relying on applyTombstonesToMicrobatch having filtered out stale events upstream: even
     // an unfiltered stale incoming delete must not regress the high-water mark.
-    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)))
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
 
     val microbatch = microbatchOf(minimalSchema)(
-      Row(1, cdcMetadataRow(deleteSeq = Some(5), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = Some(5L), upsertSeq = None))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Row(1, Row(10L, null)))
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(resultAuxTable, Row(1, Row(10L, null)))
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable ignores microbatch upserts whose sequence is older " +
     "than the existing tombstone") {
-    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)))
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
 
     val microbatch = microbatchOf(minimalSchema)(
-      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5)))
+      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5L)))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Row(1, Row(10L, null)))
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(resultAuxTable, Row(1, Row(10L, null)))
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable applies the tied-sequence asymmetry: equal deletes " +
@@ -299,34 +218,36 @@ class Scd1BatchProcessorMergeSuite
     // tombstone. On a delete<->delete sequencing tie, the effect is a no-op. This is an
     // internal SCD1 tie-breaking convention, not a publicly documented contract.
     createAuxTable(
-      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)),
-      Row(2, cdcMetadataRow(deleteSeq = Some(20), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)),
+      Row(2, cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None))
     )
 
     val microbatch = microbatchOf(minimalSchema)(
-      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)),
-      Row(2, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+      Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)),
+      Row(2, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     // Row 1's tombstone remains the same, but row 2's tombstone should be marked as stale and
     // deleted.
-    checkAnswer(readAuxTable(), Row(1, Row(10L, null)))
+    checkAnswer(resultAuxTable, Row(1, Row(10L, null)))
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable upsert event for different key does not affect " +
     "tombstone") {
-    createAuxTable(Row(2, cdcMetadataRow(deleteSeq = Some(5), upsertSeq = None)))
+    createAuxTable(Row(2, cdcMetadataRow(deleteSeq = Some(5L), upsertSeq = None)))
 
     val microbatch = microbatchOf(minimalSchema)(
       // Although the upsert seq is 10, this is for key=1; tombstone for key=2 should be unaffected.
-      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10)))
+      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L)))
     )
 
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Row(2, Row(5L, null)))
+    val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(resultAuxTable, Row(2, Row(5L, null)))
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable is idempotent across a microbatch that exercises " +
@@ -338,15 +259,15 @@ class Scd1BatchProcessorMergeSuite
     //   - id=3: untouched by the microbatch
     //   - id=4: new tombstone for an untracked key
     createAuxTable(
-      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)),
-      Row(2, cdcMetadataRow(deleteSeq = Some(20), upsertSeq = None)),
-      Row(3, cdcMetadataRow(deleteSeq = Some(30), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)),
+      Row(2, cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None)),
+      Row(3, cdcMetadataRow(deleteSeq = Some(30L), upsertSeq = None))
     )
 
     val microbatch = microbatchOf(minimalSchema)(
-      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(15))),
-      Row(2, cdcMetadataRow(deleteSeq = Some(25), upsertSeq = None)),
-      Row(4, cdcMetadataRow(deleteSeq = Some(40), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = Some(15L))),
+      Row(2, cdcMetadataRow(deleteSeq = Some(25L), upsertSeq = None)),
+      Row(4, cdcMetadataRow(deleteSeq = Some(40L), upsertSeq = None))
     )
 
     val expectedAfterMerge = Seq(
@@ -356,15 +277,17 @@ class Scd1BatchProcessorMergeSuite
     )
 
     // First merge applies all three clauses exactly once.
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
-    checkAnswer(readAuxTable(), expectedAfterMerge)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
+    val auxTableAfterFirstMerge = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(auxTableAfterFirstMerge, expectedAfterMerge)
 
     // Re-applying the same microbatch is a no-op:
     //   - id=1 is absent from aux; whenNotMatched is gated on delete events => skipped.
     //   - id=2 has tied delete (incoming==aux); strict `>` in the update clause fails.
     //   - id=4 has tied delete (incoming==aux); same reason.
-    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
-    checkAnswer(readAuxTable(), expectedAfterMerge)
+    processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
+    val auxTableAfterSecondMerge = spark.read.table(defaultAuxTableIdentifier.quotedString)
+    checkAnswer(auxTableAfterSecondMerge, expectedAfterMerge)
   }
 
   test("mergeMicrobatchOntoAuxiliaryTable correctly inserts tombstones for composite key") {
@@ -377,7 +300,7 @@ class Scd1BatchProcessorMergeSuite
     ))
     createAuxTableWithSchema(
       compositeSchema,
-      Row("US", 99, cdcMetadataRow(deleteSeq = Some(50), upsertSeq = None))
+      Row("US", 99, cdcMetadataRow(deleteSeq = Some(50L), upsertSeq = None))
     )
 
     val compositeKeyProcessor = Scd1BatchProcessor(
@@ -390,12 +313,12 @@ class Scd1BatchProcessorMergeSuite
     )
 
     val microbatch = microbatchOf(compositeSchema)(
-      Row("US", 1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
+      Row("US", 1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None))
     )
 
-    compositeKeyProcessor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    compositeKeyProcessor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Seq(
+    checkAnswer(spark.read.table(defaultAuxTableIdentifier.quotedString), Seq(
       Row("US", 99, Row(50L, null)),
       Row("US", 1, Row(10L, null))
     ))
@@ -409,7 +332,7 @@ class Scd1BatchProcessorMergeSuite
     val dottedKeySchema = customKeyAuxSchema(Seq("user.id" -> IntegerType))
     createAuxTableWithSchema(
       dottedKeySchema,
-      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None))
     )
 
     val dottedKeyProcessor = Scd1BatchProcessor(
@@ -424,56 +347,59 @@ class Scd1BatchProcessorMergeSuite
     // We expect the existing tombstone with del seq=10 to be advanced to 20 if the merge matches
     // dotted keys correctly.
     val microbatch = microbatchOf(dottedKeySchema)(
-      Row(1, cdcMetadataRow(deleteSeq = Some(20), upsertSeq = None))
+      Row(1, cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None))
     )
 
-    dottedKeyProcessor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+    dottedKeyProcessor.mergeMicrobatchOntoAuxiliaryTable(microbatch, defaultAuxTableIdentifier)
 
-    checkAnswer(readAuxTable(), Row(1, Row(20L, null)))
+    checkAnswer(spark.read.table(defaultAuxTableIdentifier.quotedString), Row(1, Row(20L, null)))
   }
 
   // =============== mergeMicrobatchOntoTarget tests ===============
 
   test("mergeMicrobatchOntoTarget updates an existing row with a newer upsert") {
-    createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))))
+    createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
 
     val microbatch = microbatchOf(targetSchema)(
-      Row(1, "new", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+      Row(1, "new", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
     )
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
 
-    val result = readTargetTable()
-    checkAnswer(result, Row(1, "new", Row(null, 20L)))
-    assert(columnNamesAndDataTypes(result.schema) == columnNamesAndDataTypes(targetSchema))
+    val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(resultTargetTable, Row(1, "new", Row(null, 20L)))
+    assert(columnNamesAndDataTypes(resultTargetTable.schema) ==
+      columnNamesAndDataTypes(targetSchema))
   }
 
   test("mergeMicrobatchOntoTarget deletes an existing row with a newer delete") {
     createTargetTable(
-      Row(1, "delete-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))),
-      Row(2, "keep-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+      Row(1, "delete-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))),
+      Row(2, "keep-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
     )
 
     val microbatch = microbatchOf(targetSchema)(
-      Row(1, "unused", cdcMetadataRow(deleteSeq = Some(15), upsertSeq = None))
+      Row(1, "unused", cdcMetadataRow(deleteSeq = Some(15L), upsertSeq = None))
     )
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
 
-    checkAnswer(readTargetTable(), Row(2, "keep-me", Row(null, 20L)))
+    val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(resultTargetTable, Row(2, "keep-me", Row(null, 20L)))
   }
 
   test("mergeMicrobatchOntoTarget inserts new upserts but not new (tombstone) deletes") {
-    createTargetTable(Row(1, "existing", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))))
+    createTargetTable(Row(1, "existing", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
 
     val microbatch = microbatchOf(targetSchema)(
-      Row(2, "insert-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20))),
-      Row(3, "do-not-insert", cdcMetadataRow(deleteSeq = Some(30), upsertSeq = None))
+      Row(2, "insert-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L))),
+      Row(3, "do-not-insert", cdcMetadataRow(deleteSeq = Some(30L), upsertSeq = None))
     )
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
 
-    checkAnswer(readTargetTable(), Seq(
+    val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(resultTargetTable, Seq(
       Row(1, "existing", Row(null, 10L)),
       Row(2, "insert-me", Row(null, 20L))
     ))
@@ -481,33 +407,35 @@ class Scd1BatchProcessorMergeSuite
 
   test("mergeMicrobatchOntoTarget ignores stale upserts and stale deletes") {
     createTargetTable(
-      Row(1, "target-delete-tie", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))),
-      Row(2, "target-newer", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+      Row(1, "target-delete-tie", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))),
+      Row(2, "target-newer", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
     )
 
     val microbatch = microbatchOf(targetSchema)(
-      Row(1, "delete-tie", cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None)),
-      Row(2, "older-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(15)))
+      Row(1, "delete-tie", cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)),
+      Row(2, "older-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(15L)))
     )
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
 
-    checkAnswer(readTargetTable(), Seq(
+    val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(resultTargetTable, Seq(
       Row(1, "target-delete-tie", Row(null, 10L)),
       Row(2, "target-newer", Row(null, 20L))
     ))
   }
 
   test("mergeMicrobatchOntoTarget gives tied upserts priority over the target row") {
-    createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))))
+    createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
 
     val microbatch = microbatchOf(targetSchema)(
-      Row(1, "same-sequence-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10)))
+      Row(1, "same-sequence-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L)))
     )
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
 
-    checkAnswer(readTargetTable(), Row(1, "same-sequence-upsert", Row(null, 10L)))
+    val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(resultTargetTable, Row(1, "same-sequence-upsert", Row(null, 10L)))
   }
 
   test("mergeMicrobatchOntoTarget correctly matches escaped key column names") {
@@ -518,22 +446,14 @@ class Scd1BatchProcessorMergeSuite
       // The schema always stores the backtick consumed column name, so unticked the raw name here.
       .add(rawKeyName, IntegerType)
       .add("value", StringType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType)
+      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
 
-    val tableInfo = new TableInfo.Builder()
-      .withSchema(schemaWithSpecialKeyCharacters)
-      .build()
-    spark.sessionState.catalogManager
-      .catalog(auxCatalogName)
-      .asTableCatalog
-      .createTable(targetIdent, tableInfo)
-
-    val targetTableDf = spark.createDataFrame(
-      spark.sparkContext.parallelize(Seq(
-        Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10)))
-      )),
-      schemaWithSpecialKeyCharacters)
-    targetTableDf.writeTo(targetTableIdentifier.quotedString).append()
+    createTable(
+      defaultTargetIdent,
+      defaultTargetTableIdentifier,
+      schemaWithSpecialKeyCharacters,
+      Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L)))
+    )
 
     val processorForCustomKeySchema = processor.copy(
       changeArgs = processor.changeArgs.copy(
@@ -541,22 +461,23 @@ class Scd1BatchProcessorMergeSuite
       )
     )
     val microbatch = microbatchOf(schemaWithSpecialKeyCharacters)(
-      Row(1, "new", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+      Row(1, "new", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
     )
 
     processorForCustomKeySchema.mergeMicrobatchOntoTarget(
       microbatch,
-      targetTableIdentifier
+      defaultTargetTableIdentifier
     )
 
-    checkAnswer(readTargetTable(), Row(1, "new", Row(null, 20L)))
+    val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(resultTargetTable, Row(1, "new", Row(null, 20L)))
   }
 
   gridTest(
     "mergeMicrobatchOntoTarget key column comparison respects spark session case sensitivity"
   )(Seq(false, true)) { caseSensitive =>
     withSQLConf("spark.sql.caseSensitive" -> caseSensitive.toString) {
-      createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))))
+      createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
 
       val processorWithUpperCaseKey = processor.copy(
         changeArgs = processor.changeArgs.copy(
@@ -565,38 +486,42 @@ class Scd1BatchProcessorMergeSuite
       )
 
       val microbatch = microbatchOf(targetSchema)(
-        Row(1, "new", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20)))
+        Row(1, "new", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L)))
       )
 
       if (caseSensitive) {
         val ex = intercept[AnalysisException] {
           processorWithUpperCaseKey.mergeMicrobatchOntoTarget(
             microbatch,
-            targetTableIdentifier
+            defaultTargetTableIdentifier
           )
         }
         // Intentionally not using checkError here, to avoid asserting on a brittle query context
         // and long message parmeters list.
         assert(ex.errorClass.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
       } else {
-        processorWithUpperCaseKey.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
-        checkAnswer(readTargetTable(), Row(1, "new", Row(null, 20L)))
+        processorWithUpperCaseKey.mergeMicrobatchOntoTarget(
+          microbatch,
+          defaultTargetTableIdentifier
+        )
+        val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
+        checkAnswer(resultTargetTable, Row(1, "new", Row(null, 20L)))
       }
     }
   }
 
   test("mergeMicrobatchOntoTarget is idempotent across a microbatch") {
     createTargetTable(
-      Row(1, "delete-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10))),
-      Row(2, "update-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20))),
-      Row(3, "untouched", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(30)))
+      Row(1, "delete-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))),
+      Row(2, "update-me", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(20L))),
+      Row(3, "untouched", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(30L)))
     )
 
     val microbatch = microbatchOf(targetSchema)(
-      Row(1, "delete-event", cdcMetadataRow(deleteSeq = Some(15), upsertSeq = None)),
-      Row(2, "updated", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(25))),
-      Row(4, "inserted", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(40))),
-      Row(5, "absent-delete", cdcMetadataRow(deleteSeq = Some(50), upsertSeq = None))
+      Row(1, "delete-event", cdcMetadataRow(deleteSeq = Some(15L), upsertSeq = None)),
+      Row(2, "updated", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(25L))),
+      Row(4, "inserted", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(40L))),
+      Row(5, "absent-delete", cdcMetadataRow(deleteSeq = Some(50L), upsertSeq = None))
     )
 
     val expectedAfterMerge = Seq(
@@ -605,10 +530,12 @@ class Scd1BatchProcessorMergeSuite
       Row(4, "inserted", Row(null, 40L))
     )
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
-    checkAnswer(readTargetTable(), expectedAfterMerge)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
+    val targetTableAfterFirstMerge = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(targetTableAfterFirstMerge, expectedAfterMerge)
 
-    processor.mergeMicrobatchOntoTarget(microbatch, targetTableIdentifier)
-    checkAnswer(readTargetTable(), expectedAfterMerge)
+    processor.mergeMicrobatchOntoTarget(microbatch, defaultTargetTableIdentifier)
+    val targetTableAfterSecondMerge = spark.read.table(defaultTargetTableIdentifier.quotedString)
+    checkAnswer(targetTableAfterSecondMerge, expectedAfterMerge)
   }
 }
