@@ -1535,6 +1535,32 @@ class Analyzer(
     }
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child `LogicalPlan`
+      // slots (`child = query`), so the default `resolveOperatorsUp` + `mapExpressions`
+      // traversal never resolves expressions placed inside them. For a
+      // `PlanWithUnresolvedIdentifier`, `identifierExpr` (e.g. an `UnresolvedAttribute`
+      // referring to a SQL variable in `INSERT INTO IDENTIFIER(target_table) ...`) must
+      // be resolved here before `ResolveIdentifierClause` can materialize the relation.
+      // Mirror the recursion that `BindParameters` and `ResolveIdentifierClause` already
+      // do for the same shape (SPARK-46625). The `!identifierExpr.resolved` guard makes
+      // the case idempotent under bottom-up traversal.
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
+             !i.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
+        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+        val resolvedExpr = resolveExpressionByPlanChildren(
+          p.identifierExpr, i, includeLastResort = true)
+        resolveColumnDefaultInCommandInputQuery(
+          i.copy(table = p.copy(identifierExpr = resolvedExpr)))
+
+      case w: V2WriteCommand
+          if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
+             !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
+        val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+        val resolvedExpr = resolveExpressionByPlanChildren(
+          p.identifierExpr, w, includeLastResort = true)
+        w.withNewTable(p.copy(identifierExpr = resolvedExpr))
+
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case i: InsertIntoStatement => resolveColumnDefaultInCommandInputQuery(i)
