@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Non-ANSI (master, Hadoop 3, JDK 17, Scala 2.13)"
+name: "Build / Non-ANSI (branch-4.x, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
