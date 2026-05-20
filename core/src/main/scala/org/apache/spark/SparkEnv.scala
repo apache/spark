@@ -47,8 +47,11 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
+import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkUDFWorkerLogger
 
 /**
  * :: DeveloperApi ::
@@ -120,6 +123,39 @@ class SparkEnv (
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
+  /**
+   * :: Experimental ::
+   * Dispatcher factory to generate UDF worker dispatchers
+   * using the new UDF framework proposed in SPARK-55278
+   */
+  private lazy val udfDispatcherManager: UDFDispatcherManager =
+    createUDFDispatcherManager()
+
+  private def createUDFDispatcherManager(): UDFDispatcherManager = {
+    val factory = new UDFDispatcherFactory {
+      override def createDispatcher(
+          workerSpec: UDFWorkerSpecification,
+          logger: org.apache.spark.udf.worker.core.WorkerLogger
+      ): WorkerDispatcher = {
+        // TODO [SPARK-55278]: Wire in the correct dispatcher factory
+        throw new UnsupportedOperationException(
+          "No UDF dispatcher factory configured. " +
+            "Set up a concrete factory for SPARK-55278.")
+      }
+    }
+    new UDFDispatcherManager(factory, new SparkUDFWorkerLogger())
+  }
+
+  /**
+   * :: Experimental ::
+   * Returns the [[WorkerDispatcher]] for the given worker
+   * specification via the [[UDFDispatcherManager]].
+   */
+  private[spark] def getExternalUDFDispatcher(
+      workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
+    udfDispatcherManager.getDispatcher(workerSpec)
+  }
+
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata =
@@ -134,6 +170,7 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
+      udfDispatcherManager.close()
       mapOutputTracker.stop()
       if (shuffleManager != null) {
         shuffleManager.stop()

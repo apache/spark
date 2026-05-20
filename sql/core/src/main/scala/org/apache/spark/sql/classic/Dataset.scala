@@ -61,6 +61,7 @@ import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConver
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.{ExtractV2ScanInfo, ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.externalUDF.PythonUDFWorkerSpecification
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
@@ -1521,14 +1522,36 @@ class Dataset[T] private[sql](
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
     val func = funcCol.expr
-    Dataset.ofRows(
-      sparkSession,
+    val output = toAttributes(func.dataType.asInstanceOf[StructType])
+
+    if (SQLConf.get.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED)) {
+      // If enabled, use the new, unified UDF execution path
+      val pythonUdf = func.asInstanceOf[PythonUDF]
+      val workerSpec =
+        PythonUDFWorkerSpecification.fromPythonFunction(
+          pythonUdf.func,
+          sparkSession.sparkContext.conf)
+      val udf = ExternalUserDefinedFunction(
+        name = pythonUdf.name,
+        payload = pythonUdf.func.command.toArray,
+        dataType = pythonUdf.dataType,
+        children = Seq.empty,
+        udfDeterministic = pythonUdf.udfDeterministic,
+        udfNullable = true)
+      Dataset.ofRows(
+        sparkSession,
+        MapPartitionsExternalUDF(
+          workerSpec, udf, isBarrier, logicalPlan))
+    } else {
+      Dataset.ofRows(
+        sparkSession,
       MapInPandas(
         func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
+        output,
         logicalPlan,
         isBarrier,
         Option(profile)))
+    }
   }
 
   /**

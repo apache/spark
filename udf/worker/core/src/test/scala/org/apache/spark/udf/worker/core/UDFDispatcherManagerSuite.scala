@@ -73,7 +73,7 @@ class UDFDispatcherManagerSuite
     assert(createdDispatchers.size === 1)
   }
 
-  test("Structurally equal specs return the same dispatcher") {
+  test("Value-equal specs return the same dispatcher") {
     val (manager, createdDispatchers) = createManager()
     val spec1 = makeSpec("worker.bin")
     val spec2 = makeSpec("worker.bin")

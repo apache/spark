@@ -27,62 +27,15 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.udf.worker.{
-  DirectWorker, Init, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
+  DirectWorker, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
   UDFWorkerSpecification, UnixDomainSocket, WorkerConnectionSpec,
   WorkerEnvironment}
 import org.apache.spark.udf.worker.core.direct.{DirectUnixSocketWorkerDispatcher,
-  DirectWorkerException, DirectWorkerProcess, DirectWorkerSession,
+  DirectWorkerException, DirectWorkerProcess,
   DirectWorkerTimeoutException}
 
-/**
- * A [[WorkerConnection]] test implementation that considers the connection
- * active as long as the socket file exists on disk. Inherits socket-file
- * deletion from [[UnixSocketWorkerConnection.close]].
- */
-class SocketFileConnection(socketPath: String)
-    extends UnixSocketWorkerConnection(socketPath) {
-  override def isActive: Boolean = new File(socketPath).exists()
-}
-
-/**
- * A stub [[DirectWorkerSession]] for process-lifecycle tests that don't
- * need actual data transmission.
- *
- * TODO: [[cancel]] is a no-op here. Once a concrete [[DirectWorkerSession]]
- *   with real data-plane wiring lands, add tests exercising cancel() in
- *   particular: cancel from a different thread than process(), cancel
- *   after process() has returned, and cancel before init (should be a no-op).
- *   See the thread-safety contract in the docstring on
- *   [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
- */
-class StubWorkerSession(
-    workerProcess: DirectWorkerProcess) extends DirectWorkerSession(workerProcess) {
-
-  override protected def doInit(message: Init): Unit = {}
-
-  override protected def doProcess(
-      input: Iterator[Array[Byte]]): Iterator[Array[Byte]] =
-    Iterator.empty
-
-  override def cancel(): Unit = {}
-}
-
-/**
- * A [[DirectUnixSocketWorkerDispatcher]] subclass for testing that uses
- * a socket-file connection and stub sessions instead of a real protocol
- * implementation.
- */
-class TestDirectWorkerDispatcher(spec: UDFWorkerSpecification)
-    extends DirectUnixSocketWorkerDispatcher(spec) {
-
-  override protected def createConnection(
-      socketPath: String): UnixSocketWorkerConnection =
-    new SocketFileConnection(socketPath)
-
-  override protected def createSessionForWorker(
-      worker: DirectWorkerProcess): WorkerSession =
-    new StubWorkerSession(worker)
-}
+// Shared test helpers (SocketFileConnection, StubWorkerSession,
+// TestDirectWorkerDispatcher) are in TestDirectWorkerHelpers.scala.
 
 /**
  * Tests for [[DirectWorkerDispatcher]] process lifecycle: spawning workers
