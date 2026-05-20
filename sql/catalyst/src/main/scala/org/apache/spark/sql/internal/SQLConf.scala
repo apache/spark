@@ -554,7 +554,7 @@ object SQLConf {
   val PYTHON_UDF_TRANSPILERS =
     buildConf("spark.sql.experimental.optimizer.pyTranspilers")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
-    .doc("Which transpilers to use for transpiling UDFS. Without the default optimizer " +
+    .doc("Which transpilers to use for transpiling UDFs. Without the default optimizer " +
       " the first successful result will be the one used.")
     .version("4.3.0")
     .stringConf

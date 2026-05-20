@@ -52,10 +52,10 @@ The suite is gated on two things, both required:
 * the ``hypothesis`` package must be installed.
 
 If either gate is unmet the entire suite is skipped cleanly so it never
-becomes a CI tax for folks who haven't opted in. A targeted GitHub Actions
-workflow (``.github/workflows/build_python_transpile_hypothesis.yml``)
-flips both gates on, but only fires on PRs that actually touch the
-transpiler or this test file.
+becomes a CI tax for folks who haven't opted in. In CI, this opt-in suite
+is wired through ``.github/workflows/build_and_test.yml``, which flips both
+gates on for the relevant job when PR changes touch the transpiler or this
+test file.
 
 To run locally::
 

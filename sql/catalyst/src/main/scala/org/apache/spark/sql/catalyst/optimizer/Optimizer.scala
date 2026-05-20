@@ -1057,7 +1057,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // Recursively apply to the children first because we may use them as inputs in parent
               val withTranspiledChildren = catalystExpr.mapChildren(
                 applyExpr(_, parent_is_udf = false))
-              // Upgrade the types here since Python duct-typing means that
+              // Upgrade the types here since Python duck typing means that
               // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
               val catalystExprUpgraded = UDFTypeCoercesExpressionTypes.runCoercionTransformations(
                 withTranspiledChildren, true)

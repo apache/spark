@@ -109,7 +109,6 @@ case class UserDefinedPythonFunction(
               throw new Exception(f"Invalid UDF parameter index: $index")
             }
           case _ =>
-            val ec = expression.getClass
             expression.mapChildren(resolveUDFParams(_, children))
         }
       }

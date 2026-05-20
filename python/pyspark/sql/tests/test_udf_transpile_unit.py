@@ -58,7 +58,6 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             input_df = self.spark.createDataFrame([Row(a=1)])
             transformed_df = input_df.select(pudf("a"))
             [row] = transformed_df.collect()
-            transformed_df.explain()
             self.assertEqual(row[0], 5)
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": False}):
@@ -78,7 +77,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 if col is not None:
                     return col + 4
 
-        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": True}):
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
             # Make sure we can transpile the object
             call = PlusFour()
             pudf = UserDefinedFunction(call, LongType())
@@ -160,7 +164,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # Python AST today. Everything outside that subset must
         # gracefully fall back to interpreted Python (with an empty
         # `transpiled` list and a UserWarning) rather than break the
-        # UDF -- the "don't break peoples Spark code" promise. This test
+        # UDF -- the "don't break people's Spark code" promise. This test
         # walks the most common unsupported shapes, registers each as a
         # UDF with transpilation on, and asserts (a) construction does
         # not raise, (b) `transpiled == []`, (c) the UDF still produces
