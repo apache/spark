@@ -182,12 +182,6 @@ message PipelineCommand {
       // SCD Type for target table.
       SCDType stored_as_scd_type = 10;
 
-      // Columns tracked for change history.
-      repeated Expression track_history_column_list = 11;
-
-      // Columns not tracked for change history.
-      repeated Expression track_history_except_column_list = 12;
-
       // Subset of columns to ignore null in updates.
       repeated Expression ignore_null_updates_column_list = 14;
 
@@ -200,7 +194,6 @@ message PipelineCommand {
     enum SCDType {
       SCD_TYPE_UNSPECIFIED = 0;
       SCD_TYPE_1 = 1;
-      SCD_TYPE_2 = 2;
     }
 
     // If true, define the flow as a one-time flow, such as for backfill.
