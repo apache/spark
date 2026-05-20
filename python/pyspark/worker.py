@@ -289,8 +289,7 @@ def verify_return_type(result: T, expected_type: Type[T]) -> T:
 
 
 def _top_level_package(t: type) -> str:
-    """Return the top-level package name of ``t`` (e.g. ``pandas`` for
-    ``pd.DataFrame``, ``pyarrow`` for ``pa.Table``)."""
+    """Return the top-level package of ``t`` (``pandas`` for ``pd.DataFrame``)."""
     return (t.__module__ or "").split(".", 1)[0]
 
 
@@ -434,12 +433,7 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
 
 
 def _verify_column_schema(actual_names, expected_names, *, assign_cols_by_name):
-    """Shared name/count check for both pandas and arrow verify paths.
-
-    Raises ``RESULT_COLUMN_NAMES_MISMATCH`` (by-name mode) or
-    ``RESULT_COLUMN_SCHEMA_MISMATCH`` (by-position mode) when the actual
-    columns don't line up with the expected schema.
-    """
+    """Check column names (by-name) or count (by-position) match the expected schema."""
     if assign_cols_by_name:
         actual_set = set(actual_names)
         expected_set = set(expected_names)
@@ -472,20 +466,16 @@ def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_retu
 
     verify_return_type(result, pd.DataFrame)
 
-    # check the schema of the result only if it is not empty or has columns
+    # Skip schema check on a fully empty result (no rows and no columns).
     if result.empty and len(result.columns) == 0:
         return
 
     field_names = [field.name for field in return_type.fields]
-    # only the first len(field_names) result columns are considered
-    # when truncating the return schema
     actual_names = (
         list(result.columns[: len(field_names)]) if truncate_return_schema else list(result.columns)
     )
-    # if any column name of the result is a string
-    # the column names of the result have to match the return type;
-    # otherwise (e.g. a RangeIndex), fall back to a by-position count check.
-    #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
+    # By-name mode only applies when the result has string column names;
+    # a numeric RangeIndex falls back to a by-position count check.
     by_name = assign_cols_by_name and any(isinstance(n, str) for n in result.columns)
     _verify_column_schema(actual_names, field_names, assign_cols_by_name=by_name)
 
@@ -513,13 +503,13 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
-    # an empty table can have no columns; if there are columns, they have to match
+    # Skip schema check on a fully empty result (no rows and no columns).
     if result.num_columns == 0 and result.num_rows == 0:
         return
 
     actual_names = list(result.schema.names)
     actual_types = list(result.schema.types)
-    # columns are either mapped by name (dict) or by position (list of tuples)
+    # expected_cols_and_types is a dict in by-name mode, list of (name, type) by position.
     if assign_cols_by_name:
         expected_names = list(expected_cols_and_types.keys())
     else:
@@ -527,7 +517,6 @@ def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
 
     _verify_column_schema(actual_names, expected_names, assign_cols_by_name=assign_cols_by_name)
 
-    # the types of the fields have to be identical to return type
     if assign_cols_by_name:
         actual_by_name = dict(zip(actual_names, actual_types))
         column_types = [
