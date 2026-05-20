@@ -519,14 +519,12 @@ class PipelineCommand(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             SCD_TYPE_UNSPECIFIED: PipelineCommand.DefineFlow._SCDType.ValueType  # 0
             SCD_TYPE_1: PipelineCommand.DefineFlow._SCDType.ValueType  # 1
-            SCD_TYPE_2: PipelineCommand.DefineFlow._SCDType.ValueType  # 2
 
         class SCDType(_SCDType, metaclass=_SCDTypeEnumTypeWrapper):
             """SCD Type for Auto CDC target tables."""
 
         SCD_TYPE_UNSPECIFIED: PipelineCommand.DefineFlow.SCDType.ValueType  # 0
         SCD_TYPE_1: PipelineCommand.DefineFlow.SCDType.ValueType  # 1
-        SCD_TYPE_2: PipelineCommand.DefineFlow.SCDType.ValueType  # 2
 
         class SqlConfEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -590,8 +588,6 @@ class PipelineCommand(google.protobuf.message.Message):
             COLUMN_LIST_FIELD_NUMBER: builtins.int
             EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             STORED_AS_SCD_TYPE_FIELD_NUMBER: builtins.int
-            TRACK_HISTORY_COLUMN_LIST_FIELD_NUMBER: builtins.int
-            TRACK_HISTORY_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             source: builtins.str
@@ -629,20 +625,6 @@ class PipelineCommand(google.protobuf.message.Message):
             stored_as_scd_type: global___PipelineCommand.DefineFlow.SCDType.ValueType
             """SCD Type for target table."""
             @property
-            def track_history_column_list(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                pyspark.sql.connect.proto.expressions_pb2.Expression
-            ]:
-                """Columns tracked for change history."""
-            @property
-            def track_history_except_column_list(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                pyspark.sql.connect.proto.expressions_pb2.Expression
-            ]:
-                """Columns not tracked for change history."""
-            @property
             def ignore_null_updates_column_list(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
@@ -675,14 +657,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 ]
                 | None = ...,
                 stored_as_scd_type: global___PipelineCommand.DefineFlow.SCDType.ValueType = ...,
-                track_history_column_list: collections.abc.Iterable[
-                    pyspark.sql.connect.proto.expressions_pb2.Expression
-                ]
-                | None = ...,
-                track_history_except_column_list: collections.abc.Iterable[
-                    pyspark.sql.connect.proto.expressions_pb2.Expression
-                ]
-                | None = ...,
                 ignore_null_updates_column_list: collections.abc.Iterable[
                     pyspark.sql.connect.proto.expressions_pb2.Expression
                 ]
@@ -744,10 +718,6 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"source",
                     "stored_as_scd_type",
                     b"stored_as_scd_type",
-                    "track_history_column_list",
-                    b"track_history_column_list",
-                    "track_history_except_column_list",
-                    b"track_history_except_column_list",
                 ],
             ) -> None: ...
             @typing.overload
