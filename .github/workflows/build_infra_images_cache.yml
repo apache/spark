@@ -64,6 +64,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
         id: docker_build
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/infra/
@@ -76,6 +77,7 @@ jobs:
       - name: Build and push (Documentation)
         if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         id: docker_build_docs
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/docs/
@@ -89,6 +91,7 @@ jobs:
       - name: Build and push (Linter)
         if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
         id: docker_build_lint
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/lint/
@@ -102,6 +105,7 @@ jobs:
       - name: Build and push (SparkR)
         if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
         id: docker_build_sparkr
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/sparkr/
@@ -115,6 +119,7 @@ jobs:
       - name: Build and push (PySpark with old dependencies)
         if: hashFiles('dev/spark-test-image/python-minimum/Dockerfile') != ''
         id: docker_build_pyspark_python_minimum
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-minimum/
@@ -128,6 +133,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.10)
         if: hashFiles('dev/spark-test-image/python-310/Dockerfile') != ''
         id: docker_build_pyspark_python_310
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-310/
@@ -141,6 +147,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.11)
         if: hashFiles('dev/spark-test-image/python-311/Dockerfile') != ''
         id: docker_build_pyspark_python_311
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-311/
@@ -154,6 +161,7 @@ jobs:
       - name: Build and push (PySpark Classic Only with Python 3.12)
         if: hashFiles('dev/spark-test-image/python-312-classic-only/Dockerfile') != ''
         id: docker_build_pyspark_python_312_classic_only
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-312-classic-only/
@@ -167,6 +175,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.12)
         if: hashFiles('dev/spark-test-image/python-312/Dockerfile') != ''
         id: docker_build_pyspark_python_312
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-312/
@@ -180,6 +189,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.12 Pandas 3)
         if: hashFiles('dev/spark-test-image/python-312-pandas-3/Dockerfile') != ''
         id: docker_build_pyspark_python_312_pandas_3
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-312-pandas-3/
@@ -193,6 +203,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.13)
         if: hashFiles('dev/spark-test-image/python-313/Dockerfile') != ''
         id: docker_build_pyspark_python_313
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-313/
@@ -206,6 +217,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.14)
         if: hashFiles('dev/spark-test-image/python-314/Dockerfile') != ''
         id: docker_build_pyspark_python_314
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-314/
@@ -219,6 +231,7 @@ jobs:
       - name: Build and push (PySpark with Python 3.14 no GIL)
         if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
         id: docker_build_pyspark_python_314_nogil
+        continue-on-error: true
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: ./dev/spark-test-image/python-314-nogil/
@@ -229,3 +242,32 @@ jobs:
       - name: Image digest (PySpark with Python 3.14 no GIL)
         if: hashFiles('dev/spark-test-image/python-314-nogil/Dockerfile') != ''
         run: echo ${{ steps.docker_build_pyspark_python_314_nogil.outputs.digest }}
+      - name: Fail if any image build failed
+        if: always()
+        run: |
+          status=0
+          check() {
+            local name="$1"
+            local outcome="$2"
+            echo "$name: $outcome"
+            if [ "$outcome" = "failure" ]; then
+              status=1
+            fi
+          }
+          check "base"                            "${{ steps.docker_build.outcome }}"
+          check "docs"                            "${{ steps.docker_build_docs.outcome }}"
+          check "lint"                            "${{ steps.docker_build_lint.outcome }}"
+          check "sparkr"                          "${{ steps.docker_build_sparkr.outcome }}"
+          check "pyspark-python-minimum"          "${{ steps.docker_build_pyspark_python_minimum.outcome }}"
+          check "pyspark-python-310"              "${{ steps.docker_build_pyspark_python_310.outcome }}"
+          check "pyspark-python-311"              "${{ steps.docker_build_pyspark_python_311.outcome }}"
+          check "pyspark-python-312-classic-only" "${{ steps.docker_build_pyspark_python_312_classic_only.outcome }}"
+          check "pyspark-python-312"              "${{ steps.docker_build_pyspark_python_312.outcome }}"
+          check "pyspark-python-312-pandas-3"     "${{ steps.docker_build_pyspark_python_312_pandas_3.outcome }}"
+          check "pyspark-python-313"              "${{ steps.docker_build_pyspark_python_313.outcome }}"
+          check "pyspark-python-314"              "${{ steps.docker_build_pyspark_python_314.outcome }}"
+          check "pyspark-python-314-nogil"        "${{ steps.docker_build_pyspark_python_314_nogil.outcome }}"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::One or more image builds failed; see entries above marked 'failure'."
+          fi
+          exit "$status"
