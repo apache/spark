@@ -143,4 +143,5 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     val prunedSchema = SchemaPruning.pruneSchema(schema, rootFields)
     assert(prunedSchema.head.metadata.getString("foo") == "bar")
   }
+
 }
