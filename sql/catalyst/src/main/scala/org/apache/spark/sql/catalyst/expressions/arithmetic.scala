@@ -302,18 +302,17 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType if failOnError =>
-      val opName = symbol match {
-        case "+" => "Add"
-        case "-" => "Subtract"
-        case "*" => "Multiply"
+      val methodName = symbol match {
+        case "+" => "plus"
+        case "-" => "minus"
+        case "*" => "times"
         case _ =>
           throw SparkException.internalError(
             s"Unexpected symbol '$symbol' for Byte/Short BinaryArithmetic")
       }
-      val typeName = if (dataType == ByteType) "byte" else "short"
-      val arithmeticUtils = classOf[ArithmeticUtils].getName
-      defineCodeGen(ctx, ev, (eval1, eval2) =>
-        s"$arithmeticUtils.$typeName${opName}Exact($eval1, $eval2)")
+      val numericObj = (if (dataType == ByteType) ByteExactNumeric else ShortExactNumeric)
+        .getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$numericObj.$methodName($eval1, $eval2)")
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"${ev.value} = (${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2);"
