@@ -255,7 +255,8 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
-      )
+      ),
+      resolvedSequencingType = LongType
     )
 
     checkAnswer(
@@ -322,7 +323,8 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         keys = Seq(UnqualifiedColumnName("id")),
         sequencing = F.greatest(F.col("seq"), F.col("alt_seq")),
         storedAsScdType = ScdType.Type1
-      )
+      ),
+      resolvedSequencingType = LongType
     )
 
     checkAnswer(
@@ -377,7 +379,8 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
         keys = Seq(UnqualifiedColumnName(reservedColName)),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type1
-      )
+      ),
+      resolvedSequencingType = LongType
     )
 
     checkError(
