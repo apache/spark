@@ -343,13 +343,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       withTable(session, tableName = NC) { serverSession =>
         val df1 = session.table(NC)
 
-        // A single alterTable call that deletes salary (and its ID) and adds a new salary
-        // column with a fresh ID.
         val cat = serverCatalog[NullTableIdInMemoryTableCatalog](serverSession, "nullidcat")
         cat.alterTable(
-          ncIdent,
-          TableChange.deleteColumn(Array("salary"), false),
-          TableChange.addColumn(Array("salary"), IntegerType, true))
+          ncIdent, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(
+          ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
         val df2 = session.table(NC)
 
@@ -371,14 +369,13 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       withTable(session, tableName = NC) { serverSession =>
         val df1 = session.table(NC)
 
-        // A single alterTable call with no column IDs to detect the change.
         val cat = serverCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
           serverSession,
           "nullbothidscat")
         cat.alterTable(
-          ncIdent,
-          TableChange.deleteColumn(Array("salary"), false),
-          TableChange.addColumn(Array("salary"), IntegerType, true))
+          ncIdent, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(
+          ncIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
         val df2 = session.table(NC)
 
@@ -399,11 +396,11 @@ class DataSourceV2JoinConnectSuite extends SparkConnectServerTest {
       withTable(session) { serverSession =>
         val df1 = session.table(T)
 
-        // external drop and re-add column with different type via catalog API
         val cat = serverCatalog[InMemoryTableCatalog](serverSession, "testcat")
-        val dropCol = TableChange.deleteColumn(Array("salary"), false)
-        val addCol = TableChange.addColumn(Array("salary"), StringType, true)
-        cat.alterTable(ident, dropCol, addCol)
+        cat.alterTable(
+          ident, TableChange.deleteColumn(Array("salary"), false))
+        cat.alterTable(
+          ident, TableChange.addColumn(Array("salary"), StringType, true))
 
         // external writer adds (2, "high") with new schema
         externalAppend(
