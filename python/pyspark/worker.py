@@ -44,6 +44,9 @@ from typing import (
 T = TypeVar("T")
 
 if TYPE_CHECKING:
+    import pandas as pd
+    import pyarrow as pa
+
     from pyspark.sql.pandas._typing import GroupedBatch
 
 from pyspark.accumulators import (
@@ -460,7 +463,7 @@ def _verify_column_schema(
 
 
 def verify_pandas_result(
-    result: Any,
+    result: Union["pd.DataFrame", "pd.Series"],
     return_type: DataType,
     assign_cols_by_name: bool,
     truncate_return_schema: bool,
@@ -510,9 +513,9 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def verify_arrow_result(
-    result: Any,
+    result: Union["pa.Table", "pa.RecordBatch"],
     assign_cols_by_name: bool,
-    expected_cols_and_types: Union[dict[str, Any], list[tuple[str, Any]]],
+    expected_cols_and_types: Union[dict[str, "pa.DataType"], list[tuple[str, "pa.DataType"]]],
 ) -> None:
     # Skip schema check on a fully empty result (no rows and no columns).
     if result.num_columns == 0 and result.num_rows == 0:
