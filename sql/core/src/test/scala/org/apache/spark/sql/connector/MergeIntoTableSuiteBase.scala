@@ -2665,11 +2665,12 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("metric values are stable across stage retries") {
-    // The join in the MERGE plan introduces a shuffle (with broadcast disabled). The
-    // DAGScheduler corrupts the first attempt of every upstream shuffle map stage, forcing
-    // the MergeRowsExec stage to retry. With plain SQLMetrics the row counters would double
-    // up across attempts, but SQLLastAttemptMetric reports only the last attempt, so the
-    // values surfaced via `MergeSummary` remain correct.
+    // The join in the MERGE plan introduces a shuffle (with broadcast disabled), and the
+    // DAGScheduler corrupts the first attempt of every upstream shuffle map stage. Note:
+    // the current fetch-failure injection does not retry the MergeRowsExec/writer stage,
+    // so this test passes equally well with plain SQLMetric — it only exercises the
+    // SLAM-aware read path. Follow-up #55738 will add infra to actually retry the writer
+    // stage and exercise the SLAM behavior end-to-end for MERGE.
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

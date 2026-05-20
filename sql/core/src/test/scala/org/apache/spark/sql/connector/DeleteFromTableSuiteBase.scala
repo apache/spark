@@ -429,13 +429,13 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
 
   test("metric values are stable across stage retries") {
     // Force a shuffle in the DELETE plan via an IN-subquery (with broadcast disabled), then
-    // have the DAGScheduler corrupt the first attempt of every upstream shuffle map stage so
-    // the writer stage has to retry. With plain SQLMetrics the writer-side numCopiedRows /
-    // numDeletedRows and the scan-side numOutputRows would all double up across attempts;
-    // SQLLastAttemptMetric reports only the last attempt, so the values surfaced via
-    // `DeleteSummary` (including the group-based driver derivation
-    // numDeletedRows = numScannedRows - numCopiedRows in `ReplaceDataExec.getWriteSummary`)
-    // remain correct.
+    // have the DAGScheduler corrupt the first attempt of every upstream shuffle map stage.
+    // The scan-side numOutputRows doubles up across attempts, and the driver-side derivation
+    // numDeletedRows = numScannedRows - numCopiedRows in `ReplaceDataExec.getWriteSummary`
+    // propagates that doubling into `DeleteSummary`. With SQLLastAttemptMetric on the scan,
+    // the surfaced numDeletedRows stays correct. (The current fetch-failure injection does
+    // not retry the writer stage, so writer-side numCopiedRows isn't actually exercised
+    // here; follow-up #55738 will fill that gap.)
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
