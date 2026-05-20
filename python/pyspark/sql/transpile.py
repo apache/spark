@@ -534,7 +534,7 @@ def _get_src_ast_from_func(func: Callable) -> Tuple[Optional[str], Optional[ast.
 
 
 def _get_parameter_list(node: ast.FunctionDef) -> list[str]:
-    """Return the positional argument names of in order."""
+    """Return the positional argument names in order."""
     return [arg.arg for arg in node.args.args]
 
 
@@ -612,11 +612,11 @@ def _transpile_func(
     try:
         src, ast = _get_src_ast_from_func(func)
         if ast is None:
-            return ([], ["Error getting ast for function, can not transpile"], [])
+            return ([], ["Error getting ast for function, cannot transpile"], [])
         # Get the lambda body and parameters
         function_ast = _get_function_from_ast(ast)
         if function_ast is None:
-            return ([], ["Error extracting function body from ast, can not transpile"], [])
+            return ([], ["Error extracting function body from ast, cannot transpile"], [])
         params = _get_parameter_list(function_ast)
         # Strip ``self`` for the caller-facing param list -- callers will
         # match user-supplied kwargs against this, and the user doesn't
