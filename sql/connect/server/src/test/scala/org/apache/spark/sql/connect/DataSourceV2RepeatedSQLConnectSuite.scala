@@ -79,7 +79,8 @@ class DataSourceV2RepeatedSQLConnectSuite extends SparkConnectServerTest {
     try { fn }
     finally {
       session.sql(s"DROP TABLE IF EXISTS $table").collect()
-      CachingInMemoryTableCatalog.clearCache()
+      val serverSession = getServerSession(session)
+      serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat").clearCache()
     }
   }
 
