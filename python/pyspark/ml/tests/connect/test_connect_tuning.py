@@ -18,9 +18,10 @@
 import os
 import unittest
 from pyspark.sql import SparkSession
-from pyspark.ml.tests.connect.test_legacy_mode_tuning import CrossValidatorTestsMixin
+from pyspark.ml.tests.connect.test_legacy_mode_tuning import CrossValidatorTestsMixin, have_torch
 
 
+@unittest.skipIf(not have_torch, "torch is required")
 @unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
 class CrossValidatorTestsOnConnect(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
