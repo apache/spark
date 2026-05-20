@@ -1043,8 +1043,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               "we still got TranspiledPythonUDFs in our plan."
           )
           s.pythonUDFExpr.mapChildren(applyExpr(_, parent_is_udf = true))
-        } else if (!parent_is_udf ||
-          !s.children.forall { x => x.isInstanceOf[PythonUDF] }) {
+        } else if (!parent_is_udf || !s.hasOnlyPythonUDFInputs) {
           // Walk the full list of transpiled options and pick the first one
           // that's actually usable, falling back to the original Python UDF
           // if nothing fits. If you're plugging in your own transpilation, please add a
