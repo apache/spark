@@ -1071,37 +1071,12 @@ class Analyzer(
       }
     }
 
-    // Resolve the write target of a V2 write command (batch or streaming).
-    private def resolveWriteTarget(
-        write: LogicalPlan,
-        table: NamedRelation,
-        withNewTable: NamedRelation => LogicalPlan): LogicalPlan = {
-      table match {
-        case u: UnresolvedRelation if !u.isStreaming =>
-          resolveRelation(u).map(unwrapRelationPlan).map {
-            case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-              v.desc.identifier, write)
-            case u: UnresolvedCatalogRelation =>
-              throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
-                u.tableMeta.identifier, write)
-            case r: DataSourceV2Relation => withNewTable(r)
-            case _ =>
-              throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                u.multipartIdentifier.quoted)
-          }.getOrElse(write)
-        case _ => write
-      }
-    }
-
     // Resolve V2TableReference nodes inside temp view plans. These are created by
     // V2TableReference.createForTempView. We only need to resolve it when returning
     // the plan of temp views (in resolveViews and unwrapRelationPlan).
     private def resolveTableReferencesInTempView(plan: LogicalPlan): LogicalPlan = {
       plan.resolveOperatorsUp {
-        case r: V2TableReference =>
-          assert(r.context.isInstanceOf[V2TableReference.TemporaryViewContext],
-            s"""Expected TemporaryViewContext in temp view but got
-               |${r.context.getClass.getSimpleName}""".stripMargin)
+        case r: V2TableReference if r.context.isInstanceOf[V2TableReference.TemporaryViewContext] =>
           relationResolution.resolveReference(r)
       }
     }
@@ -1125,11 +1100,34 @@ class Analyzer(
           case other => i.copy(table = other)
         }
 
-      case write: StreamingV2WriteCommand =>
-        resolveWriteTarget(write, write.table, write.withNewTable)
+      case write: V2StreamingWriteCommand =>
+        write.table match {
+          case ref: V2TableReference =>
+            relationResolution.resolveReference(ref) match {
+              case r: NamedRelation => write.withNewTable(r)
+              case other => throw SparkException.internalError(
+                s"Expected V2TableReference write target to resolve to a NamedRelation, " +
+                  s"but got ${other.getClass.getName}")
+            }
+          case _ => write
+        }
 
       case write: V2WriteCommand =>
-        resolveWriteTarget(write, write.table, write.withNewTable)
+        write.table match {
+          case u: UnresolvedRelation if !u.isStreaming =>
+            resolveRelation(u).map(unwrapRelationPlan).map {
+              case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+                v.desc.identifier, write)
+              case u: UnresolvedCatalogRelation =>
+                throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
+                  u.tableMeta.identifier, write)
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case _ =>
+                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                  u.multipartIdentifier.quoted)
+            }.getOrElse(write)
+          case _ => write
+        }
 
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
