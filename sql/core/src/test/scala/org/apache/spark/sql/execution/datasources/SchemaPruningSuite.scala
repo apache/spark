@@ -361,6 +361,33 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("select ArrayTransform over nested fields of array of struct") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(transform(col("friends"), friend =>
+        struct(
+          friend.getField("first").as("first"),
+          friend.getField("last").as("last"))))
+
+    checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query,
+      Row(Array(Row("Susan", "Smith"))) ::
+      Row(Array.empty[Row]) ::
+      Nil)
+  }
+
+  testSchemaPruning("do not prune ArrayTransform when the whole element is used") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(transform(col("friends"), friend => friend))
+
+    checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query,
+      Row(Array(Row("Susan", "Z.", "Smith"))) ::
+      Row(Array.empty[Row]) ::
+      Nil)
+  }
+
   testSchemaPruning("SPARK-34638: nested column prune on generator output") {
     val query1 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))

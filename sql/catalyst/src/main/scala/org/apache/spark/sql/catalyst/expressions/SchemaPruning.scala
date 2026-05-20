@@ -140,6 +140,16 @@ object SchemaPruning extends SQLConfHelper {
    */
   private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
+      case ArrayTransform(argument, lambda: LambdaFunction) =>
+        val nestedRootFields = lambda.arguments.headOption.collect {
+          case elementVar: NamedLambdaVariable =>
+            getArrayTransformRootField(argument, lambda.function, elementVar)
+        }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
+        if (nestedRootFields.nonEmpty) {
+          nestedRootFields ++ getRootFields(lambda.function)
+        } else {
+          expr.children.flatMap(getRootFields)
+        }
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
@@ -159,6 +169,67 @@ object SchemaPruning extends SQLConfHelper {
         s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
+    }
+  }
+
+  private def getArrayTransformRootField(
+      argument: Expression,
+      function: Expression,
+      elementVar: NamedLambdaVariable): Option[StructField] = {
+    argument.dataType match {
+      case ArrayType(_: StructType, containsNull) =>
+        val selectedFields = collectLambdaVariableFields(function, elementVar)
+        if (selectedFields.exists(_.nonEmpty)) {
+          val mergedElementSchema = selectedFields
+            .get
+            .map(field => StructType(Array(field)))
+            .reduceLeft(_ merge _)
+          SelectedField.withDataType(
+            argument,
+            ArrayType(mergedElementSchema, containsNull))
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  private def collectLambdaVariableFields(
+      expr: Expression,
+      elementVar: NamedLambdaVariable): Option[Seq[StructField]] = {
+    expr match {
+      case LambdaVariableField(field, variable) if variable.semanticEquals(elementVar) =>
+        Some(field :: Nil)
+      case variable: NamedLambdaVariable if variable.semanticEquals(elementVar) =>
+        None
+      case _ =>
+        expr.children.foldLeft(Option(Seq.empty[StructField])) {
+          case (Some(fields), child) =>
+            collectLambdaVariableFields(child, elementVar).map(fields ++ _)
+          case (None, _) => None
+        }
+    }
+  }
+
+  private object LambdaVariableField {
+    def unapply(expr: Expression): Option[(StructField, NamedLambdaVariable)] = {
+      def selectField(
+          expression: Expression,
+          dataTypeOpt: Option[DataType]): Option[(StructField, NamedLambdaVariable)] =
+        expression match {
+        case variable: NamedLambdaVariable =>
+          dataTypeOpt.collect {
+            case schema: StructType if schema.length == 1 =>
+              schema.head -> variable
+          }
+        case getStructField: GetStructField =>
+          val field = getStructField.childSchema(getStructField.ordinal)
+          val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
+          selectField(getStructField.child, Some(StructType(Array(newField))))
+        case _ => None
+      }
+
+      selectField(expr, None)
     }
   }
 

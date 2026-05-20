@@ -68,6 +68,28 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
         getProjection(child).map { projection => MapValues(projection) }
       case GetMapValue(child, key) =>
         getProjection(child).map { projection => GetMapValue(projection, key) }
+      case transform @ ArrayTransform(argument, lambda: LambdaFunction) =>
+        getProjection(argument).map {
+          case projection @ ArrayTypeProjection(projectedElementSchema) =>
+            lambda.arguments.headOption match {
+              case Some(elementVar: NamedLambdaVariable) =>
+                val projectedElementVar = elementVar.copy(dataType = projectedElementSchema)
+                val lambdaProjection =
+                  ProjectionOverLambdaVariable(elementVar, projectedElementVar)
+                val projectedBody = lambda.function.transformDown {
+                  case lambdaProjection(expr) => expr
+                }
+                transform.copy(
+                  argument = projection,
+                  function = lambda.copy(
+                    function = projectedBody,
+                    arguments = projectedElementVar +: lambda.arguments.tail))
+              case _ =>
+                transform.copy(argument = projection)
+            }
+          case projection =>
+            transform.copy(argument = projection)
+        }
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>
@@ -82,4 +104,33 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
       case _ =>
         None
     }
+
+  private object ArrayTypeProjection {
+    def unapply(expr: Expression): Option[StructType] = expr.dataType match {
+      case ArrayType(projectedElementSchema: StructType, _) => Some(projectedElementSchema)
+      case _ => None
+    }
+  }
+
+  private case class ProjectionOverLambdaVariable(
+      original: NamedLambdaVariable,
+      projected: NamedLambdaVariable) {
+    def unapply(expr: Expression): Option[Expression] = project(expr)
+
+    private def project(expr: Expression): Option[Expression] = expr match {
+      case variable: NamedLambdaVariable if variable.semanticEquals(original) =>
+        Some(projected)
+      case GetStructFieldObject(child, field: StructField) =>
+        project(child).map { projection =>
+          projection.dataType match {
+            case projectedSchema: StructType =>
+              GetStructField(projection, projectedSchema.fieldIndex(field.name))
+            case dataType =>
+              throw new IllegalStateException(
+                s"unmatched lambda child schema for GetStructField: $dataType")
+          }
+        }
+      case _ => None
+    }
+  }
 }
