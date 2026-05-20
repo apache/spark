@@ -389,7 +389,6 @@ trait APITest
     checkAnswer(spark.sql(s"SELECT * FROM mv"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
-
   test("Python Pipeline with materialized_view, create_streaming_table, and append_flow") {
     val pipelineSpec =
       TestPipelineSpec(include = Seq("transformations/**"))

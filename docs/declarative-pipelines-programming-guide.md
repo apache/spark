@@ -182,7 +182,7 @@ from pyspark import pipelines as dp
 
 ### The Spark Session in Python Pipelines
 
-The Spark session is automatically injected by the pipeline framework and is available as `spark` in every Python pipeline file — no initialization code is required. You can use `spark` directly without importing or constructing a `SparkSession`:
+In Spark 4.1, every pipeline file had to declare `spark = SparkSession.active()` explicitly. Starting in Spark 4.2, the framework injects spark into each pipeline file's module namespace, so the explicit assignment is no longer required. 
 
 ```python
 from pyspark import pipelines as dp
@@ -192,7 +192,7 @@ def my_view():
     return spark.range(10)
 ```
 
-Previous versions of Declarative Pipelines required explicitly assigning the session with `spark = SparkSession.active()` at the top of each pipeline file. This is still allowed and continues to work correctly. However, if you do assign the session explicitly, `SparkSession.active()` is the only supported way to do so — any other method of obtaining or constructing a `SparkSession` is unsupported and may lead to unexpected behavior.
+Pipeline files that still include `spark = SparkSession.active()` continue to work correctly. However, if you do assign the session explicitly, `SparkSession.active()` is the only supported way to do so. For example, `SparkSession.builder.config(...).getOrCreate()` mutates session config, which is blocked in SDP.
 
 ### Creating a Materialized View in Python
 
