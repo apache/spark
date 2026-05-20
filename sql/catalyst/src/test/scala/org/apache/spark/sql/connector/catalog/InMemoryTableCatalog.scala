@@ -190,7 +190,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     val schemaAfterDrops = if (deletedTopLevelNames.nonEmpty) {
       StructType(table.schema.fields.filterNot(f => deletedTopLevelNames(f.name)))
     } else {
-      schema
+      table.schema
     }
 
     table.increaseVersion()
