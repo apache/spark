@@ -44,6 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -105,6 +106,18 @@ trait V2WriteCommand
   def isByName: Boolean
 
   override def child: LogicalPlan = query
+
+  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
+  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
+  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
+  // `PARAMETER`). Only `OverwriteByExpression` is constructed at parse time with a placeholder
+  // in `table`, but applying this uniformly across all `V2WriteCommand`s keeps the invariant
+  // consistent for any future analyzer-built node that lands a placeholder in the same slot.
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
+  }
 
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
@@ -1955,7 +1968,7 @@ case class CacheTable(
  * The logical plan of the CACHE TABLE ... AS SELECT command.
  */
 case class CacheTableAsSelect(
-    tempViewName: String,
+    tempViewName: Expression,
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
@@ -1963,6 +1976,19 @@ case class CacheTableAsSelect(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
   extends AnalysisOnlyCommand with CTEInChildren {
+
+  /**
+   * Returns the temp view name string. Must only be called after analysis, when `tempViewName`
+   * has been resolved to a non-null string `Literal`. `CheckAnalysis` enforces this invariant.
+   */
+  def tempViewNameString: String = tempViewName match {
+    case Literal(value, _: StringType) if value != null => value.toString
+    case other =>
+      throw SparkException.internalError(
+        "CacheTableAsSelect.tempViewName must be a non-null string literal after analysis, " +
+          s"but got: ${other.sql}")
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)

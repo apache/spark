@@ -2763,7 +2763,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
       CacheTableAsSelect(
-        "t",
+        Literal("t"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
         "SELECT * FROM testData",
         false,
