@@ -20,6 +20,17 @@ package org.apache.spark.network.shuffle.streaming;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 
+/**
+ * Writer → reader data message. Carries a contiguous payload of serialized shuffle
+ * records together with the routing metadata (shuffleWriterId, shuffleReaderId,
+ * dataSize) and a CRC32C {@link #checksum} over the payload. Each DataMessage
+ * corresponds to one network frame on the streaming-shuffle wire.
+ *
+ * Memory ownership: the {@code data} ByteBuf passed to the constructor is retained
+ * once and stored as {@link #ownedBuf}, so callers must release their own reference
+ * separately. On {@link #release()} the retained reference is dropped. See the
+ * memory-ownership rules in {@link StreamingShuffleMessage}.
+ */
 public final class DataMessage extends StreamingShuffleMessage {
 
   public final ByteBuf data;

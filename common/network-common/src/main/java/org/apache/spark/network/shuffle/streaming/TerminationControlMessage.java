@@ -20,6 +20,13 @@ package org.apache.spark.network.shuffle.streaming;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 
+/**
+ * Writer → reader control message that signals end-of-stream. After a writer has
+ * sent its last {@link DataMessage} to a given reader it sends one
+ * TerminationControlMessage on the same connection and waits for the matching
+ * {@link TerminationAckMessage} back. Receipt of this message tells the reader
+ * that no further DataMessages will arrive from this writer.
+ */
 public final class TerminationControlMessage extends StreamingShuffleMessage {
   public final int shuffleWriterId;
   public final int shuffleReaderId;
