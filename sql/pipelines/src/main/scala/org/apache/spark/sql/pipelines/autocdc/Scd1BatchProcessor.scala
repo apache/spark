@@ -63,5 +63,5 @@ case class Scd1BatchProcessor(changeArgs: ChangeArgs) {
 
 object Scd1BatchProcessor {
   // Columns prefixed with `__spark_autocdc_` are reserved for internal SDP AutoCDC processing.
-  private val winningRowColName = "__spark_autocdc_winning_row"
+  private[autocdc] val winningRowColName = "__spark_autocdc_winning_row"
 }

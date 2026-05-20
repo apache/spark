@@ -362,6 +362,21 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
     )
   }
 
+  test("ChangeArgs rejects an empty key list") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        ChangeArgs(
+          keys = Seq.empty,
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type1
+        )
+      },
+      condition = "AUTOCDC_EMPTY_KEYS",
+      sqlState = "22023",
+      parameters = Map.empty
+    )
+  }
+
   test("UnqualifiedColumnName lets a ParseException from the SQL parser propagate") {
     checkError(
       exception = intercept[ParseException] {

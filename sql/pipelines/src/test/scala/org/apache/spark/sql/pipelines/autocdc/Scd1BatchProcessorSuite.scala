@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.{functions => F, Row}
+import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -291,6 +290,38 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("deduplicateMicrobatch supports an arbitrary sequencing expression") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("alt_seq", LongType)
+      .add("value", StringType)
+
+    // The sequencing expression is a function call referencing multiple columns, not a bare
+    // identifier. Locks in that `max_by(..., changeArgs.sequencing)` evaluates the full
+    // expression per-row rather than treating `sequencing` as a single column reference.
+    val batch = microbatchOf(schema)(
+      // greatest(10, 30) = 30 - winner under the expression.
+      Row(1, 10L, 30L, "winner"),
+      // greatest(25, 20) = 25 - would win under `seq` alone, but loses under `greatest`.
+      Row(1, 25L, 20L, "would-win-on-seq-alone"),
+      Row(1, 15L, 15L, "always-loses")
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.greatest(F.col("seq"), F.col("alt_seq")),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+
+    checkAnswer(
+      df = processor.deduplicateMicrobatch(batch),
+      expectedAnswer = Row(1, 10L, 30L, "winner")
+    )
+  }
+
   test("deduplicateMicrobatch supports literal-dot column names") {
     val schema = new StructType()
       .add("user.id", IntegerType)
@@ -313,6 +344,43 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = processor.deduplicateMicrobatch(batch),
       expectedAnswer = Row(1, 20L, "new")
+    )
+  }
+
+  test(
+    "deduplicateMicrobatch fails when a key column collides with the reserved name"
+  ) {
+    val reservedColName = Scd1BatchProcessor.winningRowColName
+
+    val schema = new StructType()
+      .add(reservedColName, StringType)
+      .add("seq", LongType)
+      .add("value", StringType)
+
+    val batch = microbatchOf(schema)(
+      Row("k1", 10L, "loser"),
+      Row("k1", 20L, "winner")
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName(reservedColName)),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type1
+      )
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        processor.deduplicateMicrobatch(batch).collect()
+      },
+      condition = "AMBIGUOUS_REFERENCE",
+      sqlState = "42704",
+      parameters = Map(
+        "name" -> s"`$reservedColName`",
+        "referenceNames" -> s"[`$reservedColName`, `$reservedColName`]"
+      ),
+      context = ExpectedContext(fragment = "col", callSitePattern = "")
     )
   }
 
