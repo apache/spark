@@ -398,7 +398,7 @@ def clean_up():
 
 
 # merge the requested PR and return the merge hash
-def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors, default_branch):
+def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors):
     pr_branch_name = "%s_MERGE_PR_%s" % (BRANCH_PREFIX, pr_num)
     target_branch_name = "%s_MERGE_PR_%s_%s" % (BRANCH_PREFIX, pr_num, target_ref.upper())
     run_cmd("git fetch %s pull/%s/head:%s" % (PR_REMOTE_NAME, pr_num, pr_branch_name))
@@ -470,9 +470,10 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
     # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
-    # PRs), close the PR explicitly through the API.
-    if target_ref != default_branch:
-        print("Target branch %s is not the default branch; closing PR #%s." % (target_ref, pr_num))
+    # PRs), GitHub leaves the PR open, so close it explicitly through the API.
+    pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+    if pr_state != "closed":
+        print("PR #%s is still open after push; closing it explicitly." % pr_num)
         close_pr(pr_num)
 
     return merge_hash
@@ -841,7 +842,6 @@ def main():
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
     branch_iter = iter(branch_names)
-    default_branch = get_json(GITHUB_API_BASE)["default_branch"]
 
     if len(sys.argv) == 1:
         pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
@@ -975,9 +975,7 @@ def main():
 
     merged_refs = [target_ref]
 
-    merge_hash = merge_pr(
-        pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors, default_branch
-    )
+    merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
