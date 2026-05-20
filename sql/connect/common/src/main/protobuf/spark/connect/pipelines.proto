@@ -167,12 +167,6 @@ message PipelineCommand {
       // Expression to order the source data.
       optional Expression sequence_by = 3;
 
-      // Optional condition applied to source and target for optimizations like partition pruning.
-      optional Expression where = 4;
-
-      // Whether to ignore null values in source data updates.
-      optional bool ignore_null_updates = 5;
-
       // Delete condition for the merged operation.
       optional Expression apply_as_deletes = 6;
 
@@ -200,8 +194,6 @@ message PipelineCommand {
       // Subset of columns excluded from ignoring null in updates.
       repeated Expression ignore_null_updates_except_column_list = 15;
 
-      // Column indicating which user columns to update or ignore.
-      optional Expression columns_to_update = 16;
     }
 
     // SCD Type for Auto CDC target tables.

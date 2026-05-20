@@ -585,8 +585,6 @@ class PipelineCommand(google.protobuf.message.Message):
             SOURCE_FIELD_NUMBER: builtins.int
             KEYS_FIELD_NUMBER: builtins.int
             SEQUENCE_BY_FIELD_NUMBER: builtins.int
-            WHERE_FIELD_NUMBER: builtins.int
-            IGNORE_NULL_UPDATES_FIELD_NUMBER: builtins.int
             APPLY_AS_DELETES_FIELD_NUMBER: builtins.int
             APPLY_AS_TRUNCATES_FIELD_NUMBER: builtins.int
             COLUMN_LIST_FIELD_NUMBER: builtins.int
@@ -596,7 +594,6 @@ class PipelineCommand(google.protobuf.message.Message):
             TRACK_HISTORY_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_COLUMN_LIST_FIELD_NUMBER: builtins.int
             IGNORE_NULL_UPDATES_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
-            COLUMNS_TO_UPDATE_FIELD_NUMBER: builtins.int
             source: builtins.str
             """The name of the CDC source to stream from."""
             @property
@@ -609,11 +606,6 @@ class PipelineCommand(google.protobuf.message.Message):
             @property
             def sequence_by(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
                 """Expression to order the source data."""
-            @property
-            def where(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
-                """Optional condition applied to source and target for optimizations like partition pruning."""
-            ignore_null_updates: builtins.bool
-            """Whether to ignore null values in source data updates."""
             @property
             def apply_as_deletes(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
                 """Delete condition for the merged operation."""
@@ -664,9 +656,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 pyspark.sql.connect.proto.expressions_pb2.Expression
             ]:
                 """Subset of columns excluded from ignoring null in updates."""
-            @property
-            def columns_to_update(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
-                """Column indicating which user columns to update or ignore."""
             def __init__(
                 self,
                 *,
@@ -674,8 +663,6 @@ class PipelineCommand(google.protobuf.message.Message):
                 keys: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
                 | None = ...,
                 sequence_by: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-                where: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
-                ignore_null_updates: builtins.bool | None = ...,
                 apply_as_deletes: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
                 apply_as_truncates: pyspark.sql.connect.proto.expressions_pb2.Expression
                 | None = ...,
@@ -704,8 +691,6 @@ class PipelineCommand(google.protobuf.message.Message):
                     pyspark.sql.connect.proto.expressions_pb2.Expression
                 ]
                 | None = ...,
-                columns_to_update: pyspark.sql.connect.proto.expressions_pb2.Expression
-                | None = ...,
             ) -> None: ...
             def HasField(
                 self,
@@ -714,30 +699,18 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"_apply_as_deletes",
                     "_apply_as_truncates",
                     b"_apply_as_truncates",
-                    "_columns_to_update",
-                    b"_columns_to_update",
-                    "_ignore_null_updates",
-                    b"_ignore_null_updates",
                     "_sequence_by",
                     b"_sequence_by",
                     "_source",
                     b"_source",
-                    "_where",
-                    b"_where",
                     "apply_as_deletes",
                     b"apply_as_deletes",
                     "apply_as_truncates",
                     b"apply_as_truncates",
-                    "columns_to_update",
-                    b"columns_to_update",
-                    "ignore_null_updates",
-                    b"ignore_null_updates",
                     "sequence_by",
                     b"sequence_by",
                     "source",
                     b"source",
-                    "where",
-                    b"where",
                 ],
             ) -> builtins.bool: ...
             def ClearField(
@@ -747,28 +720,18 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"_apply_as_deletes",
                     "_apply_as_truncates",
                     b"_apply_as_truncates",
-                    "_columns_to_update",
-                    b"_columns_to_update",
-                    "_ignore_null_updates",
-                    b"_ignore_null_updates",
                     "_sequence_by",
                     b"_sequence_by",
                     "_source",
                     b"_source",
-                    "_where",
-                    b"_where",
                     "apply_as_deletes",
                     b"apply_as_deletes",
                     "apply_as_truncates",
                     b"apply_as_truncates",
                     "column_list",
                     b"column_list",
-                    "columns_to_update",
-                    b"columns_to_update",
                     "except_column_list",
                     b"except_column_list",
-                    "ignore_null_updates",
-                    b"ignore_null_updates",
                     "ignore_null_updates_column_list",
                     b"ignore_null_updates_column_list",
                     "ignore_null_updates_except_column_list",
@@ -785,8 +748,6 @@ class PipelineCommand(google.protobuf.message.Message):
                     b"track_history_column_list",
                     "track_history_except_column_list",
                     b"track_history_except_column_list",
-                    "where",
-                    b"where",
                 ],
             ) -> None: ...
             @typing.overload
@@ -803,28 +764,12 @@ class PipelineCommand(google.protobuf.message.Message):
             ) -> typing_extensions.Literal["apply_as_truncates"] | None: ...
             @typing.overload
             def WhichOneof(
-                self,
-                oneof_group: typing_extensions.Literal["_columns_to_update", b"_columns_to_update"],
-            ) -> typing_extensions.Literal["columns_to_update"] | None: ...
-            @typing.overload
-            def WhichOneof(
-                self,
-                oneof_group: typing_extensions.Literal[
-                    "_ignore_null_updates", b"_ignore_null_updates"
-                ],
-            ) -> typing_extensions.Literal["ignore_null_updates"] | None: ...
-            @typing.overload
-            def WhichOneof(
                 self, oneof_group: typing_extensions.Literal["_sequence_by", b"_sequence_by"]
             ) -> typing_extensions.Literal["sequence_by"] | None: ...
             @typing.overload
             def WhichOneof(
                 self, oneof_group: typing_extensions.Literal["_source", b"_source"]
             ) -> typing_extensions.Literal["source"] | None: ...
-            @typing.overload
-            def WhichOneof(
-                self, oneof_group: typing_extensions.Literal["_where", b"_where"]
-            ) -> typing_extensions.Literal["where"] | None: ...
 
         class Response(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
