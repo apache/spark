@@ -368,6 +368,56 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
+  test("source evolution flag does not bump existing V1 offset log on restart") {
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val inputData = MemoryStream[Int]
+
+        // Start query without source evolution, writing V1 offset log entries.
+        val query1 = inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("path", outputDir.getAbsolutePath)
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .start()
+        inputData.addData(1, 2)
+        query1.processAllAvailable()
+        query1.stop()
+
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+        val initialBatch = offsetLog.getLatest()
+        assert(initialBatch.isDefined)
+        assert(initialBatch.get._2.version === 1)
+        assert(initialBatch.get._2.isInstanceOf[OffsetSeq])
+
+        // Restart with the source evolution session flag enabled. The existing V1 entry's metadata
+        // pins source evolution to false, so the offset log version must stay V1 rather than
+        // jumping to V2 from the session config.
+        withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+          val query2 = inputData.toDF()
+            .writeStream
+            .format("parquet")
+            .option("path", outputDir.getAbsolutePath)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start()
+          try {
+            inputData.addData(3, 4)
+            query2.processAllAvailable()
+
+            val latestBatch = offsetLog.getLatest()
+            assert(latestBatch.isDefined)
+            val (_, offsetSeq) = latestBatch.get
+            assert(offsetSeq.isInstanceOf[OffsetSeq],
+              s"Expected OffsetSeq but got ${offsetSeq.getClass.getSimpleName}")
+            assert(offsetSeq.version === 1, s"Expected version 1 but got ${offsetSeq.version}")
+          } finally {
+            query2.stop()
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-55131: offset log records defaults to merge operator version 2") {
     val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
       spark.conf)
