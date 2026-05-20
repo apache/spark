@@ -471,14 +471,24 @@ class MicroBatchExecution(
     )
 
     // Read the offset log format version from the last written offset log entry. If no entries
-    // are found, use the set/default value from the config.
+    // are found, use the set/default value from the config. When streaming source evolution is
+    // enabled, the offset log must be at least VERSION_2 since named-source tracking requires
+    // the OffsetMap (sourceId -> offset) format.
     val offsetLogFormatVersion = if (latestStartedBatch.isDefined) {
       latestStartedBatch.get._2.version
     } else {
       // If no offset log entries are found, assert that the query does not have any committed
       // batches to be extra safe.
       assert(lastCommittedBatchId == -1L)
-      sparkSessionForStream.conf.get(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION)
+      val configuredVersion =
+        sparkSessionForStream.conf.get(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION)
+      val minRequiredVersion =
+        if (sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution) {
+          OffsetSeqLog.VERSION_2
+        } else {
+          OffsetSeqLog.VERSION_1
+        }
+      math.max(configuredVersion, minRequiredVersion)
     }
 
     // Set the offset log format version in the sparkSessionForStream conf
