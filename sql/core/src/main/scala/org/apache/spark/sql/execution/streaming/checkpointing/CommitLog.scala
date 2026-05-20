@@ -26,6 +26,7 @@ import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -76,12 +77,19 @@ class CommitLog(
   /**
    * Factory for creating a [[CommitMetadataBase]] for the requested wire format version.
    * Defaults to the version configured via [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]].
+   *
+   * For [[VERSION_3]], [[sinkMetadataMap]] must be non-empty.
    */
   def createMetadata(
       nextBatchWatermarkMs: Long = 0,
       stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
+      sinkMetadataMap: Map[String, SinkMetadataInfo] = Map.empty,
       commitLogFormatVersion: Int = defaultVersion): CommitMetadataBase = {
     commitLogFormatVersion match {
+      case VERSION_3 =>
+        require(sinkMetadataMap.nonEmpty,
+          "VERSION_3 commit log requires a non-empty sinkMetadataMap")
+        CommitMetadataV3(nextBatchWatermarkMs, stateUniqueIds, sinkMetadataMap)
       case VERSION_2 =>
         CommitMetadataV2(nextBatchWatermarkMs, stateUniqueIds)
       case VERSION_1 =>
@@ -98,7 +106,8 @@ object CommitLog {
   private val EMPTY_JSON = "{}"
   val VERSION_1 = 1
   val VERSION_2 = 2
-  val MAX_VERSION: Int = VERSION_2
+  val VERSION_3 = 3
+  val MAX_VERSION: Int = VERSION_3
 
   /**
    * Reads a single commit log entry and dispatches to the matching
@@ -112,6 +121,7 @@ object CommitLog {
     val version = MetadataVersionUtil.validateVersion(lines.next().trim, MAX_VERSION)
     val metadataJson = if (lines.hasNext) lines.next() else EMPTY_JSON
     version match {
+      case VERSION_3 => CommitMetadataV3(metadataJson)
       case VERSION_2 => CommitMetadataV2(metadataJson)
       case VERSION_1 => CommitMetadata(metadataJson)
       case v => throw QueryExecutionErrors.logVersionGreaterThanSupported(v, MAX_VERSION)
@@ -204,4 +214,71 @@ object CommitMetadataV2 {
   import CommitMetadata.format
 
   def apply(json: String): CommitMetadataV2 = Serialization.read[CommitMetadataV2](json)
+}
+
+/**
+ * Commit log metadata for [[CommitLog.VERSION_3]]. Extends V2 with a map of per-sink metadata
+ * keyed by sink name. This enables streaming sink evolution: each batch records the active sink
+ * along with any historical sinks that were used in earlier batches but are no longer active.
+ *
+ * @param nextBatchWatermarkMs The watermark of the next batch.
+ * @param stateUniqueIds Per-operator state store unique ids (see [[CommitMetadataV2]]).
+ * @param sinkMetadataMap Map keyed by sink name. There is at most one active entry per
+ *                       commit; deactivated sinks are retained to detect reuse of a sink name.
+ */
+case class CommitMetadataV3(
+    nextBatchWatermarkMs: Long = 0,
+    stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
+    sinkMetadataMap: Map[String, SinkMetadataInfo] = Map.empty) extends CommitMetadataBase {
+  override def version: Int = CommitLog.VERSION_3
+
+  override def withStateUniqueIds(
+      stateUniqueIds: Option[Map[Long, Array[Array[String]]]]): CommitMetadataV3 =
+    copy(stateUniqueIds = stateUniqueIds)
+
+  /** Returns the currently active sink's metadata, if any. */
+  def activeSinkMetadataInfoOpt: Option[SinkMetadataInfo] = sinkMetadataMap.values.find(_.isActive)
+}
+
+object CommitMetadataV3 {
+  implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): CommitMetadataV3 = Serialization.read[CommitMetadataV3](json)
+}
+
+/**
+ * Per-sink metadata recorded in a [[CommitMetadataV3]] entry.
+ *
+ * @param sinkName Sink name as supplied via `DataStreamWriter.name()`, or
+ *                 [[org.apache.spark.sql.execution.streaming.runtime.MicroBatchExecution.DEFAULT_SINK_NAME]]
+ *                 when sink evolution is disabled.
+ * @param commitOffset The latest offset committed to the sink as a JSON string
+ *                     (i.e. [[OffsetV2.json()]]), or [[OffsetSeqLog.SERIALIZED_VOID_OFFSET]] if
+ *                     no offset is available.
+ * @param providerName Identifies the sink implementation (e.g. fully-qualified class name).
+ * @param isActive Whether this sink is the active sink for the current batch. Historical sinks
+ *                 are retained with `isActive = false`.
+ */
+case class SinkMetadataInfo(
+    sinkName: String,
+    commitOffset: String,
+    providerName: String,
+    isActive: Boolean = true) {
+  def json: String = Serialization.write(this)(SinkMetadataInfo.format)
+}
+
+object SinkMetadataInfo {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(
+      sinkName: String,
+      commitOffset: Option[OffsetV2],
+      providerName: String,
+      isActive: Boolean): SinkMetadataInfo = {
+    val offsetString = commitOffset match {
+      case Some(off) => off.json
+      case None => OffsetSeqLog.SERIALIZED_VOID_OFFSET
+    }
+    new SinkMetadataInfo(sinkName, offsetString, providerName, isActive)
+  }
 }

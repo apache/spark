@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream}
 import java.nio.file.Path
 
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataBase, CommitMetadataV2}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataBase, CommitMetadataV2, CommitMetadataV3, OffsetSeqLog, SinkMetadataInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -111,6 +111,67 @@ class CommitLogSuite extends SharedSparkSession {
     withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       val testMetadataV2 = CommitMetadataV2(0, Some(Map[Long, Array[Array[String]]]()))
       testSerde(testMetadataV2, testCommitLogV2FilePathEmptyUniqueId)
+    }
+  }
+
+  test("Basic Commit Log V3 SerDe - single active sink") {
+    withTempDir { tempDir =>
+      val commitLog = new CommitLog(spark, tempDir.getAbsolutePath)
+      val sinkInfo = SinkMetadataInfo(
+        sinkName = "sink-0",
+        commitOffset = OffsetSeqLog.SERIALIZED_VOID_OFFSET,
+        providerName = "memory",
+        isActive = true)
+      val metadata = commitLog.createMetadata(
+        nextBatchWatermarkMs = 42,
+        sinkMetadataMap = Map("sink-0" -> sinkInfo),
+        commitLogFormatVersion = CommitLog.VERSION_3)
+      assert(commitLog.add(0, metadata))
+
+      val read = commitLog.get(0).get
+      assert(read.version === CommitLog.VERSION_3)
+      assert(read.nextBatchWatermarkMs === 42)
+      val readV3 = read.asInstanceOf[CommitMetadataV3]
+      assert(readV3.sinkMetadataMap === Map("sink-0" -> sinkInfo))
+      assert(readV3.activeSinkMetadataInfoOpt === Some(sinkInfo))
+    }
+  }
+
+  test("Commit Log V3 - retains historical sinks alongside active") {
+    withTempDir { tempDir =>
+      val commitLog = new CommitLog(spark, tempDir.getAbsolutePath)
+      val historical = SinkMetadataInfo(
+        sinkName = "sink-0",
+        commitOffset = """{"offset":3}""",
+        providerName = "memory",
+        isActive = false)
+      val active = SinkMetadataInfo(
+        sinkName = "sink-1",
+        commitOffset = """{"offset":7}""",
+        providerName = "memory",
+        isActive = true)
+      val metadata = commitLog.createMetadata(
+        nextBatchWatermarkMs = 100,
+        sinkMetadataMap = Map("sink-0" -> historical, "sink-1" -> active),
+        commitLogFormatVersion = CommitLog.VERSION_3)
+      assert(commitLog.add(0, metadata))
+
+      val readV3 = commitLog.get(0).get.asInstanceOf[CommitMetadataV3]
+      assert(readV3.activeSinkMetadataInfoOpt === Some(active))
+      assert(readV3.sinkMetadataMap("sink-0") === historical)
+      assert(readV3.sinkMetadataMap("sink-1") === active)
+    }
+  }
+
+  test("createMetadata for V3 requires non-empty sinkMetadataMap") {
+    withTempDir { tempDir =>
+      val commitLog = new CommitLog(spark, tempDir.getAbsolutePath)
+      intercept[IllegalArgumentException] {
+        commitLog.createMetadata(
+          nextBatchWatermarkMs = 0,
+          sinkMetadataMap = Map.empty,
+          commitLogFormatVersion = CommitLog.VERSION_3)
+      }
     }
   }
 
