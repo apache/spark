@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
@@ -338,6 +339,47 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "hr") :: Row(2, 100, "hardware") :: Row(3, null, "hr") :: Nil)
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
+  }
+
+  test("metric values are stable across stage retries") {
+    // Force a shuffle in the UPDATE plan via an IN-subquery (with broadcast disabled), then
+    // have the DAGScheduler corrupt the first attempt of every upstream shuffle map stage.
+    // Note: the current fetch-failure injection does not retry the writer stage, so this
+    // test passes equally well with plain SQLMetric — it only exercises the SLAM-aware
+    // read path. Follow-up #55738 will add infra to actually retry the writer stage and
+    // exercise the SLAM behavior end-to-end for UPDATE.
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq(1, 2).toDF("pk")
+        sourceDF.createOrReplaceTempView("source")
+
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          sql(
+            s"""UPDATE $tableNameAsString
+               |SET salary = salary + 100
+               |WHERE pk IN (SELECT pk FROM source)
+               |""".stripMargin)
+        }
+
+        checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 2)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 200, "hr"),
+            Row(2, 300, "software"),
+            Row(3, 300, "hr"),
+            Row(4, 400, "software")))
+      }
+    }
   }
 
   test("update nested struct fields") {
