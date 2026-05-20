@@ -389,6 +389,29 @@ trait APITest
     checkAnswer(spark.sql(s"SELECT * FROM mv"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
+  test("Python Pipeline with spark session placeholder works as expected") {
+    val pipelineSpec =
+      TestPipelineSpec(include = Seq("transformations/**"))
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
+    val sources = Seq(
+      PipelineSourceFile(
+        name = "transformations/definition.py",
+        contents = """
+                     |from pyspark import pipelines as dp
+                     |from pyspark.sql import SparkSession
+                     |
+                     |spark: SparkSession
+                     |
+                     |@dp.materialized_view
+                     |def mv():
+                     |  return spark.range(5)
+                     |""".stripMargin))
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
+
+    checkAnswer(spark.sql(s"SELECT * FROM mv"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+  }
+
   test("Python Pipeline with materialized_view, create_streaming_table, and append_flow") {
     val pipelineSpec =
       TestPipelineSpec(include = Seq("transformations/**"))
