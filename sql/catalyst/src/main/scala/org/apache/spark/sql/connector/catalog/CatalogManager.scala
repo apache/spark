@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
@@ -99,6 +100,7 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   def resolutionPathEntriesForAnalysis(
       pinnedEntries: Option[Seq[Seq[String]]],
       viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]]
+  def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind]
 
   // Reset the manager to its initial state. Only used in tests.
   private[sql] def reset(): Unit
@@ -380,7 +382,7 @@ private[sql] class DefaultCatalogManager(
    * [[org.apache.spark.sql.catalyst.analysis.FunctionResolution.isSessionBeforeBuiltinInPath]])
    * MUST NOT hold [[SessionCatalog]]'s intrinsic lock when invoking this method.
    */
-  def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionCatalog.SessionFunctionKind] = {
+  override def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind] = {
     // SPARK-56939: read v1's current database before taking the CM lock; see the method
     // doc for why the resulting staleness is harmless for the kinds list.
     val v1CurrentDb = v1SessionCatalog.getCurrentDatabase

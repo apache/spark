@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 
 /**
@@ -102,6 +103,9 @@ private[sql] class TransactionAwareCatalogManager(
       pinnedEntries: Option[Seq[Seq[String]]],
       viewCatalogAndNamespace: Seq[String]): Seq[Seq[String]] =
     delegate.resolutionPathEntriesForAnalysis(pinnedEntries, viewCatalogAndNamespace)
+
+  override def sessionFunctionKindsForUnqualifiedResolution(): Seq[SessionFunctionKind] =
+    delegate.sessionFunctionKindsForUnqualifiedResolution()
 
   override private[sql] def reset(): Unit = delegate.reset()
 }
