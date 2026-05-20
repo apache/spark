@@ -30,7 +30,6 @@ from pyspark.testing.pandasutils import (
     PandasOnSparkTestCase,
     SPARK_CONF_ARROW_ENABLED,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.series import MissingPandasLikeSeries
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
@@ -878,7 +877,6 @@ class SeriesTestsMixin:
 class SeriesTests(
     SeriesTestsMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -20,6 +20,33 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
+## Scala Test Base Classes
+
+When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. Spark uses the `AnyFunSuite` ScalaTest style throughout, so the bases below are the chain to choose from. Each adds capability on top of the previous:
+
+    SparkFunSuite                                                           (core)
+      <- PlanTest                                                           (sql/catalyst)
+        <- QueryTest                                                        (sql/core)
+
+| Test scope | Base | Notes |
+|------------|------|-------|
+| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, `testRetry`, `gridTest`, thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`. |
+| Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
+| SQL/DataFrame tests — needs a `SparkSession` | `QueryTest` | Adds `checkAnswer`, codegen-on/off helpers. `spark: SparkSession` is abstract and must be supplied by a session-providing trait (see below). |
+
+### Providing a `SparkSession` for `QueryTest`
+
+`QueryTest` declares `spark: SparkSession` abstractly via `SparkSessionProvider`, so it cannot be instantiated on its own. A concrete suite mixes in one of the session-providing traits below:
+
+    QueryTest                                                               (abstract `spark`)
+      + SharedSparkSession (sql/core)        -> classic in-process `TestSparkSession`
+      + TestHiveSingleton  (sql/hive)        -> Hive-backed `TestHive` session
+
+| Session provider | Module / location | Typical usage |
+|---|---|---|
+| `SharedSparkSession` | `sql/core` | Already extends `QueryTest` for historical reasons, but still mix in `QueryTest` explicitly, e.g. `class X extends QueryTest with SharedSparkSession`. Default for tests under `sql/core`. |
+| `TestHiveSingleton` | `sql/hive` | Mixed in alongside `QueryTest`, e.g. `class X extends QueryTest with TestHiveSingleton`. Used by tests under `sql/hive`. |
+
 ## Build and Test
 
 Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.

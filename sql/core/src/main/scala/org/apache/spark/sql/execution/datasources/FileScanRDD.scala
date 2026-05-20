@@ -27,6 +27,7 @@ import org.apache.hadoop.security.AccessControlException
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.LogKeys.{CURRENT_FILE, PATH}
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -89,6 +90,14 @@ class FileScanRDD(
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
+  // Evaluated on the driver (sparkSession is @transient) and serialized to executors so the
+  // `compute` iterator below can pass it through to ColumnVectorUtils.populate.
+  private val memoryMode: MemoryMode =
+    if (sparkSession.sessionState.conf.offHeapColumnVectorEnabled) {
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -183,7 +192,7 @@ class FileScanRDD(
           }
 
           val columnVector = new ConstantColumnVector(c.numRows(), attr.dataType)
-          ColumnVectorUtils.populate(columnVector, tmpRow, 0)
+          ColumnVectorUtils.populate(columnVector, tmpRow, 0, memoryMode)
           columnVector
         }.toArray
       }

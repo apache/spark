@@ -21,7 +21,6 @@ import numpy as np
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class DiffFramesBasicSlowMixin:
@@ -181,7 +180,7 @@ class DiffFramesBasicSlowMixin:
         )
 
 
-class DiffFramesBasicSlowTests(DiffFramesBasicSlowMixin, PandasOnSparkTestCase, SQLTestUtils):
+class DiffFramesBasicSlowTests(DiffFramesBasicSlowMixin, PandasOnSparkTestCase):
     pass
 
 

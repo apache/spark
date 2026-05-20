@@ -1,0 +1,74 @@
+================================================================================================
+DecimalAggregates SUM widened-cast peel (Aggregate)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+A1 p=7 s=2 p'=8:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3068           3095          35          3.3         306.8       1.0X
+widened cast, peel off                             3396           3410          19          2.9         339.6       0.9X
+widened cast, peel on                              3107           3115          10          3.2         310.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+A2 p=7 s=2 p'=17:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3104           3120          23          3.2         310.4       1.0X
+widened cast, peel off                             3386           3407          27          3.0         338.6       0.9X
+widened cast, peel on                              3094           3106          17          3.2         309.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+A3 p=5 s=0 p'=6:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3039           3053          21          3.3         303.9       1.0X
+widened cast, peel off                             3336           3340           5          3.0         333.6       0.9X
+widened cast, peel on                              3034           3048          14          3.3         303.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+A4 p=5 s=0 p'=15:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3037           3049          16          3.3         303.7       1.0X
+widened cast, peel off                             3324           3340          16          3.0         332.4       0.9X
+widened cast, peel on                              3027           3031           4          3.3         302.7       1.0X
+
+
+================================================================================================
+DecimalAggregates AVG widened-cast peel (Aggregate)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+B1 p=7 s=2 p'=8:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3038           3041           2          3.3         303.8       1.0X
+widened cast, peel off                             3274           3283          18          3.1         327.4       0.9X
+widened cast, peel on                              3056           3074          15          3.3         305.6       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+B2 p=7 s=2 p'=12:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3029           3033           3          3.3         302.9       1.0X
+widened cast, peel off                             3288           3291           2          3.0         328.8       0.9X
+widened cast, peel on                              3031           3036           6          3.3         303.1       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+B3 p=5 s=0 p'=6:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3022           3030           5          3.3         302.2       1.0X
+widened cast, peel off                             3275           3307          28          3.1         327.5       0.9X
+widened cast, peel on                              3025           3028           3          3.3         302.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+B4 p=5 s=0 p'=15:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3024           3039          21          3.3         302.4       1.0X
+widened cast, peel off                             3279           3298          17          3.1         327.9       0.9X
+widened cast, peel on                              3016           3023           6          3.3         301.6       1.0X
+
+

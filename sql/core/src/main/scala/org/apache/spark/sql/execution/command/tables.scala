@@ -103,7 +103,7 @@ case class CreateTableLikeCommand(
       provider
     } else if (fileFormat.inputFormat.isDefined) {
       Some(DDLUtils.HIVE_PROVIDER)
-    } else if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+    } else if (sourceTableDesc.isViewLike) {
       Some(sparkSession.sessionState.conf.defaultDataSourceName)
     } else {
       sourceTableDesc.provider
@@ -267,7 +267,7 @@ case class AlterTableAddColumnsCommand(
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
 
-    if (catalogTable.tableType == CatalogTableType.VIEW) {
+    if (catalogTable.isViewLike) {
       throw QueryCompilationErrors.alterAddColNotSupportViewError(table)
     }
 
@@ -730,7 +730,7 @@ case class DescribeTableCommand(
       catalog: SessionCatalog,
       metadata: CatalogTable,
       result: ArrayBuffer[Row]): Unit = {
-    if (metadata.tableType == CatalogTableType.VIEW) {
+    if (metadata.isViewLike) {
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
@@ -1209,6 +1209,14 @@ case class ShowCreateTableCommand(
       throw QueryCompilationErrors.showCreateTableNotSupportedOnTempView(table.identifier)
     } else {
       val tableMetadata = catalog.getTableRawMetadata(table)
+
+      // SHOW CREATE TABLE / VIEW does not have a WITH METRICS round-trippable form yet,
+      // so explicitly reject metric views rather than emit a misleading `CREATE VIEW`
+      // statement that loses the METRIC_VIEW kind. Tracked as follow-up.
+      if (tableMetadata.tableType == METRIC_VIEW) {
+        throw QueryCompilationErrors.showCreateTableNotSupportedOnMetricViewError(
+          table.identifier)
+      }
 
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.

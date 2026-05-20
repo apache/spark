@@ -1954,6 +1954,36 @@ class FunctionsTestsMixin:
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[: len(r)])
 
+    def test_counter_diff_window_function(self):
+        df = self.spark.createDataFrame(
+            [
+                (1, datetime.datetime(2026, 1, 1, 0, 0, 0), 100),
+                (2, datetime.datetime(2026, 1, 1, 0, 0, 0), 200),
+                (3, datetime.datetime(2026, 1, 1, 0, 0, 0), 50),
+                (4, datetime.datetime(2026, 1, 1, 0, 0, 0), 100),
+                (5, datetime.datetime(2026, 1, 1, 0, 1, 0), 200),
+                (6, datetime.datetime(2026, 1, 1, 0, 1, 0), 300),
+            ],
+            ["t", "st", "c"],
+        )
+        w = Window.orderBy("t")
+
+        rows = df.select("t", F.counter_diff("c").over(w).alias("d")).orderBy("t").collect()
+        self.assertEqual(
+            [(r.t, r.d) for r in rows],
+            [(1, None), (2, 100), (3, None), (4, 50), (5, 100), (6, 100)],
+        )
+
+        rows = (
+            df.select("t", F.counter_diff("c", startTime="st").over(w).alias("d"))
+            .orderBy("t")
+            .collect()
+        )
+        self.assertEqual(
+            [(r.t, r.d) for r in rows],
+            [(1, None), (2, 100), (3, None), (4, 50), (5, None), (6, 100)],
+        )
+
     def test_window_functions_without_partitionBy(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         w = Window.orderBy("key", df.value)
@@ -3848,16 +3878,28 @@ class FunctionsTestsMixin:
 
     def test_st_asbinary(self):
         df = self.spark.createDataFrame(
-            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"),)],
-            ["wkb"],
+            [(bytes.fromhex("0101000000000000000000F03F0000000000000040"), "XDR")],
+            ["wkb", "end"],
         )
         results = df.select(
             F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "NDR")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), "XDR")),
+            F.hex(F.st_asbinary(F.st_geogfromwkb("wkb"), F.col("end"))),
             F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"))),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "NDR")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), "XDR")),
+            F.hex(F.st_asbinary(F.st_geomfromwkb("wkb"), F.col("end"))),
         ).collect()
         expected = Row(
             "0101000000000000000000F03F0000000000000040",
             "0101000000000000000000F03F0000000000000040",
+            "00000000013FF00000000000004000000000000000",
+            "00000000013FF00000000000004000000000000000",
+            "0101000000000000000000F03F0000000000000040",
+            "0101000000000000000000F03F0000000000000040",
+            "00000000013FF00000000000004000000000000000",
+            "00000000013FF00000000000004000000000000000",
         )
         self.assertEqual(results, [expected])
 

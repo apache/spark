@@ -342,9 +342,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
     // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
-    // `ViewCatalog.dropView`. Other non-session catalogs get `MISSING_CATALOG_ABILITY.VIEWS`,
-    // matching the error raised from `CheckViewReferences` for CREATE/ALTER VIEW and from the
-    // analyzer gate on UnresolvedView.
+    // `ViewCatalog.dropView` (this also covers METRIC_VIEW since metric views are persisted
+    // through the same ViewCatalog interface). Other non-session catalogs get
+    // `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from `CheckViewReferences` for
+    // CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
     case DropView(r @ ResolvedIdentifier(catalog, ident), ifExists)
         if !catalog.isInstanceOf[ViewCatalog] =>
       if (catalog == FakeSystemCatalog) {

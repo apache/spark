@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.udf.worker.{
-  DirectWorker, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
+  DirectWorker, Init, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
   UDFWorkerSpecification, UnixDomainSocket, WorkerConnectionSpec,
   WorkerEnvironment}
 import org.apache.spark.udf.worker.core.direct.{DirectUnixSocketWorkerDispatcher,
@@ -51,14 +51,14 @@ class SocketFileConnection(socketPath: String)
  * TODO: [[cancel]] is a no-op here. Once a concrete [[DirectWorkerSession]]
  *   with real data-plane wiring lands, add tests exercising cancel() in
  *   particular: cancel from a different thread than process(), cancel
- *   after process() has returned, and cancel before init (should be a
- *   no-op). Tracking the thread-safety contract in the docstring on
+ *   after process() has returned, and cancel before init (should be a no-op).
+ *   See the thread-safety contract in the docstring on
  *   [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
  */
 class StubWorkerSession(
     workerProcess: DirectWorkerProcess) extends DirectWorkerSession(workerProcess) {
 
-  override protected def doInit(message: InitMessage): Unit = {}
+  override protected def doInit(message: Init): Unit = {}
 
   override protected def doProcess(
       input: Iterator[Array[Byte]]): Iterator[Array[Byte]] =

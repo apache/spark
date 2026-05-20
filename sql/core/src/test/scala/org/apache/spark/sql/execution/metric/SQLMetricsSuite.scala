@@ -726,16 +726,33 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-25278: output metrics are wrong for plans repeated in the query") {
-    val name = "demo_view"
-    withView(name) {
-      sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
-      val view = spark.table(name)
-      val union = view.union(view)
-      testSparkPlanMetrics(union, 1, Map(
-        0L -> ("Union" -> Map()),
-        1L -> ("Project" -> Map()),
-        2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
-        3L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+    withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "false") {
+      val name = "demo_view"
+      withView(name) {
+        sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+        val view = spark.table(name)
+        val union = view.union(view)
+        testSparkPlanMetrics(union, 1, Map(
+          0L -> ("Union" -> Map()),
+          1L -> ("Project" -> Map()),
+          2L -> ("LocalTableScan" -> Map("number of output rows" -> 2L)),
+          3L -> ("LocalTableScan" -> Map("number of output rows" -> 2L))))
+      }
+    }
+  }
+
+  test("UnionExec.numOutputRows reports total row count under fusion") {
+    withSQLConf(SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") {
+      val name = "demo_view"
+      withView(name) {
+        sql(s"CREATE OR REPLACE VIEW $name AS VALUES 1,2")
+        val union = spark.table(name).union(spark.table(name))
+        union.collect()
+        val unionExec = union.queryExecution.executedPlan.collectFirst {
+          case u: UnionExec => u
+        }.get
+        assert(unionExec.metrics("numOutputRows").value == 4L)
+      }
     }
   }
 

@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.13</artifactId>
-  <version>4.2.0-SNAPSHOT</version>
+  <version>5.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -143,7 +143,7 @@
     <kafka.version>3.9.2</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.17.0</parquet.version>
+    <parquet.version>1.17.1</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>12.1.8</jetty.version>
@@ -215,9 +215,13 @@
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
     <tink.version>1.20.0</tink.version>
+    <!--
+      TODO: Once upgrade datasketches to a version that supports Java 25,
+            SPARK-53327 workaround should be reverted.
+     -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.12.Final</netty.version>
-    <netty-tcnative.version>2.0.76.Final</netty-tcnative.version>
+    <netty.version>4.2.13.Final</netty.version>
+    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -338,10 +342,11 @@
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
       -Dio.netty.noUnsafe=false
       --enable-native-access=ALL-UNNAMED
+      -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
-    <postgresql.version>42.7.10</postgresql.version>
+    <postgresql.version>42.7.11</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
@@ -894,7 +899,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-7</version>
+        <version>1.5.7-8</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

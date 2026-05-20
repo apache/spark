@@ -59,3 +59,35 @@ table.dataTable thead .sorting_desc_disabled::after {
 div.dataTables_wrapper div.dataTables_length select {
   width: 100%;
 }
+
+/* SQL tab sub-execution disclosure (SPARK-56811) */
+table#sql-table td.sub-exec-toggle {
+  white-space: nowrap;
+}
+
+table#sql-table td.sub-exec-toggle a.toggle-sub-exec {
+  text-decoration: none;
+}
+
+table#sql-table td.sub-exec-toggle a.toggle-sub-exec:hover {
+  text-decoration: underline;
+}
+
+table#sql-table tr.shown td.sub-exec-toggle a.toggle-sub-exec {
+  font-weight: 600;
+}
+
+table#sql-table tr.shown + tr > td {
+  background-color: var(--bs-tertiary-bg, #f4f7fa);
+}
+
+table.sub-exec-table {
+  margin-left: 1.5rem !important;
+  width: calc(100% - 1.5rem) !important;
+  background-color: transparent;
+}
+
+table.sub-exec-table thead th {
+  font-weight: 600;
+  background-color: transparent;
+}

@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class ReflectData(
@@ -76,7 +76,7 @@ case class ComplexReflectData(
 
 case class InvalidInJava(`abstract`: Int)
 
-class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSparkSession {
+class ScalaReflectionRelationSuite extends SharedSparkSession {
   import testImplicits._
 
   // To avoid syntax error thrown by genjavadoc, make this case class non-top level and private.

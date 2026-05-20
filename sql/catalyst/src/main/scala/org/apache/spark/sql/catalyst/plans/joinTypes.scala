@@ -184,7 +184,8 @@ object LateralJoinType {
 
 object NearestByDirection {
 
-  val supported = Seq("distance", "similarity")
+  /** @see [[NearestByJoinValidation.SupportedDirections]] */
+  val supported: Seq[String] = NearestByJoinValidation.SupportedDirections
 
   def apply(direction: String): NearestByDirection = {
     direction.toLowerCase(Locale.ROOT) match {
@@ -207,13 +208,11 @@ case object NearestBySimilarity extends NearestByDirection
 
 object NearestByJoinType {
 
-  /** Strings accepted by the Dataset API. */
-  val supported = Seq("inner", "leftouter", "left", "left_outer")
+  /** @see [[NearestByJoinValidation.SupportedJoinTypes]] */
+  val supported: Seq[String] = NearestByJoinValidation.SupportedJoinTypes
 
-  /** Display string used in `NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE` error messages. Matches the
-   *  parser-side wording so the same error class reports the same `supported` value across the
-   *  SQL and DataFrame paths. */
-  val supportedDisplay = "'INNER', 'LEFT OUTER'"
+  /** @see [[NearestByJoinValidation.SupportedJoinTypeDisplay]] */
+  val supportedDisplay: String = NearestByJoinValidation.SupportedJoinTypeDisplay
 
   def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
@@ -229,7 +228,8 @@ object NearestByJoinType {
 
 object NearestByJoinMode {
 
-  val supported = Seq("approx", "exact")
+  /** @see [[NearestByJoinValidation.SupportedModes]] */
+  val supported: Seq[String] = NearestByJoinValidation.SupportedModes
 
   /** Returns true for APPROX, false for EXACT. */
   def apply(mode: String): Boolean = mode.toLowerCase(Locale.ROOT) match {
