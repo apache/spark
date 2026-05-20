@@ -33,7 +33,6 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 25
-      branch: master
       hadoop: hadoop3
       envs: >-
         {
