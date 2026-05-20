@@ -84,7 +84,10 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
     } finally {
       views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v").collect())
       session.sql(s"DROP TABLE IF EXISTS $table").collect()
-      if (clearCachingCatalog) CachingInMemoryTableCatalog.clearCache()
+      if (clearCachingCatalog) {
+        val serverSession = getServerSession(session)
+        serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat").clearCache()
+      }
     }
   }
 
