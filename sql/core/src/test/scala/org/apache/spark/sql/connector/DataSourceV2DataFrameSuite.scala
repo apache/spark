@@ -2614,8 +2614,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // succeeds because column ID validation is skipped when IDs are null
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because IDs are null. The table is refreshed via version
+      // tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2663,8 +2664,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
 
-      // succeeds because current column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because current ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2693,8 +2695,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
 
-      // succeeds because original column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because original ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
