@@ -49,17 +49,29 @@ public class JavaModuleOptions {
       "-Dio.netty.noUnsafe=false",
       "--enable-native-access=ALL-UNNAMED"};
 
+    // JDK 25+ restricts unsafe memory access by default, breaking Arrow/Netty.
+    private static final String[] JDK25_OPTIONS = {
+      "--sun-misc-unsafe-memory-access=allow"
+    };
+
     /**
      * Returns the default JVM runtime options used by Spark.
      */
     public static String defaultModuleOptions() {
-      return String.join(" ", DEFAULT_MODULE_OPTIONS);
+      return String.join(" ", defaultModuleOptionArray());
     }
 
     /**
      * Returns the default JVM runtime option array used by Spark.
      */
     public static String[] defaultModuleOptionArray() {
+      if (Runtime.version().feature() >= 25) {
+        String[] combined = new String[DEFAULT_MODULE_OPTIONS.length + JDK25_OPTIONS.length];
+        System.arraycopy(DEFAULT_MODULE_OPTIONS, 0, combined, 0, DEFAULT_MODULE_OPTIONS.length);
+        System.arraycopy(JDK25_OPTIONS, 0, combined, DEFAULT_MODULE_OPTIONS.length,
+          JDK25_OPTIONS.length);
+        return combined;
+      }
       return DEFAULT_MODULE_OPTIONS;
     }
 }
