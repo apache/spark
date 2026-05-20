@@ -108,6 +108,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("table")
     val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val unresolved = UnresolvedRelation(
       identifier,
