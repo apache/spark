@@ -21,10 +21,12 @@ import java.io.File
 
 import org.scalatest.Tag
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -368,7 +370,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     }
   }
 
-  test("source evolution flag does not bump existing V1 offset log on restart") {
+  test("enabling source evolution on an existing V1 checkpoint is rejected") {
     withTempDir { checkpointDir =>
       withTempDir { outputDir =>
         val inputData = MemoryStream[Int]
@@ -390,9 +392,9 @@ class OffsetSeqLogSuite extends SharedSparkSession {
         assert(initialBatch.get._2.version === 1)
         assert(initialBatch.get._2.isInstanceOf[OffsetSeq])
 
-        // Restart with the source evolution session flag enabled. The existing V1 entry's metadata
-        // pins source evolution to false, so the offset log version must stay V1 rather than
-        // jumping to V2 from the session config.
+        // Restart with the source evolution session flag enabled. The existing V1 checkpoint does
+        // not support OffsetMap-based named source tracking, so the query must fail loudly rather
+        // than silently downgrading the user's session config.
         withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
           val query2 = inputData.toDF()
             .writeStream
@@ -400,19 +402,14 @@ class OffsetSeqLogSuite extends SharedSparkSession {
             .option("path", outputDir.getAbsolutePath)
             .option("checkpointLocation", checkpointDir.getAbsolutePath)
             .start()
-          try {
+          val ex = intercept[StreamingQueryException] {
             inputData.addData(3, 4)
             query2.processAllAvailable()
-
-            val latestBatch = offsetLog.getLatest()
-            assert(latestBatch.isDefined)
-            val (_, offsetSeq) = latestBatch.get
-            assert(offsetSeq.isInstanceOf[OffsetSeq],
-              s"Expected OffsetSeq but got ${offsetSeq.getClass.getSimpleName}")
-            assert(offsetSeq.version === 1, s"Expected version 1 but got ${offsetSeq.version}")
-          } finally {
-            query2.stop()
           }
+          checkError(
+            exception = ex.cause.asInstanceOf[AnalysisException],
+            condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+            parameters = Map("existingVersion" -> "1"))
         }
       }
     }

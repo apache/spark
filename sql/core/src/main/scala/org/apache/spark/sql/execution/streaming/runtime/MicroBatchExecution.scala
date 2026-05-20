@@ -40,7 +40,7 @@ import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
@@ -474,7 +474,16 @@ class MicroBatchExecution(
     // are found, delegate to CheckpointVersionManager to resolve the version from the configured
     // value and any feature-driven minimum (e.g. streaming source evolution requires VERSION_2).
     val offsetLogFormatVersion = if (latestStartedBatch.isDefined) {
-      latestStartedBatch.get._2.version
+      val existingVersion = latestStartedBatch.get._2.version
+      // Streaming source evolution requires the OffsetMap (sourceId -> offset) format introduced
+      // in VERSION_2. If the user enabled source evolution at the session level but the existing
+      // checkpoint is older, fail loudly rather than silently downgrading the session config.
+      if (existingVersion < OffsetSeqLog.VERSION_2 &&
+          sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution) {
+        throw QueryCompilationErrors.cannotEnableSourceEvolutionOnExistingCheckpointError(
+          existingVersion)
+      }
+      existingVersion
     } else {
       // If no offset log entries are found, assert that the query does not have any committed
       // batches to be extra safe.
