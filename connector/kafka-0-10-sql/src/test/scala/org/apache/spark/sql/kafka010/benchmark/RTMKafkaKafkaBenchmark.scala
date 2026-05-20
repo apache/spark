@@ -242,6 +242,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     val dataGenThread = new Thread(() => {
       genData(testUtils.brokerAddress, inputTopic)
     })
+    dataGenThread.setDaemon(true)
     dataGenThread.start()
 
     val latch = new CountDownLatch(1)
