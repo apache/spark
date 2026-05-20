@@ -156,7 +156,7 @@ message PipelineCommand {
       optional spark.connect.Relation relation = 1;
     }
 
-    // Details for Apply Changes Into (ACI) flows.
+    // Details for Auto CDC flows.
     message AutoCdcFlowDetails {
       // The name of the CDC source to stream from.
       optional string source = 1;

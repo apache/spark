@@ -578,7 +578,7 @@ class PipelineCommand(google.protobuf.message.Message):
             ) -> typing_extensions.Literal["relation"] | None: ...
 
         class AutoCdcFlowDetails(google.protobuf.message.Message):
-            """Details for Apply Changes Into (ACI) flows."""
+            """Details for Auto CDC flows."""
 
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
