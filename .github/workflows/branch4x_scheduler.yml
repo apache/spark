@@ -23,6 +23,7 @@ on:
   schedule:
     - cron: '0 4 */2 * *'
     - cron: '0 7 */2 * *'
+    - cron: '0 11 */2 * *'
     - cron: '0 16 */2 * *'
     - cron: '0 18 */2 * *'
     - cron: '0 19 */2 * *'
@@ -68,6 +69,13 @@ jobs:
             (inputs.target == 'maven_java21' || inputs.target == 'all'))
         run: |
           gh workflow run build_maven_java21.yml --repo ${{ github.repository }} --ref branch-4.x
+      - name: Java 17 Build
+        if: >-
+          github.event.schedule == '0 11 */2 * *' ||
+          (github.event_name == 'workflow_dispatch' &&
+            (inputs.target == 'java17' || inputs.target == 'all'))
+        run: |
+          gh workflow run build_java17.yml --repo ${{ github.repository }} --ref branch-4.x
       - name: Java 21 Build
         if: >-
           github.event.schedule == '0 7 */2 * *' ||
