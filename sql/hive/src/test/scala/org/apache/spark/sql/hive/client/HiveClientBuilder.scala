@@ -36,7 +36,7 @@ private[client] object HiveClientBuilder {
   // Path to a custom Ivy settings file for testing in environments that require
   // authenticated access to private repositories:
   private val ivySettingsPath: Option[String] =
-    sys.env.get("SPARK_VERSIONS_SUITE_IVY_SETTINGS")
+    sys.env.get("SPARK_TEST_VERSIONS_SUITE_IVY_SETTINGS")
 
   private[client] def buildConf(extraConf: Map[String, String]): Map[String, String] = {
     lazy val warehousePath = Utils.createTempDir()
