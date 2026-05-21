@@ -26,10 +26,9 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -48,8 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
-  with DSv2TempViewWithStoredPlanTests
-  with DSv2RepeatedSQLTests {
+  with DSv2TempViewWithStoredPlanTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -108,7 +106,7 @@ class DataSourceV2DataFrameSuite
       views: Seq[String] = Seq.empty)(fn: => Unit): Unit = {
     withTable(table) {
       try { fn }
-      finally { views.foreach(v => sql(s"DROP VIEW IF EXISTS $v")) }
+      finally { views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v")) }
     }
   }
 

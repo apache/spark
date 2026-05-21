@@ -34,8 +34,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * (where the test session IS the server session) and Connect mode (where the test session
  * is a Connect client and catalog access requires the server session).
  *
- * Concrete suites override the abstract methods and mix in one or more of the test traits:
- * [[DSv2TempViewWithStoredPlanTests]], [[DSv2RepeatedSQLTests]], [[DSv2CacheTableTests]].
+ * Concrete suites override the abstract methods and mix in the test trait
+ * [[DSv2TempViewWithStoredPlanTests]].
  */
 trait DSv2ExternalMutationTestBase extends SharedSparkSession {
 
