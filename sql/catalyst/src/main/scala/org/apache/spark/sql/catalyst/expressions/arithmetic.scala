@@ -256,11 +256,7 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
   }
 
   protected def checkDecimalOverflow(value: Decimal, precision: Int, scale: Int): Decimal = {
-    if (failOnError) {
-      CastUtils.changePrecisionExact(value, precision, scale, getContextOrNull())
-    } else {
-      CastUtils.changePrecisionOrNull(value, precision, scale)
-    }
+    value.toPrecision(precision, scale, Decimal.ROUND_HALF_UP, !failOnError, getContextOrNull())
   }
 
   /** Name of the function for this expression on a [[Decimal]] type. */
