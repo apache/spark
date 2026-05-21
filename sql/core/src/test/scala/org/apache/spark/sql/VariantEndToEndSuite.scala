@@ -193,23 +193,20 @@ class VariantEndToEndSuite extends SharedSparkSession {
     val parseJsonError = intercept[SparkException] {
       df.selectExpr("parse_json(j)").collect()
     }
-    checkError(exception = parseJsonError,
-    condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-    parameters = Map(
-    "badRecord" -> invalidJson,
-    "failFastMode" -> "FAILFAST")
+    checkError(
+      exception = parseJsonError,
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> invalidJson, "failFastMode" -> "FAILFAST")
     )
 
     val fromJsonFailFast = intercept[SparkException] {
-      df.selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()}
-      checkError(
-        exception = fromJsonFailFast,
-        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map(
-          "badRecord" -> "[null]",
-          "failFastMode" -> "FAILFAST"
-          )
-        )
+      df.selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()
+    }
+    checkError(
+      exception = fromJsonFailFast,
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
 
     withSQLConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING.key -> "false") {
       val parsed = df.selectExpr("parse_json(j)").collect()

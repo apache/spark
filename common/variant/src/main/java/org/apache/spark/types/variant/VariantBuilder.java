@@ -596,7 +596,7 @@ public class VariantBuilder {
   // Reject JSON strings that contain unpaired UTF-16 surrogate code units. Java strings can
   // hold lone surrogates, but RFC 8259 section 7 requires JSON string contents to be well-formed
   // Unicode. Stricter parsers such as simdjson reject these inputs, while Jackson's
-  // `ReaderBasedJsonParser` accepts them and silently drops the invalid character to U+FFFD
+  // `ReaderBasedJsonParser` accepts them and silently replaces the invalid character with U+FFFD
   // when the result is encoded as UTF-8. That silent replacement causes data corruption, so
   // we surface a JSON parse error instead.
   private static void checkValidUnicodeString(String str, JsonParser parser)
