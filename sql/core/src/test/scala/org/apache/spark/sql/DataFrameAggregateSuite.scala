@@ -4968,7 +4968,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       val peeled = avgCastResult(xs, d)
       val direct = avgDirectResult(xs, d)
       // BigDecimal.compareTo ignores trailing-zero precision differences:
-      // peeled has output DecimalType.bounded(pPrime+4, s+4), direct has
+      // peeled has output DecimalType(pPrime+4, s+4), direct has
       // DecimalType(p+4, s+4). Both wrap the same Double-divide bit pattern
       // so the underlying value is identical.
       assert(peeled.compareTo(direct) == 0,

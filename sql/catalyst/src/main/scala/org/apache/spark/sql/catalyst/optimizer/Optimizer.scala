@@ -2601,15 +2601,16 @@ object DecimalAggregates extends Rule[LogicalPlan] {
       }
       case ae @ AggregateExpression(af, _, _, _, _) => af match {
         // Hoist a scale-preserving widening Cast out of Sum so the existing
-        // Long fast-path can fire on the inner. The MakeDecimal target
-        // precision `min(pPrime + 10, MAX_PRECISION)` matches
-        // `Sum(Cast(x, dec(pPrime, s))).dataType`, so the final-value
-        // overflow boundary is the same as the un-rewritten expression.
+        // Long fast-path can fire on the inner. The MakeDecimal target type
+        // matches `Sum(Cast(x, dec(pPrime, s))).dataType` (see Sum.resultType)
+        // so the final-value overflow boundary is the same as the un-rewritten
+        // expression.
         case s @ Sum(WidenedDecimalChild(inner, p, pPrime, s_scale), _)
             if p + 10 <= MAX_LONG_DIGITS =>
+          val target = DecimalType.bounded(pPrime + 10, s_scale)
           MakeDecimal(
             ae.copy(aggregateFunction = s.copy(child = UnscaledValue(inner))),
-            math.min(pPrime + 10, DecimalType.MAX_PRECISION), s_scale)
+            target.precision, target.scale)
 
         case s @ Sum(e @ DecimalExpression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = s.copy(child = UnscaledValue(e))),

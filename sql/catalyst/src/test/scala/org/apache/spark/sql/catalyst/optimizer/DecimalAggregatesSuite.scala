@@ -456,12 +456,14 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
 
   private case class PeelInputs(p: Int, pPrime: Int, s: Int)
 
-  private val peelGen: Gen[PeelInputs] = (for {
+  // Bounds already enforce the peel-firing predicate:
+  //   p + 10 <= 18 (p <= 8), p < pPrime (pPrime >= p+1), pPrime + 10 <= 38
+  //   (pPrime <= 28).
+  private val peelGen: Gen[PeelInputs] = for {
     p <- Gen.choose(1, 8)
     pPrime <- Gen.choose(p + 1, 28)
     s <- Gen.choose(0, p)
-  } yield PeelInputs(p, pPrime, s))
-    .retryUntil(in => in.p + 10 <= 18 && in.p < in.pPrime && in.pPrime + 10 <= 38)
+  } yield PeelInputs(p, pPrime, s)
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfiguration(minSuccessful = 50, minSize = 0, sizeRange = 0)
