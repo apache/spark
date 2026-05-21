@@ -27,6 +27,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CreateNamespaceExecSuite extends SparkFunSuite {
 
+  /**
+   * Catalog stub that simulates implementations which validate the request (ACLs, properties,
+   * etc.) before checking namespace existence — so `createNamespace` can fail on a pre-existing
+   * namespace with an error other than `NamespaceAlreadyExistsException`.
+   */
   private class TrackingNamespaceCatalog(
       existing: Boolean,
       createFails: Boolean) extends SupportsNamespaces {
@@ -46,10 +51,7 @@ class CreateNamespaceExecSuite extends SparkFunSuite {
         metadata: util.Map[String, String]): Unit = {
       createCalled.set(true)
       if (createFails) {
-        // Simulate a catalog that fails the create call for reasons unrelated to
-        // existence (e.g. property validation), so that the test asserts we never
-        // reach this code path when IF NOT EXISTS short-circuits.
-        throw new IllegalStateException("createNamespace should not have been called")
+        throw new IllegalStateException("simulated authz/validation failure")
       }
     }
 
@@ -61,46 +63,68 @@ class CreateNamespaceExecSuite extends SparkFunSuite {
     override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = true
   }
 
-  test("SPARK-55250: IF NOT EXISTS skips createNamespace when the namespace already exists") {
+  test("SPARK-55250: IF NOT EXISTS swallows underlying failure when namespace already exists") {
     val catalog = new TrackingNamespaceCatalog(existing = true, createFails = true)
     CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = true, Map.empty).executeCollect()
-    assert(catalog.existsCalled.get(), "namespaceExists should be checked first")
-    assert(!catalog.createCalled.get(),
-      "createNamespace must not be invoked when IF NOT EXISTS and namespace already exists")
+    assert(catalog.createCalled.get(),
+      "createNamespace is attempted before falling back to the existence check")
+    assert(catalog.existsCalled.get(),
+      "after createNamespace fails, namespaceExists confirms the no-op")
   }
 
-  test("SPARK-55250: IF NOT EXISTS calls createNamespace when the namespace is absent") {
+  test("SPARK-55250: IF NOT EXISTS propagates underlying failure when namespace is absent") {
+    val catalog = new TrackingNamespaceCatalog(existing = false, createFails = true)
+    val e = intercept[IllegalStateException] {
+      CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = true, Map.empty).executeCollect()
+    }
+    assert(e.getMessage.contains("simulated authz/validation failure"))
+    assert(catalog.createCalled.get())
+    assert(catalog.existsCalled.get(),
+      "namespaceExists is consulted to decide whether the failure is recoverable")
+  }
+
+  test("SPARK-55250: IF NOT EXISTS skips fallback when createNamespace succeeds") {
     val catalog = new TrackingNamespaceCatalog(existing = false, createFails = false)
     CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = true, Map.empty).executeCollect()
     assert(catalog.createCalled.get())
-  }
-
-  test("SPARK-55250: IF NOT EXISTS swallows concurrent NamespaceAlreadyExistsException") {
-    val catalog = new SupportsNamespaces {
-      override def name(): String = "racy"
-      override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
-      override def namespaceExists(namespace: Array[String]): Boolean = false
-      override def createNamespace(
-          namespace: Array[String],
-          metadata: util.Map[String, String]): Unit =
-        throw new NamespaceAlreadyExistsException(namespace)
-      override def listNamespaces(): Array[Array[String]] = Array.empty
-      override def listNamespaces(namespace: Array[String]): Array[Array[String]] = Array.empty
-      override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] =
-        throw new NoSuchNamespaceException(namespace)
-      override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {}
-      override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = true
-    }
-    // Should not throw — IF NOT EXISTS swallows the race-induced AlreadyExists.
-    CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = true, Map.empty).executeCollect()
-  }
-
-  test("SPARK-55250: without IF NOT EXISTS, createNamespace is always called") {
-    val catalog = new TrackingNamespaceCatalog(existing = true, createFails = false)
-    CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = false, Map.empty).executeCollect()
-    assert(catalog.createCalled.get(),
-      "createNamespace must be invoked when IF NOT EXISTS is not set")
     assert(!catalog.existsCalled.get(),
-      "namespaceExists must not be checked when IF NOT EXISTS is not set")
+      "namespaceExists must not be called on the happy path — preserves SPARK-55250's 1-RPC win")
+  }
+
+  private class RacyNamespaceCatalog extends SupportsNamespaces {
+    val existsCalled = new AtomicBoolean(false)
+    override def name(): String = "racy"
+    override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
+    override def namespaceExists(namespace: Array[String]): Boolean = {
+      existsCalled.set(true)
+      false
+    }
+    override def createNamespace(
+        namespace: Array[String],
+        metadata: util.Map[String, String]): Unit =
+      throw new NamespaceAlreadyExistsException(namespace)
+    override def listNamespaces(): Array[Array[String]] = Array.empty
+    override def listNamespaces(namespace: Array[String]): Array[Array[String]] = Array.empty
+    override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] =
+      throw new NoSuchNamespaceException(namespace)
+    override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = {}
+    override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = true
+  }
+
+  test("SPARK-55250: IF NOT EXISTS swallows NamespaceAlreadyExistsException without fallback") {
+    val catalog = new RacyNamespaceCatalog
+    CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = true, Map.empty).executeCollect()
+    assert(!catalog.existsCalled.get(),
+      "NamespaceAlreadyExistsException is handled directly without a second RPC")
+  }
+
+  test("SPARK-55250: without IF NOT EXISTS, createNamespace is called and errors propagate") {
+    val catalog = new TrackingNamespaceCatalog(existing = true, createFails = true)
+    intercept[IllegalStateException] {
+      CreateNamespaceExec(catalog, Seq("ns"), ifNotExists = false, Map.empty).executeCollect()
+    }
+    assert(catalog.createCalled.get())
+    assert(!catalog.existsCalled.get(),
+      "namespaceExists fallback only applies when IF NOT EXISTS is set")
   }
 }
