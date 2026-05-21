@@ -34,14 +34,31 @@ DROP [ TEMPORARY ] FUNCTION [ IF EXISTS ] function_name
 
 * **function_name**
 
-    Specifies the name of an existing function. The function name may be
-    optionally qualified with a database name.
+    Specifies the name of an existing function. Whether `function_name` refers to a temporary
+    function or a persistent function is selected by the `TEMPORARY` keyword, not by the
+    identifier &mdash; without `TEMPORARY` the name always targets a persistent function (even if
+    you write `session.f` or `system.session.f`, in which case Spark looks for a persistent
+    function in a schema literally named `session`).
 
-    **Syntax:** `[ database_name. ] function_name`
+    * With `TEMPORARY`: the name may be optionally qualified with the session schema
+      (`session` or `system.session`); for example, `DROP TEMPORARY FUNCTION f`,
+      `DROP TEMPORARY FUNCTION session.f`, and `DROP TEMPORARY FUNCTION system.session.f` all
+      drop the same temporary function.
+
+      **Syntax:** `[ { session | system.session } . ] function_name`
+
+    * Without `TEMPORARY`: the name may be optionally qualified with a database name (or a catalog
+      and database) and resolves to a persistent function in that schema.
+
+      **Syntax:** `[ catalog_name. ] [ database_name. ] function_name`
+
+    The built-in namespace `system.builtin` cannot be dropped: `DROP FUNCTION system.builtin.abs`
+    raises `FORBIDDEN_OPERATION`.
 
 * **TEMPORARY**
 
-    Should be used to delete the `TEMPORARY` function.
+    Required to drop a temporary function. Without `TEMPORARY`, `DROP FUNCTION` only considers
+    persistent functions.
 
 * **IF EXISTS**
 

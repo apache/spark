@@ -58,7 +58,10 @@ characteristic
 
 - **TEMPORARY**
 
-  The scope of the function being created. When you specify `TEMPORARY`, the created function is valid and visible in the current session. No persistent entry is made in the catalog.
+  The scope of the function being created. When you specify `TEMPORARY`, the created function is
+  valid and visible in the current session. Temporary functions live in the per-session
+  `system.session` namespace and are dropped when the session ends. No persistent entry is made in
+  the catalog.
 
 - **IF NOT EXISTS**
 
@@ -66,10 +69,30 @@ characteristic
 
 - **function_name**
 
-  A name for the function. For a permanent function, you can optionally qualify the function name, or it will be created under the current catalog and namespace.
-  If the name is not qualified the permanent function is created in the current schema.
+  A name for the function.
 
-  **Syntax:** `[ database_name. ] function_name`
+  * For a **permanent** function, you can optionally qualify the function name with a database name
+    (or a catalog and database). If the name is not qualified the permanent function is created in
+    the current schema.
+
+    **Syntax:** `[ catalog_name. ] [ database_name. ] function_name`
+
+  * For a **temporary** function, you can optionally qualify the function name with the session
+    schema (`session` or `system.session`). Any other qualifier &mdash; including
+    `system.builtin`, the current schema, or an arbitrary database name &mdash; is rejected with
+    `INVALID_TEMP_OBJ_QUALIFIER`. For example, `CREATE TEMPORARY FUNCTION session.f ...` and
+    `CREATE TEMPORARY FUNCTION system.session.f ...` are accepted.
+
+    **Syntax:** `[ { session | system.session } . ] function_name`
+
+  The function name must be unique among all routines (procedures and functions) in its schema.
+
+> Note: a SQL UDF captures the SQL Path that was in effect when `CREATE FUNCTION` ran. When the
+> function is invoked, the body resolves against that frozen path, not the invoker's current path.
+> Inside the body, `current_schema()` and `current_path()` still reflect the invoker's context.
+> See [Name Resolution](sql-ref-name-resolution.html#sql-path).
+> Use [DESCRIBE FUNCTION EXTENDED](sql-ref-syntax-aux-describe-function.html) to inspect the
+> captured path.
 
 - **function_parameter**
 
@@ -296,8 +319,76 @@ characteristic
  Returns:  INT
 ```
 
+### Create a temporary SQL function with a session qualifier
+
+```sql
+-- Unqualified, `session`-qualified, and `system.session`-qualified names all create the same
+-- temporary function in the per-session `system.session` namespace.
+> CREATE TEMPORARY FUNCTION add_one(x INT) RETURNS INT RETURN x + 1;
+
+> CREATE OR REPLACE TEMPORARY FUNCTION session.add_one(x INT) RETURNS INT
+    RETURN x + 1;
+
+> CREATE OR REPLACE TEMPORARY FUNCTION system.session.add_one(x INT) RETURNS INT
+    RETURN x + 1;
+
+-- All three names refer to the same temporary function:
+> SELECT add_one(1), session.add_one(1), system.session.add_one(1);
+ 2  2  2
+
+-- DROP TEMPORARY FUNCTION accepts the same qualifiers:
+> DROP TEMPORARY FUNCTION session.add_one;
+
+-- Any other qualifier on a TEMPORARY function is rejected.
+> CREATE TEMPORARY FUNCTION mydb.bad_temp() RETURNS INT RETURN 1;
+  [INVALID_TEMP_OBJ_QUALIFIER] qualifier `mydb` is not allowed for temporary FUNCTION ...
+
+> CREATE TEMPORARY FUNCTION system.builtin.bad_temp() RETURNS INT RETURN 1;
+  [INVALID_TEMP_OBJ_QUALIFIER] qualifier `system`.`builtin` is not allowed for temporary FUNCTION ...
+```
+
+### Frozen SQL Path
+
+A SQL UDF captures the SQL Path that is in effect at `CREATE FUNCTION` time. The body resolves
+against that frozen path on every invocation, even if the caller's session has set a different
+PATH. See [Name Resolution](sql-ref-name-resolution.html#sql-path).
+
+```sql
+> SET spark.sql.path.enabled = true;
+
+> CREATE SCHEMA path_a;
+> CREATE SCHEMA path_b;
+> CREATE TABLE path_a.t USING parquet AS SELECT 10 AS id;
+> CREATE TABLE path_b.t USING parquet AS SELECT 20 AS id;
+
+-- The PATH at CREATE FUNCTION time points at path_a, so unqualified `t` in the body binds to
+-- path_a.t.
+> SET PATH = spark_catalog.path_a, system.builtin;
+> CREATE FUNCTION default.frozen_fn() RETURNS INT
+    RETURN (SELECT MAX(id) FROM t);
+
+-- Flip the live PATH. The function body still resolves `t` against the frozen path.
+> SET PATH = spark_catalog.path_b, system.builtin;
+
+-- A bare query follows the LIVE path:
+> SELECT MAX(id) FROM t;
+ 20
+
+-- The function body follows its FROZEN path:
+> SELECT default.frozen_fn();
+ 10
+
+-- DESCRIBE FUNCTION EXTENDED shows the captured path:
+> DESC FUNCTION EXTENDED default.frozen_fn;
+ Function:    spark_catalog.default.frozen_fn
+ ...
+ SQL Path:    spark_catalog.path_a, system.builtin
+```
+
 ### Related Statements
 
 * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
 * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
 * [DROP FUNCTION](sql-ref-syntax-ddl-drop-function.html)
+* [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html)
+* [Name Resolution](sql-ref-name-resolution.html)

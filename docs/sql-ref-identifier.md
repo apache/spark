@@ -52,6 +52,19 @@ An identifier is a string used to identify a database object such as a table, vi
 
     Any character from the character set. Use <code>`</code> to escape special characters (e.g., <code>`</code>).
 
+### Reserved system names
+
+A few names have a special meaning in object identifiers and should be avoided as user-defined
+names. They are interpreted by Spark's [SQL Path](sql-ref-name-resolution.html#sql-path) and are
+documented in detail under
+[Reserved names and collisions](sql-ref-name-resolution.html#reserved-names-and-collisions).
+
+| Name | Position | Notes |
+| :--- | :------- | :---- |
+| `system` | catalog | Synthetic catalog hosting `system.builtin` and `system.session`. Registering a v2 catalog under this name (`spark.sql.catalog.system = ...`) is not supported. |
+| `builtin` | schema in any catalog | The 2-part form `builtin.x` is interpreted as the synonym `system.builtin.x`. A persistent schema literally named `builtin` is allowed but discouraged; reach it as `current_catalog.builtin.x`. |
+| `session` | schema in any catalog | The 2-part form `session.x` is interpreted as the synonym `system.session.x`. A persistent schema literally named `session` is allowed but discouraged; reach it as `current_catalog.session.x`. |
+
 ### Examples
 
 ```sql

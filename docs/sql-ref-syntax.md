@@ -123,6 +123,7 @@ You use SQL scripting to execute procedural logic in SQL.
  * [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
+ * [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html)
  * [SET VAR](sql-ref-syntax-aux-set-var.html)
  * [SHOW COLLATIONS](sql-ref-syntax-aux-show-collations.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)

@@ -274,6 +274,34 @@ DESCRIBE customer salesdb.customer.name;
 -- Returns the table metadata in JSON format.
 DESC FORMATTED customer AS JSON;
 {"table_name":"customer","catalog_name":"spark_catalog","schema_name":"default","namespace":["default"],"columns":[{"name":"cust_id","type":{"name":"integer"},"nullable":true},{"name":"name","type":{"name":"string"},"comment":"Short name","nullable":true},{"name":"state","type":{"name":"varchar","length":20},"nullable":true}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+
+-- DESCRIBE EXTENDED on a view emits view-specific rows. When `spark.sql.path.enabled` is true,
+-- the output also includes the frozen `SQL Path` that the view body resolves against; see
+-- [Name Resolution](sql-ref-name-resolution.html#sql-path).
+SET spark.sql.path.enabled = true;
+SET PATH = spark_catalog.default, system.builtin;
+CREATE VIEW recent_customers AS
+    SELECT cust_id, name FROM customer WHERE cust_id > 1000;
+
+DESCRIBE EXTENDED recent_customers;
++----------------------------+---------------------------------------+--------+
+|                    col_name|                              data_type| comment|
++----------------------------+---------------------------------------+--------+
+|                     cust_id|                                    int|    null|
+|                        name|                                 string|    null|
+|                            |                                       |        |
+|# Detailed Table Information|                                       |        |
+|                    Catalog |                          spark_catalog|        |
+|                    Database|                                default|        |
+|                       Table|                       recent_customers|        |
+|                        Type|                                   VIEW|        |
+|                   View Text|SELECT cust_id, name FROM customer ... |        |
+|          View Original Text|SELECT cust_id, name FROM customer ... |        |
+|            View Schema Mode|                           COMPENSATION|        |
+| View Catalog and Namespace|                spark_catalog.default   |        |
+|   View Query Output Columns|                   [`cust_id`, `name`]  |        |
+|                    SQL Path|   spark_catalog.default, system.builtin|        |
++----------------------------+---------------------------------------+--------+
 ```
 
 ### Related Statements
@@ -281,3 +309,4 @@ DESC FORMATTED customer AS JSON;
 * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
 * [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
 * [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+* [Name Resolution](sql-ref-name-resolution.html)

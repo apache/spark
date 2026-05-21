@@ -23,6 +23,14 @@ license: |
 
 `DROP VIEW` removes the metadata associated with a specified view from the catalog.
 
+Unlike `DROP FUNCTION`, `DROP VIEW` has no `TEMPORARY` keyword. The choice between a temporary
+view and a persistent view is driven by the identifier alone:
+
+* An unqualified `view_name` first matches a temporary view, then a persistent view in
+  the current schema.
+* A name qualified with `session` or `system.session` targets only the temporary view scope.
+* Any other qualifier targets only persistent views.
+
 ### Syntax
 
 ```sql
@@ -37,9 +45,18 @@ DROP VIEW [ IF EXISTS ] view_identifier
 
 * **view_identifier**
 
-    Specifies the view name to be dropped. The view name may be optionally qualified with a database name.
+    Specifies the view name to be dropped.
 
-    **Syntax:** `[ database_name. ] view_name`
+    * For a **persistent** view the name may be optionally qualified with a database name
+      (or a catalog and database).
+
+      **Syntax:** `[ catalog_name. ] [ database_name. ] view_name`
+
+    * For a **temporary** view the name may be optionally qualified with the session schema
+      (`session` or `system.session`); for example, `DROP VIEW v`, `DROP VIEW session.v`, and
+      `DROP VIEW system.session.v` all drop the same temporary view.
+
+      **Syntax:** `[ { session | system.session } . ] view_name`
 
 ### Examples
 
