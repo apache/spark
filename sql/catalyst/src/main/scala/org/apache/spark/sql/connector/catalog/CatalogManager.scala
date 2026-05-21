@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManage
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager.SessionPathEntry
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -73,18 +74,17 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   // ---- Transactions ----
   def transaction: Option[Transaction] = None
 
-  def withTransaction(transaction: Transaction): CatalogManager =
-    new TransactionAwareCatalogManager(this, transaction)
+  def withTransaction(transaction: Transaction): CatalogManager
 
   // ---- Namespace ----
   def currentNamespace: Array[String]
   def setCurrentNamespace(namespace: Array[String]): Unit
 
   // ---- Session path ----
-  def sessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
-  def storedSessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
-  def confDefaultPathEntries: Option[Seq[CatalogManager.SessionPathEntry]]
-  def setSessionPath(entries: Seq[CatalogManager.SessionPathEntry]): Unit
+  def sessionPathEntries: Option[Seq[SessionPathEntry]]
+  def storedSessionPathEntries: Option[Seq[SessionPathEntry]]
+  def confDefaultPathEntries: Option[Seq[SessionPathEntry]]
+  def setSessionPath(entries: Seq[SessionPathEntry]): Unit
   def clearSessionPath(): Unit
   private[sql] def copySessionPathFrom(other: CatalogManager): Unit
   def currentPathString: String
@@ -114,7 +114,6 @@ private[sql] class DefaultCatalogManager(
     val defaultSessionCatalog: CatalogPlugin,
     val v1SessionCatalog: SessionCatalog) extends CatalogManager {
   import CatalogManager.SESSION_CATALOG_NAME
-  import CatalogManager.SessionPathEntry
   import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
@@ -160,6 +159,9 @@ private[sql] class DefaultCatalogManager(
       case _ => catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
     }
   }
+
+  override def withTransaction(transaction: Transaction): CatalogManager =
+    new TransactionAwareCatalogManager(this, transaction)
 
   private var _currentNamespace: Option[Array[String]] = None
 

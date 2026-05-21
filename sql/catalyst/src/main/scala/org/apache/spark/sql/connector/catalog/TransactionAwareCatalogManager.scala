@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind
+import org.apache.spark.sql.connector.catalog.CatalogManager.SessionPathEntry
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 
 /**
@@ -65,16 +66,16 @@ private[sql] class TransactionAwareCatalogManager(
   override def setCurrentNamespace(namespace: Array[String]): Unit =
     delegate.setCurrentNamespace(namespace)
 
-  override def sessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
+  override def sessionPathEntries: Option[Seq[SessionPathEntry]] =
     delegate.sessionPathEntries
 
-  override def storedSessionPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
+  override def storedSessionPathEntries: Option[Seq[SessionPathEntry]] =
     delegate.storedSessionPathEntries
 
-  override def confDefaultPathEntries: Option[Seq[CatalogManager.SessionPathEntry]] =
+  override def confDefaultPathEntries: Option[Seq[SessionPathEntry]] =
     delegate.confDefaultPathEntries
 
-  override def setSessionPath(entries: Seq[CatalogManager.SessionPathEntry]): Unit =
+  override def setSessionPath(entries: Seq[SessionPathEntry]): Unit =
     delegate.setSessionPath(entries)
 
   override def clearSessionPath(): Unit = delegate.clearSessionPath()
