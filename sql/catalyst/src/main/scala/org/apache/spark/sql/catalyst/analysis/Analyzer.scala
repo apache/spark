@@ -1541,24 +1541,29 @@ class Analyzer(
       // `PlanWithUnresolvedIdentifier`, `identifierExpr` (e.g. an `UnresolvedAttribute`
       // referring to a SQL variable in `INSERT INTO IDENTIFIER(target_table) ...`) must
       // be resolved here before `ResolveIdentifierClause` can materialize the relation.
-      // Mirror the recursion that `BindParameters` and `ResolveIdentifierClause` already
-      // do for the same shape (SPARK-46625). The `!identifierExpr.resolved` guard makes
-      // the case idempotent under bottom-up traversal.
+      // Mirror the structural recursion into the non-child `.table` slot that
+      // `BindParameters` and `ResolveIdentifierClause` already do for the same shape
+      // (SPARK-46625); unlike those rules, this one performs attribute resolution rather
+      // than parameter binding or placeholder materialization. Resolve against `p` (whose
+      // `children` are `Nil` on the INSERT / `OverwriteByExpression` path built by
+      // `buildWriteTableSlot`) so the IDENTIFIER expression cannot see query output
+      // columns -- only the last-resort variable resolution path fires. The
+      // `!identifierExpr.resolved` guard makes the case idempotent under bottom-up
+      // traversal.
       case i: InsertIntoStatement
           if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
              !i.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
         val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
         val resolvedExpr = resolveExpressionByPlanChildren(
-          p.identifierExpr, i, includeLastResort = true)
-        resolveColumnDefaultInCommandInputQuery(
-          i.copy(table = p.copy(identifierExpr = resolvedExpr)))
+          p.identifierExpr, p, includeLastResort = true)
+        i.copy(table = p.copy(identifierExpr = resolvedExpr))
 
       case w: V2WriteCommand
           if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
              !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
         val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
         val resolvedExpr = resolveExpressionByPlanChildren(
-          p.identifierExpr, w, includeLastResort = true)
+          p.identifierExpr, p, includeLastResort = true)
         w.withNewTable(p.copy(identifierExpr = resolvedExpr))
 
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need

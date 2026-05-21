@@ -2608,6 +2608,26 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
+  // SPARK-46625 followup: when the SQL variable name in `IDENTIFIER(<name>)` collides
+  // with a query output column, the IDENTIFIER expression must still bind to the
+  // variable, not to the column. The `ResolveReferences` case for `InsertIntoStatement`
+  // resolves `identifierExpr` against the `PlanWithUnresolvedIdentifier` itself (whose
+  // `children` are `Nil` on this path), not against the surrounding `InsertIntoStatement`
+  // (whose child is `query`), so query output columns are out of scope and only the
+  // last-resort variable resolution path fires.
+  test("SPARK-46625: INSERT INTO IDENTIFIER(<sql-variable>) ignores colliding query columns") {
+    withTable("t_shadow") {
+      sql("CREATE TABLE t_shadow (a INT) USING PARQUET")
+      sql("DECLARE OR REPLACE VARIABLE a STRING DEFAULT 't_shadow'")
+      try {
+        sql("INSERT INTO IDENTIFIER(a) SELECT 42 AS a")
+        checkAnswer(spark.table("t_shadow"), Row(42))
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS a")
+      }
+    }
+  }
+
   // SPARK-46625: `CacheTableAsSelect.tempViewName` is an `Expression` slot, so an
   // `IDENTIFIER(<non-literal>)` produces an `ExpressionWithUnresolvedIdentifier` there instead of
   // wrapping the entire command in a `PlanWithUnresolvedIdentifier`. Verify on the parsed plan
