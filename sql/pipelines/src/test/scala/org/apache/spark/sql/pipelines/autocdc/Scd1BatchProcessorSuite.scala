@@ -471,7 +471,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-    // Mutual-exclusivity invariant: each row's _cdc_metadata struct has exactly one of
+    // Mutual-exclusivity invariant: each row's CDC metadata struct has exactly one of
     // (deleteSequence, upsertSequence) non-null, and the non-null side carries the row's
     // sequence value.
     checkAnswer(

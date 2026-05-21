@@ -81,12 +81,16 @@ case class Scd1BatchProcessor(
    * Rows are classified as deletes only when [[ChangeArgs.deleteCondition]] evaluates to true. A
    * false or null delete condition classifies the row as an upsert.
    *
+   * @param validatedMicrobatch A microbatch that has already been validated such that the
+   *                            sequencing column should not contain null values, and its data type
+   *                            should support ordering.
+   *
    * The returned dataframe has all of the columns in the input microbatch + the CDC metadata
    * column.
    */
-  def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
+  def extendMicrobatchRowsWithCdcMetadata(validatedMicrobatch: DataFrame): DataFrame = {
     // Proactively validate the reserved CDC metadata column does not exist in the microbatch.
-    validateCdcMetadataColumnNotPresent(microbatchDf)
+    validateCdcMetadataColumnNotPresent(validatedMicrobatch)
 
     val rowDeleteSequence: Column = changeArgs.deleteCondition match {
       case Some(deleteCondition) =>
@@ -100,7 +104,7 @@ case class Scd1BatchProcessor(
       // set of CDC event types.
       F.when(rowDeleteSequence.isNull, changeArgs.sequencing).otherwise(F.lit(null))
 
-    microbatchDf.withColumn(
+    validatedMicrobatch.withColumn(
       Scd1BatchProcessor.cdcMetadataColName,
       Scd1BatchProcessor.constructCdcMetadataCol(
         deleteSequence = rowDeleteSequence,
@@ -110,11 +114,11 @@ case class Scd1BatchProcessor(
     )
   }
 
-  private def validateCdcMetadataColumnNotPresent(microbatchDf: DataFrame): Unit = {
-    val microbatchSqlConf = microbatchDf.sparkSession.sessionState.conf
+  private def validateCdcMetadataColumnNotPresent(microbatch: DataFrame): Unit = {
+    val microbatchSqlConf = microbatch.sparkSession.sessionState.conf
     val resolver = microbatchSqlConf.resolver
 
-    microbatchDf.schema.fieldNames
+    microbatch.schema.fieldNames
       .find(resolver(_, Scd1BatchProcessor.cdcMetadataColName))
       .foreach { conflictingColumnName =>
         throw new AnalysisException(
