@@ -19,9 +19,10 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import org.apache.spark.sql.connector.catalog.{SupportsV1OverwriteWithSaveAsTable, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, SessionConfigSupport, SupportsCatalogOptions, SupportsV1OverwriteWithSaveAsTable, Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -92,4 +93,46 @@ class FakeV2ProviderWithV1SaveAsTableOverwriteWriteOptionDisabled
     extends FakeV2Provider
     with SupportsV1OverwriteWithSaveAsTable {
   override def addV1OverwriteWithSaveAsTableOption(): Boolean = false
+}
+
+/**
+ * Simulates a path-based connector (e.g. Delta) that implements [[SupportsCatalogOptions]]
+ * to route `pathformat.\`/path/to/t\`` SQL identifiers to the session catalog. We rely on
+ * the default [[SupportsCatalogOptions#extractCatalog]] which returns
+ * [[org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME]].
+ */
+class FakePathBasedSource
+    extends FakeV2ProviderWithCustomSchema
+    with SupportsCatalogOptions
+    with DataSourceRegister {
+
+  override def shortName(): String = "pathformat"
+
+  // Strip our own format prefix from the multipart path and return the rest under our
+  // format-name namespace.
+  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
+    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
+}
+
+/**
+ * Like [[FakePathBasedSource]] but resolves the owning catalog from the session config
+ * `spark.datasource.pathformat2.catalog` instead of always returning null. This simulates
+ * a connector that lets users configure the target catalog.
+ */
+class FakePathBasedSourceWithSessionConfig
+    extends FakeV2ProviderWithCustomSchema
+    with SupportsCatalogOptions
+    with SessionConfigSupport
+    with DataSourceRegister {
+
+  override def shortName(): String = "pathformat2"
+
+  override def keyPrefix: String = "pathformat2"
+
+  override def extractCatalog(options: CaseInsensitiveStringMap): String = options.get("catalog")
+
+  // Strip our own format prefix from the multipart path and return the rest under our
+  // format-name namespace.
+  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
+    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
 }
