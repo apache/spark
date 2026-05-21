@@ -196,16 +196,31 @@ class ChangelogResolutionSuite extends SharedSparkSession {
       parameters = Map("relationId" -> "`x`"))
   }
 
-  test("CHANGES clause passes changelogInfo to catalog") {
+  test("CHANGES clause passes changelogContext to catalog") {
     sql(s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM VERSION 1 TO VERSION 5")
     val cat = spark.sessionState.catalogManager
       .catalog(cdcCatalogName)
       .asInstanceOf[InMemoryChangelogCatalog]
-    val info = cat.lastChangelogInfo
+    val info = cat.lastChangelogContext
     assert(info.isDefined)
     val range = info.get.range().asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "1")
     assert(range.endingVersion().get() == "5")
+  }
+
+  test("user-defined options are forwarded to loadChangelog") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    spark.read
+      .option("startingVersion", "1")
+      .option("customOption", "customValue")
+      .changes(s"$cdcCatalogName.test_table")
+
+    val opts = cat.lastOptions
+    assert(opts.isDefined)
+    assert(opts.get.get("customOption") == "customValue")
   }
 
   // ===========================================================================
@@ -306,9 +321,9 @@ class ChangelogResolutionSuite extends SharedSparkSession {
   // Generic changelog schema validation
   // ===========================================================================
 
-  private def stubInfo(): ChangelogInfo = new ChangelogInfo(
+  private def stubInfo(): ChangelogContext = new ChangelogContext(
     new ChangelogRange.VersionRange("1", java.util.Optional.of("2"), true, true),
-    ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+    ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
     false)
 
   private def cl(name: String, cols: (String, org.apache.spark.sql.types.DataType)*)

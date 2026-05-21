@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedStreamingRelation, RelationChanges, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class StreamRelationParserSuite extends AnalysisTest {
@@ -594,17 +594,17 @@ class StreamRelationParserSuite extends AnalysisTest {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
     assert(relationChanges.size == 1)
-    assert(relationChanges.head.changelogInfo.range().isInstanceOf[ChangelogRange.UnboundedRange])
-    assert(relationChanges.head.changelogInfo.deduplicationMode() ==
-      ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
-    assert(!relationChanges.head.changelogInfo.computeUpdates())
+    assert(relationChanges.head.changelogContext.range().isInstanceOf[ChangelogRange.UnboundedRange])
+    assert(relationChanges.head.changelogContext.deduplicationMode() ==
+      ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
+    assert(!relationChanges.head.changelogContext.computeUpdates())
   }
 
   test("STREAM t CHANGES FROM VERSION") {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 1")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
     assert(relationChanges.size == 1)
-    val range = relationChanges.head.changelogInfo.range()
+    val range = relationChanges.head.changelogContext.range()
       .asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "1")
     assert(!range.endingVersion().isPresent)
@@ -615,7 +615,7 @@ class StreamRelationParserSuite extends AnalysisTest {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM VERSION 5 EXCLUSIVE")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
     assert(relationChanges.size == 1)
-    val range = relationChanges.head.changelogInfo.range()
+    val range = relationChanges.head.changelogContext.range()
       .asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "5")
     assert(!range.startingBoundInclusive())
@@ -625,7 +625,7 @@ class StreamRelationParserSuite extends AnalysisTest {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES FROM TIMESTAMP '2026-01-01'")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
     assert(relationChanges.size == 1)
-    assert(relationChanges.head.changelogInfo.range()
+    assert(relationChanges.head.changelogContext.range()
       .isInstanceOf[ChangelogRange.TimestampRange])
   }
 
@@ -647,9 +647,9 @@ class StreamRelationParserSuite extends AnalysisTest {
         "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
     assert(relationChanges.size == 1)
-    assert(relationChanges.head.changelogInfo.deduplicationMode() ==
-      ChangelogInfo.DeduplicationMode.NONE)
-    assert(relationChanges.head.changelogInfo.computeUpdates())
+    assert(relationChanges.head.changelogContext.deduplicationMode() ==
+      ChangelogContext.DeduplicationMode.NONE)
+    assert(relationChanges.head.changelogContext.computeUpdates())
   }
 
   test("STREAM t CHANGES - error: subquery in timestamp") {
