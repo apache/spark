@@ -524,14 +524,14 @@ def verify_arrow_result(
     actual_names = list(result.schema.names)
     actual_types = list(result.schema.types)
     # expected_cols_and_types is a dict in by-name mode, list of (name, type) by position.
-    if assign_cols_by_name:
+    if isinstance(expected_cols_and_types, dict):
         expected_names = list(expected_cols_and_types.keys())
     else:
         expected_names = [name for name, _ in expected_cols_and_types]
 
     _verify_column_schema(actual_names, expected_names, assign_cols_by_name=assign_cols_by_name)
 
-    if assign_cols_by_name:
+    if isinstance(expected_cols_and_types, dict):
         actual_by_name = dict(zip(actual_names, actual_types))
         column_types = [
             (name, expected_cols_and_types[name], actual_by_name[name])
