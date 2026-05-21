@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
-import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryParsingErrors}
+import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase, QueryParsingErrors}
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 
 /**
  * AST builder for parsing data type definitions and table schemas.
@@ -350,11 +350,43 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
             CalendarIntervalType
           }
         case TIMESTAMP if currentCtx.withLocalTimeZone() != null =>
-          TimestampType
+          if (currentCtx.precision == null) {
+            TimestampType
+          } else {
+            parseTimestampLtzNanosPrecision(currentCtx.precision.getText)
+          }
         case TIMESTAMP if currentCtx.withoutTimeZone() != null =>
-          TimestampNTZType
+          if (currentCtx.precision == null) {
+            TimestampNTZType
+          } else {
+            parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
+          }
         case TIMESTAMP =>
-          SqlApiConf.get.timestampType
+          if (currentCtx.precision == null) {
+            SqlApiConf.get.timestampType
+          } else {
+            SqlApiConf.get.timestampType match {
+              case TimestampType =>
+                parseTimestampLtzNanosPrecision(currentCtx.precision.getText)
+              case TimestampNTZType =>
+                parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
+              case other =>
+                throw SparkException.internalError(
+                  s"Unexpected default timestamp type: $other")
+            }
+          }
+        case TIMESTAMP_LTZ =>
+          if (currentCtx.precision == null) {
+            TimestampType
+          } else {
+            parseTimestampLtzNanosPrecision(currentCtx.precision.getText)
+          }
+        case TIMESTAMP_NTZ =>
+          if (currentCtx.precision == null) {
+            TimestampNTZType
+          } else {
+            parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
+          }
         case TIME =>
           val precision = if (currentCtx.precision == null) {
             TimeType.DEFAULT_PRECISION
@@ -398,8 +430,6 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
         case FLOAT | REAL => FloatType
         case DOUBLE => DoubleType
         case DATE => DateType
-        case TIMESTAMP_LTZ => TimestampType
-        case TIMESTAMP_NTZ => TimestampNTZType
         case BINARY => BinaryType
         case VOID => NullType
         case VARIANT => VariantType
@@ -445,6 +475,36 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
       DayTimeIntervalType(start, end)
     } else {
       DayTimeIntervalType(start)
+    }
+  }
+
+  private def parseTimestampLtzNanosPrecision(precision: String): TimestampLTZNanosType = {
+    checkTimestampNanosTypesEnabled()
+    try TimestampLTZNanosType(precision.toInt)
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+    }
+  }
+
+  private def parseTimestampNtzNanosPrecision(precision: String): TimestampNTZNanosType = {
+    checkTimestampNanosTypesEnabled()
+    try TimestampNTZNanosType(precision.toInt)
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+    }
+  }
+
+  private def checkTimestampNanosTypesEnabled(): Unit = {
+    if (!SqlApiConf.get.timestampNanosTypesEnabled) {
+      throw new SparkException(
+        errorClass = "FEATURE_NOT_ENABLED",
+        messageParameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"),
+        cause = null)
     }
   }
 
