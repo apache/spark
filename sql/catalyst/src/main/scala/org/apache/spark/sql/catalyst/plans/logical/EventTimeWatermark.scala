@@ -20,19 +20,43 @@ package org.apache.spark.sql.catalyst.plans.logical
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark.updateEventTimeColumn
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EVENT_TIME_WATERMARK, TreePattern, UPDATE_EVENT_TIME_WATERMARK_COLUMN}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.unsafe.types.CalendarInterval
 
-object EventTimeWatermark {
+object EventTimeWatermark extends Logging {
   /** The [[org.apache.spark.sql.types.Metadata]] key used to hold the eventTime watermark delay. */
   val delayKey = "spark.watermarkDelayMs"
 
+  /**
+   * The effective delay in milliseconds for `withWatermark`. When the configured delay is 0 and
+   * [[SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS]] is enabled (the default), it is
+   * bumped to 1 ms.
+   *
+   * Spark's late-event filter and state-eviction predicates compare event times to the watermark
+   * with `event_time_us <= watermark_ms * 1000`, so with a delay of 0 every record whose event
+   * time lands on the same millisecond as the current watermark is treated as late. Bumping the
+   * effective delay to 1 ms makes the comparison strict in practice and avoids that footgun.
+   */
   def getDelayMs(delay: CalendarInterval): Long = {
-    IntervalUtils.getDuration(delay, TimeUnit.MILLISECONDS)
+    val rawDelayMs = IntervalUtils.getDuration(delay, TimeUnit.MILLISECONDS)
+    if (rawDelayMs == 0 &&
+        SQLConf.get.getConf(SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS)) {
+      logWarning(log"withWatermark was called with a delay of 0; bumping the internal delay to " +
+        log"1 ms so that records whose event time equals the current watermark are not dropped " +
+        log"as late. Set " +
+        log"${MDC(CONFIG, SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key)}=false " +
+        log"to disable.")
+      1L
+    } else {
+      rawDelayMs
+    }
   }
 
   /**

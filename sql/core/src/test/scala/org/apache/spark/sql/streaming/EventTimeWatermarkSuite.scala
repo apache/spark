@@ -153,6 +153,47 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       matchPVals = true)
   }
 
+  test("zero-delay watermark keeps records at max event time across batches") {
+    // When the configured delay is 0 seconds, the late-event predicate `timestamp_us <=
+    // watermark_ms * 1000` drops every record at exactly the watermark, which means a record
+    // arriving in a later batch at the previous batch's max event time is dropped. Bumping the
+    // internal delay to 1 ms preserves such records.
+    def buildQuery(input: MemoryStream[Int]): Dataset[(Long, Long)] = input.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "0 seconds")
+      .groupBy($"eventTime")
+      .agg(count("*").as("cnt"))
+      .select($"eventTime".cast("long").as[Long], $"cnt".as[Long])
+
+    val input = MemoryStream[Int]
+    testStream(buildQuery(input), outputMode = Append)(
+      AddData(input, 10),
+      // With the bump, watermark = 10s - 1 ms after the batch, so the group for eventTime=10
+      // is retained and nothing is emitted yet.
+      CheckAnswer(),
+      AddData(input, 10),
+      // Same timestamp as the previous batch's max: must NOT be dropped as late.
+      CheckAnswer(),
+      AddData(input, 11),
+      // Once the watermark strictly passes 10 s, both records show up in the emitted group.
+      CheckAnswer((10L, 2L))
+    )
+
+    withSQLConf(SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
+      val input2 = MemoryStream[Int]
+      testStream(buildQuery(input2), outputMode = Append)(
+        AddData(input2, 10),
+        // Legacy: watermark = 10s exactly, so the group is evicted and emitted immediately.
+        CheckAnswer((10L, 1L)),
+        AddData(input2, 10),
+        // The second record at 10 s is dropped by the late-event filter under legacy semantics.
+        CheckAnswer((10L, 1L)),
+        AddData(input2, 11),
+        CheckAnswer((10L, 1L), (11L, 1L))
+      )
+    }
+  }
+
   test("withWatermark should work with alias-qualified column name") {
     // When a DataFrame has an alias, referencing the event time column via
     // "alias.columnName" should be allowed because it still refers to a top-level column.

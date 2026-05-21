@@ -143,6 +143,10 @@ class MultiStatefulOperatorsSuite
   }
 
   test("agg -> agg -> agg, append mode") {
+    // The expected watermark progression and window emission boundaries below are calibrated
+    // against the legacy 0-delay semantics; disable the auto-bump so the test continues to
+    // exercise that boundary math.
+    withSQLConf(SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
     val inputData = MemoryStream[Int]
 
     val stream = inputData.toDF()
@@ -224,6 +228,7 @@ class MultiStatefulOperatorsSuite
       assertNumStateRows(Seq(0, 0, 1)),
       assertNumRowsDroppedByWatermark(Seq(0, 0, 1))
     )
+    }
   }
 
   test("stream deduplication -> aggregation, append mode") {
@@ -269,6 +274,9 @@ class MultiStatefulOperatorsSuite
   }
 
   test("join -> window agg, append mode") {
+    // The expected watermark progression below assumes the legacy 0-delay boundary; disable the
+    // auto-bump so the test continues to exercise that boundary math.
+    withSQLConf(SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
     val input1 = MemoryStream[Int]
     val inputDF1 = input1.toDF()
       .withColumnRenamed("value", "value1")
@@ -334,9 +342,13 @@ class MultiStatefulOperatorsSuite
       assertNumStateRows(Seq(1, 0)),
       assertNumRowsDroppedByWatermark(Seq(0, 0))
     )
+    }
   }
 
   test("aggregation -> stream deduplication, append mode") {
+    // The expected watermark progression below assumes the legacy 0-delay boundary; disable the
+    // auto-bump so the test continues to exercise that boundary math.
+    withSQLConf(SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
     val inputData = MemoryStream[Int]
 
     val aggStream = inputData.toDF()
@@ -415,37 +427,42 @@ class MultiStatefulOperatorsSuite
       assertNumStateRows(Seq(0, 1)),
       assertNumRowsDroppedByWatermark(Seq(0, 0))
     )
+    }
   }
 
   test("join with range join on non-time intervals -> window agg, append mode, shouldn't fail") {
-    val input1 = MemoryStream[Int]
-    val inputDF1 = input1.toDF()
-      .withColumnRenamed("value", "value1")
-      .withColumn("eventTime1", timestamp_seconds($"value1"))
-      .withColumn("v1", timestamp_seconds($"value1"))
-      .withWatermark("eventTime1", "0 seconds")
+    // The expected watermark progression below assumes the legacy 0-delay boundary; disable the
+    // auto-bump so the test continues to exercise that boundary math.
+    withSQLConf(SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
+      val input1 = MemoryStream[Int]
+      val inputDF1 = input1.toDF()
+        .withColumnRenamed("value", "value1")
+        .withColumn("eventTime1", timestamp_seconds($"value1"))
+        .withColumn("v1", timestamp_seconds($"value1"))
+        .withWatermark("eventTime1", "0 seconds")
 
-    val input2 = MemoryStream[(Int, Int)]
-    val inputDF2 = input2.toDS().toDF("start", "end")
-      .withColumn("eventTime2Start", timestamp_seconds($"start"))
-      .withColumn("start2", timestamp_seconds($"start"))
-      .withColumn("end2", timestamp_seconds($"end"))
-      .withWatermark("eventTime2Start", "0 seconds")
+      val input2 = MemoryStream[(Int, Int)]
+      val inputDF2 = input2.toDS().toDF("start", "end")
+        .withColumn("eventTime2Start", timestamp_seconds($"start"))
+        .withColumn("start2", timestamp_seconds($"start"))
+        .withColumn("end2", timestamp_seconds($"end"))
+        .withWatermark("eventTime2Start", "0 seconds")
 
-    val stream = inputDF1.join(inputDF2,
-      expr("v1 >= start2 AND v1 < end2 " +
-        "AND eventTime1 = start2"), "inner")
-      .groupBy(window($"eventTime1", "5 seconds") as Symbol("window"))
-      .agg(count("*") as Symbol("count"))
-      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+      val stream = inputDF1.join(inputDF2,
+        expr("v1 >= start2 AND v1 < end2 " +
+          "AND eventTime1 = start2"), "inner")
+        .groupBy(window($"eventTime1", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
+        .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
 
-    testStream(stream)(
-      AddData(input1, 1, 2, 3, 4),
-      AddData(input2, (1, 2), (2, 3), (3, 4), (4, 5)),
-      CheckNewAnswer(),
-      assertNumStateRows(Seq(1, 0)),
-      assertNumRowsDroppedByWatermark(Seq(0, 0))
-    )
+      testStream(stream)(
+        AddData(input1, 1, 2, 3, 4),
+        AddData(input2, (1, 2), (2, 3), (3, 4), (4, 5)),
+        CheckNewAnswer(),
+        assertNumStateRows(Seq(1, 0)),
+        assertNumRowsDroppedByWatermark(Seq(0, 0))
+      )
+    }
   }
 
   test("stream-stream time interval left outer join -> aggregation, append mode") {
@@ -473,8 +490,11 @@ class MultiStatefulOperatorsSuite
       .selectExpr("CAST(window.start AS STRING) AS window_start",
         "CAST(window.end AS STRING) AS window_end", "cnt")
 
-    // for ease of verification, we change the session timezone to UTC
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+    // for ease of verification, we change the session timezone to UTC. The expected eviction
+    // watermark below also assumes the legacy 0-delay boundary, so disable the auto-bump.
+    withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
       testStream(agg)(
         MultiAddData(
           (input1, Seq(
@@ -733,8 +753,11 @@ class MultiStatefulOperatorsSuite
       .selectExpr("CAST(window.start AS STRING) AS window_start",
         "CAST(window.end AS STRING) AS window_end", "cnt")
 
-    // for ease of verification, we change the session timezone to UTC
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+    // for ease of verification, we change the session timezone to UTC. The expected eviction
+    // watermark below also assumes the legacy 0-delay boundary, so disable the auto-bump.
+    withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS.key -> "false") {
       testStream(agg)(
         MultiAddData(
           (input2, Seq(

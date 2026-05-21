@@ -3689,6 +3689,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_WATERMARK_BUMP_ZERO_DELAY_TO_ONE_MS =
+    buildConf("spark.sql.streaming.eventTimeWatermark.bumpZeroDelayToOneMs")
+      .doc("When true, a zero watermark delay configured via withWatermark is internally " +
+        "bumped to 1 millisecond, and a warning is logged. Without this bump, the late-event " +
+        "predicate `event_time_us <= watermark_ms * 1000` drops every record whose event time " +
+        "lands on the same millisecond as the current watermark; with a delay of 0 seconds " +
+        "this means all but the first record per millisecond is dropped. Set to false to " +
+        "restore the pre-Spark 5.0 behavior. Non-zero delays are not affected.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD =
     buildConf("spark.sql.objectHashAggregate.sortBased.fallbackThreshold")
       .internal()
