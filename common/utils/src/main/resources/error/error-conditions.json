@@ -191,6 +191,24 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_EMPTY_KEYS" : {
+    "message" : [
+      "AutoCDC requires at least one key column to identify rows, but received an empty key set."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+    ],
+    "sqlState" : "42703"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
