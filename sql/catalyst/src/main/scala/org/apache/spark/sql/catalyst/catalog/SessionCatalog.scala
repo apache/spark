@@ -135,7 +135,8 @@ class SessionCatalog(
 
   /**
    * Wire live PATH-derived session function kinds from the session [[CatalogManager]].
-   * Called once from [[org.apache.spark.sql.connector.catalog.DefaultCatalogManager]]'s constructor.
+   * Called once from [[org.apache.spark.sql.connector.catalog.DefaultCatalogManager]]'s
+   * constructor.
    */
   private[sql] def bindCatalogManagerForSessionFunctionKinds(cm: CatalogManager): Unit = {
     catalogManagerForSessionFunctionKinds = Some(cm)
