@@ -176,59 +176,67 @@ class OptimizeRandSuite extends PlanTest {
     }
   }
 
-  test("Support arithmetic expressions with rand in optimization") {
-    // Test that optimizer can handle arithmetic with rand() without crashing
-    // These tests verify the infrastructure is in place to optimize such expressions
-
-    // rand() * 2 < 1 - multiplication with rand
-    val plan1 = testRelation.select((rand5 * literal2d < literal1d).as("flag")).analyze
+  test("Optimize arithmetic expressions with rand") {
+    // rand() * 3 < 3 should be optimized to true
+    val plan1 = testRelation.select((rand5 * literal3d < literal3d).as("flag")).analyze
     val actual1 = Optimize.execute(plan1)
-    assert(actual1 != null)
+    val correctAnswer1 = testRelation.select(Alias(TrueLiteral, "flag")()).analyze
+    comparePlans(actual1, correctAnswer1)
 
-    // rand() + 1 < 2 - addition with rand
+    // rand() + 1 < 2 should be optimized to true
     val plan2 = testRelation.select((rand5 + literal1d < literal2d).as("flag")).analyze
     val actual2 = Optimize.execute(plan2)
-    assert(actual2 != null)
+    val correctAnswer2 = testRelation.select(Alias(TrueLiteral, "flag")()).analyze
+    comparePlans(actual2, correctAnswer2)
 
-    // rand() - 1 < 0 - subtraction with rand
+    // rand() - 1 < 0 should be optimized to true
     val plan3 = testRelation.select((rand5 - literal1d < literal0d).as("flag")).analyze
     val actual3 = Optimize.execute(plan3)
-    assert(actual3 != null)
+    val correctAnswer3 = testRelation.select(Alias(TrueLiteral, "flag")()).analyze
+    comparePlans(actual3, correctAnswer3)
 
-    // rand() / 2 < 1 - division with rand
+    // rand() / 2 < 1 should be optimized to true
     val plan4 = testRelation.select((rand5 / literal2d < literal1d).as("flag")).analyze
     val actual4 = Optimize.execute(plan4)
-    assert(actual4 != null)
+    val correctAnswer4 = testRelation.select(Alias(TrueLiteral, "flag")()).analyze
+    comparePlans(actual4, correctAnswer4)
+
+    // rand() * 2 > 3 should be optimized to false
+    val plan5 = testRelation.select((rand5 * literal2d > literal3d).as("flag")).analyze
+    val actual5 = Optimize.execute(plan5)
+    val correctAnswer5 = testRelation.select(Alias(FalseLiteral, "flag")()).analyze
+    comparePlans(actual5, correctAnswer5)
   }
 
-  test("Support equality comparison with rand in optimization") {
-    // Test that optimizer can handle equality with rand() without crashing
-    // These tests verify the infrastructure is in place to optimize equality
-
+  test("Optimize equality comparison with rand") {
     // rand() == 0.5 cannot be optimized (value is in [0, 1) range)
     val plan1 = testRelation.select((rand5 === literalHalf).as("flag")).analyze
     val actual1 = Optimize.execute(plan1)
-    assert(actual1 != null)
+    comparePlans(actual1, plan1)
 
-    // rand() == 2 (value outside [0, 1) range)
+    // rand() == 2 should be optimized to false (value outside [0, 1) range)
     val plan2 = testRelation.select((rand5 === literal2d).as("flag")).analyze
     val actual2 = Optimize.execute(plan2)
-    assert(actual2 != null)
+    val correctAnswer2 = testRelation.select(Alias(FalseLiteral, "flag")()).analyze
+    comparePlans(actual2, correctAnswer2)
 
-    // rand() == -1 (value outside [0, 1) range)
+    // rand() == -1 should be optimized to false (value outside [0, 1) range)
     val plan3 = testRelation.select((rand5 === negativeLiteral1d).as("flag")).analyze
     val actual3 = Optimize.execute(plan3)
-    assert(actual3 != null)
+    val correctAnswer3 = testRelation.select(Alias(FalseLiteral, "flag")()).analyze
+    comparePlans(actual3, correctAnswer3)
 
-    // 2 == rand() (literal on left side)
+    // 2 == rand() should be optimized to false (literal on left side)
     val plan4 = testRelation.select((literal2d === rand5).as("flag")).analyze
     val actual4 = Optimize.execute(plan4)
-    assert(actual4 != null)
+    val correctAnswer4 = testRelation.select(Alias(FalseLiteral, "flag")()).analyze
+    comparePlans(actual4, correctAnswer4)
 
-    // -1 == rand() (literal on left side)
+    // -1 == rand() should be optimized to false (literal on left side)
     val plan5 = testRelation.select((negativeLiteral1d === rand5).as("flag")).analyze
     val actual5 = Optimize.execute(plan5)
-    assert(actual5 != null)
+    val correctAnswer5 = testRelation.select(Alias(FalseLiteral, "flag")()).analyze
+    comparePlans(actual5, correctAnswer5)
   }
 
 }

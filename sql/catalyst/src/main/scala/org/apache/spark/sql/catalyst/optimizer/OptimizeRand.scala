@@ -29,12 +29,25 @@ object OptimizeRand extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformAllExpressionsWithPruning(_.containsAnyPattern(
       EXPRESSION_WITH_RANDOM_SEED), ruleId) {
-      case op @ BinaryComparison(DoubleLiteral(_), _: Rand) =>
+      case op @ EqualTo(DoubleLiteral(_), _: Rand) =>
+        eliminateRand(EqualTo(op.right, op.left))
+      case op @ BinaryComparison(DoubleLiteral(_), _: Rand)
+          if !op.isInstanceOf[EqualTo] =>
         eliminateRand(swapComparison(op))
       case op @ BinaryComparison(_: Rand, DoubleLiteral(_)) =>
         eliminateRand(op)
-      case op: BinaryComparison if hasRand(op.left) || hasRand(op.right) =>
+      case op: BinaryComparison
+          if isDirectRandChild(op.left) || isDirectRandChild(op.right) =>
         optimizeArithmetic(op)
+  }
+
+  private def isDirectRandChild(expr: Expression): Boolean = expr match {
+    case _: Rand => true
+    case Add(l, r, _) => l.isInstanceOf[Rand] || r.isInstanceOf[Rand]
+    case Subtract(l, r, _) => l.isInstanceOf[Rand] || r.isInstanceOf[Rand]
+    case Multiply(l, r, _) => l.isInstanceOf[Rand] || r.isInstanceOf[Rand]
+    case Divide(l, r, _) => l.isInstanceOf[Rand] || r.isInstanceOf[Rand]
+    case _ => false
   }
 
   private def hasRand(expr: Expression): Boolean = expr match {
@@ -64,6 +77,8 @@ object OptimizeRand extends Rule[LogicalPlan] {
       if (v >= 1.0) TrueLiteral else if (v <= 0.0) FalseLiteral else op
     case LessThanOrEqual(_: Rand, DoubleLiteral(v)) =>
       if (v >= 1.0) TrueLiteral else if (v < 0.0) FalseLiteral else op
+    case EqualTo(_: Rand, DoubleLiteral(v)) =>
+      if (v < 0.0 || v >= 1.0) FalseLiteral else op
     case other => other
   }
 
@@ -78,6 +93,10 @@ object OptimizeRand extends Rule[LogicalPlan] {
   case class RandExpr(coeff: Double, offset: Double)
 
   private def extractRandCoeffOffset(expr: Expression): Option[RandExpr] = {
+    // This function extracts coefficient and offset from expressions containing rand().
+    // It normalizes expressions into the form: coeff * rand() + offset
+    // Note: Only supports patterns where rand() is a direct child of arithmetic
+    // operations. Deeply nested expressions like (rand() + 1) * 2 are not supported.
     expr match {
       case _: Rand => Some(RandExpr(1.0, 0.0))
       case m: Multiply =>
@@ -172,7 +191,7 @@ object OptimizeRand extends Rule[LogicalPlan] {
             else if (t >= 1.0) FalseLiteral else original
         case "GTE" => if (t <= 0.0) TrueLiteral
             else if (t > 1.0) FalseLiteral else original
-        case "LT" => if (t > 1.0) TrueLiteral
+        case "LT" => if (t >= 1.0) TrueLiteral
             else if (t <= 0.0) FalseLiteral else original
         case "LTE" => if (t >= 1.0) TrueLiteral
             else if (t < 0.0) FalseLiteral else original
