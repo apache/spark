@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import java.util.Locale
+
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
@@ -679,7 +681,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
   test("extendMicrobatchRowsWithCdcMetadata rejects reserved CDC metadata column " +
     "case-insensitively") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val conflictingColumnName = Scd1BatchProcessor.cdcMetadataColName.toUpperCase
+      val conflictingColumnName = Scd1BatchProcessor.cdcMetadataColName.toUpperCase(Locale.ROOT)
       val schema = new StructType()
         .add("id", IntegerType)
         .add("seq", LongType)
