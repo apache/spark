@@ -239,4 +239,32 @@ class OptimizeRandSuite extends PlanTest {
     comparePlans(actual5, correctAnswer5)
   }
 
+  test("Benchmark: rand optimization performance benefit") {
+    val iterations = 1000
+
+    // Benchmark unoptimized plan (with rand)
+    val unoptimizedStartTime = System.nanoTime()
+    (0 until iterations).foreach { _ =>
+      val plan = testRelation.select((rand5 * literal3d < literal3d).as("flag")).analyze
+      plan
+    }
+    val unoptimizedTime = System.nanoTime() - unoptimizedStartTime
+
+    // Benchmark optimized plan (constant folded to true)
+    val optimizedStartTime = System.nanoTime()
+    (0 until iterations).foreach { _ =>
+      val plan = testRelation.select((rand5 * literal3d < literal3d).as("flag")).analyze
+      Optimize.execute(plan)
+    }
+    val optimizedTime = System.nanoTime() - optimizedStartTime
+
+    // Log the performance improvement (for documentation purposes)
+    val improvement = ((unoptimizedTime - optimizedTime).toDouble / unoptimizedTime * 100).toLong
+    val msg = s"Planning time improved by ~${improvement}% after optimization " +
+      s"(unoptimized: ${unoptimizedTime / 1000000}ms, optimized: ${optimizedTime / 1000000}ms)"
+    // scalastyle:off println
+    println(msg)
+    // scalastyle:on println
+  }
+
 }
