@@ -33,13 +33,14 @@ private[sql] object StreamingNameValidator {
    * is null or empty, and invokes `onInvalid` to build the [[AnalysisException]] to throw if the
    * name does not match the allowed character set.
    *
-   * @param name the source/sink name to validate
-   * @param entityKind a human-readable label (e.g. "Source", "Sink") used in null/empty messages
-   * @param onInvalid builds the AnalysisException to throw when `name` has invalid characters
+   * @param name
+   *   the source/sink name to validate
+   * @param entityKind
+   *   a human-readable label (e.g. "Source", "Sink") used in null/empty messages
+   * @param onInvalid
+   *   builds the AnalysisException to throw when `name` has invalid characters
    */
-  def validate(
-      name: String,
-      entityKind: String)(onInvalid: String => AnalysisException): Unit = {
+  def validate(name: String, entityKind: String)(onInvalid: String => AnalysisException): Unit = {
     require(name != null, s"$entityKind name cannot be null")
     require(name.nonEmpty, s"$entityKind name cannot be empty")
     if (!validNamePattern.pattern.matcher(name).matches()) {
