@@ -989,7 +989,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return func, None, None, None
+        return func, None, None, return_type
     elif eval_type in (
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
@@ -2371,6 +2371,17 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
         udf_func: Callable[[Iterator[pa.RecordBatch]], Iterator[pa.RecordBatch]] = udfs[0][0]
+        return_type = udfs[0][3]
+
+        # Pre-compute target schema so each output batch can be coerced to the
+        # declared output types (e.g. int64 -> int32 from a pandas roundtrip).
+        # Without this, a type mismatch only surfaces deep in the JVM as an
+        # opaque getInt error on the wrong ArrowColumnVector accessor.
+        return_schema = to_arrow_schema(
+            return_type,
+            timezone="UTC",
+            prefers_large_types=runner_conf.use_large_var_types,
+        )
 
         def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             """Apply mapInArrow UDF"""
@@ -2388,7 +2399,20 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 output_batches,
                 Iterator[pa.RecordBatch],  # type: ignore[type-abstract]
             )
-            yield from map(ArrowBatchTransformer.wrap_struct, verified_iter)
+            # mapInArrow has historically used positional column matching
+            # (the user's batch column names need not match the declared output
+            # schema names; the JVM struct vector is read by child index). Keep
+            # that contract -- reorder_by_name=False -- and only rely on the
+            # column-count check and the per-column type cast.
+            coerced_iter = (
+                ArrowBatchTransformer.enforce_schema(
+                    batch,
+                    return_schema,
+                    reorder_by_name=False,
+                )
+                for batch in verified_iter
+            )
+            yield from map(ArrowBatchTransformer.wrap_struct, coerced_iter)
 
         # profiling is not supported for UDF
         return func, None, ser, ser
