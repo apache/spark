@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.ChangelogContext
  * [[UnresolvedLeafNode]]). Tree traversals like `transformUp` will not visit `relation`.
  *
  * @param relation the table relation (typically an [[UnresolvedRelation]])
- * @param changelogContext the CDC query parameters (range, deduplication mode, etc.)
+ * @param changelogContext the CDC query context (range, deduplication mode, etc.)
  */
 case class RelationChanges(
     relation: LogicalPlan,
