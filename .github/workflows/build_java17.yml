@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Maven (branch-4.x, Scala 2.13, Hadoop 3, JDK 21)"
+name: "Build / Java17 (branch-4.x, Scala 2.13, Hadoop 3, JDK 17)"
 
 on:
   schedule:
-    - cron: '0 14 * * *'
+    - cron: '0 11 */2 * *'
   workflow_dispatch:
 
 jobs:
@@ -29,7 +29,24 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/maven_test.yml
+    uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 21
+      java: 17
+      hadoop: hadoop3
+      envs: >-
+        {
+          "SCALA_PROFILE": "scala2.13",
+          "PYSPARK_IMAGE_TO_TEST": "",
+          "PYTHON_TO_TEST": "",
+          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-free:23.7-slim"
+        }
+      jobs: >-
+        {
+          "build": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true",
+          "k8s-integration-tests": "true",
+          "lint" : "true"
+        }
