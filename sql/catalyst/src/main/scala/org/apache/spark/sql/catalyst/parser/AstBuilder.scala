@@ -2753,15 +2753,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def resolveChangelogOptions(
       options: CaseInsensitiveStringMap): (ChangelogContext.DeduplicationMode, Boolean) = {
-    val deduplicationModeStr = Option(options.get("deduplicationMode"))
-      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
-    val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogContext.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogContext.DeduplicationMode.NET_CHANGES
-      case other =>
-        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
-    }
+    val deduplicationMode = ChangelogContextUtils.parseDeduplicationMode(options)
     val computeUpdates = options.getBoolean("computeUpdates", false)
     (deduplicationMode, computeUpdates)
   }

@@ -18,10 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.{Long => JLong}
-import java.util.{Locale, Optional => JOptional}
+import java.util.{Optional => JOptional}
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.connector.catalog.ChangelogContext
+import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode
+import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
+import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode.NET_CHANGES
+import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode.NONE
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.TimestampType
@@ -56,15 +60,7 @@ object ChangelogContextUtils {
     val startInclusive = options.getBoolean(STARTING_BOUND_INCLUSIVE, true)
     val endInclusive = options.getBoolean(ENDING_BOUND_INCLUSIVE, true)
 
-    val deduplicationModeStr = Option(options.get(DEDUPLICATION_MODE))
-      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
-    val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogContext.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogContext.DeduplicationMode.NET_CHANGES
-      case other =>
-        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
-    }
+    val deduplicationMode = parseDeduplicationMode(options)
     val computeUpdates = options.getBoolean(COMPUTE_UPDATES, false)
 
     // Determine range from options
@@ -99,6 +95,20 @@ object ChangelogContextUtils {
     }
 
     new ChangelogContext(range, deduplicationMode, computeUpdates)
+  }
+
+  def parseDeduplicationMode(options: CaseInsensitiveStringMap): DeduplicationMode = {
+    if (options.containsKey(DEDUPLICATION_MODE)) {
+      parseDeduplicationMode(options.get(DEDUPLICATION_MODE))
+    } else {
+      DROP_CARRYOVERS
+    }
+  }
+
+  private def parseDeduplicationMode(value: String): DeduplicationMode = {
+    DeduplicationMode.values()
+      .find(_.value.equalsIgnoreCase(value))
+      .getOrElse(throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(value))
   }
 
   private def parseTimestamp(timestampStr: String, sessionLocalTimeZone: String): Long = {
