@@ -141,6 +141,9 @@ object PushDownUtils extends Logging {
    * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
    * pushdown.
    *
+   * Note: Do not call multiple times for the same `scan` instance;
+   * [[SupportsRuntimeV2Filtering.filter]] is mutating.
+   *
    * @return true if any filters were pushed to the data source
    */
   def pushRuntimeFilters(
@@ -195,14 +198,11 @@ object PushDownUtils extends Logging {
    * preserved the original partitioning and pads with `None` to preserve key alignment with the
    * pre-filter partition set.
    *
-   * Must be called at execute time: runtime filters carry [[DynamicPruningExpression]] and
-   * scalar-subquery references whose values are only resolved after their broadcast/subquery
-   * side completes. The mutating [[pushRuntimeFilters]] call must run at most once per scan
-   * instance; callers are responsible for caching the result.
-   *
-   * Precondition: when `outputPartitioning` is a [[KeyedPartitioning]], every element of
-   * `originalPartitions` (and every partition re-planned by the data source) must implement
-   * [[HasPartitionKey]].
+   * Notes:
+   *  - Do not call multiple times for the same `scan` instance;
+   *    [[SupportsRuntimeV2Filtering.filter]] is mutating.
+   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
+   *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
    *
    * @param scan                the V2 scan to push filters into
    * @param runtimeFilters      runtime filters to translate and push
