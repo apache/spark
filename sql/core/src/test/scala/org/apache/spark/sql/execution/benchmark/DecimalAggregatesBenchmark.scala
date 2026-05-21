@@ -46,9 +46,11 @@ import org.apache.spark.sql.types.Decimal
  *     PBT in `DataFrameAggregateSuite`).
  *
  * Sections:
- *   A -- Aggregate SUM widened-cast sweep over (p, s, p') cases.
- *   B -- Aggregate AVG widened-cast sweep (p <= 7 per
- *        AVG_PEEL_MAX_INNER_PRECISION).
+ *   A -- Aggregate SUM widened-cast sweep (`p + 10 <= MAX_LONG_DIGITS`,
+ *        any `pPrime > p` up to 38).
+ *   B -- Aggregate AVG widened-cast sweep (`pPrime + 4 <= MAX_DOUBLE_DIGITS`
+ *        so the rule fires only inside the existing AVG Double-regime
+ *        envelope; wider casts stay on the Decimal-exact path).
  *
  * NOTE on Window arm: the optimizer does not extend widened-Cast peel to
  * the Window arm (see DecimalAggregates rule comment) because the analyzer
@@ -56,12 +58,13 @@ import org.apache.spark.sql.types.Decimal
  * not exercise this rule. A Window benchmark belongs with a future
  * plan-layer rewrite, not here.
  *
- * Case design (`p+1` boundary vs `p+10`-class wider) deliberately includes
- * both the minimum widening (one extra digit, e.g. `dec(7,2) -> dec(8,2)`)
- * and a production-canonical wider one (e.g. `dec(7,2) -> dec(17,2)` is the
- * inner-widened-decimal shape in TPC-DS q18) so reviewers see whether
- * widening magnitude matters and whether the canonical shape behaves like
- * the boundary one.
+ * Case design:
+ *   - Section A pairs a `p+1` boundary widening with a `p+10`-class wider
+ *     cast (A2 mirrors the TPC-DS q18 inner-widened-decimal shape), so
+ *     reviewers see whether widening magnitude matters.
+ *   - Section B pairs a `p+1` boundary widening with the `pPrime <= 11`
+ *     upper bound, the widest cast the AVG arm will accept under the
+ *     semantics-preserving guard.
  *
  * Args: aN (Section A/B row count), iters, apl
  * (`spark.sql.decimalOperations.allowPrecisionLoss`; default true).

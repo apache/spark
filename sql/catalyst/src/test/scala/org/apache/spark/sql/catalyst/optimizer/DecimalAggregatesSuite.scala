@@ -148,18 +148,19 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, correctAnswer)
   }
 
-  // SPARK-56627 F1 regression: `WidenedDecimalChild` must NOT peel when the
-  // inner expression is a `CheckOverflow` (introduced by `DecimalPrecision`
-  // analyzer for nullOnOverflow semantics). Peeling through `CheckOverflow`
-  // would change the overflow behavior of the inner aggregate.
+  // WidenedDecimalChild must NOT peel when the inner expression is a
+  // CheckOverflow (introduced by DecimalPrecision for nullOnOverflow
+  // semantics). Peeling through CheckOverflow would hoist a per-row
+  // overflow check out of the aggregate.
   //
-  // The existing un-widened `Average(DecimalExpression)` arm still fires on
-  // the outer Cast (dataType `Decimal(pPrime=10, s=2)`, `pPrime + 4 = 14 <= 15`),
-  // so the optimized plan wraps `UnscaledValue` around the OUTER cast (not
-  // the inner CheckOverflow). The peel-arm-fired form would instead be
-  // `UnscaledValue(CheckOverflow(e))` (no outer cast), which we want to AVOID.
+  // The existing un-widened Average(DecimalExpression) arm still fires on
+  // the outer Cast (dataType Decimal(pPrime=10, s=2), pPrime + 4 = 14 <= 15),
+  // so the optimized plan wraps UnscaledValue around the OUTER cast. Without
+  // the CheckOverflow guard the peel arm would feed UnscaledValue off the
+  // inner CheckOverflow instead, which we want to AVOID.
   test("Decimal Average Aggregation widened-cast peel: " +
-      "Not peeled for Cast(CheckOverflow(inner), wider) form (F1 guard)") {
+      "Not peeled for Cast(CheckOverflow(inner), wider) form " +
+      "(CheckOverflow guard)") {
     val testRelationE = LocalRelation($"e".decimal(7, 2))
     val co = CheckOverflow($"e", DecimalType(7, 2), nullOnOverflow = true)
     val widened = Cast(co, DecimalType(10, 2))
