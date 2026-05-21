@@ -145,6 +145,26 @@ class RewriteNearestByJoinSuite extends PlanTest {
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
   }
 
+  test("synthetic Join uses the user's joinType") {
+    // Locks in that the rewrite's synthetic Join carries the user's `joinType`
+    // (Inner or LeftOuter).
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation($"x".int, $"y".int)
+    Seq(Inner, LeftOuter).foreach { joinType =>
+      val query = NearestByJoin(
+        left, right, joinType, approx = true, numResults = 1,
+        rankingExpression = left.output(0) + right.output(0),
+        direction = NearestBySimilarity)
+
+      val rewritten = RewriteNearestByJoin(query.analyze)
+      val syntheticJoin = rewritten.collect { case j: Join => j }
+      assert(syntheticJoin.size == 1,
+        s"expected exactly one synthetic Join in the rewritten plan, got ${syntheticJoin.size}")
+      assert(syntheticJoin.head.joinType == joinType,
+        s"expected synthetic Join to use $joinType, got ${syntheticJoin.head.joinType}")
+    }
+  }
+
   test("EXACT (approx = false) produces the same rewrite as APPROX") {
     // Locks in the current invariant that APPROX and EXACT lower through the same
     // brute-force rewrite. If a future change diverges them (e.g. an APPROX-only

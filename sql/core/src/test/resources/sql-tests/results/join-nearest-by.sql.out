@@ -286,12 +286,12 @@ AdaptiveSparkPlan isFinalPlan=false
                   +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
                      +- Sort [__qid#x ASC NULLS FIRST], false, 0
                         +- Project [user_id#x, __qid#x, product#x, pscore#x, (rand(0) + cast(pscore#x as double)) AS __ranking__#x]
-                           +- BroadcastNestedLoopJoin BuildRight, Inner
-                              :- Project [col1#x AS user_id#x, uuid(Some(x)) AS __qid#x]
-                              :  +- LocalTableScan [col1#x, col2#x]
-                              +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
-                                 +- Project [col1#x AS product#x, col2#x AS pscore#x]
-                                    +- LocalTableScan [col1#x, col2#x]
+                           +- BroadcastNestedLoopJoin BuildLeft, Inner
+                              :- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
+                              :  +- Project [col1#x AS user_id#x, uuid(Some(x)) AS __qid#x]
+                              :     +- LocalTableScan [col1#x, col2#x]
+                              +- Project [col1#x AS product#x, col2#x AS pscore#x]
+                                 +- LocalTableScan [col1#x, col2#x]
 
 
 -- !query
