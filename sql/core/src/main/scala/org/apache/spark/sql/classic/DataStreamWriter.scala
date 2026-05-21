@@ -46,7 +46,6 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -260,19 +259,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         // file source v2 does not support streaming yet.
         classOf[FileDataSourceV2].isAssignableFrom(cls)
 
-      val optionsWithPath = if (path.isEmpty) {
-        extraOptions
-      } else {
-        extraOptions + ("path" -> path.get)
-      }
+      val optionsWithPath = DataSourceV2Utils.getOptionsWithPaths(extraOptions, path.toSeq: _*)
 
       val sink = if (classOf[TableProvider].isAssignableFrom(cls) && !useV1Source) {
         val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-          source = provider, conf = ds.sparkSession.sessionState.conf)
-        val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
-          optionsWithPath.originalMap
-        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+        val dsOptions = DataSourceV2Utils.buildDsOptions(
+          provider, ds.sparkSession.sessionState.conf, optionsWithPath)
         // If the source accepts external table metadata, here we pass the schema of input query
         // to `getTable`. This is for avoiding schema inference, which can be very expensive.
         // If the query schema is not compatible with the existing data, the behavior is undefined.

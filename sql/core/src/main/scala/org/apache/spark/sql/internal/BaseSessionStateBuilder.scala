@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.internal
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
@@ -30,6 +28,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.{DataSourceCatalogResolver, DefaultCatalogManager, SupportsCatalogOptions}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -44,7 +43,7 @@ import org.apache.spark.sql.execution.externalUDF.{ClassicExternalUDFPlanner,
   ExternalUDFPlanner, UnifiedExternalUDFPlanner}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, ExecutionListenerManager}
+import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
  * Builder class that coordinates construction of a new [[SessionState]].
@@ -169,13 +168,10 @@ abstract class BaseSessionStateBuilder(
       try {
         DataSource.lookupDataSourceV2(nameParts.head, conf).flatMap {
           case sco: SupportsCatalogOptions =>
-            // Pass the full multipart name as the `path` option so the connector can do its
-            // own canonicalization (strip its format prefix, normalize, etc.). Session configs
-            // are passed through as well.
-            val sessionOpts = DataSourceV2Utils.extractSessionConfigs(sco, conf)
-            val opts = new CaseInsensitiveStringMap(
-              (sessionOpts + ("path" -> nameParts.mkString("."))).asJava)
-            Some((sco.extractCatalog(opts), sco.extractIdentifier(opts)))
+            val optionsWithPath = DataSourceV2Utils.getOptionsWithPaths(
+              CaseInsensitiveMap(Map.empty), nameParts.tail.mkString("."))
+            val dsOptions = DataSourceV2Utils.buildDsOptions(sco, conf, optionsWithPath)
+            Some(DataSourceV2Utils.extractCatalogAndIdentifier(sco, dsOptions))
           case _ => None
         }
       } catch {
