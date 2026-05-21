@@ -29,8 +29,8 @@ private[sql] object StreamingNameValidator {
   private val validNamePattern: Regex = "^[a-zA-Z0-9_]+$".r
 
   /**
-   * Validates the given streaming entity name. Throws an [[IllegalArgumentException]] if the name
-   * is null or empty, and invokes `onInvalid` to build the [[AnalysisException]] to throw if the
+   * Validates the given streaming entity name. Throws an `IllegalArgumentException` if the name
+   * is null or empty, and invokes `onInvalid` to build the `AnalysisException` to throw if the
    * name does not match the allowed character set.
    *
    * @param name
