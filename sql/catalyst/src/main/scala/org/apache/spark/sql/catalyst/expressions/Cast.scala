@@ -897,10 +897,6 @@ case class Cast(
       buildCast[Long](_, t => timestampToLong(t))
     case _: TimeType =>
       buildCast[Long](_, t => timeToLong(t))
-    case FloatType if ansiEnabled =>
-      b => CastUtils.floatToLongExact(b.asInstanceOf[Float])
-    case DoubleType if ansiEnabled =>
-      b => CastUtils.doubleToLongExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toLong(b)
@@ -943,12 +939,6 @@ case class Cast(
       })
     case _: TimeType =>
       buildCast[Long](_, t => timeToLong(t).toInt)
-    case LongType if ansiEnabled =>
-      b => CastUtils.longToIntExact(b.asInstanceOf[Long])
-    case FloatType if ansiEnabled =>
-      b => CastUtils.floatToIntExact(b.asInstanceOf[Float])
-    case DoubleType if ansiEnabled =>
-      b => CastUtils.doubleToIntExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b => exactNumeric.toInt(b)
@@ -1992,17 +1982,6 @@ case class Cast(
     }
   }
 
-  private[this] def integralPrefix(from: DataType): String = from match {
-    case ShortType => "short"
-    case IntegerType => "int"
-    case LongType => "long"
-  }
-
-  private[this] def fractionalPrefix(from: DataType): String = from match {
-    case FloatType => "float"
-    case DoubleType => "double"
-  }
-
   private[this] def castIntegralTypeToIntegralTypeExactCode(
       ctx: CodegenContext,
       integralType: String,
@@ -2010,9 +1989,10 @@ case class Cast(
       to: DataType): CastFunction = {
     assert(ansiEnabled)
     if (integralType == "int") {
-      val castUtils = classOf[CastUtils].getName
-      val method = s"${integralPrefix(from)}ToIntExact"
-      (c, evPrim, _) => code"$evPrim = $castUtils.$method($c);"
+      // Long -> Int: call LongExactNumeric.toInt directly. It already does the
+      // bounds check and throws castingCauseOverflowError -- same as the inline body.
+      val numericObj = LongExactNumeric.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) => code"$evPrim = $numericObj.toInt($c);"
     } else {
       // Byte/short narrowing remains inline; refactored in a follow-up PR.
       val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
@@ -2046,9 +2026,15 @@ case class Cast(
       to: DataType): CastFunction = {
     assert(ansiEnabled)
     if (integralType == "int" || integralType == "long") {
-      val castUtils = classOf[CastUtils].getName
-      val method = s"${fractionalPrefix(from)}To${integralType.capitalize}Exact"
-      (c, evPrim, _) => code"$evPrim = $castUtils.$method($c);"
+      // Float/Double -> Int/Long: call FloatExactNumeric/DoubleExactNumeric.toInt/toLong
+      // directly. Each already does the floor/ceil bounds check and throws
+      // castingCauseOverflowError -- same as the inline body.
+      val numericObj = (from match {
+        case FloatType => FloatExactNumeric
+        case DoubleType => DoubleExactNumeric
+      }).getClass.getCanonicalName.stripSuffix("$")
+      val method = s"to${integralType.capitalize}"
+      (c, evPrim, _) => code"$evPrim = $numericObj.$method($c);"
     } else {
       // Byte/short narrowing remains inline; refactored in a follow-up PR.
       val (min, max) = lowerAndUpperBound(integralType)
