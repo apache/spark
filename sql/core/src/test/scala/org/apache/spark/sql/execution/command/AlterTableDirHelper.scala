@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql.test.ClassicQueryTest
+import org.apache.spark.sql.test.classic.{QueryTest => ClassicQueryTest}
 
 trait AlterTableDirHelper extends ClassicQueryTest {
   def withTableDir(tableName: String)(f: (FileSystem, Path) => Unit): Unit = {

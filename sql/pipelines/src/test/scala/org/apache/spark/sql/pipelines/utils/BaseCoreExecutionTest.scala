@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.utils
 
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, DatasetManager, PipelineUpdateContext}
-import org.apache.spark.sql.test.ClassicQueryTest
+import org.apache.spark.sql.test.classic.{QueryTest => ClassicQueryTest}
 
 trait BaseCoreExecutionTest extends ExecutionTest with ClassicQueryTest {
 

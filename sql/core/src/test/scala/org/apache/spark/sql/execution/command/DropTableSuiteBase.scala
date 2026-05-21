@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.test.ClassicQueryTest
+import org.apache.spark.sql.test.classic.{QueryTest => ClassicQueryTest}
 
 /**
  * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2

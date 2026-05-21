@@ -34,7 +34,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.cleanupMetastore
-import org.apache.spark.sql.test.ClassicQueryTest
+import org.apache.spark.sql.test.classic.{QueryTest => ClassicQueryTest}
 
 abstract class PipelineTest
   extends QueryTest

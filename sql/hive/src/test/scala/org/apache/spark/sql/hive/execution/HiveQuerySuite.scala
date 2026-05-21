@@ -37,7 +37,7 @@ import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive, TestUDTFJar}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.ClassicQueryTest
+import org.apache.spark.sql.test.classic.{QueryTest => ClassicQueryTest}
 import org.apache.spark.tags.SlowHiveTest
 
 case class TestData(a: Int, b: String)

@@ -25,6 +25,7 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, SparkSessionProvider, SQLContext}
+import org.apache.spark.sql.test.{classic => classicTest}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -63,7 +64,7 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
  */
 trait SharedClassicSparkSession
   extends SharedSparkSession
-    with ClassicQueryTest
+    with classicTest.QueryTest
     with classic.SparkSessionProvider {
   override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
