@@ -6481,7 +6481,7 @@ def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = No
     Use the ORDER BY clause of the window to order the observations by the associated timestamp
     in ascending order.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
