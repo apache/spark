@@ -108,10 +108,8 @@ class FakePathBasedSource
 
   override def shortName(): String = "pathformat"
 
-  // Strip our own format prefix from the multipart path and return the rest under our
-  // format-name namespace.
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
-    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
+    Identifier.of(Array(shortName()), options.get("path"))
 }
 
 /**
@@ -131,8 +129,6 @@ class FakePathBasedSourceWithSessionConfig
 
   override def extractCatalog(options: CaseInsensitiveStringMap): String = options.get("catalog")
 
-  // Strip our own format prefix from the multipart path and return the rest under our
-  // format-name namespace.
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
-    Identifier.of(Array(shortName()), options.get("path").stripPrefix(s"${shortName()}."))
+    Identifier.of(Array(shortName()), options.get("path"))
 }
