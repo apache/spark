@@ -5,7 +5,7 @@
 To report a security vulnerability in Apache Spark, follow the
 ASF security process at <https://www.apache.org/security/>.
 Reports can be sent privately to security@apache.org or to
-security@spark.apache.org.
+private@spark.apache.org.
 
 ## Threat model
 
