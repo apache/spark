@@ -20,11 +20,6 @@
 name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 17)"
 
 on:
-  # TEMP for PR #55766: also run on every push to validate maven_test.yml
-  # changes from this PR. REVERT BEFORE MERGE.
-  push:
-    branches:
-    - '**'
   schedule:
     - cron: '0 13 */2 * *'
   workflow_dispatch:
@@ -35,5 +30,4 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/maven_test.yml
-    # TEMP for PR #55766: removed `if: github.repository == 'apache/spark'` so
-    # this workflow fires on the fork. REVERT BEFORE MERGE.
+    if: github.repository == 'apache/spark'
