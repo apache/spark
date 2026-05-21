@@ -171,13 +171,41 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         val dfNoSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(dfNoSample)
 
-        // With SYSTEM sample on one side: join pushdown should be skipped
+        // With a SYSTEM sample (fraction < 1) on one side: join pushdown
+        // should be skipped because the merged scan builder would silently
+        // discard the sample.
         val dfWithSample = sql(
-          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
         checkJoinNotPushed(dfWithSample)
         // The sample should still be pushed down though
         checkSamplePushed(dfWithSample, pushed = true)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-55978: 100% SYSTEM sample does not block join pushdown") {
+    val joinSampleCatalog = "testjoinsample100"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        // At fraction = 1 the sample is a no-op on the result set, so
+        // dropping it inside the merged scan builder is safe. The guard
+        // in V2ScanRelationPushDown short-circuits and join pushdown
+        // proceeds.
+        val dfWithSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(dfWithSample)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")

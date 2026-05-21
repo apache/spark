@@ -151,11 +151,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
-        // Do not push down join if either side has a pushed sample, because
-        // the merged scan builder would silently discard it.
+        // Do not push down join if either side has a pushed sample with
+        // fraction < 1, because the merged scan builder would silently
+        // discard it and change the result. At fraction = 1 the sample is
+        // a no-op on the result set, so dropping it is safe.
         // TODO(SPARK-56504): Extend SupportsPushDownJoin to accept pushed
         //   samples so sources supporting both can handle the composition.
-        leftHolder.pushedSample.isEmpty && rightHolder.pushedSample.isEmpty &&
+        leftHolder.pushedSample.forall(s => s.upperBound - s.lowerBound >= 1.0) &&
+        rightHolder.pushedSample.forall(s => s.upperBound - s.lowerBound >= 1.0) &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
