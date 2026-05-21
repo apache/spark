@@ -111,15 +111,15 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
  * (registered catalogs, current catalog/namespace, session path).
  */
 private[sql] class DefaultCatalogManager(
-    val defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends CatalogManager {
+    override val defaultSessionCatalog: CatalogPlugin,
+    override val v1SessionCatalog: SessionCatalog) extends CatalogManager {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
-  val tempVariableManager: TempVariableManager = new TempVariableManager
+  override val tempVariableManager: TempVariableManager = new TempVariableManager
 
   // Wire `SessionCatalog`'s fast-path kinds to the live SQL PATH. The kinds list itself is
   // pure data conversion (system entries from the path, in path order); the *decision* to use

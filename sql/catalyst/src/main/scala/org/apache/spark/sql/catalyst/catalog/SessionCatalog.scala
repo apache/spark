@@ -121,7 +121,7 @@ class SessionCatalog(
 
   /**
    * Live PATH for session function kinds. Set from
-   * [[org.apache.spark.sql.connector.catalog.CatalogManager]]'s constructor via
+   * [[org.apache.spark.sql.connector.catalog.DefaultCatalogManager]]'s constructor via
    * [[bindCatalogManagerForSessionFunctionKinds]] so unqualified lookups and the security check
    * that blocks temp functions from shadowing builtins read the effective SQL PATH (post-`SET
    * PATH`, with [[SQLConf.DEFAULT_PATH]] and [[SQLConf.defaultPathOrder]] fallbacks already
@@ -135,7 +135,7 @@ class SessionCatalog(
 
   /**
    * Wire live PATH-derived session function kinds from the session [[CatalogManager]].
-   * Called once from [[org.apache.spark.sql.connector.catalog.CatalogManager]]'s constructor.
+   * Called once from [[org.apache.spark.sql.connector.catalog.DefaultCatalogManager]]'s constructor.
    */
   private[sql] def bindCatalogManagerForSessionFunctionKinds(cm: CatalogManager): Unit = {
     catalogManagerForSessionFunctionKinds = Some(cm)
