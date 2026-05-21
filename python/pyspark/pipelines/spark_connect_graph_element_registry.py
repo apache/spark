@@ -27,12 +27,12 @@ from pyspark.pipelines.output import (
     StreamingTable,
     TemporaryView,
 )
-from pyspark.pipelines.flow import Flow
+from pyspark.pipelines.flow import AutoCdcFlow, Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 from pyspark.pipelines.source_code_location import SourceCodeLocation
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 from pyspark.sql.types import StructType
-from typing import Any, cast
+from typing import Any, List, Optional, cast
 import pyspark.sql.connect.proto as pb2
 from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 
@@ -129,6 +129,49 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             sql_conf=flow.spark_conf,
             source_code_location=source_code_location_to_proto(flow.source_code_location),
         )
+        command = pb2.Command()
+        command.pipeline_command.define_flow.CopyFrom(inner_command)
+        self._client.execute_command(command)
+
+    def register_auto_cdc_flow(self, flow: AutoCdcFlow) -> None:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        def to_plan(col: Column) -> Any:
+            return cast(ConnectColumn, col).to_plan(self._client)
+
+        def to_plans(cols: Optional[List[Column]]) -> list:
+            return [] if cols is None else [to_plan(c) for c in cols]
+
+        auto_cdc_details = pb2.PipelineCommand.DefineFlow.AutoCdcFlowDetails(
+            source=flow.source,
+            keys=to_plans(flow.keys),
+            sequence_by=to_plan(flow.sequence_by),
+            column_list=to_plans(flow.column_list),
+            except_column_list=to_plans(flow.except_column_list),
+            ignore_null_updates_column_list=to_plans(flow.ignore_null_updates_column_list),
+            ignore_null_updates_except_column_list=to_plans(
+                flow.ignore_null_updates_except_column_list
+            ),
+        )
+        if flow.stored_as_scd_type is not None:
+            auto_cdc_details.stored_as_scd_type = (
+                pb2.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1
+            )
+        if flow.apply_as_deletes is not None:
+            auto_cdc_details.apply_as_deletes.CopyFrom(to_plan(flow.apply_as_deletes))
+        if flow.apply_as_truncates is not None:
+            auto_cdc_details.apply_as_truncates.CopyFrom(to_plan(flow.apply_as_truncates))
+
+        inner_command = pb2.PipelineCommand.DefineFlow(
+            dataflow_graph_id=self._dataflow_graph_id,
+            target_dataset_name=flow.target,
+            auto_cdc_flow_details=auto_cdc_details,
+            sql_conf={},
+            source_code_location=source_code_location_to_proto(flow.source_code_location),
+        )
+        if flow.name is not None:
+            inner_command.flow_name = flow.name
+
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)
         self._client.execute_command(command)
