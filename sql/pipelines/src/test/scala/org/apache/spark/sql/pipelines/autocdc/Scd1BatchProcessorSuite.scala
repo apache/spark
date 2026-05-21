@@ -1151,4 +1151,126 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
     assert(result.collect().isEmpty)
   }
+
+  test("applyTombstonesToMicrobatch is a no-op when the auxiliary table is empty") {
+    val microbatch = microbatchOf(applyTombstonesToMicrobatchTestMicrobatchSchema)(
+      Row(1, "kept-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5))),
+      Row(2, "kept-delete", cdcMetadataRow(deleteSeq = Some(7), upsertSeq = None))
+    )
+
+    // Empty auxiliary: no rows means the left-anti join cannot match any microbatch row, so the
+    // microbatch passes through untouched regardless of its contents.
+    
+    // Conceptually, this means there are no tombstones that could potentially have delete-matched
+    // against incoming rows in the microbatch.
+    val auxiliary = microbatchOf(applyTombstonesToMicrobatchTestAuxiliarySchema)()
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+        // into the CDC metadata column.
+        sequencing = F.lit(0L),
+        storedAsScdType = ScdType.Type1
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    checkAnswer(
+      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      expectedAnswer = Seq(
+        Row(1, "kept-upsert", Row(null, 5L)),
+        Row(2, "kept-delete", Row(7L, null))
+      )
+    )
+  }
+
+  test("applyTombstonesToMicrobatch keeps microbatch rows when the matching aux row has a " +
+    "null deleteSequence") {
+    // SCD1's tombstone-merge invariant guarantees aux rows always have a non-null
+    // deleteSequence, but if a corrupt aux row ever does carry a null deleteSequence, the
+    // join's `<` predicate evaluates to null (SQL 3-valued logic) and the microbatch row is
+    // retained -- a safe fallback that never silently drops data.
+    val microbatch = microbatchOf(applyTombstonesToMicrobatchTestMicrobatchSchema)(
+      Row(1, "kept-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5)))
+    )
+    val auxiliary = microbatchOf(applyTombstonesToMicrobatchTestAuxiliarySchema)(
+      Row(1, cdcMetadataRow(deleteSeq = None, upsertSeq = None))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+        // into the CDC metadata column.
+        sequencing = F.lit(0L),
+        storedAsScdType = ScdType.Type1
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    checkAnswer(
+      df = processor.applyTombstonesToMicrobatch(microbatch, auxiliary),
+      expectedAnswer = Row(1, "kept-upsert", Row(null, 5L))
+    )
+  }
+
+  test("applyTombstonesToMicrobatch is unaffected by  stale tombstones in auxiliary table") {
+    // SCD1's tombstone-merge invariant guarantees at most one tombstone per key in the
+    // auxiliary, but if multiple ever coexist for the same key, the left-anti semantics drop
+    // the microbatch row whenever *any* matching tombstone has a strictly greater
+    // deleteSequence.
+    val microbatch = microbatchOf(applyTombstonesToMicrobatchTestMicrobatchSchema)(
+      Row(1, "stale-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(8)))
+    )
+    // Two tombstones on key=1: one stale (deleteSeq=5, doesn't dominate the microbatch row's
+    // effective seq of 8), one fresh (deleteSeq=10, dominates). The fresh one alone is enough
+    // to drop the microbatch row.
+    val auxiliary = microbatchOf(applyTombstonesToMicrobatchTestAuxiliarySchema)(
+      Row(1, cdcMetadataRow(deleteSeq = Some(5), upsertSeq = None)),
+      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+        // into the CDC metadata column.
+        sequencing = F.lit(0L),
+        storedAsScdType = ScdType.Type1
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
+    assert(result.collect().isEmpty)
+  }
+
+  test("applyTombstonesToMicrobatch ignores the aux row's upsertSequence even when it is set") {
+    // SCD1's tombstone-merge invariant guarantees aux rows always have a null upsertSequence
+    // (by definition, an aux row is an unswallowed tombstone). But if a corrupt aux row ever
+    // has both fields set, only its deleteSequence is read by the join condition; the
+    // upsertSequence is never inspected, so the row continues to behave as a pure tombstone.
+    val microbatch = microbatchOf(applyTombstonesToMicrobatchTestMicrobatchSchema)(
+      Row(1, "stale-upsert", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(5)))
+    )
+    // Aux row with both fields populated; only deleteSeq=10 drives the tombstone-drop decision.
+    val auxiliary = microbatchOf(applyTombstonesToMicrobatchTestAuxiliarySchema)(
+      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = Some(20)))
+    )
+
+    val processor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        // Sequencing is irrelevant for applyTombstonesToMicrobatch; it is already encoded
+        // into the CDC metadata column.
+        sequencing = F.lit(0L),
+        storedAsScdType = ScdType.Type1
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val result = processor.applyTombstonesToMicrobatch(microbatch, auxiliary)
+    assert(result.collect().isEmpty)
+  }
 }
