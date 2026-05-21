@@ -410,6 +410,8 @@ object ShuffleExchangeExec {
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
       case h: NullAwareHashPartitioning =>
+        // Non-NULL keys must produce the same partition id as HashPartitioning.partitionIdExpression
+        // so opted-in HashShuffleSpec and NullAwareHashShuffleSpec inputs stay aligned.
         val joinKeyProjection = UnsafeProjection.create(h.expressions, outputAttributes)
         val boundJoinKeys = h.expressions.zipWithIndex.map { case (expr, index) =>
           BoundReference(index, expr.dataType, expr.nullable)

@@ -2090,18 +2090,21 @@ class AdaptiveQueryExecSuite
           |ON CAST(value AS INT) = b
         """.stripMargin)
 
-      def checkRepartitionOptimization(optimizeDefaultRepartition: Boolean): Unit = {
+      def checkRepartitionOptimization(
+          df: Dataset[Row],
+          useNullAwarePartitioning: Boolean): Unit = {
+        val optimizeDefaultRepartition = !useNullAwarePartitioning
         withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
           // Repartition with no partition num specified.
           checkBHJ(df.repartition($"b"),
             optimizeOutRepartition = optimizeDefaultRepartition,
-            probeSideLocalRead = true,
-            probeSideCoalescedRead = false)
+            probeSideLocalRead = useNullAwarePartitioning,
+            probeSideCoalescedRead = !useNullAwarePartitioning)
 
           // Repartition with default partition num (5 in test env) specified.
           checkBHJ(df.repartition(5, $"b"),
             optimizeOutRepartition = optimizeDefaultRepartition,
-            probeSideLocalRead = true,
+            probeSideLocalRead = useNullAwarePartitioning,
             probeSideCoalescedRead = false)
 
           // Repartition with non-default partition num specified.
@@ -2126,13 +2129,13 @@ class AdaptiveQueryExecSuite
           // Repartition with no partition num specified.
           checkSMJ(df.repartition($"b"),
             optimizeOutRepartition = optimizeDefaultRepartition,
-            optimizeSkewJoin = true,
-            coalescedRead = false)
+            optimizeSkewJoin = useNullAwarePartitioning,
+            coalescedRead = !useNullAwarePartitioning)
 
           // Repartition with default partition num (5 in test env) specified.
           checkSMJ(df.repartition(5, $"b"),
             optimizeOutRepartition = optimizeDefaultRepartition,
-            optimizeSkewJoin = true,
+            optimizeSkewJoin = useNullAwarePartitioning,
             coalescedRead = false)
 
           // Repartition with non-default partition num specified.
@@ -2145,10 +2148,22 @@ class AdaptiveQueryExecSuite
         }
       }
 
-      checkRepartitionOptimization(optimizeDefaultRepartition = true)
+      checkRepartitionOptimization(df, useNullAwarePartitioning = false)
       withSQLConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
         // Null-aware join output partitioning is not equivalent to ordinary hash repartitioning.
-        checkRepartitionOptimization(optimizeDefaultRepartition = false)
+        val nullablePreservedSideDf = sql(
+          """
+            |SELECT * FROM (
+            |  SELECT * FROM testData WHERE key = 1
+            |)
+            |RIGHT OUTER JOIN (
+            |  SELECT a, b FROM testData2
+            |  UNION ALL
+            |  SELECT CAST(NULL AS INT) AS a, CAST(NULL AS INT) AS b
+            |)
+            |ON CAST(value AS INT) = b
+          """.stripMargin)
+        checkRepartitionOptimization(nullablePreservedSideDf, useNullAwarePartitioning = true)
       }
     }
   }
