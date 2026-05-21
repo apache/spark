@@ -648,6 +648,7 @@ spark.sql.hive.metastorePartitionPruningFastFallback
 spark.sql.hive.metastorePartitionPruningInSetThreshold
 spark.sql.hive.tablePropertyLengthThreshold
 spark.sql.hive.thriftServer.async
+spark.sql.hive.thriftServer.http.sniHostCheckEnabled
 spark.sql.hive.thriftServer.singleSession
 spark.sql.hive.useDelegateForSymlinkTextInputFormat
 spark.sql.hive.version
