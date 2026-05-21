@@ -38,10 +38,10 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-class AddArtifactsHandlerSuite extends SharedSparkSession with ResourceHelper {
+class AddArtifactsHandlerSuite extends SharedClassicSparkSession with ResourceHelper {
 
   private val CHUNK_SIZE: Int = 32 * 1024
 
