@@ -897,4 +897,39 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       expectedAnswer = Row(1, "u-100", Row(null, 10L))
     )
   }
+
+  test("projectTargetColumnsOntoMicrobatch resolves columnSelection case-insensitively " +
+    "when SQLConf.CASE_SENSITIVE=false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val batch = microbatchOf(microbatchWithCdcMetadataSchema)(
+        Row(1, "alice", 30, Row(null, 10L))
+      )
+
+      val processor = Scd1BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type1,
+          // User columns intentionally use a different case than the schema (id, age).
+          columnSelection = Some(
+            ColumnSelection.IncludeColumns(
+              Seq(UnqualifiedColumnName("ID"), UnqualifiedColumnName("AGE"))
+            )
+          )
+        ),
+        resolvedSequencingType = LongType
+      )
+
+      val result = processor.projectTargetColumnsOntoMicrobatch(batch)
+
+      // Output column names follow the microbatch schema's casing, not the casing in the user's
+      // columnSelection. The CDC metadata column is appended last as always.
+      assert(result.schema.fieldNames.toSeq ==
+        Seq("id", "age", Scd1BatchProcessor.cdcMetadataColName))
+      checkAnswer(
+        df = result,
+        expectedAnswer = Row(1, 30, Row(null, 10L))
+      )
+    }
+  }
 }
