@@ -2685,27 +2685,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
-        if runner_conf.assign_cols_by_name:
-            expected_cols_and_types = {
-                col.name: to_arrow_type(
-                    col.dataType,
-                    timezone="UTC",
-                    prefers_large_types=runner_conf.use_large_var_types,
-                )
-                for col in return_type.fields
-            }
-        else:
-            expected_cols_and_types = [
-                (
-                    col.name,
-                    to_arrow_type(
-                        col.dataType,
-                        timezone="UTC",
-                        prefers_large_types=runner_conf.use_large_var_types,
-                    ),
-                )
-                for col in return_type.fields
-            ]
+        arrow_return_schema = pa.schema(list(arrow_return_type))
 
         key_offsets = parsed_offsets[0][0]
         value_offsets = parsed_offsets[0][1]
@@ -2741,17 +2721,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     result = grouped_udf(key, value_table)
 
                 verify_return_type(result, pa.Table)
-                verify_arrow_result(
-                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                # Verify types (and reorder by name when configured).
+                result = ArrowBatchTransformer.enforce_schema(
+                    result,
+                    arrow_return_schema,
+                    arrow_cast=False,
+                    reorder_by_name=runner_conf.assign_cols_by_name,
                 )
 
-                # Reorder columns if needed and wrap into struct
                 for batch in result.to_batches():
-                    if runner_conf.assign_cols_by_name:
-                        batch = pa.RecordBatch.from_arrays(
-                            [batch.column(field.name) for field in arrow_return_type],
-                            names=[field.name for field in arrow_return_type],
-                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
         # profiling is not supported for UDF
@@ -2770,27 +2748,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
-        if runner_conf.assign_cols_by_name:
-            expected_cols_and_types = {
-                col.name: to_arrow_type(
-                    col.dataType,
-                    timezone="UTC",
-                    prefers_large_types=runner_conf.use_large_var_types,
-                )
-                for col in return_type.fields
-            }
-        else:
-            expected_cols_and_types = [
-                (
-                    col.name,
-                    to_arrow_type(
-                        col.dataType,
-                        timezone="UTC",
-                        prefers_large_types=runner_conf.use_large_var_types,
-                    ),
-                )
-                for col in return_type.fields
-            ]
+        arrow_return_schema = pa.schema(list(arrow_return_type))
 
         key_offsets = parsed_offsets[0][0]
         value_offsets = parsed_offsets[0][1]
@@ -2824,16 +2782,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     key = tuple(c[0] for c in keys.columns)
                     result = grouped_udf(key, value_batches)
 
-                # Verify, reorder, and wrap each output batch
+                # Verify (and reorder by name when configured) each output batch
                 for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
-                    verify_arrow_result(
-                        batch, runner_conf.assign_cols_by_name, expected_cols_and_types
+                    batch = ArrowBatchTransformer.enforce_schema(
+                        batch,
+                        arrow_return_schema,
+                        arrow_cast=False,
+                        reorder_by_name=runner_conf.assign_cols_by_name,
                     )
-                    if runner_conf.assign_cols_by_name:
-                        batch = pa.RecordBatch.from_arrays(
-                            [batch.column(field.name) for field in arrow_return_type],
-                            names=[field.name for field in arrow_return_type],
-                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
                 # Drain remaining input batches to maintain stream position
@@ -2998,32 +2954,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        # Pre-compute expected column names/types for strict result validation.
-        # Cogrouped map has a strict contract: missing, extra, or type-mismatched
-        # columns must raise; no silent coercion.
-        if runner_conf.assign_cols_by_name:
-            expected_cols_and_types = {
-                col.name: to_arrow_type(
-                    col.dataType,
-                    timezone="UTC",
-                    prefers_large_types=runner_conf.use_large_var_types,
-                )
-                for col in return_type.fields
-            }
-            reorder_names = [col.name for col in return_type.fields]
-        else:
-            expected_cols_and_types = [
-                (
-                    col.name,
-                    to_arrow_type(
-                        col.dataType,
-                        timezone="UTC",
-                        prefers_large_types=runner_conf.use_large_var_types,
-                    ),
-                )
-                for col in return_type.fields
-            ]
-            reorder_names = None
+        arrow_return_type = to_arrow_type(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+        )
+        arrow_return_schema = pa.schema(list(arrow_return_type))
 
         select_columns = ArrowBatchTransformer.select_columns
         left_key_cols, left_val_cols = parsed_offsets[0]
@@ -3051,17 +2985,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     result = cogrouped_udf(key, left_values, right_values)
 
                 verify_return_type(result, pa.Table)
-                verify_arrow_result(
-                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                # Verify types (and reorder by name when configured).
+                result = ArrowBatchTransformer.enforce_schema(
+                    result,
+                    arrow_return_schema,
+                    arrow_cast=False,
+                    reorder_by_name=runner_conf.assign_cols_by_name,
                 )
 
                 for batch in result.to_batches():
-                    if reorder_names is not None:
-                        # Names and types already validated equal; pure reorder, no cast.
-                        batch = pa.RecordBatch.from_arrays(
-                            [batch.column(name) for name in reorder_names],
-                            names=reorder_names,
-                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
         # profiling is not supported for UDF
