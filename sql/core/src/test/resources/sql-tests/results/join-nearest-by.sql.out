@@ -92,6 +92,16 @@ struct<user_id:int,product:string>
 
 -- !query
 SELECT u.user_id, p.product
+FROM users u INNER JOIN (SELECT * FROM products WHERE false) p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore)
+-- !query schema
+struct<user_id:int,product:string>
+-- !query output
+
+
+
+-- !query
+SELECT u.user_id, p.product
 FROM users u INNER JOIN products p
   APPROX NEAREST 1 BY DISTANCE abs(u.score - p.pscore)
 -- !query schema
@@ -286,12 +296,12 @@ AdaptiveSparkPlan isFinalPlan=false
                   +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_max_by(named_struct(product, product#x, pscore, pscore#x), __ranking__#x, 1, false, 0, 0)])
                      +- Sort [__qid#x ASC NULLS FIRST], false, 0
                         +- Project [user_id#x, __qid#x, product#x, pscore#x, (rand(0) + cast(pscore#x as double)) AS __ranking__#x]
-                           +- BroadcastNestedLoopJoin BuildRight, LeftOuter
-                              :- Project [col1#x AS user_id#x, uuid(Some(x)) AS __qid#x]
-                              :  +- LocalTableScan [col1#x, col2#x]
-                              +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
-                                 +- Project [col1#x AS product#x, col2#x AS pscore#x]
-                                    +- LocalTableScan [col1#x, col2#x]
+                           +- BroadcastNestedLoopJoin BuildLeft, Inner
+                              :- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
+                              :  +- Project [col1#x AS user_id#x, uuid(Some(x)) AS __qid#x]
+                              :     +- LocalTableScan [col1#x, col2#x]
+                              +- Project [col1#x AS product#x, col2#x AS pscore#x]
+                                 +- LocalTableScan [col1#x, col2#x]
 
 
 -- !query
@@ -313,7 +323,7 @@ AdaptiveSparkPlan isFinalPlan=false
                +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
                   +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
                      +- Sort [__qid#x ASC NULLS FIRST], false, 0
-                        +- BroadcastNestedLoopJoin BuildRight, LeftOuter
+                        +- BroadcastNestedLoopJoin BuildRight, Inner
                            :- Filter (user_id#x > 1)
                            :  +- Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]
                            :     +- LocalTableScan [col1#x, col2#x]
@@ -342,7 +352,7 @@ AdaptiveSparkPlan isFinalPlan=false
                   +- Exchange hashpartitioning(__qid#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
                      +- SortAggregate(key=[__qid#x], functions=[partial_first(user_id#x, false), partial_min_by(named_struct(product, product#x, pscore, pscore#x), abs((score#x - pscore#x)), 2, true, 0, 0)])
                         +- Sort [__qid#x ASC NULLS FIRST], false, 0
-                           +- BroadcastNestedLoopJoin BuildRight, LeftOuter
+                           +- BroadcastNestedLoopJoin BuildRight, Inner
                               :- Project [col1#x AS user_id#x, col2#x AS score#x, uuid(Some(x)) AS __qid#x]
                               :  +- LocalTableScan [col1#x, col2#x]
                               +- BroadcastExchange IdentityBroadcastMode, [plan_id=x]
