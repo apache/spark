@@ -33,12 +33,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <ul>
  *   <li>{@code _change_type} (STRING) — the kind of change: {@code insert}, {@code delete},
  *       {@code update_preimage}, or {@code update_postimage}</li>
- *   <li>{@code _commit_version} — the commit version containing this change. Must be of
- *       an atomic orderable type (e.g. {@code LongType}, {@code StringType},
- *       {@code IntegerType}, {@code TimestampType}); complex types
- *       ({@code ArrayType}, {@code MapType}, {@code StructType}) are rejected.
- *       Spark post-processing sorts rows of a given row identity by this column to
- *       determine the first and last events</li>
+ *   <li>{@code _commit_version} — the commit version containing this change. Must be
+ *       either {@code LongType} or {@code StringType}; all other types are rejected.
+ *       The column's natural ordering (numeric for {@code LongType}, lexicographic for
+ *       {@code StringType}) must match commit order, because the netChanges
+ *       post-processing path sorts rows of a given row identity by this column to
+ *       determine the first and last events.</li>
  *   <li>{@code _commit_timestamp} (TIMESTAMP) -- the timestamp of the commit. All rows
  *       belonging to a single {@code _commit_version} must share the same
  *       {@code _commit_timestamp}. For streaming reads with post-processing enabled,
@@ -71,10 +71,39 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * </ul>
  * <p>
  * Streaming reads support carry-over removal, update detection, and net change
- * computation. Net change collapses are kept in the state store keyed by row identity;
- * row identities only touched in the latest observed commit are held back until either a
- * later commit (with strictly greater `_commit_timestamp`) advances the global watermark
- * past them, or the source terminates.
+ * computation. Two streaming-specific behaviors to be aware of:
+ * <ul>
+ *   <li><b>Output is buffered until the watermark advances past the commit.</b>
+ *       When a micro-batch ingests a commit, that commit's output rows are
+ *       buffered in state and not emitted in the same batch. They are emitted
+ *       by a later micro-batch -- whichever one advances the watermark past
+ *       the commit's {@code _commit_timestamp}. The last commit's output is
+ *       emitted when the source terminates.</li>
+ *   <li><b>netChanges only merges changes that are buffered together.</b>
+ *       When each row identity appears in at most one commit within any
+ *       buffered window, the streaming output is the same as
+ *       {@code computeUpdates}. Cross-commit merging only happens when
+ *       several commits touch the same row before the earliest one's output
+ *       has been released. For full-range collapse, use a batch read.</li>
+ * </ul>
+ * <p>
+ * <b>Pushdown contract.</b> When any post-processing pass applies (carry-over
+ * removal, update detection, or netChanges), Spark only pushes predicates
+ * that reference {@code _commit_version}, {@code _commit_timestamp}, or
+ * columns named by {@link #rowId()} to the connector's
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownFilters} /
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownV2Filters}.
+ * Predicates on {@code _change_type}, the {@link #rowVersion()} column, or
+ * non-rowId data columns are kept above the scan: pushing them would drop
+ * one half of a delete/insert pair within a row-identity group and silently
+ * break post-processing. Catalyst's pushdown rules enforce this via the
+ * rewrite operators, so connectors do not need to code the restriction
+ * themselves -- but must not bypass it via connector-specific options. When
+ * no post-processing pass applies, Spark does not impose any CDC-specific
+ * predicate-pushdown restriction.
+ * {@link org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns}
+ * (column pruning) is unrestricted in either case: Spark's pruning already
+ * respects what the rewrite operators reference.
  *
  * @since 4.2.0
  */

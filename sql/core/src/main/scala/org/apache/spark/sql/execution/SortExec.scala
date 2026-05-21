@@ -154,9 +154,12 @@ case class SortExec(
       forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
+    // Pass `partitionIndex` as a parameter so bare references in the child's
+    // produce resolve to the local, not the protected superclass field.
+    // Required when `addNewFunction` spills this helper to a nested class.
     val addToSorterFuncName = ctx.addNewFunction(addToSorter,
       s"""
-        | private void $addToSorter() throws java.io.IOException {
+        | private void $addToSorter(int partitionIndex) throws java.io.IOException {
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
         | }
       """.stripMargin.trim)
@@ -169,7 +172,7 @@ case class SortExec(
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   $addToSorterFuncName();
+       |   $addToSorterFuncName(partitionIndex);
        |   $sortedIterator = $sorterVariable.sort();
        |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());

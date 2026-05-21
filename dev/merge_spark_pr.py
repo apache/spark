@@ -21,6 +21,18 @@
 # Spark.
 #   usage: ./merge_spark_pr.py    (see config env vars below)
 #
+# Rolling integration branches branch-M.x (e.g. branch-4.x; later branch-5.x after 5.0.0)
+# absorb work for the next minors on major M. Maintenance branches branch-M.N are cut from
+# branch-M.x. Cherry-pick prompts sort by semver via semver_branch_rank (branch-M.x before branch-M.N).
+#
+# Fix Version defaults when resolving JIRA aim for the minimal set of versions that tells users
+# which Spark releases will contain the commit, leveraging the Upstream-First backporting policy
+# (cherry-picks flow master -> branch-M.x -> branch-M.N). master contributes the greatest
+# unreleased N.0.0, but is omitted when any branch-M.x is in the merge set (a cherry-pick to
+# branch-M.x has already landed on master). Each branch-M.x contributes that major's greatest
+# unreleased minor.0, but is omitted when a sibling branch-M.N contributes M.N.0 (M.N.0 still
+# unreleased means branch-M.N is still a subset of branch-M.x). Patch merges on branch-M.N use
+# unreleased versions starting with M.N.
 # This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
@@ -75,6 +87,232 @@ JIRA_API_BASE = "https://issues.apache.org/jira"
 BRANCH_PREFIX = "PR_TOOL"
 
 
+def semver_branch_rank(name):
+    """
+    Sort key for maintenance branches: higher merges / cherry-picks first.
+
+    Goals:
+      - Numeric Spark branches branch-M.N sort by (M, minor), not lexicographically
+        (branch-4.11 is newer than branch-4.2).
+      - Rolling integration branches branch-M.x rank before branch-M.N for the same M so they are
+        suggested first among targets on major M.
+
+    >>> semver_branch_rank("branch-5.x") > semver_branch_rank("branch-5.0") > semver_branch_rank("branch-4.11")
+    True
+    >>> semver_branch_rank("branch-5.x") > semver_branch_rank("branch-5.2")
+    True
+    >>> semver_branch_rank("branch-4.x") > semver_branch_rank("branch-4.2")
+    True
+    >>> semver_branch_rank("branch-4.2") > semver_branch_rank("branch-4.11")
+    False
+    """
+    integration = re.match(r"^branch-(\d+)\.x$", name)
+    if integration:
+        return int(integration.group(1)), float("inf")
+    matched = re.match(r"^branch-(\d+)\.(\d+)$", name)
+    if matched:
+        return int(matched.group(1)), int(matched.group(2))
+    return (-1, -1)
+
+
+def _semver_max_version(names):
+    """
+    Highest dotted version by numeric semver (SPARK Fix Version naming).
+
+    >>> _semver_max_version(["4.2.1", "4.3.0"])
+    '4.3.0'
+    >>> _semver_max_version(["5.0.0", "6.0.0"])
+    '6.0.0'
+    """
+    if not names:
+        return None
+    parsed = [(tuple(int(p) for p in n.split(".")), n) for n in names]
+    return max(parsed)[1]
+
+
+def _integration_major_from_branch(branch_name):
+    """If branch-name is branch-M.x, return integer M; else None."""
+    m = re.match(r"^branch-(\d+)\.x$", branch_name)
+    return int(m.group(1)) if m else None
+
+
+def _first_integration_major(merge_branches):
+    """First branch-M.x on merge_branches in list order (deterministic).
+
+    >>> _first_integration_major(["master", "branch-5.x", "branch-4.x"])
+    5
+    >>> _first_integration_major(["master", "branch-4.2"]) is None
+    True
+    """
+    for ref in merge_branches:
+        mj = _integration_major_from_branch(ref)
+        if mj is not None:
+            return mj
+    return None
+
+
+def _sort_version_names_lex_desc(names):
+    """Same ordering as resolve_jira_issue (reverse lexicographic on Fix Version name)."""
+    return sorted(names, reverse=True)
+
+
+def compute_merge_default_fix_versions(merge_branches, unreleased_version_names):
+    """
+    Build suggested SPARK Fix Version names from merged git refs (no JIRA I/O).
+
+    unreleased_version_names: x.y.z strings marked unreleased in JIRA.
+
+    Returns (default_version_names, warning_messages).
+
+    The output is the minimal set of Fix Versions that tells users which Spark releases will
+    contain the commit, leveraging the Upstream-First backporting policy (cherry-picks flow
+    master -> branch-M.x -> branch-M.N):
+      - master contributes the greatest unreleased N.0.0;
+      - branch-M.x with master contributes that major's greatest unreleased minor.0;
+      - branch-M.N contributes its greatest unreleased M.N.patch.
+    Redundant entries are then suppressed: master's N.0.0 is dropped when any branch-M.x is in
+    the merge set (a cherry-pick to branch-M.x has already landed on master); branch-M.x's
+    minor.0 is dropped when a branch-M.N for the same major contributes M.N.0 (M.N.0 still
+    unreleased means branch-M.N is still a subset of branch-M.x).
+
+    >>> compute_merge_default_fix_versions(["master"], ["4.3.0", "5.0.0", "6.0.0"])[0]
+    ['6.0.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x"], ["6.0.0", "5.0.0", "4.3.0", "4.2.1"])[0]
+    ['4.3.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-5.x"],
+    ...     ["7.0.0", "6.0.0", "5.2.0", "5.1.2", "5.1.1", "5.0.1"],
+    ... )[0]
+    ['5.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-3.5"],
+    ...     ["6.0.0", "4.1.0", "3.5.2", "3.5.1", "3.5.0"],
+    ... )[0]
+    ['6.0.0', '3.5.2']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-1.1", "branch-1.0"],
+    ...     ["2.0.0", "1.1.1", "1.1.0", "1.0.1", "1.0.0"],
+    ... )[0]
+    ['2.0.0', '1.1.1', '1.0.1']
+
+    >>> d, w = compute_merge_default_fix_versions(["master"], ["4.3.0", "4.2.1"])
+    >>> (d, len(w), "N.0.0" in w[0])
+    ([], 1, True)
+
+    >>> compute_merge_default_fix_versions(["branch-4.x"], ["4.3.0"])
+    ([], [])
+
+    >>> d, w = compute_merge_default_fix_versions(["branch-4.99"], ["4.3.0"])
+    >>> d == [] and len(w) == 1 and "branch-4.99" in w[0]
+    True
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-5.x", "branch-4.x"], ["5.2.0", "4.3.0", "6.0.0"]
+    ... )[0]
+    ['5.2.0', '4.3.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.x"], ["6.0.0", "4.3.0"]
+    ... )[0]
+    ['4.3.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.0"]
+    ... )[0]
+    ['4.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.1"]
+    ... )[0]
+    ['4.3.0', '4.2.1']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.2"], ["5.0.0", "4.2.0"]
+    ... )[0]
+    ['5.0.0', '4.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.2"], ["5.0.0", "4.2.1"]
+    ... )[0]
+    ['5.0.0', '4.2.1']
+    """
+    names = _sort_version_names_lex_desc(list(unreleased_version_names))
+    has_integration_branch = any(
+        _integration_major_from_branch(b) is not None for b in merge_branches
+    )
+
+    # Collect each merge branch's candidate Fix Version. We track (branch, version) so we can
+    # later suppress redundant entries (master, branch-M.x) based on which branches contributed.
+    contributions = []
+    warnings = []
+
+    for b in merge_branches:
+        if b == "master":
+            majors = [n for n in names if re.match(r"^\d+\.0\.0$", n)]
+            chosen = _semver_max_version(majors)
+            if chosen:
+                contributions.append((b, chosen))
+            else:
+                warnings.append(
+                    "No unreleased N.0.0 Fix Version found in JIRA for master; "
+                    "enter comma-separated Fix Version(s) manually when prompted."
+                )
+            continue
+        line_major = _integration_major_from_branch(b)
+        if line_major is not None:
+            if "master" not in merge_branches:
+                continue
+            line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
+            chosen = _semver_max_version(line_versions)
+            if chosen:
+                contributions.append((b, chosen))
+            else:
+                warnings.append(
+                    "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
+                    "for branch-%s.x + master merge; enter version(s) manually when prompted."
+                    % (line_major, line_major)
+                )
+            continue
+        prefix = b.replace("branch-", "")
+        found_versions = [n for n in names if n.startswith(prefix)]
+        chosen = _semver_max_version(found_versions)
+        if chosen:
+            contributions.append((b, chosen))
+        else:
+            warnings.append(
+                "Target version for %s is not found on JIRA, it may be archived or "
+                "not created. Skipping it." % b
+            )
+
+    # Majors where a release branch's M.N.0 contribution makes the sibling branch-M.x's
+    # minor.0 redundant: an unreleased M.N.0 means branch-M.N has not diverged from branch-M.x
+    # yet, so anything that's on branch-M.N is also on branch-M.x.
+    suppress_integration_majors = set()
+    for b, v in contributions:
+        if b == "master" or _integration_major_from_branch(b) is not None:
+            continue
+        m = re.match(r"^(\d+)\.\d+\.0$", v)
+        if m:
+            suppress_integration_majors.add(int(m.group(1)))
+
+    def keep(item):
+        b, _ = item
+        if b == "master":
+            return not has_integration_branch
+        major = _integration_major_from_branch(b)
+        if major is not None:
+            return major not in suppress_integration_majors
+        return True
+
+    filtered = [item for item in contributions if keep(item)]
+    return list(dict.fromkeys(v for _, v in filtered)), warnings
+
+
 def print_error(msg):
     print("\033[91m%s\033[0m" % msg)
 
@@ -105,6 +343,21 @@ def get_json(url):
         else:
             print_error("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
+
+
+def close_pr(pr_num):
+    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"state": "closed"}).encode("utf-8")
+    request = Request(url, data=data, method="PATCH")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
 
 
 def fail(msg):
@@ -309,40 +562,13 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     ]
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
 
-    default_fix_versions = []
-    for b in merge_branches:
-        if b == "master":
-            default_fix_versions.append(versions[0].name)
-        else:
-            found = False
-            found_versions = []
-            for v in versions:
-                if v.name.startswith(b.replace("branch-", "")):
-                    found_versions.append(v.name)
-                    found = True
-            if found:
-                # There might be several unreleased versions for specific branches
-                # For example, assuming
-                # versions = ['4.0.0', '3.5.1', '3.5.0', '3.4.2', '3.3.4', '3.3.3']
-                # we've found two candidates for branch-3.5, we pick the last/smallest one
-                default_fix_versions.append(found_versions[-1])
-            else:
-                print_error(
-                    "Target version for %s is not found on JIRA, it may be archived or "
-                    "not created. Skipping it." % b
-                )
-
-    for v in default_fix_versions:
-        # Handles the case where we have forked a release branch but not yet made the release.
-        # In this case, if the PR is committed to the master branch and the release branch, we
-        # only consider the release branch to be the fix version. E.g. it is not valid to have
-        # both 1.1.0 and 1.0.0 as fix versions.
-        major, minor, patch = v.split(".")
-        if patch == "0":
-            previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
-            if previous in default_fix_versions:
-                default_fix_versions = list(filter(lambda x: x != v, default_fix_versions))
-    default_fix_versions = ",".join(default_fix_versions)
+    unreleased_names = [v.name for v in versions]
+    default_fix_list, infer_warnings = compute_merge_default_fix_versions(
+        merge_branches, unreleased_names
+    )
+    for w in infer_warnings:
+        print_error(w)
+    default_fix_versions = ",".join(default_fix_list)
 
     available_versions = set(list(map(lambda v: v.name, versions)))
     while True:
@@ -605,8 +831,7 @@ def main():
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
-    # Assumes branch names can be sorted lexicographically
-    branch_names = sorted(branch_names, reverse=True)
+    branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
     branch_iter = iter(branch_names)
 
     if len(sys.argv) == 1:
@@ -742,6 +967,14 @@ def main():
     merged_refs = [target_ref]
 
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
+
+    # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
+    # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
+    # PRs), GitHub leaves the PR open, so close it explicitly through the API.
+    pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+    if pr_state != "closed":
+        print("PR #%s is still open after push; closing it explicitly." % pr_num)
+        close_pr(pr_num)
 
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":

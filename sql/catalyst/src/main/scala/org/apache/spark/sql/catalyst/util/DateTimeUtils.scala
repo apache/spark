@@ -486,6 +486,47 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Fast path for truncating to MINUTE/HOUR/DAY using offset arithmetic instead of
+   * allocating a `ZonedDateTime` per row. The offset is resolved once for `micros`; the
+   * truncation then runs as `floorMod` in local time. We fall back to [[truncToUnit]] when
+   * the offset at the candidate truncated instant differs from the offset at `micros`,
+   * which means the truncation crosses a DST/historical transition and the local-time
+   * alignment we computed is no longer valid (see SPARK-30766/30857). The check is
+   * skipped for fixed-offset zones. Sub-minute offsets (e.g. America/Los_Angeles LMT
+   * -07:52:58, see SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu
+   * +05:45) are handled correctly by this path because the offset is applied as part of
+   * the arithmetic; no offset-alignment guard is needed.
+   *
+   * `unitMicros` must evenly divide `MICROS_PER_DAY`; otherwise wall-clock unit
+   * boundaries do not align to multiples of `unitMicros` in the shifted-local frame
+   * and the `floorMod` truncation is unsafe.
+   */
+  private def truncToUnitFast(
+      micros: Long, zoneId: ZoneId, unitMicros: Long, fallbackUnit: ChronoUnit): Long = {
+    val rules = zoneId.getRules
+    val originalSec = Math.floorDiv(micros, MICROS_PER_SECOND)
+    val originalOffsetSec =
+      rules.getOffset(Instant.ofEpochSecond(originalSec)).getTotalSeconds.toLong
+    val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
+    try {
+      val local = Math.addExact(micros, offsetMicros)
+      val truncatedLocal = local - Math.floorMod(local, unitMicros)
+      val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
+      if (!rules.isFixedOffset) {
+        val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
+        val candidateOffsetSec =
+          rules.getOffset(Instant.ofEpochSecond(candidateSec)).getTotalSeconds.toLong
+        if (candidateOffsetSec != originalOffsetSec) {
+          return truncToUnit(micros, zoneId, fallbackUnit)
+        }
+      }
+      candidate
+    } catch {
+      case _: ArithmeticException => truncToUnit(micros, zoneId, fallbackUnit)
+    }
+  }
+
+  /**
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
@@ -499,9 +540,12 @@ object DateTimeUtils extends SparkDateTimeUtils {
         micros - Math.floorMod(micros, MICROS_PER_MILLIS)
       case TRUNC_TO_SECOND =>
         micros - Math.floorMod(micros, MICROS_PER_SECOND)
-      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
-      case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
-      case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
+      case TRUNC_TO_MINUTE =>
+        truncToUnitFast(micros, zoneId, MICROS_PER_MINUTE, ChronoUnit.MINUTES)
+      case TRUNC_TO_HOUR =>
+        truncToUnitFast(micros, zoneId, MICROS_PER_HOUR, ChronoUnit.HOURS)
+      case TRUNC_TO_DAY =>
+        truncToUnitFast(micros, zoneId, MICROS_PER_DAY, ChronoUnit.DAYS)
       case _ => // Try to truncate date levels
         val dDays = microsToDays(micros, zoneId)
         daysToMicros(truncDate(dDays, level), zoneId)

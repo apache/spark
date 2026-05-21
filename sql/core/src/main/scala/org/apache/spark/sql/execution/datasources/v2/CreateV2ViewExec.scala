@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvoluti
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, TableCatalog, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
@@ -57,6 +57,21 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   protected lazy val fullNameParts: Seq[String] =
     (catalog.name() +: identifier.asMultipartIdentifier).toSeq
 
+  /** Optional structured dependency list to stamp on the built `ViewInfo`. */
+  protected def viewDependencies: Option[DependencyList] = None
+
+  /** Optional view sub-kind to stamp on `PROP_TABLE_TYPE`; defaults to `VIEW` when `None`. */
+  protected def tableType: Option[String] = None
+
+  /**
+   * Whether `aliasPlan` should preserve any column metadata the analyzer attached to the
+   * source plan when re-aliasing user-specified column names. Plain views default to `false`
+   * (matches v1 `CreateViewCommand`); metric views override to `true` so the analyzer-injected
+   * `metric_view.type` / `metric_view.expr` keys survive a `CREATE VIEW <ident>(c1, c2, ...)`
+   * column rename (matches v1 `ViewHelper.prepareTable(isMetricView = true)`).
+   */
+  protected def retainColumnMetadata: Boolean = false
+
   override def output: Seq[Attribute] = Seq.empty
 
   protected def buildViewInfo(): ViewInfo = {
@@ -79,7 +94,9 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
     SchemaUtils.checkIndeterminateCollationInSchema(query.schema)
 
     val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, query, userSpecifiedColumns).schema, session.sessionState.conf)
+      aliasPlan(session, query, userSpecifiedColumns, retainMetadata = retainColumnMetadata)
+        .schema,
+      session.sessionState.conf)
     SchemaUtils.checkColumnNameDuplication(
       aliasedSchema.fieldNames.toImmutableArraySeq, session.sessionState.conf.resolver)
 
@@ -106,6 +123,8 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
     owner.foreach(builder.withOwner)
     comment.foreach(builder.withComment)
     collation.foreach(builder.withCollation)
+    viewDependencies.foreach(builder.withViewDependencies)
+    tableType.foreach(builder.withTableType)
     builder.build()
   }
 
@@ -114,27 +133,19 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 }
 
 /**
- * Physical plan node for CREATE VIEW on a v2 [[ViewCatalog]]. Dispatches to
- * [[ViewCatalog#createView]] for plain CREATE, [[ViewCatalog#createOrReplaceView]] for
- * `OR REPLACE`, and short-circuits `IF NOT EXISTS` early via [[ViewCatalog#viewExists]] so
- * the view body isn't analyzed when the view already exists.
+ * Shared CREATE-side `run()` for v2 view-create execs. Adds the `IF NOT EXISTS` short-circuit
+ * via [[ViewCatalog#viewExists]], dispatches `OR REPLACE` to
+ * [[ViewCatalog#createOrReplaceView]] vs. plain CREATE to [[ViewCatalog#createView]], and
+ * decodes `ViewAlreadyExistsException` into the dedicated cross-type collision error when a
+ * non-view table sits at the ident in a mixed catalog. Subclasses supply only the
+ * view-shape-specific fields (`allowExisting`, `replace`, plus the [[V2ViewPreparation]] hooks
+ * such as `viewDependencies` / `tableType`) and inherit `run()` unchanged.
  */
-case class CreateV2ViewExec(
-    catalog: ViewCatalog,
-    identifier: Identifier,
-    userSpecifiedColumns: Seq[(String, Option[String])],
-    comment: Option[String],
-    collation: Option[String],
-    userProperties: Map[String, String],
-    originalText: String,
-    query: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    viewSchemaMode: ViewSchemaMode) extends V2ViewPreparation {
+private[v2] trait V2CreateViewPreparation extends V2ViewPreparation {
+  def allowExisting: Boolean
+  def replace: Boolean
 
-  override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
-
-  override protected def run(): Seq[InternalRow] = {
+  override final protected def run(): Seq[InternalRow] = {
     // CREATE VIEW IF NOT EXISTS: short-circuit before `buildViewInfo` if a view already sits
     // at the ident -- avoids `aliasPlan` / config capture for the common no-op case (matches
     // v1 `CreateViewCommand.run`). The mixed-catalog "table at ident" no-op is handled in the
@@ -172,4 +183,26 @@ case class CreateV2ViewExec(
     }
     Seq.empty
   }
+}
+
+/**
+ * Physical plan node for CREATE VIEW on a v2 [[ViewCatalog]]. Inherits the create-side
+ * `run()` (viewExists short-circuit + OR REPLACE + cross-type decoding) from
+ * [[V2CreateViewPreparation]]; only supplies the case-class fields and stamps the current
+ * user as owner.
+ */
+case class CreateV2ViewExec(
+    catalog: ViewCatalog,
+    identifier: Identifier,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    collation: Option[String],
+    userProperties: Map[String, String],
+    originalText: String,
+    query: LogicalPlan,
+    allowExisting: Boolean,
+    replace: Boolean,
+    viewSchemaMode: ViewSchemaMode) extends V2CreateViewPreparation {
+
+  override def owner: Option[String] = Some(CurrentUserContext.getCurrentUser)
 }

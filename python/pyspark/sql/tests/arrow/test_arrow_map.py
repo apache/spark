@@ -114,19 +114,27 @@ class MapInArrowTestsMixin:
         def bad_iter_elem(_):
             return iter([1])
 
+        def list_not_iter(_):
+            # Iterable but not an Iterator: violates the Iterator[pa.RecordBatch] contract.
+            return [pa.RecordBatch.from_pandas(pd.DataFrame({"a": [0]}))]
+
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is int",
+            r"iterator of pyarrow\.RecordBatch.*\bint\b",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
-            "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is iterator of int",
+            r"iterator of pyarrow\.RecordBatch.*iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
+
+        with self.assertRaisesRegex(
+            PythonException,
+            r"iterator of pyarrow\.RecordBatch.*\blist\b",
+        ):
+            (self.spark.range(10, numPartitions=3).mapInArrow(list_not_iter, "a int").count())
 
     def test_empty_iterator(self):
         def empty_iter(_):

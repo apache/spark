@@ -74,7 +74,7 @@ name: Release Apache Spark
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 7 */2 * *'
   workflow_dispatch:
     inputs:
       branch:

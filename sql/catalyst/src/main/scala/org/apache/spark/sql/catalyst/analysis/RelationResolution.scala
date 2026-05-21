@@ -24,7 +24,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
   CatalogTable,
-  CatalogTableType,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
@@ -131,25 +130,9 @@ class RelationResolution(
    * When PATH is disabled, legacy resolution rules apply.
    */
   private def relationResolutionEntries: Seq[Seq[String]] = {
-    val pinned = AnalysisContext.get.resolutionPathEntries
-    if (pinned.isDefined && conf.pathEnabled) {
-      pinned.get
-    } else {
-      val expandCatalog = catalogManager.currentCatalog.name
-      val expandNamespace = catalogManager.currentNamespace.toSeq
-      val (pathCatalog, pathNamespace) =
-        if (isResolvingView) {
-          val p = AnalysisContext.get.catalogAndNamespace
-          (p.head, p.tail.toSeq)
-        } else {
-          (expandCatalog, expandNamespace)
-        }
-      catalogManager.sqlResolutionPathEntries(
-        pathCatalog,
-        pathNamespace,
-        expandCatalog,
-        expandNamespace)
-    }
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
   }
 
   /**
@@ -398,7 +381,7 @@ class RelationResolution(
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
       if (isStreaming) {
-        if (v1Table.tableType == CatalogTableType.VIEW) {
+        if (v1Table.isViewLike) {
           throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
             ident.quoted
           )
@@ -477,7 +460,11 @@ class RelationResolution(
   }
 
   def resolveReference(ref: V2TableReference): LogicalPlan = {
-    val relation = getOrLoadRelation(ref)
+    val relation = if (ref.context.cacheable) {
+      getOrLoadRelation(ref)
+    } else {
+      loadRelation(ref)
+    }
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
     cloneWithPlanId(relation, planId)
   }

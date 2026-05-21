@@ -520,6 +520,7 @@ Window Functions
 .. autosummary::
     :toctree: api/
 
+    counter_diff
     cume_dist
     dense_rank
     lag
@@ -586,6 +587,7 @@ VARIANT Functions
 .. autosummary::
     :toctree: api/
 
+    is_valid_variant
     is_variant_null
     parse_json
     schema_of_variant

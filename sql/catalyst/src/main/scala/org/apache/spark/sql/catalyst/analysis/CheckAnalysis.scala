@@ -459,6 +459,23 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
         )
 
+      case c: CacheTableAsSelect if c.tempViewName.resolved =>
+        // The parser builds `tempViewName` as either a `Literal[StringType]` (for direct
+        // identifiers and `IDENTIFIER('literal')`) or an `ExpressionWithUnresolvedIdentifier`
+        // that resolves to such a Literal. Validate the post-analysis shape so any future
+        // construction path that violates the invariant fails loudly here, not deep inside
+        // execution via `tempViewNameString`. The `resolved` guard ensures that when the
+        // IDENTIFIER expression itself failed to resolve (e.g. `IDENTIFIER(<unresolved-col>)`),
+        // we fall through to the catch-all `LogicalPlan` case so the user sees the proper
+        // `UNRESOLVED_COLUMN` error rather than an internal error.
+        c.tempViewName match {
+          case Literal(value, _: StringType) if value != null => // OK
+          case other =>
+            throw SparkException.internalError(
+              "CacheTableAsSelect.tempViewName must be a non-null string literal after " +
+                s"analysis, but got: ${other.sql}")
+        }
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           case hof: HigherOrderFunction if hof.arguments.exists {
@@ -656,6 +673,39 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
                 messageParameters = Map.empty)
             }
+
+          // Reject streaming inputs early. The optimizer rewrite is built around an
+          // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
+          // identifier (`__qid`). That shape doesn't compose cleanly with structured-streaming
+          // semantics: a stateful aggregate keyed by a freshly-generated identifier accumulates
+          // state indefinitely (every batch creates new keys, old keys never match again) and a
+          // cross-product against a streaming right side has no bounded state model today.
+          // Failing at analysis time is clearer than letting either fail at runtime. Streaming
+          // support is tracked as a follow-up; resolving it likely comes from a different
+          // grouping strategy or a dedicated physical operator.
+          case j: NearestByJoin if j.isStreaming =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+              messageParameters = Map.empty)
+
+          case j: NearestByJoin if !conf.crossJoinEnabled =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+              messageParameters = Map.empty)
+
+          case j @ NearestByJoin(_, _, _, _, _, rankingExpression, _)
+              if !RowOrdering.isOrderable(rankingExpression.dataType) =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.NON_ORDERABLE_RANKING_EXPRESSION",
+              messageParameters = Map(
+                "expression" -> toSQLExpr(rankingExpression),
+                "type" -> toSQLType(rankingExpression.dataType)))
+
+          case j @ NearestByJoin(_, _, _, false, _, rankingExpression, _)
+              if !rankingExpression.deterministic =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
+              messageParameters = Map("expression" -> toSQLExpr(rankingExpression)))
 
           case a: Aggregate =>
             a.groupingExpressions.foreach(
@@ -939,6 +989,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
+
+          case j: NearestByJoin if !j.duplicateResolved =>
             val conflictingAttributes =
               j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
             throw SparkException.internalError(

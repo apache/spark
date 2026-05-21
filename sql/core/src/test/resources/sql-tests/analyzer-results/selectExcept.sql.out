@@ -507,7 +507,7 @@ Project [c1#x, c2#x, c3#x, c4#x, c5#x]
 +- LateralJoin lateral-subquery#x [c1#x && c2#x && c3#x && c4#x && c5#x], Inner
    :  +- SubqueryAlias T
    :     +- Project [c1#x AS c1#x, c2#x AS c2#x, c3#x AS c3#x, c4#x AS c4#x, c5#x AS c5#x]
-   :        +- Project [outer(c1#x), outer(c2#x), outer(c3#x), outer(c4#x), outer(c5#x)]
+   :        +- Project [outer(c1#x) AS c1#x, outer(c2#x) AS c2#x, outer(c3#x) AS c3#x, outer(c4#x) AS c4#x, outer(c5#x) AS c5#x]
    :           +- OneRowRelation
    +- SubqueryAlias v1
       +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])

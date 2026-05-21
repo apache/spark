@@ -122,6 +122,15 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_THRIFT_SERVER_HTTP_SNI_HOST_CHECK_ENABLED =
+    buildStaticConf("spark.sql.hive.thriftServer.http.sniHostCheckEnabled")
+      .internal()
+      .doc("Whether to enable Jetty's SNI host check on the ThriftHttpCLIService HTTPS " +
+        "connector. Set to false to restore the behavior prior to SPARK-45522 (Jetty 10+).")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
       "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +

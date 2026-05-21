@@ -21,7 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Stable}
 import org.apache.spark.broadcast.Broadcast
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.broadcast.Broadcast
  *
  * @param value Hadoop configuration
  */
-@DeveloperApi @Unstable
+@DeveloperApi @Stable
 class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.defaultWriteObject()

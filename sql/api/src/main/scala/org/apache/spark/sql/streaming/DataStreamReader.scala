@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders}
 import org.apache.spark.sql.types.StructType
 
@@ -103,6 +103,17 @@ abstract class DataStreamReader {
     this.options(options.asScala)
     this
   }
+
+  /**
+   * Specifies a name for the streaming source. This name is used to identify the source in
+   * checkpoint metadata and enables stable checkpoint locations for source evolution.
+   *
+   * @param sourceName
+   *   the name to assign to this streaming source
+   * @since 4.2.0
+   */
+  @Experimental
+  def name(sourceName: String): this.type
 
   /**
    * Loads input data stream in as a `DataFrame`, for data streams that don't require a path (e.g.

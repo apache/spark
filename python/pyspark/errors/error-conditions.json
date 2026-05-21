@@ -602,6 +602,34 @@
       "Multiple pipeline spec files found in the directory `<dir_path>`. Please remove one or choose a particular one with the --spec argument."
     ]
   },
+  "NEAREST_BY_JOIN": {
+    "message": [
+      "Invalid nearest-by join."
+    ],
+    "sub_class": {
+      "NUM_RESULTS_OUT_OF_RANGE": {
+        "message": [
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
+        ]
+      },
+      "UNSUPPORTED_DIRECTION": {
+        "message": [
+          "Unsupported nearest-by join direction '<direction>'. Supported nearest-by join directions include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_JOIN_TYPE": {
+        "message": [
+          "Unsupported nearest-by join type <joinType>. Supported types: <supported>."
+        ]
+      },
+      "UNSUPPORTED_MODE": {
+        "message": [
+          "Unsupported nearest-by join mode '<mode>'. Supported modes include: <supported>."
+        ]
+      }
+    },
+    "sqlState": "42604"
+  },
   "NEGATIVE_VALUE": {
     "message": [
       "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
@@ -955,6 +983,12 @@
   "ST_INVALID_CRS_VALUE" : {
     "message" : [
       "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_ENDIANNESS_VALUE" : {
+    "message" : [
+      "Endianness '<endianness>' must be either 'NDR' (little-endian) or 'XDR' (big-endian)."
     ],
     "sqlState" : "22023"
   },

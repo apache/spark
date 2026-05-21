@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedIdentifier, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedIdentifier, UnresolvedRelation, V2TableReference}
 import org.apache.spark.sql.catalyst.plans.logical.TransactionalWrite
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -173,6 +173,11 @@ private[sql] trait LookupCatalog extends Logging {
           Some(c)
         case UnresolvedIdentifier(CatalogAndIdentifier(c: TransactionalCatalogPlugin, _), _) =>
           Some(c)
+        case ref: V2TableReference =>
+          ref.catalog match {
+            case c: TransactionalCatalogPlugin => Some(c)
+            case _ => None
+          }
         case _ =>
           None
       }

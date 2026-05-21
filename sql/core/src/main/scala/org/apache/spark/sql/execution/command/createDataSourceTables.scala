@@ -50,7 +50,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
   extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(table.tableType != CatalogTableType.VIEW)
+    assert(!table.isViewLike)
     assert(table.provider.isDefined)
 
     val sessionState = sparkSession.sessionState
@@ -151,7 +151,7 @@ case class CreateDataSourceTableAsSelectCommand(
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(table.tableType != CatalogTableType.VIEW)
+    assert(!table.isViewLike)
     assert(table.provider.isDefined)
 
     val sessionState = sparkSession.sessionState

@@ -24,7 +24,7 @@ import java.util
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
@@ -70,10 +70,7 @@ import org.apache.spark.util.Utils
  * compatibility.
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite
-    extends SparkFunSuite
-    with SharedSparkSession
-    with ResourceHelper {
+class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper {
 
   private val cleanOrphanedGoldenFiles: Boolean =
     System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
@@ -135,17 +132,16 @@ class ProtoToParsedPlanTestSuite
 
   /**
    * Isolated from [[SharedSparkSession]] so PATH / session path settings do not affect catalog.
+   * Cloned from the test session's conf so all sparkConf overrides (ANSI, alias config, etc.) are
+   * preserved automatically; only the genuine isolation knob is overridden explicitly.
    */
-  private val analyzerIsolationConf: SQLConf = {
-    val c = new SQLConf()
+  private lazy val analyzerIsolationConf: SQLConf = {
+    val c = spark.sessionState.conf.clone()
     c.setConf(SQLConf.PATH_ENABLED, false)
-    // Match [[sparkConf]]: a bare SQLConf defaults ANSI_ENABLED to true, which changes
-    // function signatures in analyzed plans (e.g. make_date) vs golden files.
-    c.setConf(SQLConf.ANSI_ENABLED, false)
     c
   }
 
-  private val analyzer = {
+  private lazy val analyzer = {
     val inMemoryCatalog = new InMemoryChangelogCatalog
     // Name must match [[CatalogManager.SESSION_CATALOG_NAME]]: path entries use
     // [[currentCatalog.name()]], then resolution calls [[catalogManager.catalog]] on that segment.

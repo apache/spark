@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+
+from pyspark.sql.tests.test_nearest_by_join import NearestByJoinTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.tests.test_utils import UtilsTestsMixin
 
 
-class ConnectUtilsTests(UtilsTestsMixin, ReusedConnectTestCase):
+class NearestByJoinParityTests(NearestByJoinTestsMixin, ReusedConnectTestCase):
     pass
 
 

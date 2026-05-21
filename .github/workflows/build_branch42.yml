@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.10)"
+name: "Build (branch-4.2, Scala 2.13, Hadoop 3, JDK 17)"
 
 on:
   schedule:
-    - cron: '0 17 * * *'
+    - cron: '0 13 */2 * *'
   workflow_dispatch:
 
 jobs:
@@ -33,15 +33,21 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 17
-      branch: master
+      branch: branch-4.2
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-310",
-          "PYTHON_TO_TEST": "python3.10"
+          "SCALA_PROFILE": "scala2.13",
+          "PYSPARK_IMAGE_TO_TEST": "",
+          "PYTHON_TO_TEST": "",
+          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-free:23.7-slim"
         }
       jobs: >-
         {
-          "pyspark": "true",
-          "pyspark-pandas": "true"
+          "build": "true",
+          "sparkr": "true",
+          "tpcds-1g": "true",
+          "docker-integration-tests": "true",
+          "k8s-integration-tests": "true",
+          "lint" : "true"
         }

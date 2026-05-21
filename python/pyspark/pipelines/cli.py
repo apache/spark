@@ -253,6 +253,7 @@ def register_definitions(
                         assert module_spec.loader is not None, (
                             f"Module spec has no loader for {file}"
                         )
+                        module.__dict__["spark"] = spark
                         with add_pipeline_analysis_context(
                             spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
                         ):

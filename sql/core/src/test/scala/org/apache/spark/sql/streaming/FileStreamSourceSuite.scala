@@ -45,14 +45,12 @@ import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSink, FileStrea
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-abstract class FileStreamSourceTest
-  extends StreamTest with SharedSparkSession with PrivateMethodTester {
+abstract class FileStreamSourceTest extends StreamTest with PrivateMethodTester {
 
   import testImplicits._
 

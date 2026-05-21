@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
@@ -349,11 +349,17 @@ class MicroBatchExecution(
     sink match {
       case s: SupportsWrite =>
         val relation = plan.catalogAndIdent match {
-          // When the catalog is transactional, instead of eagerly creating the relation, we
-          // delegate resolution to ResolveRelations. This allows to resolve the relation against
-          // a transactional catalo which keeps track of all tables loaded within the transaction.
+          // For transactional catalog sinks, capture the baseline table metadata in a
+          // V2TableReference so that each micro-batch re-resolves the table through the
+          // transaction-aware catalog and fails if the table has been replaced or schema changed.
           case Some((catalog: TransactionalCatalogPlugin, ident)) =>
-            UnresolvedRelation(catalog.name +: ident.namespace().toSeq :+ ident.name())
+            // Re-resolve through the streaming session's catalog manager so the reference
+            // captures the streaming-session-specific catalog instance. TransactionalWrite
+            // detection and transaction begin must happen in the streaming session context.
+            val catalogManager = sparkSessionForStream.sessionState.catalogManager
+            val streamingCatalog = catalogManager.catalog(catalog.name)
+            val v2Relation = DataSourceV2Relation.create(s, Some(streamingCatalog), Some(ident))
+            V2TableReference.createForWriteTarget(v2Relation)
           case Some((catalog, ident)) =>
             DataSourceV2Relation.create(s, Some(catalog), Some(ident))
           case None => DataSourceV2Relation.create(s, None, None)

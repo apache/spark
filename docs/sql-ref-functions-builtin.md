@@ -126,3 +126,8 @@ license: |
 {% include_api_gen generated-variant-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-variant-funcs-examples.html %}
+
+### Geospatial ST Functions
+{% include_api_gen generated-st-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-st-funcs-examples.html %}

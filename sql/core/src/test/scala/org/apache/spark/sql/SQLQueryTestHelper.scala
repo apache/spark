@@ -50,6 +50,7 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
       .replaceAll("plan_id=\\d+", "plan_id=x")
+      .replaceAll("uuid\\(Some\\(-?\\d+\\)\\)", "uuid(Some(x))")
       .replaceAll(
         s"Location.*$clsName/",
         s"Location $notIncludedMsg/{warehouse_dir}/")
@@ -178,7 +179,8 @@ trait SQLQueryTestHelper extends SQLConfHelper with Logging {
         val msg = Option(e.getMessageParameters.get("traceback")).getOrElse("")
         (emptySchema, Seq(e.getClass.getName, msg))
       case e: SparkThrowable with Throwable if e.getCondition != null =>
-        (emptySchema, Seq(e.getClass.getName, getMessage(e, format)))
+        (emptySchema, Seq(e.getClass.getName,
+          getMessage(e, format).replaceAll("uuid\\(Some\\(-?\\d+\\)\\)", "uuid(Some(x))")))
       case a: AnalysisException =>
         // Do not output the logical plan tree which contains expression IDs.
         // Also implement a crude way of masking expression IDs in the error message
