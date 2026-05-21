@@ -37,9 +37,6 @@ trait CommandSuiteBase extends SharedSparkSession {
   def nonPartitionCatalog: String = "non_part_test_catalog" // Catalog for non-partitioned tables
   def atomicCatalog: String = "atomic_test_catalog" // Catalog with StagingTableCatalog support
   def rowLevelOPCatalog: String = "row_level_op_catalog"
-  // A test catalog whose createNamespace validates before checking existence; used to
-  // exercise CreateNamespaceExec's IF NOT EXISTS recovery path.
-  def validatingCatalog: String = "validating_test_catalog"
   def defaultUsing: String = "USING _" // The clause is used in creating v2 tables under testing
 
   // V2 catalogs created and used especially for testing
@@ -50,8 +47,6 @@ trait CommandSuiteBase extends SharedSparkSession {
     .set(s"spark.sql.catalog.fun_$catalog", classOf[InMemoryCatalog].getName)
     .set(s"spark.sql.catalog.$rowLevelOPCatalog",
       classOf[InMemoryRowLevelOperationTableCatalog].getName)
-    .set(s"spark.sql.catalog.$validatingCatalog",
-      classOf[ValidatingInMemoryTableCatalog].getName)
 
   def checkLocation(
       t: String,

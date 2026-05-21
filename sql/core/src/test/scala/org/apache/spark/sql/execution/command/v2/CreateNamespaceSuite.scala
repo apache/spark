@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.connector.catalog.ValidatingInMemoryTableCatalog
 import org.apache.spark.sql.execution.command
 
 /**
@@ -24,6 +26,14 @@ import org.apache.spark.sql.execution.command
  */
 class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def namespace: String = "ns1.ns2"
+
+  // A test catalog whose createNamespace validates before checking existence; used to
+  // exercise CreateNamespaceExec's IF NOT EXISTS recovery path.
+  private val validatingCatalog: String = "validating_test_catalog"
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(s"spark.sql.catalog.$validatingCatalog",
+      classOf[ValidatingInMemoryTableCatalog].getName)
 
   test("SPARK-55250: IF NOT EXISTS is a no-op on pre-existing namespace even when the " +
     "catalog raises a non-NamespaceAlreadyExistsException error") {
