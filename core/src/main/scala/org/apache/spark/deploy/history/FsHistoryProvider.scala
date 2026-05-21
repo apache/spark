@@ -349,12 +349,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       } catch {
         case f: FileNotFoundException =>
-          var msg = s"Log directory specified does not exist: $dir"
-          if (dir == DEFAULT_LOG_DIR) {
-            msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
+          if (FileSystem.mkdirs(dirFs, path, EventLogFileWriter.LOG_FOLDER_PERMISSIONS)) {
+            logInfo(log"Created missing history log directory ${MDC(HISTORY_DIR, dir)}.")
+            true
+          } else {
+            var msg = s"Log directory specified does not exist: $dir"
+            if (dir == DEFAULT_LOG_DIR) {
+              msg += " Did you configure the correct one through spark.history.fs.logDirectory?"
+            }
+            logWarning(msg)
+            false
           }
-          logWarning(msg)
-          false
       }
     }
     require(validDirs.nonEmpty,
