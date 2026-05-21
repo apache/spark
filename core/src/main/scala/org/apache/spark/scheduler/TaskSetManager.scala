@@ -1051,10 +1051,17 @@ private[spark] class TaskSetManager(
         logWarning(failureReason)
         None
 
-      case e: ExecutorLostFailure if !e.exitCausedByApp =>
-        logInfo(log"${MDC(TASK_NAME, taskName(tid))} failed because while it was being computed," +
-          log" its executor exited for a reason unrelated to the task. " +
-          log"Not counting this failure towards the maximum number of failures for the task.")
+      case e: ExecutorLostFailure =>
+        if (!e.exitCausedByApp
+          // if the query is running in real time mode, any failure should be considered
+          // a task failure
+          && !ConcurrentStageDAGScheduler.isConcurrentStagesEnabled(taskSet.properties)) {
+          logInfo(log"${MDC(TASK_NAME, taskName(tid))} failed because while it was being " +
+            log"computed, its executor exited for a reason unrelated to the task. " +
+            log"Not counting this failure towards the maximum number of failures for the task.")
+        } else {
+          logWarning(failureReason)
+        }
         None
 
       case _: TaskFailedReason =>  // TaskResultLost and others
@@ -1069,7 +1076,12 @@ private[spark] class TaskSetManager(
     emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
       accumUpdates, metricPeaks)
 
-    if (!isZombie && reason.countTowardsTaskFailures) {
+    val countTowardsTaskFailures = reason.countTowardsTaskFailures ||
+      // if the query is running in real time mode, any failures should contribute the task failures
+      // so that the query can restart.
+      ConcurrentStageDAGScheduler.isConcurrentStagesEnabled(taskSet.properties)
+
+    if (!isZombie && countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReasonString))

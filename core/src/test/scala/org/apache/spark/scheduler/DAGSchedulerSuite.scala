@@ -180,7 +180,8 @@ class DummyScheduledFuture(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
+abstract class DAGSchedulerSuiteBase extends SparkFunSuite with TempLocalSparkContext
+  with TimeLimits {
 
   import DAGSchedulerSuite._
 
@@ -368,18 +369,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  class MyDAGScheduler(
-      sc: SparkContext,
-      taskScheduler: TaskScheduler,
-      listenerBus: LiveListenerBus,
-      mapOutputTracker: MapOutputTrackerMaster,
-      blockManagerMaster: BlockManagerMaster,
-      env: SparkEnv,
-      clock: Clock = new SystemClock(),
-      shuffleMergeFinalize: Boolean = true,
-      shuffleMergeRegister: Boolean = true
-  ) extends DAGScheduler(
-      sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
+  trait TestDAGScheduler extends DAGScheduler {
+
+    protected def getShuffleMergeFinalize: Boolean = true
+    protected def getShuffleMergeRegister: Boolean = true
+
     /**
      * Schedules shuffle merge finalize.
      */
@@ -387,7 +381,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         shuffleMapStage: ShuffleMapStage,
         delay: Long,
         registerMergeResults: Boolean = true): Unit = {
-      if (shuffleMergeRegister && registerMergeResults) {
+      if (getShuffleMergeRegister && registerMergeResults) {
         for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
           val mergeStatuses = Seq((part, makeMergeStatus("",
             shuffleMapStage.shuffleDep.shuffleMergeId)))
@@ -403,7 +397,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
       shuffleMapStage.shuffleDep.setFinalizeTask(
           new DummyScheduledFuture(delay, registerMergeResults))
-      if (shuffleMergeFinalize) {
+      if (getShuffleMergeFinalize) {
         handleShuffleMergeFinalized(shuffleMapStage, shuffleMapStage.shuffleDep.shuffleMergeId)
       }
     }
@@ -415,6 +409,24 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         if (partitions.isEmpty) runningTaskInfos.remove(event.task.stageId)
       }
     }
+  }
+
+  class MyDAGScheduler(
+      sc: SparkContext,
+      taskScheduler: TaskScheduler,
+      listenerBus: LiveListenerBus,
+      mapOutputTracker: MapOutputTrackerMaster,
+      blockManagerMaster: BlockManagerMaster,
+      env: SparkEnv,
+      clock: Clock = new SystemClock(),
+      shuffleMergeFinalize: Boolean = true,
+      shuffleMergeRegister: Boolean = true
+  ) extends DAGScheduler(
+      sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock)
+    with TestDAGScheduler {
+
+    override def getShuffleMergeFinalize: Boolean = shuffleMergeFinalize
+    override def getShuffleMergeRegister: Boolean = shuffleMergeRegister
   }
 
   override def beforeEach(): Unit = {
@@ -446,15 +458,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       new MyMapOutputTrackerMaster(sc.getConf, broadcastManager))
     blockManagerMaster = spy[MyBlockManagerMaster](new MyBlockManagerMaster(sc.getConf))
     doNothing().when(blockManagerMaster).updateRDDBlockVisibility(any(), any())
-    scheduler = spy[MyDAGScheduler](new MyDAGScheduler(
+    scheduler = spy(createInitialScheduler(sc))
+
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+  }
+
+  protected def createInitialScheduler(sc: SparkContext): DAGScheduler = {
+    new MyDAGScheduler(
       sc,
       taskScheduler,
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env))
-
-    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+      sc.env)
   }
 
   override def afterEach(): Unit = {
@@ -527,7 +543,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   /** Submits a job to the scheduler and returns the job id. */
-  private def submit(
+  protected def submit(
       rdd: RDD[_],
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
@@ -1168,7 +1184,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * @param hostNames - Host on which each task in the task set is executed. In case no hostNames
    *                  are provided, the tasks will progressively complete on hostA, hostB, etc.
    */
-  private def completeShuffleMapStageSuccessfully(
+  protected def completeShuffleMapStageSuccessfully(
       stageId: Int,
       attemptIdx: Int,
       numShufflePartitions: Int,
@@ -1219,7 +1235,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
    */
-  private def completeNextResultStageWithSuccess(
+  protected def completeNextResultStageWithSuccess(
       stageId: Int,
       attemptIdx: Int,
       partitionToResult: Int => Int = _ => 42): Unit = {
@@ -6107,7 +6123,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  private def assertDataStructuresEmpty(): Unit = {
+  protected def assertDataStructuresEmpty(): Unit = {
     assert(scheduler.activeJobs.isEmpty)
     assert(scheduler.failedStages.isEmpty)
     assert(scheduler.jobIdToActiveJob.isEmpty)
@@ -6149,6 +6165,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, metricPeaks, taskInfo)
   }
 }
+
+class DAGSchedulerSuite extends DAGSchedulerSuiteBase
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
   override def conf: SparkConf = super.conf.set(LEGACY_ABORT_STAGE_AFTER_KILL_TASKS, false)

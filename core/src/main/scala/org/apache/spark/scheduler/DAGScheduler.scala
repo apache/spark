@@ -1272,6 +1272,14 @@ private[spark] class DAGScheduler(
     }
   }
 
+  private[scheduler] def isRunningStage(stage: Stage): Boolean = {
+    runningStages.contains(stage)
+  }
+
+  private[scheduler] def getStage(stageId: Int): Option[Stage] = {
+    stageIdToStage.get(stageId)
+  }
+
   /** Finds the earliest-created active job that needs the stage */
   // TODO: Probably should actually find among the active jobs that need this
   // stage the one with the highest priority (highest-priority pool, earliest created).
@@ -1385,6 +1393,8 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
   }
 
+  protected def onFinalStageCreated(finalStage: Stage, properties: Properties): Unit = {}
+
   private def getQueryExecutionIdFromProperties(properties: Properties): Option[Long] = {
     try {
       Option(properties)
@@ -1420,6 +1430,7 @@ private[spark] class DAGScheduler(
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
+      onFinalStageCreated(finalStage, properties)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
@@ -1497,6 +1508,7 @@ private[spark] class DAGScheduler(
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = getOrCreateShuffleMapStage(dependency, jobId)
+      onFinalStageCreated(finalStage, properties)
     } catch {
       case e: Exception =>
         logWarning(log"Creating new stage failed due to exception - job: ${MDC(JOB_ID, jobId)}", e)
@@ -1537,7 +1549,7 @@ private[spark] class DAGScheduler(
   }
 
   /** Submits stage, but first recursively submits any missing parents. */
-  private def submitStage(stage: Stage): Unit = {
+  protected def submitStage(stage: Stage): Unit = {
     val jobId = activeJobForStage(stage)
     if (jobId.isDefined) {
       logDebug(s"submitStage($stage (name=${stage.name};" +
@@ -1567,6 +1579,27 @@ private[spark] class DAGScheduler(
     } else {
       abortStage(stage, "No active job for stage " + stage.id, None)
     }
+  }
+
+  /**
+   * An experimental API to submit child stages even while the parents are running. This is only
+   * used in [[ConcurrentStageDAGScheduler]]. It defined here since it depends two private APIs in
+   * this class (namely submitMissingTasks() and activeJobForStage()).
+   */
+  protected def submitConcurrentStage(stage: Stage): Unit = {
+    assert(waitingStages.contains(stage))
+    activeJobForStage(stage) match {
+      case Some(job) =>
+        waitingStages -= stage
+        submitMissingTasks(stage, job)
+      case None => // Not expected.
+        new IllegalStateException(s"No active job for stage $stage")
+    }
+  }
+
+  protected def postSchedulerEvent(event: DAGSchedulerEvent): Unit = {
+    // Currently only used in [[ConcurrentStageDAGScheduler]].
+    eventProcessLoop.post(event)
   }
 
   /**
@@ -3253,7 +3286,7 @@ private[spark] class DAGScheduler(
   /**
    * Marks a stage as finished and removes it from the list of running stages.
    */
-  private def markStageAsFinished(
+  protected def markStageAsFinished(
       stage: Stage,
       errorMessage: Option[String] = None,
       willRetry: Boolean = false): Unit = {

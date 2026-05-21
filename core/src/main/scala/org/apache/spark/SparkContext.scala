@@ -600,7 +600,11 @@ class SparkContext(config: SparkConf) extends Logging {
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched
     _taskScheduler = ts
-    _dagScheduler = new DAGScheduler(this)
+    _dagScheduler = conf.get(DAG_SCHEDULER_TYPE) match {
+      case "ConcurrentStageDAGScheduler" =>
+        new ConcurrentStageDAGScheduler(this)
+      case _ => new DAGScheduler(this)
+    }
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     if (_conf.get(EXECUTOR_ALLOW_SYNC_LOG_LEVEL)) {

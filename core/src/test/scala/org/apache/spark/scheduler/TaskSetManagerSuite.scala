@@ -2921,6 +2921,58 @@ class TaskSetManagerSuite
         s"\nCaptured logs:\n${logs.mkString("\n")}")
   }
 
+  /**
+   * Wraps an existing TaskSet with a copy that has the given properties. Used by the
+   * concurrent-stages tests below since `FakeTask.createTaskSet` always sets properties to null.
+   */
+  private def withProperties(taskSet: TaskSet, properties: Properties): TaskSet = {
+    new TaskSet(taskSet.tasks, taskSet.stageId, taskSet.stageAttemptId, taskSet.priority,
+      properties, taskSet.resourceProfileId, taskSet.shuffleId)
+  }
+
+  private def concurrentStagesProperties: Properties = {
+    val props = new Properties()
+    props.setProperty(
+      ConcurrentStageDAGScheduler.CONCURRENT_STAGES_ENABLED_PROPERTY, "true")
+    props
+  }
+
+  test("ExecutorLostFailure counts as task failure when concurrent stages are enabled") {
+    // Otherwise (the default), an executor exit that wasn't "caused by the app" is exempt
+    // from the maxTaskFailures count. For real-time mode that exemption is wrong: an executor
+    // loss is a query failure, and the query should be restarted.
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = withProperties(FakeTask.createTaskSet(1), concurrentStagesProperties)
+    // Concurrent stage execution does not support task retries, so maxFailures = 1.
+    val manager = new TaskSetManager(sched, taskSet, maxTaskFailures = 1)
+
+    val offer = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+    assert(offer.isDefined)
+    manager.handleFailedTask(offer.get.taskId, TaskState.FAILED,
+      ExecutorLostFailure("exec1", exitCausedByApp = false, reason = None))
+
+    assert(sched.taskSetsFailed.contains(taskSet.id),
+      "TaskSet should have been aborted after the single allowed failure")
+    assert(manager.isZombie)
+  }
+
+  test("ExecutorLostFailure is not counted without concurrent stages (regression guard)") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val manager = new TaskSetManager(sched, taskSet, maxTaskFailures = 1)
+
+    val offer = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+    assert(offer.isDefined)
+    manager.handleFailedTask(offer.get.taskId, TaskState.FAILED,
+      ExecutorLostFailure("exec1", exitCausedByApp = false, reason = None))
+
+    assert(!sched.taskSetsFailed.contains(taskSet.id),
+      "Executor loss not caused by app should not count toward task failures by default")
+    assert(!manager.isZombie)
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {

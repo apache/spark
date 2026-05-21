@@ -2752,4 +2752,32 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
   }
 
+  test("maxTaskFailures is overridden to 1 when concurrent stages are enabled") {
+    // Concurrent stage execution does not support task retries — a failure must restart the
+    // streaming query rather than be silently retried against a still-running shuffle. The
+    // scheduler enforces this by capping the TaskSetManager's maxFailures at 1, regardless of
+    // the cluster-wide spark.task.maxFailures.
+    val clusterMaxFailures = 4
+    val taskScheduler = setupScheduler(config.TASK_MAX_FAILURES.key -> clusterMaxFailures.toString)
+    val props = new Properties()
+    props.setProperty(
+      ConcurrentStageDAGScheduler.CONCURRENT_STAGES_ENABLED_PROPERTY, "true")
+    val base = FakeTask.createTaskSet(numTasks = 1)
+    val taskSet = new TaskSet(base.tasks, base.stageId, base.stageAttemptId, base.priority,
+      props, base.resourceProfileId, base.shuffleId)
+
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(
+      taskSet.stageId, taskSet.stageAttemptId).get
+
+    assert(tsm.maxTaskFailures === 1)
+
+    // Regression guard: a regular TaskSet should still get the cluster's maxTaskFailures.
+    val regular = FakeTask.createTaskSet(numTasks = 1, stageId = 1, stageAttemptId = 0)
+    taskScheduler.submitTasks(regular)
+    val regularTsm = taskScheduler.taskSetManagerForAttempt(
+      regular.stageId, regular.stageAttemptId).get
+    assert(regularTsm.maxTaskFailures === clusterMaxFailures)
+  }
+
 }

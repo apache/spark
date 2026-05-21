@@ -890,6 +890,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT" : {
+    "message" : [
+      "The minimum number of free slots required in the cluster is <numTasks>, however, the cluster has only has <numSlots> slots free. Query will stall or fail. Increase cluster size to proceed."
+    ],
+    "sqlState" : "53000"
+  },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
       "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",

@@ -2396,6 +2396,26 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val STREAMING_REALTIME_MODE_SLOTS_CHECK_DISABLED =
+    ConfigBuilder("spark.scheduler.realtimeModeSlotsCheck.disabled")
+      .internal()
+      .doc("For query running in real time mode, disable the check if the number of slots" +
+        " required by all concurrent stages is available before submit the query" )
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DAG_SCHEDULER_TYPE =
+    ConfigBuilder("spark.scheduler.dagSchedulerType")
+      .internal()
+      .doc("The DAGScheduler implementation to use. Set to 'ConcurrentStageDAGScheduler' to " +
+        "enable real-time mode, which runs stages concurrently for low-latency streaming queries.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .version("4.2.0")
+      .stringConf
+      .createWithDefault("DAGScheduler")
+
   private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH =
     ConfigBuilder("spark.scheduler.streaming.idAwareLogging.queryIdLength")
       .doc("Maximum number of characters of the streaming query ID to include " +

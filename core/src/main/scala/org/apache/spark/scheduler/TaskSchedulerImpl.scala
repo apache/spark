@@ -245,8 +245,15 @@ private[spark] class TaskSchedulerImpl(
     logInfo(log"Adding task set " + taskSet.logId +
       log" with ${MDC(LogKeys.NUM_TASKS, tasks.length)} tasks resource profile " +
       log"${MDC(LogKeys.RESOURCE_PROFILE_ID, taskSet.resourceProfileId)}")
+    val maxFailures = if (ConcurrentStageDAGScheduler
+                          .isConcurrentStagesEnabled(taskSet.properties)) {
+      logInfo(s"Task retries are disabled for task set ${taskSet.id} with ${tasks.length} tasks")
+      1 // Concurrent stage execution does not support task retries.
+    } else {
+      maxTaskFailures
+    }
     this.synchronized {
-      val manager = createTaskSetManager(taskSet, maxTaskFailures)
+      val manager = createTaskSetManager(taskSet, maxFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
         taskSetsByStageIdAndAttempt.getOrElseUpdate(stage, new HashMap[Int, TaskSetManager])
