@@ -72,7 +72,7 @@ Usage: $script_name [options]
                      prepended to the runner args
   /etc/sbt/sbtopts   if this file exists, it is prepended to the runner args
   -Dkey=val          pass -Dkey=val directly to the java runtime
-  -J-X               pass option -X directly to the java runtime
+  -J-X               pass option -X directly to the java runtimegit status --short
                      (-J is stripped)
   -S-X               add -X to sbt's scalacOptions (-S is stripped)
   -PmavenProfiles    Enable a maven profile for the build.

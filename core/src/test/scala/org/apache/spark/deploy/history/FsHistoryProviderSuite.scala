@@ -2266,6 +2266,29 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("create missing spark.history.fs.logDirectory automatically") {
+    val missingDir = Utils.createTempDir(namePrefix = "missingHistoryDir")
+    val missingDirPath = missingDir.getAbsolutePath
+    Utils.deleteRecursively(missingDir)
+    assert(!new File(missingDirPath).exists())
+    
+    val conf = createTestConf().set(HISTORY_LOG_DIR, missingDirPath)
+    val provider = new FsHistoryProvider(conf)
+    try {
+      updateAndCheck(provider) { list =>
+        list.size should be(0)
+      }
+      new File(missingDirPath).isDirectory should be(true)
+    } finally {
+      provider.stop()
+      val recreatedDir = new File(missingDirPath)
+      if (recreatedDir.exists()) {
+        Utils.deleteRecursively(recreatedDir)
+      }
+    }
+  }
+
+
   test("SPARK-55864: directory temporarily inaccessible then recovers") {
     val dir2 = Utils.createTempDir(namePrefix = "logDir2")
     try {
