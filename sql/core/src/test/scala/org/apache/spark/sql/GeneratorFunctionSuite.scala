@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StructType}
 
 class GeneratorFunctionSuite extends SharedSparkSession {
   import testImplicits._
@@ -774,7 +774,7 @@ class GeneratorFunctionSuite extends SharedSparkSession {
     val good = df.select(
       transform(col("my_array2"), x => struct(x.as("data"))).as("my_struct")
     )
-    assert(good.schema("my_struct").dataType.asInstanceOf[types.ArrayType]
+    assert(good.schema("my_struct").dataType.asInstanceOf[ArrayType]
       .elementType.asInstanceOf[StructType].fieldNames.toSeq === Seq("data"))
 
     // With explode in same select - aliases should still be preserved
@@ -782,7 +782,7 @@ class GeneratorFunctionSuite extends SharedSparkSession {
       explode(col("my_array")).as("exploded"),
       transform(col("my_array2"), x => struct(x.as("data"))).as("my_struct")
     )
-    assert(result.schema("my_struct").dataType.asInstanceOf[types.ArrayType]
+    assert(result.schema("my_struct").dataType.asInstanceOf[ArrayType]
       .elementType.asInstanceOf[StructType].fieldNames.toSeq === Seq("data"))
 
     // Multiple aliases inside struct
@@ -792,7 +792,7 @@ class GeneratorFunctionSuite extends SharedSparkSession {
         x => struct(x.as("value"), col("id").as("key"))
       ).as("my_struct")
     )
-    val fields2 = result2.schema("my_struct").dataType.asInstanceOf[types.ArrayType]
+    val fields2 = result2.schema("my_struct").dataType.asInstanceOf[ArrayType]
       .elementType.asInstanceOf[StructType].fieldNames.toSeq
     assert(fields2 === Seq("value", "key"))
   }
