@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import java.util.Locale
-
 import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
@@ -669,81 +667,6 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
       processor.extendMicrobatchRowsWithCdcMetadata(batch).schema
     }
     assert(ex.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
-  }
-
-  test("extendMicrobatchRowsWithCdcMetadata rejects a microbatch that already contains the " +
-    "reserved CDC metadata column") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val schema = new StructType()
-        .add("id", IntegerType)
-        .add("seq", LongType)
-        .add(Scd1BatchProcessor.cdcMetadataColName, StringType)
-
-      val batch = microbatchOf(schema)(
-        Row(1, 10L, "user-supplied")
-      )
-
-      val processor = Scd1BatchProcessor(
-        changeArgs = ChangeArgs(
-          keys = Seq(UnqualifiedColumnName("id")),
-          sequencing = F.col("seq"),
-          storedAsScdType = ScdType.Type1
-        ),
-        resolvedSequencingType = LongType
-      )
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          processor.extendMicrobatchRowsWithCdcMetadata(batch)
-        },
-        condition = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
-        sqlState = "42710",
-        parameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.CaseSensitive,
-          "columnName" -> Scd1BatchProcessor.cdcMetadataColName,
-          "schemaName" -> "microbatch",
-          "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
-        )
-      )
-    }
-  }
-
-  test("extendMicrobatchRowsWithCdcMetadata rejects reserved CDC metadata column " +
-    "case-insensitively") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val conflictingColumnName = Scd1BatchProcessor.cdcMetadataColName.toUpperCase(Locale.ROOT)
-      val schema = new StructType()
-        .add("id", IntegerType)
-        .add("seq", LongType)
-        .add(conflictingColumnName, StringType)
-
-      val batch = microbatchOf(schema)(
-        Row(1, 10L, "user-supplied")
-      )
-
-      val processor = Scd1BatchProcessor(
-        changeArgs = ChangeArgs(
-          keys = Seq(UnqualifiedColumnName("id")),
-          sequencing = F.col("seq"),
-          storedAsScdType = ScdType.Type1
-        ),
-        resolvedSequencingType = LongType
-      )
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          processor.extendMicrobatchRowsWithCdcMetadata(batch)
-        },
-        condition = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
-        sqlState = "42710",
-        parameters = Map(
-          "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
-          "columnName" -> conflictingColumnName,
-          "schemaName" -> "microbatch",
-          "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
-        )
-      )
-    }
   }
 
   test("projectTargetColumnsOntoMicrobatch keeps every user column and the CDC metadata column " +

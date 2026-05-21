@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{functions => F, AnalysisException}
+import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -416,9 +416,15 @@ case class Scd1BatchProcessor(
 }
 
 object Scd1BatchProcessor {
-  // Columns prefixed with `__spark_autocdc_` are reserved for internal SDP AutoCDC processing.
-  private[autocdc] val winningRowColName: String = "__spark_autocdc_winning_row"
-  private[autocdc] val cdcMetadataColName: String = "__spark_autocdc_metadata"
+  /**
+   * Reserved column-name prefix for internal SDP AutoCDC processing. Source change-data-feed
+   * dataframes must not contain any columns starting with this prefix; the invariant is
+   * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
+   */
+  private[pipelines] val reservedColumnNamePrefix: String = "__spark_autocdc_"
+
+  private[autocdc] val winningRowColName: String = s"${reservedColumnNamePrefix}winning_row"
+  private[pipelines] val cdcMetadataColName: String = s"${reservedColumnNamePrefix}metadata"
 
   private[autocdc] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[autocdc] val cdcUpsertSequenceFieldName: String = "upsertSequence"
@@ -434,7 +440,7 @@ object Scd1BatchProcessor {
   /**
    * Schema of the CDC metadata struct column for SCD1.
    */
-  private def cdcMetadataColSchema(sequencingType: DataType): StructType =
+  private[pipelines] def cdcMetadataColSchema(sequencingType: DataType): StructType =
     StructType(
       Seq(
         // The sequencing of the event if it represents a delete, null otherwise.

@@ -232,9 +232,15 @@
     ],
     "sqlState" : "42703"
   },
-  "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
+  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
     "message" : [
-      "Using <caseSensitivity> column name comparison, the column `<columnName>` in the <schemaName> schema conflicts with the reserved AutoCDC column name `<reservedColumnName>`. Rename or remove the column."
+      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
     ],
     "sqlState" : "42710"
   },
