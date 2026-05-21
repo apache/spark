@@ -29,7 +29,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
-import org.apache.spark.storage.{RDDBlockId, ShuffleDataBlockId}
+import org.apache.spark.storage.{BlockId, RDDBlockId, ShardBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.Clock
 
 /**
@@ -388,10 +388,12 @@ private[spark] class ExecutorMonitor(
     val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
       UNKNOWN_RESOURCE_PROFILE_ID)
 
+    var shouldRet = true
     // Check if it is a shuffle file, or RDD to pick the correct codepath for update
-    if (!event.blockUpdatedInfo.blockId.isInstanceOf[RDDBlockId]) {
-      if (event.blockUpdatedInfo.blockId.isInstanceOf[ShuffleDataBlockId] &&
-        shuffleTrackingEnabled) {
+    event.blockUpdatedInfo.blockId match {
+      case _: RDDBlockId =>
+        shouldRet = false
+      case ShuffleDataBlockId(shuffleId, _, _) if shuffleTrackingEnabled =>
         /**
          * The executor monitor keeps track of locations of cache and shuffle blocks and this can
          * be used to decide which executor(s) Spark should shutdown first. Since we move shuffle
@@ -399,11 +401,19 @@ private[spark] class ExecutorMonitor(
          * data blocks as index and other blocks blocks do not necessarily mean the entire block
          * has been committed.
          */
-        event.blockUpdatedInfo.blockId match {
-          case ShuffleDataBlockId(shuffleId, _, _) => exec.addShuffle(shuffleId)
-          case _ => // For now we only update on data blocks
+        exec.addShuffle(shuffleId)
+      case sh: ShardBlockId if sh.shardId != -1 =>
+        val storageLevel = event.blockUpdatedInfo.storageLevel
+        if (storageLevel.isValid) {
+          exec.addNonRddCached(sh)
+        } else {
+          exec.removeNonRddCached(sh)
         }
-      }
+        exec.updateTimeout()
+      case _ => // For now we only update on data blocks
+    }
+
+    if (shouldRet) {
       return
     }
 
@@ -461,6 +471,18 @@ private[spark] class ExecutorMonitor(
   }
 
   override def broadcastCleaned(broadcastId: Long): Unit = { }
+
+  override def shardSetCleaned(setId: Long): Unit = {
+    executors.asScala.foreach { case (_, exec) =>
+      val toRemove = exec.nonRddCachedBlocks.collect {
+        case s: ShardBlockId if s.setId == setId => s
+      }
+      if (toRemove.nonEmpty) {
+        toRemove.foreach(exec.removeNonRddCached)
+      }
+    }
+    nextTimeout.set(Long.MinValue)
+  }
 
   override def accumCleaned(accId: Long): Unit = { }
 
@@ -556,6 +578,19 @@ private[spark] class ExecutorMonitor(
     // This should only be used in the event thread.
     private val shuffleIds = if (shuffleTrackingEnabled) new mutable.HashSet[Int]() else null
 
+    val nonRddCachedBlocks = new mutable.HashSet[BlockId]()
+
+    def addNonRddCached(id: BlockId): Unit = {
+      if (nonRddCachedBlocks.add(id) && isIdle) {
+        updateTimeout()
+      }
+    }
+    def removeNonRddCached(id: BlockId): Unit = {
+      if (nonRddCachedBlocks.remove(id) && nonRddCachedBlocks.isEmpty && cachedBlocks.isEmpty) {
+        updateTimeout()
+      }
+    }
+
     def isIdle: Boolean = idleStart >= 0 && !hasActiveShuffle
 
     def updateRunningTasks(delta: Int): Unit = {
@@ -567,7 +602,8 @@ private[spark] class ExecutorMonitor(
     def updateTimeout(): Unit = {
       val oldDeadline = timeoutAt
       val newDeadline = if (idleStart >= 0) {
-        val _cacheTimeout = if (cachedBlocks.nonEmpty) storageTimeoutNs else 0
+        val _cacheTimeout =
+          if (cachedBlocks.nonEmpty || nonRddCachedBlocks.nonEmpty) storageTimeoutNs else 0
         val _shuffleTimeout = if (shuffleIds != null && shuffleIds.nonEmpty) {
           shuffleTimeoutNs
         } else {

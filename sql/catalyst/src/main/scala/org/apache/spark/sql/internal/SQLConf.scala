@@ -7585,6 +7585,35 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DISTRIBUTED_MAP_JOIN_MAX_IN_FLIGHT_NUM =
+    buildConf("spark.sql.execution.distributedMapJoin.maxInFlightNum")
+      .doc("Maximum number of concurrent RPC lookup batches per task on the probe side.")
+      .version("5.0.0")
+      .intConf
+      .createWithDefault(8)
+
+  val DISTRIBUTED_MAP_JOIN_MAX_BATCH_SIZE =
+    buildConf("spark.sql.execution.distributedMapJoin.maxBatchSize")
+      .doc("Maximum number of probe-side keys per RPC lookup batch.")
+      .version("5.0.0")
+      .intConf
+      .createWithDefault(1024)
+
+  val DISTRIBUTED_MAP_JOIN_BLOOM_FILTER_CAPACITY =
+    buildConf("spark.sql.execution.distributedMapJoin.bloomFilterCapacity")
+      .doc("Expected number of distinct keys per shard for the build-side bloom filter. " +
+        "The total bloom filter capacity is this value multiplied by the number of shards.")
+      .version("5.0.0")
+      .longConf
+      .createWithDefault(5L << 20)
+
+  val DISTRIBUTED_MAP_JOIN_EXCHANGE_TIMEOUT =
+    buildConf("spark.sql.execution.distributedMapJoin.exchangeTimeout")
+      .doc("Timeout in seconds for building shard data in distributed map join.")
+      .version("5.0.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString(s"${30 * 60}")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -8161,6 +8190,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def broadcastHashJoinOutputPartitioningExpandLimit: Int =
     getConf(BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT)
+
+  def distributedMapJoinMaxInFlightNum: Int = getConf(DISTRIBUTED_MAP_JOIN_MAX_IN_FLIGHT_NUM)
+
+  def distributedMapJoinMaxBatchSize: Int = getConf(DISTRIBUTED_MAP_JOIN_MAX_BATCH_SIZE)
+
+  def distributedMapJoinExchangeTimeout: Long = getConf(DISTRIBUTED_MAP_JOIN_EXCHANGE_TIMEOUT)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

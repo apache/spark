@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.StringLiteral
+import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, EqualTo, Expression, IntegerLiteral, Literal, ShortLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -98,6 +98,45 @@ object ResolveHints {
     private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean =
       ResolveHints.matchedIdentifier(identInHint, identInQuery, resolver)
 
+    private def createHintInfo(ident: Seq[String], hint: UnresolvedHint): HintInfo = {
+
+      if (DistributedMapJoinStrategy(None, None).hintAliases
+        .map(_.toUpperCase(Locale.ROOT))
+        .contains(hint.name.toUpperCase(Locale.ROOT))) {
+
+        def keyName(e: Expression): Option[String] = e match {
+          case UnresolvedAttribute(parts) => Some(parts.last.toLowerCase(Locale.ROOT))
+          case _ => None
+        }
+        def intValue(e: Expression): Option[Int] = e match {
+          case IntegerLiteral(i) => Some(i)
+          case Literal(i: Int, _) => Some(i)
+          case _ => None
+        }
+
+        val keyOpts = hint.parameters
+          .collectFirst {
+            case uf: UnresolvedFunction if matchedIdentifier(uf.nameParts, ident) =>
+              uf.arguments
+                .collect { case EqualTo(lhs, rhs) =>
+                  for {
+                    k <- keyName(lhs)
+                    v <- intValue(rhs)
+                  } yield k -> v
+                }
+                .flatten
+                .toMap
+          }
+          .getOrElse(Map.empty)
+        HintInfo(strategy =
+          Some(DistributedMapJoinStrategy(
+            keyOpts.get(DistributedMapJoinStrategy.KEY_SHARD_COUNT),
+            keyOpts.get(DistributedMapJoinStrategy.KEY_REPLICA_COUNT))))
+      } else {
+        createHintInfo(hint.name)
+      }
+    }
+
     private def extractIdentifier(r: SubqueryAlias): Seq[String] = {
       r.identifier.qualifier :+ r.identifier.name
     }
@@ -106,7 +145,7 @@ object ResolveHints {
         plan: LogicalPlan,
         relationsInHint: Set[Seq[String]],
         relationsInHintWithMatch: mutable.HashSet[Seq[String]],
-        hintName: String): LogicalPlan = {
+        hint: UnresolvedHint): LogicalPlan = {
       // Whether to continue recursing down the tree
       var recurse = true
 
@@ -117,19 +156,20 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u @ UnresolvedRelation(ident, _, _), hint)
+          case ResolvedHint(u @ UnresolvedRelation(ident, _, _), info)
               if matchedIdentifierInHint(ident) =>
-            ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
+            ResolvedHint(u, createHintInfo(ident, hint).merge(info, hintErrorHandler))
 
-          case ResolvedHint(r: SubqueryAlias, hint)
+          case ResolvedHint(r: SubqueryAlias, info)
               if matchedIdentifierInHint(extractIdentifier(r)) =>
-            ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
+            ResolvedHint(r, createHintInfo(extractIdentifier(r), hint)
+              .merge(info, hintErrorHandler))
 
           case UnresolvedRelation(ident, _, _) if matchedIdentifierInHint(ident) =>
-            ResolvedHint(plan, createHintInfo(hintName))
+            ResolvedHint(plan, createHintInfo(ident, hint))
 
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
-            ResolvedHint(plan, createHintInfo(hintName))
+            ResolvedHint(plan, createHintInfo(extractIdentifier(r), hint))
 
           case _: ResolvedHint | _: View | _: UnresolvedWith | _: SubqueryAlias =>
             // Don't traverse down these nodes.
@@ -148,7 +188,7 @@ object ResolveHints {
 
       if ((plan fastEquals newNode) && recurse) {
         newNode.mapChildren { child =>
-          applyJoinStrategyHint(child, relationsInHint, relationsInHintWithMatch, hintName)
+          applyJoinStrategyHint(child, relationsInHint, relationsInHintWithMatch, hint)
         }
       } else {
         newNode
@@ -166,12 +206,13 @@ object ResolveHints {
           val relationNamesInHint = h.parameters.map {
             case StringLiteral(tableName) => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
+            case uf: UnresolvedFunction => uf.nameParts
             case unsupported =>
               throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
           }.toSet
           val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
           val applied = applyJoinStrategyHint(
-            h.child, relationNamesInHint, relationsInHintWithMatch, h.name)
+            h.child, relationNamesInHint, relationsInHintWithMatch, h)
 
           // Filters unmatched relation identifiers in the hint
           val unmatchedIdents = relationNamesInHint -- relationsInHintWithMatch

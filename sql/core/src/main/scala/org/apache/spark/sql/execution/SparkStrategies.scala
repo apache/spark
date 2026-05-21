@@ -156,6 +156,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     small. However, broadcasting tables is a network-intensive operation and it could cause
    *     OOM or perform badly in some cases, especially when the build/broadcast side is big.
    *
+   *  - Distributed map join (DMJ):
+   *    Only supported for equi-joins.
+   *    Supported for all join types that allow right-side build
+   *    (e.g., inner, left outer, left semi).
+   *    Avoids shuffle by building a distributed hash table service for the build side.
+   *    The probe side performs batched RPC lookups to fetch matching rows.
+   *    Ideal for medium-sized dimension tables (e.g., 200MB ~ 2GB) that are too large for BHJ
+   *    but much smaller than the probe side. Requires explicit `distmapjoin` hint.
+   *
    * - Shuffle hash join:
    *     Only supported for equi-joins, while the join keys do not need to be sortable.
    *     Supported for all join types.
@@ -205,6 +214,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       }
     }
 
+    private def checkDistributedMapJoinBuildSide(
+        onlyLookingAtHint: Boolean,
+        buildSide: Option[BuildSide],
+        joinType: JoinType,
+        hint: JoinHint): Unit = {
+
+      def invalidBuildSide(hintInfo: HintInfo, side: String): Unit = {
+        hintErrorHandler.joinHintNotSupported(hintInfo,
+          s"build $side for ${joinType.sql.toLowerCase(Locale.ROOT)} join via distmapjoin")
+      }
+
+      if (onlyLookingAtHint && buildSide.isEmpty) {
+        if (hintToDistributedMapJoinLeft(hint)) {
+          invalidBuildSide(hint.leftHint.get, "left")
+        }
+        if (hintToDistributedMapJoinRight(hint)) {
+          invalidBuildSide(hint.rightHint.get, "right")
+        }
+      }
+    }
+
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
       if (hintToShuffleHashJoin(hint) || hintToPreferShuffleHashJoin(hint) ||
           hintToSortMergeJoin(hint)) {
@@ -219,11 +249,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
       //   1. broadcast hint: pick broadcast hash join if the join type is supported. If both sides
       //      have the broadcast hints, choose the smaller side (based on stats) to broadcast.
-      //   2. sort merge hint: pick sort merge join if join keys are sortable.
-      //   3. shuffle hash hint: We pick shuffle hash join if the join type is supported. If both
+      //   2. distmapjoin hint: pick distributed map join if the join type supports build right.
+      //   3. sort merge hint: pick sort merge join if join keys are sortable.
+      //   4. shuffle hash hint: We pick shuffle hash join if the join type is supported. If both
       //      sides have the shuffle hash hints, choose the smaller side (based on stats) as the
       //      build side.
-      //   4. shuffle replicate NL hint: pick cartesian product if join type is inner like.
+      //   5. shuffle replicate NL hint: pick cartesian product if join type is inner like.
       //
       // If there is no hint or the hints are not applicable, we follow these rules one by one:
       //   1. Pick broadcast hash join if one side is small enough to broadcast, and the join type
@@ -255,6 +286,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
           } else {
             None
+          }
+        }
+
+        def createDistributedMapJoin(onlyLookingAtHint: Boolean) = {
+          val buildSide = getDistributedMapJoinBuildSide(
+            left, right, joinType, hint, onlyLookingAtHint, conf)
+          checkDistributedMapJoinBuildSide(onlyLookingAtHint, buildSide, joinType, hint)
+          buildSide.map {
+            buildSide =>
+              Seq(joins.DistributedMapJoinExec(
+                leftKeys,
+                rightKeys,
+                joinType,
+                buildSide,
+                nonEquiCond,
+                planLater(left),
+                planLater(right),
+                hint))
           }
         }
 
@@ -322,6 +371,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           createJoinWithoutHint()
         } else {
           createBroadcastHashJoin(true)
+            .orElse(createDistributedMapJoin(true))
             .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
             .orElse(createShuffleHashJoin(true))
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }

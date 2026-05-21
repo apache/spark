@@ -127,6 +127,7 @@ object JoinStrategyHint {
 
   val strategies: Set[JoinStrategyHint] = Set(
     BROADCAST,
+    DistributedMapJoinStrategy(None, None),
     SHUFFLE_MERGE,
     SHUFFLE_HASH,
     SHUFFLE_REPLICATE_NL)
@@ -149,6 +150,25 @@ case object BROADCAST extends JoinStrategyHint {
     "BROADCAST",
     "BROADCASTJOIN",
     "MAPJOIN")
+}
+
+case class DistributedMapJoinStrategy(
+    shards: Option[Int],
+    replicas: Option[Int]) extends JoinStrategyHint {
+
+  override val displayName: String = {
+    val params = List("shard_count" -> shards, "replica_count" -> replicas)
+      .collect { case (k, Some(v)) => s"$k=$v" }
+      .mkString(", ")
+    s"distmapjoin${if (params.isEmpty) "" else s"($params)"}"
+  }
+
+  override val hintAliases: Set[String] = Set("DISTMAPJOIN")
+}
+
+object DistributedMapJoinStrategy {
+  val KEY_SHARD_COUNT: String = "shard_count"
+  val KEY_REPLICA_COUNT: String = "replica_count"
 }
 
 /**

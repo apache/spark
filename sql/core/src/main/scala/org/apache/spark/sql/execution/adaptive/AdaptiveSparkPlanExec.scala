@@ -690,7 +690,13 @@ case class AdaptiveSparkPlanExec(
           optimized,
           postStageCreationRules(outputsColumnar = plan.supportsColumnar),
           "AQE Post Stage Creation")
-        if (e.isInstanceOf[ShuffleExchangeLike]) {
+        if (e.isInstanceOf[ShardExchangeLike]) {
+          if (!newPlan.isInstanceOf[ShardExchangeLike]) {
+            throw SparkException.internalError(
+              "Custom columnar rules cannot transform shard node to something else.")
+          }
+          ShardQueryStageExec(currentStageId, newPlan, e.canonicalized)
+        } else if (e.isInstanceOf[ShuffleExchangeLike]) {
           if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
             throw SparkException.internalError(
               "Custom columnar rules cannot transform shuffle node to something else.")
@@ -830,6 +836,8 @@ case class AdaptiveSparkPlanExec(
       val finalPlan = inputPlan match {
         case b: BroadcastExchangeLike
           if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
+        case sh: ShardExchangeLike
+          if (!newPlan.isInstanceOf[ShardExchangeLike]) => sh.withNewChildren(Seq(newPlan))
         case _ => newPlan
       }
 

@@ -203,6 +203,21 @@ public class TransportClient implements Closeable {
     return requestId;
   }
 
+  public long sendManagedRpc(ManagedBuffer message, ManagedRpcResponseCallback callback) {
+    if (logger.isTraceEnabled()) {
+      logger.trace("Sending RPC to {}", getRemoteAddress(channel));
+    }
+
+    long requestId = requestId();
+    handler.addRpcRequest(requestId, callback);
+
+    RpcChannelListener listener = new RpcChannelListener(requestId, callback);
+    channel.writeAndFlush(new RpcRequest(requestId, message))
+      .addListener(listener);
+
+    return requestId;
+  }
+
   /**
    * Sends a MergedBlockMetaRequest message to the server. The response of this message is
    * either a {@link MergedBlockMetaSuccess} or {@link RpcFailure}.

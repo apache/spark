@@ -2127,6 +2127,14 @@ private[spark] class BlockManager(
     blocksToRemove.size
   }
 
+  def removeShardSet(setId: Long, tellMaster: Boolean): Int = {
+    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
+      case sid @ ShardBlockId(`setId`, _, _) => sid
+    }
+    blocksToRemove.foreach { shardId => removeBlock(shardId, tellMaster) }
+    blocksToRemove.size
+  }
+
   /**
    * Remove cache blocks that might be related to cached local relations.
    *

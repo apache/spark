@@ -38,6 +38,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
+import org.apache.spark.network.ShardLookupServiceFactory
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -45,6 +46,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
+import org.apache.spark.shard.{ShardManager, ShardManagerId, ShardManagerInfo, ShardManagerMaster, ShardManagerMasterEndpoint}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
 import org.apache.spark.storage._
@@ -70,6 +72,7 @@ class SparkEnv (
     val serializerManager: SerializerManager,
     val mapOutputTracker: MapOutputTracker,
     val broadcastManager: BroadcastManager,
+    shardManagerFactory: () => ShardManager,
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
     val metricsSystem: MetricsSystem,
@@ -110,6 +113,14 @@ class SparkEnv (
   private var _memoryManager: MemoryManager = _
 
   def memoryManager: MemoryManager = _memoryManager
+
+  @volatile private[spark] var shardManager: ShardManager = _
+
+  private[spark] def initializeShardManager(): Unit = {
+    if (conf.get(config.SHARD_ENABLED)) {
+      shardManager = shardManagerFactory()
+    }
+  }
 
   @volatile private[spark] var isStopped = false
 
@@ -189,6 +200,10 @@ class SparkEnv (
         shuffleManager.stop()
       }
       broadcastManager.stop()
+      if (shardManager != null) {
+        shardManager.stop()
+        shardManager.master.stop()
+      }
       blockManager.stop()
       blockManager.master.stop()
       metricsSystem.stop()
@@ -573,6 +588,38 @@ object SparkEnv extends Logging {
       securityManager,
       externalShuffleClient)
 
+    val shardManagerFactory: () => ShardManager = () => {
+      val managerInfo = new concurrent.TrieMap[ShardManagerId, ShardManagerInfo]
+      val managerMaster = new ShardManagerMaster(
+        registerOrLookupEndpoint(
+          ShardManagerMaster.DRIVER_ENDPOINT_NAME,
+          new ShardManagerMasterEndpoint(
+            rpcEnv,
+            isLocal,
+            conf,
+            managerInfo,
+            isDriver)),
+        conf,
+        isDriver)
+      val lookupService =
+        ShardLookupServiceFactory.create(
+          conf,
+          bindAddress,
+          advertiseAddress,
+          0,
+          numUsableCores,
+          managerMaster.masterEndpoint)
+      val sm = new ShardManager(
+        executorId,
+        rpcEnv,
+        managerMaster,
+        conf,
+        lookupService,
+        isDriver)
+      sm.initialize(conf.get("spark.app.id", ""))
+      sm
+    }
+
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
       // We need to wait for the task scheduler to give us an app ID.
@@ -603,6 +650,7 @@ object SparkEnv extends Logging {
       serializerManager,
       mapOutputTracker,
       broadcastManager,
+      shardManagerFactory,
       blockManager,
       securityManager,
       metricsSystem,

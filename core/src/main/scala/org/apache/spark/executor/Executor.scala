@@ -532,6 +532,7 @@ private[spark] class Executor(
     Utils.withContextClassLoader(defaultSessionState.replClassLoader) {
       env.initializeShuffleManager()
     }
+    env.initializeShardManager()
   }
 
   metricsPoller.start()

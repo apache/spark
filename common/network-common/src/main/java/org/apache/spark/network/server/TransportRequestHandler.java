@@ -163,25 +163,58 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   private void processRpcRequest(final RpcRequest req) {
-    try {
-      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
-        @Override
-        public void onSuccess(ByteBuffer response) {
-          respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
-        }
+    if (rpcHandler instanceof RpcHandler.ManagedRpcHandler) {
+      boolean handedOff = false;
+      try {
+        ((RpcHandler.ManagedRpcHandler) rpcHandler).receive(reverseClient, req.body(),
+            new ManagedRpcResponseCallback() {
+              @Override
+              public void onSuccess(ManagedBuffer response) {
+                boolean sent = false;
+                try {
+                  respond(new RpcResponse(req.requestId, response));
+                  sent = true;
+                } finally {
+                  if (!sent) {
+                    response.release();
+                  }
+                }
+              }
 
-        @Override
-        public void onFailure(Throwable e) {
-          respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
+              @Override
+              public void onFailure(Throwable e) {
+                respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
+              }
+            });
+        handedOff = true;
+      } catch (Exception e) {
+        respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
+      } finally {
+        if (!handedOff) {
+          req.body().release();
         }
-      });
-    } catch (Exception e) {
-      logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
-        MDC.of(LogKeys.REQUEST_ID, req.requestId),
-        MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
-      respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
-    } finally {
-      req.body().release();
+      }
+    } else {
+      try {
+        rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
+          @Override
+          public void onSuccess(ByteBuffer response) {
+            respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
+          }
+
+          @Override
+          public void onFailure(Throwable e) {
+            respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
+          }
+        });
+      } catch (Exception e) {
+        logger.error("Error while invoking RpcHandler#receive() on RPC id {} from {}", e,
+          MDC.of(LogKeys.REQUEST_ID, req.requestId),
+          MDC.of(LogKeys.HOST_PORT, getRemoteAddress(channel)));
+        respond(new RpcFailure(req.requestId, JavaUtils.stackTraceToString(e)));
+      } finally {
+        req.body().release();
+      }
     }
   }
 

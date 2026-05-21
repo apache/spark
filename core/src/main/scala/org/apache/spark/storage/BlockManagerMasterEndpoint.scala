@@ -203,6 +203,9 @@ class BlockManagerMasterEndpoint(
     case RemoveBroadcast(broadcastId, removeFromDriver) =>
       context.reply(removeBroadcast(broadcastId, removeFromDriver))
 
+    case RemoveShardSet(setId) =>
+      context.reply(removeShardSet(setId))
+
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
       context.reply(true)
@@ -491,6 +494,18 @@ class BlockManagerMasterEndpoint(
       bm.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
         handleBlockRemovalFailure("broadcast", broadcastId.toString, bm.blockManagerId, 0)
+      }
+    }.toSeq
+
+    Future.sequence(futures)
+  }
+
+  private def removeShardSet(setId: Long): Future[Seq[Int]] = {
+    val removeMsg = RemoveShardSet(setId)
+    val futures = blockManagerInfo.values.map { bm =>
+      bm.storageEndpoint.ask[Int](removeMsg).recover {
+        // use 0 as default value means no blocks were removed
+        handleBlockRemovalFailure("shard-set", setId.toString, bm.blockManagerId, 0)
       }
     }.toSeq
 

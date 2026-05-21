@@ -189,7 +189,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           "Failure while fetching " + resp.streamChunkId + ": " + resp.errorString));
       }
     } else if (message instanceof RpcResponse resp) {
-      RpcResponseCallback listener = (RpcResponseCallback) outstandingRpcs.get(resp.requestId);
+      BaseResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
           MDC.of(LogKeys.REQUEST_ID, resp.requestId),
@@ -198,10 +198,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         resp.body().release();
       } else {
         outstandingRpcs.remove(resp.requestId);
-        try {
-          listener.onSuccess(resp.body().nioByteBuffer());
-        } finally {
-          resp.body().release();
+        if (listener instanceof ManagedRpcResponseCallback) {
+          ((ManagedRpcResponseCallback) listener).onSuccess(resp.body());
+        } else {
+          try {
+            ((RpcResponseCallback) listener).onSuccess(resp.body().nioByteBuffer());
+          } finally {
+            resp.body().release();
+          }
         }
       }
     } else if (message instanceof RpcFailure resp) {
