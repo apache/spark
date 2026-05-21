@@ -627,22 +627,22 @@ def create_auto_cdc_flow(
             },
         )
 
-    source_code_location = get_caller_source_code_location(stacklevel = 1)
+    source_code_location = get_caller_source_code_location(stacklevel=1)
 
     flow = AutoCdcFlow(
-        name = name,
-        target = target,
-        source = source,
-        keys = keys,
-        sequence_by = sequence_by,
-        apply_as_deletes = apply_as_deletes,
-        apply_as_truncates = apply_as_truncates,
-        column_list = column_list,
-        except_column_list = except_column_list,
-        stored_as_scd_type = stored_as_scd_type,
-        ignore_null_updates_column_list = ignore_null_updates_column_list,
-        ignore_null_updates_except_column_list = ignore_null_updates_except_column_list,
-        source_code_location = source_code_location,
+        name=name,
+        target=target,
+        source=source,
+        keys=keys,
+        sequence_by=sequence_by,
+        apply_as_deletes=apply_as_deletes,
+        apply_as_truncates=apply_as_truncates,
+        column_list=column_list,
+        except_column_list=except_column_list,
+        stored_as_scd_type=stored_as_scd_type,
+        ignore_null_updates_column_list=ignore_null_updates_column_list,
+        ignore_null_updates_except_column_list=ignore_null_updates_except_column_list,
+        source_code_location=source_code_location,
     )
 
     get_active_graph_element_registry().register_auto_cdc_flow(flow)
@@ -657,6 +657,6 @@ def _normalize_optional_column_list(
 
 
 def _normalize_column_list(
-    column_list: List[Union[str, Column]],
+    column_list: Union[List[str], List[Column]],
 ) -> List[Column]:
     return [F.col(c) if isinstance(c, str) else c for c in column_list]
