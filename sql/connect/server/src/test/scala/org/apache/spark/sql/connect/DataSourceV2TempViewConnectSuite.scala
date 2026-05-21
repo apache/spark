@@ -25,13 +25,13 @@ import org.apache.spark.sql.connector.DSv2TempViewWithStoredPlanTests
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, TableCatalog}
 
 /**
- * Connect-mode runner for [[DSv2TempViewWithStoredPlanTests]].
- * All test logic lives in the shared trait; this class only provides
- * the Connect-specific session, catalog access, and assertion wiring.
+ * Connect-mode runner for [[DSv2TempViewWithStoredPlanTests]]. All test logic lives in the shared
+ * trait; this class only provides the Connect-specific session, catalog access, and assertion
+ * wiring.
  */
 class DataSourceV2TempViewConnectSuite
-  extends SparkConnectServerTest
-  with DSv2TempViewWithStoredPlanTests {
+    extends SparkConnectServerTest
+    with DSv2TempViewWithStoredPlanTests {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
