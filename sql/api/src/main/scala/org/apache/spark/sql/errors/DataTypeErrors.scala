@@ -275,4 +275,11 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       messageParameters = Map("precision" -> precision.toString),
       cause = null)
   }
+
+  def invalidTimestampPrecisionError(precision: String, typeName: String): Throwable = {
+    new SparkException(
+      errorClass = "INVALID_TIMESTAMP_PRECISION",
+      messageParameters = Map("precision" -> precision, "type" -> typeName),
+      cause = null)
+  }
 }
