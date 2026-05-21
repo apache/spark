@@ -19,12 +19,14 @@ package org.apache.spark.sql.connect
 
 import java.util
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.classic
-import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, TableCatalog, TableChange, TableInfo, TableWritePrivilege}
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, CatalogV2Util, Column, Identifier, InMemoryBaseTable, InMemoryTableCatalog, TableCatalog, TableChange, TableInfo, TableWritePrivilege}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 /**
  * DSv2 temp view with stored plan tests for Spark Connect, mirroring the classic
@@ -48,28 +50,33 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
 
   /**
    * Assert that rows collected through the Connect client match expected rows (order-agnostic).
+   * Uses [[QueryTest.sameRows]] for value-based comparison instead of toString.
    */
   private def assertRows(actual: Array[Row], expected: Seq[Row]): Unit = {
-    assert(
-      actual.toSeq.sortBy(_.toString()) == expected.sortBy(_.toString()),
-      s"Expected ${expected.mkString(", ")} but got ${actual.mkString(", ")}")
+    QueryTest.sameRows(expected, actual.toSeq).foreach(msg => fail(msg))
   }
 
   /** Get a catalog from the server-side session by name. */
-  private def serverCatalog[T <: TableCatalog](
+  private def serverCatalog[T <: TableCatalog: ClassTag](
       serverSession: classic.SparkSession,
-      name: String): T =
-    serverSession.sessionState.catalogManager.catalog(name).asInstanceOf[T]
+      name: String): T = {
+    val catalog = serverSession.sessionState.catalogManager.catalog(name)
+    val ct = implicitly[ClassTag[T]]
+    require(
+      ct.runtimeClass.isInstance(catalog),
+      s"Expected ${ct.runtimeClass.getName} but got ${catalog.getClass.getName}")
+    catalog.asInstanceOf[T]
+  }
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   private def externalAppend(
       cat: TableCatalog,
       ident: Identifier,
-      schema: StructType,
       row: InternalRow): Unit = {
     val extTable = cat
       .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
       .asInstanceOf[InMemoryBaseTable]
+    val schema = CatalogV2Util.v2ColumnsToStructType(extTable.columns())
     extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
   }
 
@@ -77,17 +84,12 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
   private def withTableAndViews(
       session: SparkSession,
       table: String,
-      views: Seq[String],
-      clearCachingCatalog: Boolean = false)(fn: => Unit): Unit = {
+      views: Seq[String])(fn: => Unit): Unit = {
     try {
       fn
     } finally {
       views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v").collect())
       session.sql(s"DROP TABLE IF EXISTS $table").collect()
-      if (clearCachingCatalog) {
-        val serverSession = getServerSession(session)
-        serverCatalog[CachingInMemoryTableCatalog](serverSession, "cachingcat").clearCache()
-      }
     }
   }
 
@@ -129,7 +131,6 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         externalAppend(
           cat = cat,
           ident = ident,
-          schema = StructType.fromDDL("id INT, salary INT"),
           row = InternalRow(2, 200))
 
         assertRows(session.table("v").collect(), Seq(Row(1, 100), Row(2, 200)))
@@ -143,8 +144,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -156,7 +156,6 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         externalAppend(
           cat = cat,
           ident = ident,
-          schema = StructType.fromDDL("id INT, salary INT"),
           row = InternalRow(2, 200))
 
         // Caching connector returns stale table: external write invisible
@@ -208,7 +207,6 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         externalAppend(
           cat = cat,
           ident = ident,
-          schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
           row = InternalRow(2, 200, -1))
 
         // view preserves original 2-column schema, filter still applied
@@ -223,8 +221,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -239,7 +236,6 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
         externalAppend(
           cat = cat,
           ident = ident,
-          schema = StructType.fromDDL("id INT, salary INT, new_column INT"),
           row = InternalRow(2, 200, -1))
 
         // Caching connector returns stale table: external changes invisible
@@ -315,8 +311,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -422,8 +417,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -526,8 +520,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -616,8 +609,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
@@ -713,8 +705,7 @@ class DataSourceV2TempViewConnectSuite extends SparkConnectServerTest {
       withTableAndViews(
         session = session,
         table = CT,
-        views = Seq("v"),
-        clearCachingCatalog = true) {
+        views = Seq("v")) {
         session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
 
