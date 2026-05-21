@@ -19,14 +19,62 @@ package org.apache.spark.sql.metricview.logical
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{METRIC_VIEW_PLACEHOLDER, RESOLVED_METRIC_VIEW, TreePattern}
-import org.apache.spark.sql.metricview.serde.MetricView
+import org.apache.spark.sql.types.Metadata
+
+/**
+ * A parsed metric-view column, populated by
+ * [[org.apache.spark.sql.metricview.util.MetricViewPlanner]] from the YAML definition before the
+ * placeholder is handed to the analyzer. Carrying the parsed [[Expression]] (rather than the raw
+ * YAML descriptor) lets downstream resolution rules read a stable, analyzer-friendly
+ * representation without re-parsing.
+ */
+sealed trait InputColumn {
+  def name: String
+  def expr: Expression
+  def metadata: Metadata
+}
+
+case class DimensionInputColumn(
+    name: String,
+    expr: Expression,
+    metadata: Metadata) extends InputColumn
+
+case class MeasureInputColumn(
+    name: String,
+    expr: Expression,
+    metadata: Metadata) extends InputColumn
+
+/**
+ * Logical plan for `CREATE VIEW ... WITH METRICS`. This is the v1/v2-agnostic representation
+ * the parser returns; downstream analysis decides which runnable form it becomes:
+ *  - For the session catalog: [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]]
+ *    via an analyzer rule that fires once the identifier is resolved.
+ *  - For non-session v2 [[org.apache.spark.sql.connector.catalog.ViewCatalog]]s: a
+ *    `CreateV2MetricViewExec` produced by `DataSourceV2Strategy`.
+ *
+ * Splitting this from the runnable command lets the parser return a single logical shape
+ * regardless of target catalog (instead of pre-committing to a runnable command at parse
+ * time), and gives downstream rules a single match target to dispatch from.
+ */
+case class CreateMetricView(
+    child: LogicalPlan,
+    userSpecifiedColumns: Seq[(String, Option[String])],
+    comment: Option[String],
+    properties: Map[String, String],
+    originalText: String,
+    allowExisting: Boolean,
+    replace: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
+    copy(child = newChild)
+  }
+}
 
 case class MetricViewPlaceholder(
     metadata: CatalogTable,
-    desc: MetricView,
+    inputColumns: Seq[InputColumn],
     outputMetrics: Seq[Attribute],
     child: LogicalPlan,
     isCreate: Boolean = false) extends UnaryNode {
