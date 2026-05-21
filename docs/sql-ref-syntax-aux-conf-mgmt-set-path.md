@@ -21,16 +21,51 @@ license: |
 
 ### Description
 
-`SET PATH` changes the **SQL Path** of the current session. The SQL Path is the ordered list of
-namespaces Spark walks when resolving unqualified references to functions, tables, views, and
-session variables. The first match along the path wins. See
-[Name Resolution](sql-ref-name-resolution.html#sql-path) for the conceptual overview.
+`SET PATH` changes the **SQL Path** of the current session.
 
-The path is observable through the [`current_path()`](sql-ref-function-current-path.html) function.
+The SQL Path is an ordered list of catalog-qualified schema names that Spark walks when
+resolving unqualified references to functions, tables, views, and session variables in queries
+and DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`). The first match wins. DDL
+(`CREATE TABLE`, `CREATE VIEW`, `CREATE FUNCTION`, `DROP`, `ALTER`, ...) resolves unqualified
+object names against `current_catalog.current_schema`, not the path; so `CREATE TABLE t` always
+creates `t` in the current schema regardless of the path.
 
-`SET PATH` is gated by `spark.sql.path.enabled`. When that configuration is `false` (the default),
-`SET PATH` raises `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED`. Unqualified resolution still uses
-a fixed default path, and `current_path()` still returns it.
+The path can include two virtual namespaces in the `system` catalog:
+
+- `system.builtin` &mdash; built-in functions, including those injected by
+  `SparkSessionExtensions`.
+- `system.session` &mdash; temporary views, temporary functions, and session variables in the
+  current session.
+
+`SET PATH` is gated by `spark.sql.path.enabled`. When it is `false` (the default), `SET PATH`
+raises `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED`. Unqualified resolution and
+[`current_path()`](sql-ref-function-current-path.html) still use the default path.
+
+The path within a session:
+
+1. The initial value of `PATH` is `DEFAULT_PATH`.
+2. `DEFAULT_PATH` is either:
+
+   - the value of `spark.sql.defaultPath`, when that configuration is set; or
+   - a built-in value composed of `system.builtin`, `system.session`, and the current schema,
+     when `spark.sql.defaultPath` is empty.
+
+3. To override the initial value, set `spark.sql.defaultPath`, or set
+   `spark.sql.functionResolution.sessionOrder` to reorder the entries of the built-in value in
+   step 2.
+
+See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation rules.
+
+A `SET PATH` is scoped to the current session and is lost when the session ends. To revert
+mid-session, run `SET PATH = DEFAULT_PATH`. Cloned sessions inherit the parent's path at clone
+time; later changes in the child do not propagate back.
+
+Persistent views and SQL UDFs capture the path at `CREATE` time into the object's metadata.
+Each invocation resolves the body against that frozen path, not the invoker's current path;
+`current_schema()` and `current_path()` inside the body still return the invoker's context.
+
+The leading names `session` and `builtin` have special meaning in 2-part references; see
+[Reserved system names](sql-ref-identifier.html#reserved-system-names).
 
 ### Syntax
 
@@ -53,10 +88,37 @@ schema_name
 
 * **`DEFAULT_PATH`**
 
-  Expands to the value of the `spark.sql.defaultPath` configuration, or, when that configuration
-  is empty, to the spark-built-in default: `system.builtin`, `system.session`, and the current
-  schema, interleaved per `spark.sql.functionResolution.sessionOrder`
-  (`first` / `second` (default) / `last`).
+  Expands to the session's default path. The default path has two layers:
+
+  1. If `spark.sql.defaultPath` is set to a non-empty value, that value is parsed using the same
+     grammar as `SET PATH` (with one restriction: the `PATH` keyword is not allowed inside the
+     conf value, since it would be self-referential).
+
+     The conf value is validated for syntax at the time it is set; an invalid value is rejected.
+     Static duplicates inside the conf are tolerated (unlike interactive `SET PATH`, which
+     rejects them) so a later `USE SCHEMA` cannot turn a previously valid default into a runtime
+     error. A `DEFAULT_PATH` token inside the conf value resolves to the spark-built-in default
+     below (cycle break) rather than recursing.
+
+  2. If `spark.sql.defaultPath` is empty (the factory setting), the spark-built-in default
+     applies: `system.builtin`, `system.session`, and the current schema
+     (`current_catalog.current_schema`), interleaved per
+     `spark.sql.functionResolution.sessionOrder`:
+
+     | `sessionOrder` | Order produced |
+     | :------------- | :------------- |
+     | `first` | `system.session`, `system.builtin`, `current_schema` |
+     | `second` (default) | `system.builtin`, `system.session`, `current_schema` |
+     | `last` | `system.builtin`, `current_schema`, `system.session` |
+
+  To change the default path, set `spark.sql.defaultPath` via any of the usual mechanisms
+  (`SET spark.sql.defaultPath = ...` at runtime, `--conf` on `spark-submit`, `SparkConf`, or
+  `spark-defaults.conf`); clear it with `RESET spark.sql.defaultPath` to return to the
+  spark-built-in default.
+
+  `spark.sql.functionResolution.sessionOrder` and `spark.sql.legacy.persistentCatalogFirst` are
+  internal configurations intended for advanced use; ordinary workloads should leave them at
+  their defaults.
 
 * **`SYSTEM_PATH`**
 
@@ -85,71 +147,21 @@ schema_name
   Identifier quoting follows the usual rules; backtick-quoted parts that contain a dot are
   preserved, for example `spark_catalog.` + `` `sch.b` ``.
 
-### Description
+### Semantics
 
-* Duplicate entries are detected after expansion and raise `DUPLICATE_SQL_PATH_ENTRY`.
-  Comparisons honor the session's case sensitivity setting.
-* `CURRENT_SCHEMA` and `CURRENT_DATABASE` are aliases and are flagged as a duplicate if both are
-  listed.
+* Setting the path takes effect immediately.
 * Identifier case is preserved in storage and in `current_path()` output.
-* Setting the path takes effect immediately. The change is scoped to the current session and is
-  reset by `RESET` or by closing the session. Cloned sessions inherit the parent's path
-  at clone time, but later changes in a child session do not propagate back.
+* Duplicate entries are detected after expansion and raise `DUPLICATE_SQL_PATH_ENTRY`.
+  Comparisons honor the session's case sensitivity setting. Because `CURRENT_DATABASE` is an
+  alias for `CURRENT_SCHEMA`, listing both is flagged as a duplicate.
 
-#### How `DEFAULT_PATH` is derived
-
-`DEFAULT_PATH` is what `SET PATH = DEFAULT_PATH` expands to, and it is also the effective path of
-a session that has never issued `SET PATH`. It has two layers:
-
-1. If `spark.sql.defaultPath` is set to a non-empty value, that value is parsed using the same
-   grammar as `SET PATH` (with one restriction: the `PATH` keyword is not allowed inside the conf
-   value, since it would be self-referential). The parsed value is `DEFAULT_PATH`.
-
-   The conf value is validated for syntax at the time it is set; an invalid value is rejected
-   with `Cannot modify the value of the SQL config 'spark.sql.defaultPath'`. Static duplicates
-   inside the conf are tolerated (unlike interactive `SET PATH`, which rejects them) so a later
-   `USE SCHEMA` cannot turn a previously valid default into a runtime error.
-
-   A `DEFAULT_PATH` token *inside* the conf value resolves to the spark-built-in default below
-   (cycle break) rather than recursing.
-
-2. If `spark.sql.defaultPath` is empty (the factory default), `DEFAULT_PATH` is the
-   **spark-built-in default**: `system.builtin`, `system.session`, and the current schema
-   (`current_catalog.current_schema`), interleaved per
-   `spark.sql.functionResolution.sessionOrder`:
-
-   | `sessionOrder` | Order produced |
-   | :------------- | :------------- |
-   | `first` | `system.session`, `system.builtin`, `current_schema` |
-   | `second` (default) | `system.builtin`, `system.session`, `current_schema` |
-   | `last` | `system.builtin`, `current_schema`, `system.session` |
-
-To change `DEFAULT_PATH`, set the conf via any of the usual mechanisms:
-
-* In a session: `SET spark.sql.defaultPath = system.session, system.builtin, current_schema;`
-* In static configuration: pass `--conf spark.sql.defaultPath=...` to `spark-submit`, set it in
-  `SparkConf`, or add it to `spark-defaults.conf`.
-* To return to the spark-built-in default, clear the conf with
-  `RESET spark.sql.defaultPath` (or set it to an empty string).
-
-`spark.sql.functionResolution.sessionOrder` and `spark.sql.legacy.persistentCatalogFirst` are
-internal configurations intended for advanced use; ordinary workloads should leave them at their
-defaults. See [Reserved names and collisions](sql-ref-name-resolution.html#reserved-names-and-collisions).
-
-#### Error conditions
+### Error conditions
 
 | Condition | Cause |
 | :-------- | :---- |
 | `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED` | `SET PATH` was issued while `spark.sql.path.enabled` is `false`. |
 | `INVALID_SQL_PATH_SCHEMA_REFERENCE` | A `schema_name` was given with fewer than two parts. |
 | `DUPLICATE_SQL_PATH_ENTRY` | Two entries collapsed to the same concrete namespace after expansion. |
-
-#### Reserved names
-
-`system` is reserved as a catalog name and `session` / `builtin` are discouraged as schema names
-because they collide with the 2-part shortcuts for the system namespaces. See
-[Reserved names and collisions](sql-ref-name-resolution.html#reserved-names-and-collisions) for
-the details and for the internal configurations that tune the behavior when collisions exist.
 
 ### Examples
 

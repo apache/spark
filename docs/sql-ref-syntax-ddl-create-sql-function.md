@@ -90,7 +90,7 @@ characteristic
 > Note: a SQL UDF captures the SQL Path that was in effect when `CREATE FUNCTION` ran. When the
 > function is invoked, the body resolves against that frozen path, not the invoker's current path.
 > Inside the body, `current_schema()` and `current_path()` still reflect the invoker's context.
-> See [Name Resolution](sql-ref-name-resolution.html#sql-path).
+> See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 > Use [DESCRIBE FUNCTION EXTENDED](sql-ref-syntax-aux-describe-function.html) to inspect the
 > captured path.
 
@@ -351,7 +351,7 @@ characteristic
 
 A SQL UDF captures the SQL Path that is in effect at `CREATE FUNCTION` time. The body resolves
 against that frozen path on every invocation, even if the caller's session has set a different
-PATH. See [Name Resolution](sql-ref-name-resolution.html#sql-path).
+PATH. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 
 ```sql
 > SET spark.sql.path.enabled = true;

@@ -27,7 +27,7 @@ function name, implementing class, and usage details. For
 [SQL user-defined functions](sql-ref-syntax-ddl-create-sql-function.html) the output describes
 the function signature (input parameters, return type/columns) and, with `EXTENDED`, the
 function body, characteristics, and the frozen
-[SQL Path](sql-ref-name-resolution.html#sql-path) that was captured at creation time.
+[SQL Path](sql-ref-syntax-aux-conf-mgmt-set-path.html) that was captured at creation time.
 
 If the optional `EXTENDED` option is specified, the basic metadata is returned along with the
 extended information.
@@ -44,8 +44,10 @@ extended information.
 
     Specifies a name of an existing function. The function name follows the regular
     [name resolution](sql-ref-name-resolution.html#function-resolution) rules: unqualified
-    names walk the SQL Path; 2- and 3-part names may use the `system.builtin` / `system.session`
-    namespaces (or their shortcuts `builtin` / `session`).
+    names walk the SQL Path; 3-part names target the chosen `catalog.schema` directly
+    (including the system namespaces `system.builtin` and `system.session`); 2-part names that
+    lead with `builtin` or `session` follow a mini-path across the system namespace and the
+    current catalog.
 
     **Syntax:** `[ catalog_name. ] [ database_name. ] function_name`
 

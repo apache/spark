@@ -20,9 +20,10 @@ license: |
 ---
 
 Returns the effective SQL Path for the current session as a comma-separated string of
-qualified namespace names. See [Name Resolution](sql-ref-name-resolution.html#sql-path) for a
-description of how the path drives unqualified name resolution and
-[`SET PATH`](sql-ref-syntax-aux-conf-mgmt-set-path.html) for how to change it.
+qualified namespace names. See [`SET PATH`](sql-ref-syntax-aux-conf-mgmt-set-path.html) for a
+description of what the path is, how it is gated, and how to change it, and
+[Name Resolution](sql-ref-name-resolution.html) for how the path drives unqualified name
+resolution.
 
 ### Syntax
 

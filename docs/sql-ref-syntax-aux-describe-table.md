@@ -277,7 +277,7 @@ DESC FORMATTED customer AS JSON;
 
 -- DESCRIBE EXTENDED on a view emits view-specific rows. When `spark.sql.path.enabled` is true,
 -- the output also includes the frozen `SQL Path` that the view body resolves against; see
--- [Name Resolution](sql-ref-name-resolution.html#sql-path).
+-- [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 SET spark.sql.path.enabled = true;
 SET PATH = spark_catalog.default, system.builtin;
 CREATE VIEW recent_customers AS

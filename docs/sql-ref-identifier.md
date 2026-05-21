@@ -54,16 +54,31 @@ An identifier is a string used to identify a database object such as a table, vi
 
 ### Reserved system names
 
-A few names have a special meaning in object identifiers and should be avoided as user-defined
-names. They are interpreted by Spark's [SQL Path](sql-ref-name-resolution.html#sql-path) and are
-documented in detail under
-[Reserved names and collisions](sql-ref-name-resolution.html#reserved-names-and-collisions).
+`system`, `session`, and `builtin` have special meaning and should not be used as user-defined
+catalog or schema names.
 
 | Name | Position | Notes |
 | :--- | :------- | :---- |
-| `system` | catalog | Synthetic catalog hosting `system.builtin` and `system.session`. Registering a v2 catalog under this name (`spark.sql.catalog.system = ...`) is not supported. |
-| `builtin` | schema in any catalog | The 2-part form `builtin.x` is interpreted as the synonym `system.builtin.x`. A persistent schema literally named `builtin` is allowed but discouraged; reach it as `current_catalog.builtin.x`. |
-| `session` | schema in any catalog | The 2-part form `session.x` is interpreted as the synonym `system.session.x`. A persistent schema literally named `session` is allowed but discouraged; reach it as `current_catalog.session.x`. |
+| `system` | catalog | Synthetic catalog hosting `system.builtin` and `system.session`. Not loadable as a v2 catalog plugin; `spark.sql.catalog.system = ...` is unsupported, and the current catalog cannot be `system`. |
+| `builtin` | schema | A persistent schema literally named `builtin` is allowed but discouraged: `builtin.x` follows the mini-path below. To reach a persistent `builtin` schema, use `current_catalog.builtin.x`. |
+| `session` | schema | A persistent schema literally named `session` is allowed but discouraged: `session.x` follows the mini-path below. To reach a persistent `session` schema, use `current_catalog.session.x`. |
+
+For 2-part references starting with `builtin` or `session`, Spark chooses the implicit catalog
+using the mini-path below and returns the first match:
+
+| `spark.sql.legacy.persistentCatalogFirst` | Mini-path tried in order |
+| :-------------------------------------- | :----------------------- |
+| `false` (default) | `system.session.x` / `system.builtin.x`, then `current_catalog.session.x` / `current_catalog.builtin.x` |
+| `true` (legacy)   | `current_catalog.session.x` / `current_catalog.builtin.x`, then `system.session.x` / `system.builtin.x` |
+
+3-part names skip the mini-path: `system.session.x` and `system.builtin.x` always target the
+system namespace, and `current_catalog.session.x` / `current_catalog.builtin.x` always target the
+persistent schema.
+
+The `system.builtin` and `system.session` namespaces are described in
+[SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html). Temporary objects in `system.session` are
+documented under [CREATE VIEW](sql-ref-syntax-ddl-create-view.html) and
+[CREATE FUNCTION (SQL)](sql-ref-syntax-ddl-create-sql-function.html).
 
 ### Examples
 

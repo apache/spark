@@ -73,7 +73,7 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
 
 > Note: a persistent view captures the SQL Path that was in effect when `CREATE VIEW` ran. When the
 > view is referenced, the body resolves against that frozen path, not the invoker's current path.
-> See [Name Resolution](sql-ref-name-resolution.html#sql-path).
+> See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 > Use [DESCRIBE EXTENDED](sql-ref-syntax-aux-describe-table.html) to inspect the captured path.
 
 * **create_view_clauses**
@@ -153,7 +153,7 @@ CREATE TEMPORARY VIEW system.builtin.bad_temp AS SELECT 1;
 
 A persistent view captures the SQL Path that is in effect at `CREATE VIEW` time. The view body
 resolves against that frozen path on every reference, even when the caller's session has set a
-different PATH. See [Name Resolution](sql-ref-name-resolution.html#sql-path).
+different PATH. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 
 ```sql
 > SET spark.sql.path.enabled = true;

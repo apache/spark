@@ -42,7 +42,7 @@ CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
     > but the 2-part forms `session.x` and `builtin.x` are interpreted as the temporary and
     > built-in namespaces respectively, which hides a persistent database with one of these
     > names. See
-    > [Reserved names and collisions](sql-ref-name-resolution.html#reserved-names-and-collisions).
+    > [Reserved system names](sql-ref-identifier.html#reserved-system-names).
 
 * **IF NOT EXISTS**
 
