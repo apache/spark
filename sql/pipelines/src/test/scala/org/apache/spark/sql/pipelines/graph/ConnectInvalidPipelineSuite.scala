@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -546,5 +547,53 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     val streamingTableHint = "please full refresh"
     assert(!ex1.getMessage.contains(streamingTableHint))
     assert(ex2.getMessage.contains(streamingTableHint))
+  }
+
+  test("A multiquery table cannot have an AutoCDC query input") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      val cdcEvents = MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq")
+      registerTable("target")
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("auto_cdc_flow"),
+          destinationIdentifier = fullyQualifiedIdentifier("target"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+      registerFlow(
+        destinationName = "target",
+        name = "extra_flow",
+        query = dfFlowFunc(MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq"))
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET",
+      parameters = Map(
+        "tableName" -> fullyQualifiedIdentifier("target").unquotedString,
+        "flows" -> Seq(
+          fullyQualifiedIdentifier("auto_cdc_flow").unquotedString,
+          fullyQualifiedIdentifier("extra_flow").unquotedString
+        ).sorted.mkString(", ")
+      )
+    )
   }
 }

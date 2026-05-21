@@ -232,6 +232,12 @@
     ],
     "sqlState" : "42703"
   },
+  "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
+    "message" : [
+      "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
+    ],
+    "sqlState" : "42000"
+  },
   "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."

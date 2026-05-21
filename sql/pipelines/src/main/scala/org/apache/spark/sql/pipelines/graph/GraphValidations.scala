@@ -34,6 +34,24 @@ trait GraphValidations extends Logging {
    */
   protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)
+
+    // A multiflow table may not have an AutoCDC flow; AutoCDC flow targets must be single query.
+    multiQueryTables
+      .find { case (_, flows) => flows.exists(isAutoCdcFlow) }
+      .foreach {
+        case (dest, flows) =>
+          throw new AnalysisException(
+            "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET",
+            Map(
+              "tableName" -> dest.unquotedString,
+              "flows" -> flows
+                .map(_.displayName)
+                .sorted
+                .mkString(", ")
+            )
+          )
+      }
+
     // Non-streaming tables do not support multiflow.
     multiQueryTables
       .find {
@@ -56,6 +74,13 @@ trait GraphValidations extends Logging {
       }
 
     multiQueryTables
+  }
+
+  /** Returns true iff the given flow is an [[AutoCdcFlow]] (resolved or not). */
+  private def isAutoCdcFlow(f: Flow): Boolean = f match {
+    case _: AutoCdcFlow => true
+    case rcf: ResolutionCompletedFlow => rcf.flow.isInstanceOf[AutoCdcFlow]
+    case _ => false
   }
 
   /**
