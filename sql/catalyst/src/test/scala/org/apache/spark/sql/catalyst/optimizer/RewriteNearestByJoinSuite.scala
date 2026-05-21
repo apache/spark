@@ -162,6 +162,13 @@ class RewriteNearestByJoinSuite extends PlanTest {
         s"expected exactly one synthetic Join in the rewritten plan, got ${syntheticJoin.size}")
       assert(syntheticJoin.head.joinType == joinType,
         s"expected synthetic Join to use $joinType, got ${syntheticJoin.head.joinType}")
+
+      val generate = rewritten.collect { case g: Generate => g }
+      assert(generate.size == 1,
+        s"expected exactly one Generate in the rewritten plan, got ${generate.size}")
+      val expectedOuter = joinType == LeftOuter
+      assert(generate.head.outer == expectedOuter,
+        s"expected Generate.outer == $expectedOuter for $joinType, got ${generate.head.outer}")
     }
   }
 
