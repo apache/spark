@@ -18,8 +18,6 @@ package org.apache.spark.sql.streaming
 
 import java.util.concurrent.TimeoutException
 
-import scala.util.matching.Regex
-
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter, WriteConfigMethods}
@@ -239,16 +237,14 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    *   the sink name to validate
    * @throws AnalysisException
    *   if the sink name contains invalid characters
+   * @throws IllegalArgumentException
+   *   if the sink name is null or empty
    */
   private[sql] def validateSinkName(sinkName: String): Unit = {
-    require(sinkName != null, "Sink name cannot be null")
-    require(sinkName.nonEmpty, "Sink name cannot be empty")
-
-    val validNamePattern: Regex = "^[a-zA-Z0-9_]+$".r
-    if (!validNamePattern.pattern.matcher(sinkName).matches()) {
-      throw new AnalysisException(
+    StreamingNameValidator.validate(sinkName, "Sink") { invalid =>
+      new AnalysisException(
         errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SINK_NAME",
-        messageParameters = Map("sinkName" -> sinkName))
+        messageParameters = Map("sinkName" -> invalid))
     }
   }
 
