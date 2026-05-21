@@ -39,6 +39,13 @@ case class CreateNamespaceExec(
     extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val ns = namespace.toArray
+    // For `IF NOT EXISTS`, check existence first and short-circuit if the namespace is already
+    // there. Some catalog implementations validate properties (e.g. owner, ACLs) before checking
+    // existence, so calling `createNamespace` on a pre-existing namespace can surface errors
+    // unrelated to the "already exists" condition the user intends to ignore.
+    if (ifNotExists && catalog.namespaceExists(ns)) {
+      return Seq.empty
+    }
     try {
       val ownership = Map(PROP_OWNER -> Utils.getCurrentUserName())
       catalog.createNamespace(ns, (properties ++ ownership).asJava)
