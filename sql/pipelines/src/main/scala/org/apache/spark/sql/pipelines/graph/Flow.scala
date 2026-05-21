@@ -136,7 +136,7 @@ sealed trait UnresolvedFlow extends Flow {
 
 /**
  * An [[UnresolvedFlow]] whose execution-type has not yet been determined.
- * 
+ *
  * In some cases, we know the execution-type for an [[UnresolvedFlow]] even before flow analysis
  * and resolution. For example an AutoCDCFlow is a special unresolved-but-typed flow; we know a
  * flow will be an AutoCDC flow immediately on construction, because it has its own special

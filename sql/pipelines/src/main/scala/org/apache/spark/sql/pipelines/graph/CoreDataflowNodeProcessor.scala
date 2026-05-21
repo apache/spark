@@ -176,7 +176,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
           } else {
             f
           }
-          convertResolvedToTypedFlow(flowToResolve, maybeNewFuncResult)
+          transformUnresolvedFlowToResolvedFlow(flowToResolve, maybeNewFuncResult)
 
         // If the flow failed due to an UnresolvedDatasetException, it means that one of the
         // flow's inputs wasn't available. After other flows are resolved, these inputs
@@ -199,8 +199,17 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       }
   }
 
-  private def convertResolvedToTypedFlow(
+  private def transformUnresolvedFlowToResolvedFlow(
       flow: UnresolvedFlow,
+      funcResult: FlowFunctionResult): ResolvedFlow = {
+    flow match {
+      case acf: AutoCdcFlow => new AutoCdcMergeFlow(acf, funcResult)
+      case utf: UntypedFlow => transformUntypedFlowToResolvedFlow(utf, funcResult)
+    }
+  }
+
+  private def transformUntypedFlowToResolvedFlow(
+      flow: UntypedFlow,
       funcResult: FlowFunctionResult): ResolvedFlow = {
     flow match {
       case _ if flow.once => new AppendOnceFlow(flow, funcResult)
@@ -210,7 +219,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
         // then get their results overwritten.
         val mustBeAppend = rawGraph.flowsTo(flow.destinationIdentifier).size > 1
         new StreamingFlow(flow, funcResult, mustBeAppend = mustBeAppend)
-      case _: UnresolvedFlow => new CompleteFlow(flow, funcResult)
+      case _ => new CompleteFlow(flow, funcResult)
     }
   }
 }
