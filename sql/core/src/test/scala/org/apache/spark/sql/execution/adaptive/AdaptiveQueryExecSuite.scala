@@ -2079,7 +2079,6 @@ class AdaptiveQueryExecSuite
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true",
       // Disabling cleanup as the test assertions depend on them
       SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "false") {
       val df = sql(
@@ -2091,65 +2090,65 @@ class AdaptiveQueryExecSuite
           |ON CAST(value AS INT) = b
         """.stripMargin)
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-        // Repartition with no partition num specified.
-        checkBHJ(df.repartition($"b"),
-          // The join output uses null-aware partitioning, which is not equivalent to the
-          // user-requested repartition because NULL keys may be spread across reducers.
-          optimizeOutRepartition = false,
-          probeSideLocalRead = true,
-          probeSideCoalescedRead = false)
+      def checkRepartitionOptimization(optimizeDefaultRepartition: Boolean): Unit = {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+          // Repartition with no partition num specified.
+          checkBHJ(df.repartition($"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            probeSideLocalRead = true,
+            probeSideCoalescedRead = false)
 
-        // Repartition with default partition num (5 in test env) specified.
-        checkBHJ(df.repartition(5, $"b"),
-          // The final plan must have 5 partitions, and the top shuffle must stay because
-          // null-aware join partitioning is not equivalent to ordinary repartitioning.
-          optimizeOutRepartition = false,
-          probeSideLocalRead = true,
-          probeSideCoalescedRead = false)
+          // Repartition with default partition num (5 in test env) specified.
+          checkBHJ(df.repartition(5, $"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            probeSideLocalRead = true,
+            probeSideCoalescedRead = false)
 
-        // Repartition with non-default partition num specified.
-        checkBHJ(df.repartition(4, $"b"),
-          // The top shuffle from repartition is not optimized out
-          optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
+          // Repartition with non-default partition num specified.
+          checkBHJ(df.repartition(4, $"b"),
+            optimizeOutRepartition = false,
+            probeSideLocalRead = true,
+            probeSideCoalescedRead = true)
 
-        // Repartition by col and project away the partition cols
-        checkBHJ(df.repartition($"b").select($"key"),
-          // The top shuffle from repartition is not optimized out
-          optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
+          // Repartition by col and project away the partition cols
+          checkBHJ(df.repartition($"b").select($"key"),
+            optimizeOutRepartition = false,
+            probeSideLocalRead = true,
+            probeSideCoalescedRead = true)
+        }
+
+        // Force skew join
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+          SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "1",
+          SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
+          // Repartition with no partition num specified.
+          checkSMJ(df.repartition($"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            optimizeSkewJoin = true,
+            coalescedRead = false)
+
+          // Repartition with default partition num (5 in test env) specified.
+          checkSMJ(df.repartition(5, $"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            optimizeSkewJoin = true,
+            coalescedRead = false)
+
+          // Repartition with non-default partition num specified.
+          checkSMJ(df.repartition(4, $"b"),
+            optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
+
+          // Repartition by col and project away the partition cols
+          checkSMJ(df.repartition($"b").select($"key"),
+            optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
+        }
       }
 
-      // Force skew join
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.SKEW_JOIN_ENABLED.key -> "true",
-        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "1",
-        SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
-        // Repartition with no partition num specified.
-        checkSMJ(df.repartition($"b"),
-          // The join output uses null-aware partitioning, which is not equivalent to the
-          // user-requested repartition because NULL keys may be spread across reducers.
-          optimizeOutRepartition = false,
-          optimizeSkewJoin = true,
-          coalescedRead = false)
-
-        // Repartition with default partition num (5 in test env) specified.
-        checkSMJ(df.repartition(5, $"b"),
-          // The final plan must have 5 partitions, and the top shuffle must stay because
-          // null-aware join partitioning is not equivalent to ordinary repartitioning.
-          optimizeOutRepartition = false,
-          optimizeSkewJoin = true,
-          coalescedRead = false)
-
-        // Repartition with non-default partition num specified.
-        checkSMJ(df.repartition(4, $"b"),
-          // The top shuffle from repartition is not optimized out.
-          optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
-
-        // Repartition by col and project away the partition cols
-        checkSMJ(df.repartition($"b").select($"key"),
-          // The top shuffle from repartition is not optimized out.
-          optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
+      checkRepartitionOptimization(optimizeDefaultRepartition = true)
+      withSQLConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+        // Null-aware join output partitioning is not equivalent to ordinary hash repartitioning.
+        checkRepartitionOptimization(optimizeDefaultRepartition = false)
       }
     }
   }

@@ -36,10 +36,14 @@ trait ShuffledJoin extends JoinCodegenSupport {
     // Null-safe equality usually rewrites to non-null shuffle keys. The NullType corner can still
     // produce NULL shuffle keys, but shuffled join execution already treats those rows as
     // unmatched, so spreading them does not change the result.
-    val isOuterJoin = joinType == LeftOuter || joinType == RightOuter || joinType == FullOuter
+    val preservedSideHasNullableKeys = joinType match {
+      case LeftOuter => leftKeys.exists(_.nullable)
+      case RightOuter => rightKeys.exists(_.nullable)
+      case FullOuter => leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable)
+      case _ => false
+    }
     conf.getConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED) &&
-      isOuterJoin &&
-      (leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable))
+      preservedSideHasNullableKeys
   }
 
   override def nodeName: String = {

@@ -367,10 +367,6 @@ case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions
   override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
     NullAwareHashShuffleSpec(this, distribution)
 
-  def partitionIdExpression: Expression = Pmod(
-    new CollationAwareMurmur3Hash(expressions), Literal(numPartitions)
-  )
-
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): NullAwareHashPartitioning =
     copy(expressions = newChildren)

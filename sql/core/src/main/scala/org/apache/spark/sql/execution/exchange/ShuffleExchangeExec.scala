@@ -352,6 +352,7 @@ object ShuffleExchangeExec {
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
       case NullAwareHashPartitioning(_, n) =>
+        // The null-aware extractor below produces partition IDs directly.
         new PartitionIdPassthrough(n)
       case ShufflePartitionIdPassThrough(_, n) =>
         // For ShufflePartitionIdPassThrough, the DirectShufflePartitionID expression directly
