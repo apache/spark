@@ -203,7 +203,8 @@ public interface TableCatalog extends CatalogPlugin {
    *
    * @param ident a table identifier
    * @param context the CDC query context (range, deduplication mode, etc.)
-   * @param options all options passed to the changelog query
+   * @param options all options passed to the changelog query, including the CDC-recognized
+   *                keys (range, deduplication mode, etc.) that are also parsed into {@code context}
    * @return a Changelog instance for the requested table and range
    * @throws NoSuchTableException If the table doesn't exist
    *
