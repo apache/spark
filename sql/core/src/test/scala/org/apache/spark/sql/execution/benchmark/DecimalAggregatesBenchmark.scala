@@ -106,17 +106,16 @@ object DecimalAggregatesBenchmark extends SqlBasedBenchmark {
   /**
    * Aggregate AVG cases: (label, p, s, widened p').
    *
-   * All `p <= 7` per the conservative `AVG_PEEL_MAX_INNER_PRECISION = 7`
-   * guard (see design doc 0001 rev 7 S7.1 -- strict-subset narrowing so
-   * SPARK-37024 Double-regime exposure is NOT amplified by this rule).
-   * Same `p+1` / `p+10` split as Section A. B2 mirrors the canonical
-   * TPC-DS q18 AVG shape.
+   * All `pPrime + 4 <= MAX_DOUBLE_DIGITS = 15`, i.e. `pPrime <= 11` -- the
+   * AVG peel arm only fires inside the existing Double-regime envelope, so
+   * the un-rewritten Decimal-exact path is preserved for wider casts (see
+   * SPARK-56983).
    */
   private val AvgAggCases: Seq[(String, Int, Int, Int)] = Seq(
     ("B1 p=7 s=2 p'=8", 7, 2, 8),    // p+1 boundary
-    ("B2 p=7 s=2 p'=12", 7, 2, 12),  // canonical TPC-DS q18 AVG shape
+    ("B2 p=7 s=2 p'=11", 7, 2, 11),  // pPrime upper bound
     ("B3 p=5 s=0 p'=6", 5, 0, 6),    // p+1 boundary, zero scale
-    ("B4 p=5 s=0 p'=15", 5, 0, 15)   // p+10, zero scale
+    ("B4 p=5 s=0 p'=11", 5, 0, 11)   // pPrime upper bound, zero scale
   )
 
   /** Clamp generator to `10^(p-s) - 1` so rand() * bound fits `DECIMAL(p, s)`. */
@@ -195,8 +194,9 @@ object DecimalAggregatesBenchmark extends SqlBasedBenchmark {
     runBenchmark("DecimalAggregates AVG widened-cast peel (Aggregate)") {
       AvgAggCases.foreach { case (label, p, s, pPrime) =>
         require(pPrime > p, s"$label: p'=$pPrime must exceed p=$p")
-        require(p <= 7,
-          s"$label: p=$p violates conservative AVG_PEEL_MAX_INNER_PRECISION=7 guard")
+        require(pPrime + 4 <= 15,
+          s"$label: p'=$pPrime violates AVG fast-path guard " +
+            s"pPrime+4<=MAX_DOUBLE_DIGITS=15; rule would not fire")
         setupAggTable(spark, aN, p, s)
         runThreeWay(label, aN,
           nativeSql = "select avg(x) from t",
