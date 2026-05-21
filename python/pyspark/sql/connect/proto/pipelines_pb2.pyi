@@ -43,6 +43,7 @@ import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import google.protobuf.timestamp_pb2
 import pyspark.sql.connect.proto.common_pb2
+import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -505,6 +506,26 @@ class PipelineCommand(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        class _SCDType:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _SCDTypeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                PipelineCommand.DefineFlow._SCDType.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            SCD_TYPE_UNSPECIFIED: PipelineCommand.DefineFlow._SCDType.ValueType  # 0
+            SCD_TYPE_1: PipelineCommand.DefineFlow._SCDType.ValueType  # 1
+
+        class SCDType(_SCDType, metaclass=_SCDTypeEnumTypeWrapper):
+            """SCD Type for Auto CDC target tables."""
+
+        SCD_TYPE_UNSPECIFIED: PipelineCommand.DefineFlow.SCDType.ValueType  # 0
+        SCD_TYPE_1: PipelineCommand.DefineFlow.SCDType.ValueType  # 1
+
         class SqlConfEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -554,6 +575,172 @@ class PipelineCommand(google.protobuf.message.Message):
                 self, oneof_group: typing_extensions.Literal["_relation", b"_relation"]
             ) -> typing_extensions.Literal["relation"] | None: ...
 
+        class AutoCdcFlowDetails(google.protobuf.message.Message):
+            """Details for Auto CDC flows."""
+
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            SOURCE_FIELD_NUMBER: builtins.int
+            KEYS_FIELD_NUMBER: builtins.int
+            SEQUENCE_BY_FIELD_NUMBER: builtins.int
+            APPLY_AS_DELETES_FIELD_NUMBER: builtins.int
+            APPLY_AS_TRUNCATES_FIELD_NUMBER: builtins.int
+            COLUMN_LIST_FIELD_NUMBER: builtins.int
+            EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
+            STORED_AS_SCD_TYPE_FIELD_NUMBER: builtins.int
+            IGNORE_NULL_UPDATES_COLUMN_LIST_FIELD_NUMBER: builtins.int
+            IGNORE_NULL_UPDATES_EXCEPT_COLUMN_LIST_FIELD_NUMBER: builtins.int
+            source: builtins.str
+            """The name of the CDC source to stream from."""
+            @property
+            def keys(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """Column(s) that uniquely identify a row in source and target data."""
+            @property
+            def sequence_by(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+                """Expression to order the source data."""
+            @property
+            def apply_as_deletes(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+                """Delete condition for the merged operation."""
+            @property
+            def apply_as_truncates(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+                """Truncate condition for the merged operation."""
+            @property
+            def column_list(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """Columns included in the output table."""
+            @property
+            def except_column_list(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """Columns excluded from the output table."""
+            stored_as_scd_type: global___PipelineCommand.DefineFlow.SCDType.ValueType
+            """SCD Type for target table."""
+            @property
+            def ignore_null_updates_column_list(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """Subset of columns to ignore null in updates."""
+            @property
+            def ignore_null_updates_except_column_list(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                pyspark.sql.connect.proto.expressions_pb2.Expression
+            ]:
+                """Subset of columns excluded from ignoring null in updates."""
+            def __init__(
+                self,
+                *,
+                source: builtins.str | None = ...,
+                keys: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+                | None = ...,
+                sequence_by: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+                apply_as_deletes: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+                apply_as_truncates: pyspark.sql.connect.proto.expressions_pb2.Expression
+                | None = ...,
+                column_list: collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression
+                ]
+                | None = ...,
+                except_column_list: collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression
+                ]
+                | None = ...,
+                stored_as_scd_type: global___PipelineCommand.DefineFlow.SCDType.ValueType = ...,
+                ignore_null_updates_column_list: collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression
+                ]
+                | None = ...,
+                ignore_null_updates_except_column_list: collections.abc.Iterable[
+                    pyspark.sql.connect.proto.expressions_pb2.Expression
+                ]
+                | None = ...,
+            ) -> None: ...
+            def HasField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_apply_as_deletes",
+                    b"_apply_as_deletes",
+                    "_apply_as_truncates",
+                    b"_apply_as_truncates",
+                    "_sequence_by",
+                    b"_sequence_by",
+                    "_source",
+                    b"_source",
+                    "apply_as_deletes",
+                    b"apply_as_deletes",
+                    "apply_as_truncates",
+                    b"apply_as_truncates",
+                    "sequence_by",
+                    b"sequence_by",
+                    "source",
+                    b"source",
+                ],
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "_apply_as_deletes",
+                    b"_apply_as_deletes",
+                    "_apply_as_truncates",
+                    b"_apply_as_truncates",
+                    "_sequence_by",
+                    b"_sequence_by",
+                    "_source",
+                    b"_source",
+                    "apply_as_deletes",
+                    b"apply_as_deletes",
+                    "apply_as_truncates",
+                    b"apply_as_truncates",
+                    "column_list",
+                    b"column_list",
+                    "except_column_list",
+                    b"except_column_list",
+                    "ignore_null_updates_column_list",
+                    b"ignore_null_updates_column_list",
+                    "ignore_null_updates_except_column_list",
+                    b"ignore_null_updates_except_column_list",
+                    "keys",
+                    b"keys",
+                    "sequence_by",
+                    b"sequence_by",
+                    "source",
+                    b"source",
+                    "stored_as_scd_type",
+                    b"stored_as_scd_type",
+                ],
+            ) -> None: ...
+            @typing.overload
+            def WhichOneof(
+                self,
+                oneof_group: typing_extensions.Literal["_apply_as_deletes", b"_apply_as_deletes"],
+            ) -> typing_extensions.Literal["apply_as_deletes"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self,
+                oneof_group: typing_extensions.Literal[
+                    "_apply_as_truncates", b"_apply_as_truncates"
+                ],
+            ) -> typing_extensions.Literal["apply_as_truncates"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_sequence_by", b"_sequence_by"]
+            ) -> typing_extensions.Literal["sequence_by"] | None: ...
+            @typing.overload
+            def WhichOneof(
+                self, oneof_group: typing_extensions.Literal["_source", b"_source"]
+            ) -> typing_extensions.Literal["source"] | None: ...
+
         class Response(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -588,6 +775,7 @@ class PipelineCommand(google.protobuf.message.Message):
         CLIENT_ID_FIELD_NUMBER: builtins.int
         SOURCE_CODE_LOCATION_FIELD_NUMBER: builtins.int
         RELATION_FLOW_DETAILS_FIELD_NUMBER: builtins.int
+        AUTO_CDC_FLOW_DETAILS_FIELD_NUMBER: builtins.int
         EXTENSION_FIELD_NUMBER: builtins.int
         ONCE_FIELD_NUMBER: builtins.int
         dataflow_graph_id: builtins.str
@@ -613,6 +801,10 @@ class PipelineCommand(google.protobuf.message.Message):
             self,
         ) -> global___PipelineCommand.DefineFlow.WriteRelationFlowDetails: ...
         @property
+        def auto_cdc_flow_details(
+            self,
+        ) -> global___PipelineCommand.DefineFlow.AutoCdcFlowDetails: ...
+        @property
         def extension(self) -> google.protobuf.any_pb2.Any: ...
         once: builtins.bool
         """If true, define the flow as a one-time flow, such as for backfill.
@@ -632,6 +824,8 @@ class PipelineCommand(google.protobuf.message.Message):
             source_code_location: global___SourceCodeLocation | None = ...,
             relation_flow_details: global___PipelineCommand.DefineFlow.WriteRelationFlowDetails
             | None = ...,
+            auto_cdc_flow_details: global___PipelineCommand.DefineFlow.AutoCdcFlowDetails
+            | None = ...,
             extension: google.protobuf.any_pb2.Any | None = ...,
             once: builtins.bool | None = ...,
         ) -> None: ...
@@ -650,6 +844,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_source_code_location",
                 "_target_dataset_name",
                 b"_target_dataset_name",
+                "auto_cdc_flow_details",
+                b"auto_cdc_flow_details",
                 "client_id",
                 b"client_id",
                 "dataflow_graph_id",
@@ -685,6 +881,8 @@ class PipelineCommand(google.protobuf.message.Message):
                 b"_source_code_location",
                 "_target_dataset_name",
                 b"_target_dataset_name",
+                "auto_cdc_flow_details",
+                b"auto_cdc_flow_details",
                 "client_id",
                 b"client_id",
                 "dataflow_graph_id",
@@ -739,7 +937,10 @@ class PipelineCommand(google.protobuf.message.Message):
         @typing.overload
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["details", b"details"]
-        ) -> typing_extensions.Literal["relation_flow_details", "extension"] | None: ...
+        ) -> (
+            typing_extensions.Literal["relation_flow_details", "auto_cdc_flow_details", "extension"]
+            | None
+        ): ...
 
     class ExecuteOutputFlows(google.protobuf.message.Message):
         """Request to execute all flows for a single output (dataset or sink) remotely."""
