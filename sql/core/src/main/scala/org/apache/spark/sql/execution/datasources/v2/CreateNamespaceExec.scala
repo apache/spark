@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters.MapHasAsJava
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.NAMESPACE
 import org.apache.spark.sql.catalyst.InternalRow
@@ -46,6 +47,19 @@ case class CreateNamespaceExec(
       case _: NamespaceAlreadyExistsException if ifNotExists =>
         logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
           log"Ignoring.")
+      case NonFatal(e) if ifNotExists =>
+        // Some catalogs validate the request (e.g. ACLs, properties) before checking existence,
+        // so creating a pre-existing namespace can surface errors unrelated to the "already
+        // exists" condition the caller intends to ignore under IF NOT EXISTS. If the namespace
+        // really does exist, treat the operation as a no-op; otherwise propagate the original
+        // error.
+        val exists = try catalog.namespaceExists(ns) catch { case NonFatal(_) => false }
+        if (exists) {
+          logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} already exists; " +
+            log"swallowing underlying error under IF NOT EXISTS.", e)
+        } else {
+          throw e
+        }
     }
 
     Seq.empty
