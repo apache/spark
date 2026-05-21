@@ -15,24 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command.v2
+package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.sql.execution.command
+import java.util
 
 /**
- * The class contains tests for the `CREATE NAMESPACE` command to check V2 table catalogs.
+ * A test catalog whose `createNamespace` validates the request before checking existence, so a
+ * pre-existing namespace surfaces a non-`NamespaceAlreadyExistsException` error. Mirrors the
+ * authorize-then-execute ordering of catalogs like Unity Catalog and is used to exercise the
+ * `IF NOT EXISTS` recovery path in `CreateNamespaceExec`.
  */
-class CreateNamespaceSuite extends command.CreateNamespaceSuiteBase with CommandSuiteBase {
-  override def namespace: String = "ns1.ns2"
-
-  test("SPARK-55250: IF NOT EXISTS is a no-op on pre-existing namespace even when the " +
-    "catalog raises a non-NamespaceAlreadyExistsException error") {
-    val ns = s"$validatingCatalog.$namespace"
-    withNamespace(ns) {
-      sql(s"CREATE NAMESPACE $ns")
-      // Without the IF NOT EXISTS recovery path, this would surface the catalog's
-      // pre-existence validation error.
-      sql(s"CREATE NAMESPACE IF NOT EXISTS $ns")
+class ValidatingInMemoryTableCatalog extends InMemoryTableCatalog {
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = {
+    if (namespaceExists(namespace)) {
+      throw new RuntimeException(
+        s"simulated validation failure on pre-existing namespace ${namespace.mkString(".")}")
     }
+    super.createNamespace(namespace, metadata)
   }
 }
