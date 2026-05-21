@@ -63,6 +63,7 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     ArrayType,
+    MapType,
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
@@ -1974,7 +1975,7 @@ from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
