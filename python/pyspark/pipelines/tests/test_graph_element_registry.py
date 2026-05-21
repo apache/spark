@@ -17,9 +17,10 @@
 
 import unittest
 
-from pyspark.errors import PySparkException
+from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.pipelines.graph_element_registry import graph_element_registration_context
 from pyspark import pipelines as dp
+from pyspark.pipelines.flow import AutoCdcFlow
 from pyspark.pipelines.output import Sink
 from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
 from typing import cast
@@ -96,6 +97,83 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(sink_obj.format, "parquet")
         self.assertEqual(sink_obj.options["key1"], "value1")
         assert sink_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
+
+    def test_create_auto_cdc_flow(self):
+        from pyspark.sql.connect.functions.builtin import col, expr
+
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("target")
+            dp.create_auto_cdc_flow(
+                target="target",
+                source="source",
+                keys=[col("key")],
+                sequence_by=expr("seq"),
+            )
+
+        self.assertEqual(len(registry.outputs), 1)
+        self.assertEqual(len(registry.auto_cdc_flows), 1)
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertEqual(flow.target, "target")
+        self.assertEqual(flow.source, "source")
+        self.assertIsNone(flow.name)
+        assert flow.source_code_location.filename.endswith("test_graph_element_registry.py")
+
+    def test_create_auto_cdc_flow_with_all_args(self):
+        from pyspark.sql.connect.functions.builtin import col, expr
+
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            dp.create_auto_cdc_flow(
+                target="tgt",
+                source="src",
+                keys=[col("id")],
+                sequence_by=expr("ts"),
+                apply_as_deletes=expr("op = 'DELETE'"),
+                apply_as_truncates=expr("op = 'TRUNCATE'"),
+                column_list=[col("id"), col("val")],
+                ignore_null_updates_column_list=[col("val")],
+                stored_as_scd_type=1,
+                name="my_flow",
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertEqual(flow.name, "my_flow")
+        self.assertIsNotNone(flow.ignore_null_updates_column_list)
+        self.assertEqual(flow.stored_as_scd_type, 1)
+
+    def test_create_auto_cdc_flow_stored_as_scd_type_string(self):
+        from pyspark.sql.connect.functions.builtin import col, expr
+
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=[col("k")],
+                sequence_by=expr("seq"),
+                stored_as_scd_type="1",
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertEqual(flow.stored_as_scd_type, "1")
+
+    def test_create_auto_cdc_flow_invalid_scd_type(self):
+        from pyspark.sql.connect.functions.builtin import col, expr
+
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            with self.assertRaises(PySparkTypeError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="t",
+                    source="s",
+                    keys=[col("k")],
+                    sequence_by=expr("seq"),
+                    stored_as_scd_type=2,  # type: ignore[arg-type]
+                )
+            self.assertEqual(ctx.exception.getCondition(), "NOT_EXPECTED_TYPE")
 
     def test_definition_without_graph_element_registry(self):
         for decorator in [dp.table, dp.temporary_view, dp.materialized_view]:
