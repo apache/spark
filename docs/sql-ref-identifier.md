@@ -59,7 +59,7 @@ catalog or schema names.
 
 | Name | Position | Notes |
 | :--- | :------- | :---- |
-| `system` | catalog | Synthetic catalog hosting `system.builtin` and `system.session`. Not loadable as a v2 catalog plugin; `spark.sql.catalog.system = ...` is unsupported, and the current catalog cannot be `system`. |
+| `system` | catalog | Synthetic catalog hosting `system.builtin` and `system.session`. Spark does not load `system` through the v2 catalog API; setting `spark.sql.catalog.system = ...` is unsupported and may yield undefined results. The current catalog cannot be `system`. |
 | `builtin` | schema | A persistent schema literally named `builtin` is allowed but discouraged because it collides with `system.builtin`. |
 | `session` | schema | A persistent schema literally named `session` is allowed but discouraged because it collides with `system.session`. |
 

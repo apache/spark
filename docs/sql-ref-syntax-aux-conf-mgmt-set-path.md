@@ -47,9 +47,11 @@ The initial value of `PATH` in a session is `DEFAULT_PATH`. `DEFAULT_PATH` is ei
 `spark.sql.defaultPath`. See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation
 rules.
 
-A `SET PATH` is scoped to the current session and is lost when the session ends. To revert
-mid-session, run `SET PATH = DEFAULT_PATH`. Cloned sessions inherit the parent's path at clone
-time; later changes in the child do not propagate back.
+A `SET PATH` is scoped to the current session and is lost when the session ends. To re-apply
+the current default path mid-session, run `SET PATH = DEFAULT_PATH`. (This stores a snapshot of
+`DEFAULT_PATH` at the moment of the statement; later changes to `spark.sql.defaultPath` are not
+picked up automatically.) Cloned sessions inherit the parent's path at clone time; later changes
+in the child do not propagate back.
 
 Persistent views and SQL UDFs capture the path at `CREATE` time into the object's metadata.
 Each invocation resolves the body against that frozen path, not the invoker's current path;
@@ -69,10 +71,7 @@ path_element
       PATH |
       CURRENT_SCHEMA |
       CURRENT_DATABASE |
-      schema_name }
-
-schema_name
-    catalog_name . schema_name
+      catalog_name . schema_name }
 ```
 
 ### Parameters
@@ -102,7 +101,7 @@ schema_name
 
 * **`SYSTEM_PATH`**
 
-  Expands to `system.builtin, system.session`.
+  Expands to the two system namespaces, `system.builtin` and `system.session`.
 
 * **`PATH`**
 
