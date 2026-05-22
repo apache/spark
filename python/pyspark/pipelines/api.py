@@ -540,8 +540,6 @@ def create_auto_cdc_flow(
     except_column_list: Optional[Union[List[str], List[Column]]] = None,
     stored_as_scd_type: Optional[Literal[1, "1"]] = None,
     name: Optional[str] = None,
-    ignore_null_updates_column_list: Optional[Union[List[str], List[Column]]] = None,
-    ignore_null_updates_except_column_list: Optional[Union[List[str], List[Column]]] = None,
 ) -> None:
     """
     Create an Auto CDC flow into the target table from the Change Data Capture (CDC) source.
@@ -554,14 +552,11 @@ def create_auto_cdc_flow(
       source = "source",
       keys = ["key"],
       sequence_by = "sequence_expr",
-      ignore_null_updates_column_list = ["value"],
       column_list = ["key", "value"],
     )
 
-    Note that for keys, sequence_by, column_list, except_column_list,
-    ignore_null_updates_column_list, and ignore_null_updates_except_column_list the arguments
-    have to be column identifiers without qualifiers, e.g. they cannot be
-    col("sourceTable.keyId").
+    Note that for keys, sequence_by, column_list, and except_column_list the arguments have to
+    be column identifiers without qualifiers, e.g. they cannot be col("sourceTable.keyId").
 
     :param target: The name of the target table that receives the Auto CDC flow.
     :param source: The name of the CDC source to stream from.
@@ -570,43 +565,30 @@ def create_auto_cdc_flow(
         table. These keys also identify records in the target table, e.g., if there exists a record \
         for given keys and the CDC source has an UPSERT operation for the same keys, we will update \
         the existing record. At least one key must be provided. This should be a list of column \
-        identifiers without qualifiers, expressed as either Python strings or Pyspark Columns.
+        identifiers without qualifiers, expressed as either Python strings or PySpark Columns.
     :param sequence_by: An expression that we use to order the source data. This can be expressed \
-        as either a Python string or Pyspark Expression.
+        as either a Python string or PySpark Expression.
     :param apply_as_deletes: Delete condition for the merged operation. This should be a string of \
         expression e.g. "operation = 'DELETE'"
     :param apply_as_truncates: Truncate condition for the merged operation. This should be a string \
         expression e.g. "operation = 'TRUNCATE'"
     :param column_list: Columns that will be included in the output table. This should be a list \
-        of column identifiers without qualifiers, expressed as either Python strings or Pyspark \
+        of column identifiers without qualifiers, expressed as either Python strings or PySpark \
         Column. Only one of column_list and except_column_list can be specified.
     :param except_column_list: Columns that will be excluded in the output table. This should be a \
-        list of column identifiers without qualifiers, expressed as either Python strings or Pyspark \
-        Column. Only one of column_list and except_column_list can be specified. When this is \
-        specified, all columns in the dataframe of the target table except those in this list will \
-        be in the output table.
+        list of column identifiers without qualifiers, expressed as either Python strings or \
+        PySpark Column. Only one of column_list and except_column_list can be specified. When this \
+        is specified, all columns in the dataframe of the target table except those in this list \
+        will be in the output table.
     :param stored_as_scd_type: The SCD type for the target table. Only 1 (or "1") is supported. \
         When not specified the server default applies.
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified this \
            will build a "default flow" with name equal to the target name.
-    :param ignore_null_updates_column_list: Subset of columns to ignore null values in during \
-        updates. When a source row has a null for one of these columns, the existing value in the \
-        target is preserved. Only one of ignore_null_updates_column_list and \
-        ignore_null_updates_except_column_list can be specified.
-    :param ignore_null_updates_except_column_list: Columns excluded from null-update ignoring. \
-        All other columns will have null values ignored during updates. Only one of \
-        ignore_null_updates_column_list and ignore_null_updates_except_column_list can be specified.
     """
     keys = _normalize_column_list(keys)
 
     column_list = _normalize_optional_column_list(column_list)
     except_column_list = _normalize_optional_column_list(except_column_list)
-    ignore_null_updates_column_list = _normalize_optional_column_list(
-        ignore_null_updates_column_list
-    )
-    ignore_null_updates_except_column_list = _normalize_optional_column_list(
-        ignore_null_updates_except_column_list
-    )
 
     if isinstance(sequence_by, str):
         sequence_by = F.expr(sequence_by)
@@ -640,8 +622,6 @@ def create_auto_cdc_flow(
         column_list=column_list,
         except_column_list=except_column_list,
         stored_as_scd_type=stored_as_scd_type,
-        ignore_null_updates_column_list=ignore_null_updates_column_list,
-        ignore_null_updates_except_column_list=ignore_null_updates_except_column_list,
         source_code_location=source_code_location,
     )
 

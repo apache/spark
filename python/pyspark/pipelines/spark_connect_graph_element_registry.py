@@ -19,11 +19,6 @@ from pathlib import Path
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession, Column
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-from pyspark.sql.connect.types import pyspark_types_to_proto_types
-from pyspark.sql.types import StructType
-from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
-from pyspark.pipelines.flow import AutoCdcFlow, Flow
-from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 from pyspark.pipelines.output import (
     Output,
     MaterializedView,
@@ -32,10 +27,14 @@ from pyspark.pipelines.output import (
     StreamingTable,
     TemporaryView,
 )
+from pyspark.pipelines.flow import AutoCdcFlow, Flow
+from pyspark.pipelines.graph_element_registry import GraphElementRegistry
 from pyspark.pipelines.source_code_location import SourceCodeLocation
+from pyspark.sql.connect.types import pyspark_types_to_proto_types
+from pyspark.sql.types import StructType
 from typing import Any, List, Optional, cast
-
 import pyspark.sql.connect.proto as pb2
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 
 
 class SparkConnectGraphElementRegistry(GraphElementRegistry):
@@ -149,10 +148,6 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             sequence_by=to_plan(flow.sequence_by),
             column_list=to_plans(flow.column_list),
             except_column_list=to_plans(flow.except_column_list),
-            ignore_null_updates_column_list=to_plans(flow.ignore_null_updates_column_list),
-            ignore_null_updates_except_column_list=to_plans(
-                flow.ignore_null_updates_except_column_list
-            ),
         )
         if flow.stored_as_scd_type is not None:
             auto_cdc_details.stored_as_scd_type = pb2.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1

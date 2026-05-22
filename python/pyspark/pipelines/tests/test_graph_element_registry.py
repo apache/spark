@@ -23,6 +23,7 @@ from pyspark import pipelines as dp
 from pyspark.pipelines.flow import AutoCdcFlow
 from pyspark.pipelines.output import Sink
 from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
+from pyspark.sql import Column
 from pyspark.sql.connect.functions.builtin import col, expr
 from typing import cast
 
@@ -117,8 +118,6 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(flow.target, "target")
         self.assertEqual(flow.source, "source")
         self.assertIsNone(flow.name)
-        self.assertIsNone(flow.ignore_null_updates_column_list)
-        self.assertIsNone(flow.ignore_null_updates_except_column_list)
         self.assertIsNone(flow.stored_as_scd_type)
         self.assertIsNone(flow.apply_as_deletes)
         self.assertIsNone(flow.apply_as_truncates)
@@ -136,15 +135,39 @@ class GraphElementRegistryTest(unittest.TestCase):
                 apply_as_deletes=expr("op = 'DELETE'"),
                 apply_as_truncates=expr("op = 'TRUNCATE'"),
                 column_list=[col("id"), col("val")],
-                ignore_null_updates_column_list=[col("val")],
                 stored_as_scd_type=1,
                 name="my_flow",
             )
 
         flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
         self.assertEqual(flow.name, "my_flow")
-        self.assertIsNotNone(flow.ignore_null_updates_column_list)
         self.assertEqual(flow.stored_as_scd_type, 1)
+
+    def test_create_auto_cdc_flow_with_string_args(self):
+        # Verify that string forms of column / expression arguments are normalized to
+        # PySpark Columns, equivalent to passing col(...) / expr(...) directly.
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            dp.create_auto_cdc_flow(
+                target="tgt",
+                source="src",
+                keys=["id"],
+                sequence_by="ts",
+                apply_as_deletes="op = 'DELETE'",
+                apply_as_truncates="op = 'TRUNCATE'",
+                column_list=["id", "val"],
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        for k in flow.keys:
+            self.assertIsInstance(k, Column)
+        self.assertIsInstance(flow.sequence_by, Column)
+        self.assertIsInstance(flow.apply_as_deletes, Column)
+        self.assertIsInstance(flow.apply_as_truncates, Column)
+        assert flow.column_list is not None
+        for c in flow.column_list:
+            self.assertIsInstance(c, Column)
 
     def test_create_auto_cdc_flow_stored_as_scd_type_string(self):
         registry = LocalGraphElementRegistry()

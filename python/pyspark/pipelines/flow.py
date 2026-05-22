@@ -61,8 +61,6 @@ class AutoCdcFlow:
     :param column_list: Optional columns to include in the output table.
     :param except_column_list: Optional columns to exclude from the output table.
     :param stored_as_scd_type: Optional SCD type for the target table. Only 1 is supported.
-    :param ignore_null_updates_column_list: Subset of columns to ignore null in updates.
-    :param ignore_null_updates_except_column_list: Columns excluded from null-ignore in updates.
     :param source_code_location: The location of the source code that created this flow.
     """
 
@@ -76,6 +74,4 @@ class AutoCdcFlow:
     column_list: Optional[List[Column]]
     except_column_list: Optional[List[Column]]
     stored_as_scd_type: Optional[Literal[1, "1"]]
-    ignore_null_updates_column_list: Optional[List[Column]]
-    ignore_null_updates_except_column_list: Optional[List[Column]]
     source_code_location: SourceCodeLocation
