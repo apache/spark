@@ -746,6 +746,7 @@ class SparkConnectClient(object):
         self._profiler_collector = ConnectProfilerCollector()
 
         self._progress_handlers: List[ProgressHandler] = []
+        self._execution_info_callbacks: "List[Callable[[str, ExecutionInfo], None]]" = []
 
         self._zstd_module = _import_zstandard_if_available()
         self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
@@ -791,6 +792,25 @@ class SparkConnectClient(object):
 
     def clear_progress_handlers(self) -> None:
         self._progress_handlers.clear()
+
+    def register_execution_info_callback(
+        self, cb: "Callable[[str, ExecutionInfo], None]"
+    ) -> None:
+        if cb not in self._execution_info_callbacks:
+            self._execution_info_callbacks.append(cb)
+
+    def remove_execution_info_callback(
+        self, cb: "Callable[[str, ExecutionInfo], None]"
+    ) -> None:
+        if cb in self._execution_info_callbacks:
+            self._execution_info_callbacks.remove(cb)
+
+    def _fire_execution_info(self, operation_id: str, ei: ExecutionInfo) -> None:
+        for cb in self._execution_info_callbacks:
+            try:
+                cb(operation_id, ei)
+            except Exception:
+                pass
 
     def remove_progress_handler(self, handler: ProgressHandler) -> None:
         """
@@ -1039,6 +1059,7 @@ class SparkConnectClient(object):
 
         # Create a query execution object.
         ei = ExecutionInfo(metrics, observed_metrics)
+        self._fire_execution_info(req.operation_id, ei)
         assert table is not None
         return table, schema, ei
 
@@ -1075,6 +1096,7 @@ class SparkConnectClient(object):
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
+        self._fire_execution_info(req.operation_id, ei)
 
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
@@ -1220,6 +1242,7 @@ class SparkConnectClient(object):
         )
         # Create a query execution object.
         ei = ExecutionInfo(metrics, observed_metrics)
+        self._fire_execution_info(req.operation_id, ei)
         if data is not None:
             return (data.to_pandas(), properties, ei)
         else:

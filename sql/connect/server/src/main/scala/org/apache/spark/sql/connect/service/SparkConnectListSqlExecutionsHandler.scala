@@ -96,10 +96,13 @@ class SparkConnectListSqlExecutionsHandler(
       .setDescription(Option(exec.description).getOrElse(""))
       .setStatus(mapStatus(exec))
       .setSubmissionTimeMs(exec.submissionTime)
+      .setStageCount(exec.stages.size)
 
     exec.completionTime.foreach(t => builder.setCompletionTimeMs(t.getTime))
     exec.errorMessage.foreach(builder.setErrorMessage)
     exec.jobs.keys.toSeq.sorted.foreach(id => builder.addJobIds(id))
+    Option(exec.queryId).foreach(id => builder.setQueryId(id.toString))
+    Option(exec.details).filter(_.nonEmpty).foreach(builder.setDetails)
 
     builder.build()
   }

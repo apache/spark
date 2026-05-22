@@ -1356,6 +1356,13 @@ message ListSqlExecutionsResponse {
     // Job IDs associated with this execution. Job statuses are not included; clients can look
     // them up via the existing /api/v1/applications/{appId}/jobs REST endpoint if needed.
     repeated int32 job_ids = 8;
+    // UUID assigned by SQLExecution; null for executions recovered from old event logs.
+    optional string query_id = 9;
+    // Long form of the call site for the executing SQL/DataFrame operation. For Connect
+    // executions this is set to a redacted, abbreviated rendering of the ExecutePlanRequest.
+    optional string details = 10;
+    // Number of Spark stages associated with this execution.
+    int32 stage_count = 11;
   }
 
   enum SqlExecutionStatus {

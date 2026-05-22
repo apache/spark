@@ -4759,6 +4759,9 @@ class ListSqlExecutionsResponse(google.protobuf.message.Message):
         COMPLETION_TIME_MS_FIELD_NUMBER: builtins.int
         ERROR_MESSAGE_FIELD_NUMBER: builtins.int
         JOB_IDS_FIELD_NUMBER: builtins.int
+        QUERY_ID_FIELD_NUMBER: builtins.int
+        DETAILS_FIELD_NUMBER: builtins.int
+        STAGE_COUNT_FIELD_NUMBER: builtins.int
         execution_id: builtins.int
         root_execution_id: builtins.int
         description: builtins.str
@@ -4774,6 +4777,14 @@ class ListSqlExecutionsResponse(google.protobuf.message.Message):
             """Job IDs associated with this execution. Job statuses are not included; clients can look
             them up via the existing /api/v1/applications/{appId}/jobs REST endpoint if needed.
             """
+        query_id: builtins.str
+        """UUID assigned by SQLExecution; null for executions recovered from old event logs."""
+        details: builtins.str
+        """Long form of the call site for the executing SQL/DataFrame operation. For Connect
+        executions this is set to a redacted, abbreviated rendering of the ExecutePlanRequest.
+        """
+        stage_count: builtins.int
+        """Number of Spark stages associated with this execution."""
         def __init__(
             self,
             *,
@@ -4785,18 +4796,29 @@ class ListSqlExecutionsResponse(google.protobuf.message.Message):
             completion_time_ms: builtins.int | None = ...,
             error_message: builtins.str | None = ...,
             job_ids: collections.abc.Iterable[builtins.int] | None = ...,
+            query_id: builtins.str | None = ...,
+            details: builtins.str | None = ...,
+            stage_count: builtins.int = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
                 "_completion_time_ms",
                 b"_completion_time_ms",
+                "_details",
+                b"_details",
                 "_error_message",
                 b"_error_message",
+                "_query_id",
+                b"_query_id",
                 "completion_time_ms",
                 b"completion_time_ms",
+                "details",
+                b"details",
                 "error_message",
                 b"error_message",
+                "query_id",
+                b"query_id",
             ],
         ) -> builtins.bool: ...
         def ClearField(
@@ -4804,20 +4826,30 @@ class ListSqlExecutionsResponse(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "_completion_time_ms",
                 b"_completion_time_ms",
+                "_details",
+                b"_details",
                 "_error_message",
                 b"_error_message",
+                "_query_id",
+                b"_query_id",
                 "completion_time_ms",
                 b"completion_time_ms",
                 "description",
                 b"description",
+                "details",
+                b"details",
                 "error_message",
                 b"error_message",
                 "execution_id",
                 b"execution_id",
                 "job_ids",
                 b"job_ids",
+                "query_id",
+                b"query_id",
                 "root_execution_id",
                 b"root_execution_id",
+                "stage_count",
+                b"stage_count",
                 "status",
                 b"status",
                 "submission_time_ms",
@@ -4831,8 +4863,16 @@ class ListSqlExecutionsResponse(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["completion_time_ms"] | None: ...
         @typing.overload
         def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_details", b"_details"]
+        ) -> typing_extensions.Literal["details"] | None: ...
+        @typing.overload
+        def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_error_message", b"_error_message"]
         ) -> typing_extensions.Literal["error_message"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_query_id", b"_query_id"]
+        ) -> typing_extensions.Literal["query_id"] | None: ...
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
