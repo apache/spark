@@ -95,13 +95,29 @@ class Scd1BatchProcessorMergeSuite
   }
 
   /**
-   * Create an auxiliary table in the test catalog using [[minimalSchema]] and seed it with
-   * `seedRows`. The table is unpartitioned and supports row-level operations. Pass no rows
-   * to create an empty table.
+   * Build an auxiliary-table schema with the given key columns followed by the standard CDC
+   * metadata struct. Used by tests that need a non-trivial key shape (composite or dotted).
    */
-  private def createAuxTable(seedRows: Row*): Unit = {
+  private def auxSchemaWithCompositeKeys(keyColumns: Seq[(String, DataType)]): StructType = {
+    val withKeys = keyColumns.foldLeft(new StructType()) { case (s, (name, dt)) =>
+      s.add(name, dt)
+    }
+    withKeys.add(
+      Scd1BatchProcessor.cdcMetadataColName,
+      new StructType()
+        .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
+        .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+    )
+  }
+
+  /**
+   * Create an auxiliary table in the test catalog using `schema` and seed it with `seedRows`.
+   * The table is unpartitioned and supports row-level operations. Pass no rows to create an
+   * empty table.
+   */
+  private def createAuxTableWithSchema(schema: StructType, seedRows: Row*): Unit = {
     val tableInfo = new TableInfo.Builder()
-      .withSchema(minimalSchema)
+      .withSchema(schema)
       .build()
     spark.sessionState.catalogManager
       .catalog(auxCatalogName)
@@ -109,10 +125,14 @@ class Scd1BatchProcessorMergeSuite
       .createTable(auxIdent, tableInfo)
 
     if (seedRows.nonEmpty) {
-      val df = spark.createDataFrame(spark.sparkContext.parallelize(seedRows), minimalSchema)
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(seedRows), schema)
       df.writeTo(auxTableIdentifier.quotedString).append()
     }
   }
+
+  /** Create an auxiliary table using [[minimalSchema]] (single `id` key). */
+  private def createAuxTable(seedRows: Row*): Unit =
+    createAuxTableWithSchema(minimalSchema, seedRows: _*)
 
   /** Read the current contents of the auxiliary table. */
   private def readAuxTable(): DataFrame = spark.read.table(auxTableIdentifier.quotedString)
@@ -313,5 +333,70 @@ class Scd1BatchProcessorMergeSuite
     //   - id=4 has tied delete (incoming==aux); same reason.
     processor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
     checkAnswer(readAuxTable(), expectedAfterMerge)
+  }
+
+  test("mergeMicrobatchOntoAuxiliaryTable correctly inserts tombstones for composite key") {
+    // Composite key: (region, customer_id). The merge join condition is the AND of every key
+    // column equality, so an aux row sharing only `region` with the microbatch must NOT be
+    // touched, while the microbatch row must be inserted as a new tombstone.
+    val compositeSchema = auxSchemaWithCompositeKeys(Seq(
+      "region" -> StringType,
+      "customer_id" -> IntegerType
+    ))
+    createAuxTableWithSchema(
+      compositeSchema,
+      Row("US", 99, cdcMetadataRow(deleteSeq = Some(50), upsertSeq = None))
+    )
+
+    val compositeKeyProcessor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("region"), UnqualifiedColumnName("customer_id")),
+        sequencing = F.lit(0L),
+        storedAsScdType = ScdType.Type1
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    val microbatch = microbatchOf(compositeSchema)(
+      Row("US", 1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
+    )
+
+    compositeKeyProcessor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+
+    checkAnswer(readAuxTable(), Seq(
+      Row("US", 99, Row(50L, null)),
+      Row("US", 1, Row(10L, null))
+    ))
+  }
+
+  test("mergeMicrobatchOntoAuxiliaryTable correctly merges for backticked/dotted keys") {
+    // Even though the column is a backticked identifier in user-facing DDL, Spark drops the
+    // backticks during schema resolution so the field name is the literal `user.id`. The merge
+    // path must propagate the user's quoted identifier through `k.quoted` so the join condition
+    // and update target both resolve to the same physical column.
+    val dottedKeySchema = auxSchemaWithCompositeKeys(Seq("user.id" -> IntegerType))
+    createAuxTableWithSchema(
+      dottedKeySchema,
+      Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
+    )
+
+    val dottedKeyProcessor = Scd1BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("`user.id`")),
+        sequencing = F.lit(0L),
+        storedAsScdType = ScdType.Type1
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    // We expect the existing tombstone with del seq=10 to be advanced to 20 if the merge matches
+    // dotted keys correctly.
+    val microbatch = microbatchOf(dottedKeySchema)(
+      Row(1, cdcMetadataRow(deleteSeq = Some(20), upsertSeq = None))
+    )
+
+    dottedKeyProcessor.mergeMicrobatchOntoAuxiliaryTable(microbatch, auxTableIdentifier)
+
+    checkAnswer(readAuxTable(), Row(1, Row(20L, null)))
   }
 }
