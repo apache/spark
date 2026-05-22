@@ -141,7 +141,7 @@ sealed trait UnresolvedFlow extends Flow {
  * and resolution. For example an AutoCDCFlow is a special unresolved-but-typed flow; we know a
  * flow will be an AutoCDC flow immediately on construction, because it has its own special
  * registration API. Such flows are considered "typed flows", but there isn't any semantic reason
- * yet to explicitly introduce a `TypedFlow` trait/class. 
+ * yet to explicitly introduce a `TypedFlow` trait/class.
  */
 case class UntypedFlow(
     identifier: TableIdentifier,
