@@ -63,6 +63,7 @@ abstract class SchemaPruningSuite
 
   case class Employee(id: Int, name: FullName, employer: Company)
   case class Team(members: Array[Employer])
+  case class Organization(team: Team)
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -88,6 +89,8 @@ abstract class SchemaPruningSuite
 
   val employees = Employee(0, janeDoe, company) :: Employee(1, johnDoe, company) :: Nil
   val teams = Team(Array(employer)) :: Nil
+  val organizations =
+    Organization(Team(Array[Employer](null, employerWithNullCompany, employer))) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -386,6 +389,18 @@ abstract class SchemaPruningSuite
 
       checkScan(query, "struct<members:array<struct<company:struct<address:string>>>>")
       checkAnswer(query, Row(Array("123 Business Street")) :: Nil)
+    }
+  }
+
+  test("select ArrayTransform over nested array path with null elements") {
+    withDataSourceTable(organizations, "organizations") {
+      val query = spark.table("organizations")
+        .select(transform(col("team.members"), member =>
+          member.getField("company").getField("address")))
+
+      checkScan(query,
+        "struct<team:struct<members:array<struct<company:struct<address:string>>>>>")
+      checkAnswer(query, Row(Array(null, null, "123 Business Street")) :: Nil)
     }
   }
 
