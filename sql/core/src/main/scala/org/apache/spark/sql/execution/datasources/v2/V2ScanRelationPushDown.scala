@@ -153,12 +153,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         condition.isDefined &&
         // Do not push down join if either side has a pushed sample with
         // fraction < 1, because the merged scan builder would silently
-        // discard it and change the result. At fraction = 1 the sample is
-        // a no-op on the result set, so dropping it is safe.
+        // discard it and change the result. At fraction = 1 without
+        // replacement the sample is a no-op on the result set, so dropping
+        // it is safe. With replacement (Poisson sampling), even fraction 1
+        // can emit each row 0, 1, 2, ... times, so it is not a no-op.
         // TODO(SPARK-56504): Extend SupportsPushDownJoin to accept pushed
         //   samples so sources supporting both can handle the composition.
-        leftHolder.pushedSample.forall(s => s.upperBound - s.lowerBound >= 1.0) &&
-        rightHolder.pushedSample.forall(s => s.upperBound - s.lowerBound >= 1.0) &&
+        leftHolder.pushedSample.forall(s =>
+          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
+        rightHolder.pushedSample.forall(s =>
+          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
