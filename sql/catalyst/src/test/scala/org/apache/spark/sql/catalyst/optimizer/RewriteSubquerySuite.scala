@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, IsNull, ListQuery, Not}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 
@@ -180,6 +180,20 @@ class RewriteSubquerySuite extends PlanTest {
 
     val query = relation1.where(
       Not($"a".in(ListQuery(relation2.offset(1))))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with preserved RHS row-limit marker skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+    relation2.setTagValue(RewritePredicateSubquery.NOT_IN_SUBQUERY_WITH_ROW_LIMIT, ())
+
+    val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
     var optimized: LogicalPlan = null
     withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
       optimized = Optimize.execute(query.analyze)

@@ -6406,6 +6406,7 @@ object SQLConf {
   val OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION =
     buildConf("spark.sql.optimizeTopLevelSingleColumnNotInWithUnion")
       .internal()
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("When true, deterministic top-level single-column NOT IN subqueries without " +
         "correlation predicates may be rewritten into a UNION fallback that separates the " +
         "empty-right case from a regular equi left anti join when the broadcast null-aware " +

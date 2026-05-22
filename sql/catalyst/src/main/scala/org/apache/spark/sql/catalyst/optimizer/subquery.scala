@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -55,6 +56,9 @@ import org.apache.spark.util.Utils
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper
   with JoinSelectionHelper {
+
+  private[optimizer] val NOT_IN_SUBQUERY_WITH_ROW_LIMIT =
+    TreeNodeTag[Unit]("notInSubqueryWithRowLimit")
 
   private def existenceScalarSubquery(
       plan: LogicalPlan,
@@ -137,7 +141,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper
     //   2. whether it contains a NULL key, and
     //   3. the anti-join branch over non-null keys.
     // Only duplicate plans whose repeated evaluation preserves the original NOT IN semantics.
-    subplan.deterministic && !subplan.exists {
+    !subplan.containsTag(NOT_IN_SUBQUERY_WITH_ROW_LIMIT) &&
+      subplan.deterministic && !subplan.exists {
       // LIMIT / OFFSET are order- or cardinality-sensitive when re-evaluated independently, so
       // duplicating them across those branches can change which RHS rows each branch observes.
       case _: GlobalLimit | _: LocalLimit | _: Offset => true
