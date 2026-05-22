@@ -21,7 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.{QueryContext, SparkArithmeticException, SparkIllegalArgumentException}
+import org.apache.spark.{QueryContext, SparkArithmeticException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -1989,9 +1989,14 @@ case class Cast(
       to: DataType): CastFunction = {
     assert(ansiEnabled)
     if (integralType == "int") {
-      // Long -> Int: call LongExactNumeric.toInt directly. It already does the
+      // Integral -> Int: call the existing *ExactNumeric.toInt directly. It already does the
       // bounds check and throws castingCauseOverflowError -- same as the inline body.
-      val numericObj = LongExactNumeric.getClass.getCanonicalName.stripSuffix("$")
+      // Only LongType reaches this branch today (`castToIntCode` gates on `case LongType`).
+      val numericObj = (from match {
+        case LongType => LongExactNumeric
+        case _ => throw SparkException.internalError(
+          s"Unexpected source type $from for castIntegralTypeToIntegralTypeExactCode int branch")
+      }).getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) => code"$evPrim = $numericObj.toInt($c);"
     } else {
     } else {
@@ -2032,6 +2037,8 @@ case class Cast(
       val numericObj = (from match {
         case FloatType => FloatExactNumeric
         case DoubleType => DoubleExactNumeric
+        case _ => throw SparkException.internalError(
+          s"Unexpected source type $from for castFractionToIntegralTypeCode")
       }).getClass.getCanonicalName.stripSuffix("$")
       val method = s"to${integralType.capitalize}"
       (c, evPrim, _) => code"$evPrim = $numericObj.$method($c);"
