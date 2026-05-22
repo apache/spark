@@ -503,38 +503,54 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     return pick_ref
 
 
-def cherry_pick(pr_num, merge_hash, default_branch, branch_names, already_picked=()):
+def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
+    """Return the sibling branch-M.x if Upstream-First should prompt, else None.
+
+    The policy only applies when the PR was merged into master: that's the only case
+    where the committer can type branch-M.N at the cherry-pick prompt and bypass the
+    rolling branch-M.x. When the PR was opened against branch-M.x the merge itself
+    lands there (nothing to bypass), and when it was opened against branch-M.N the
+    author already chose per-branch scope.
+
+    >>> _upstream_first_sibling("master", "branch-4.2", ["branch-4.x", "branch-4.2"], ())
+    'branch-4.x'
+    >>> _upstream_first_sibling("master", "branch-4.2", ["branch-4.x", "branch-4.2"],
+    ...                         ("branch-4.x",))
+    >>> _upstream_first_sibling("master", "branch-4.x", ["branch-4.x"], ())
+    >>> _upstream_first_sibling("master", "branch-4.99", ["branch-4.2"], ())
+    >>> _upstream_first_sibling("branch-4.x", "branch-4.2", ["branch-4.x", "branch-4.2"], ())
+    >>> _upstream_first_sibling("branch-4.2", "branch-3.5", ["branch-4.x", "branch-3.5"], ())
+    """
+    if target_ref != "master":
+        return None
+    m = re.match(r"^branch-(\d+)\.(\d+)$", pick_ref)
+    if not m:
+        return None
+    candidate = "branch-%s.x" % m.group(1)
+    if candidate in branch_names and candidate not in already_picked:
+        return candidate
+    return None
+
+
+def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
     """Prompt for a target branch and cherry-pick `merge_hash` onto it.
 
-    Enforces the Upstream-First policy (see header comment): when the committer types a
-    branch-M.N target while branch-M.x is also a known release branch AND has not already
-    received this commit, prompt to confirm whether to pick into BOTH (the policy-compliant
-    default) or branch-M.N only (treated as a maintenance-only bugfix). Returns the list of
-    refs actually picked into, so the main loop can advance its remaining-branches list
-    correctly.
+    Enforces the Upstream-First policy (see header comment) via
+    `_upstream_first_sibling`: when the PR was merged into master and the committer
+    types a branch-M.N target while branch-M.x is also a known release branch AND
+    has not already received this commit, prompt to confirm whether to pick into
+    BOTH (the policy-compliant default) or branch-M.N only (treated as a
+    maintenance-only bugfix). Returns the list of refs actually picked into, so
+    the main loop can advance its remaining-branches list correctly.
     """
     pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
     if pick_ref == "":
         pick_ref = default_branch
 
-    # Upstream-First check: if the committer typed branch-M.N and branch-M.x exists as a
-    # sibling release branch that has not yet received this commit, surface the policy and
-    # offer to pick both in one step. Skipping when sibling_x is the merge target or already
-    # in already_picked avoids a redundant prompt / failing re-cherry-pick.
-    sibling_x = None
-    m = re.match(r"^branch-(\d+)\.(\d+)$", pick_ref)
-    if m:
-        candidate = "branch-%s.x" % m.group(1)
-        if (
-            candidate in branch_names
-            and candidate != pick_ref
-            and candidate not in already_picked
-        ):
-            sibling_x = candidate
-
+    sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
         print()
-        print("=" * 76)
+        print("=" * 80)
         print(
             "Upstream-First policy: non-bugfix commits on %s should also land on %s."
             % (pick_ref, sibling_x)
@@ -542,7 +558,7 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, already_picked
         print("If this is a %s-only maintenance bugfix, you may pick %s alone."
               % (pick_ref, pick_ref))
         print("Otherwise, pick both (%s first, then %s)." % (sibling_x, pick_ref))
-        print("=" * 76)
+        print("=" * 80)
         choice = (
             bold_input(
                 "Pick into [b]oth %s + %s / [o]nly %s / [a]bort (default: both): "
@@ -558,7 +574,6 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, already_picked
         elif choice in ("o", "only"):
             return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
         elif choice in ("a", "abort"):
-            clean_up()
             fail("Aborted by user at Upstream-First policy prompt.")
         else:
             fail("Unrecognized choice %r; aborting." % choice)
@@ -1002,7 +1017,7 @@ def main():
 
         print("Found commit %s:\n%s" % (merge_hash, message))
         default = branch_names[0]
-        cherry_pick(pr_num, merge_hash, default, branch_names, already_picked=())
+        cherry_pick(pr_num, merge_hash, default, branch_names, target_ref, already_picked=())
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -1046,7 +1061,8 @@ def main():
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
         default = remaining_branches[0] if remaining_branches else branch_names[0]
         picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, already_picked=tuple(merged_refs)
+            pr_num, merge_hash, default, branch_names, target_ref,
+            already_picked=tuple(merged_refs),
         )
         merged_refs = merged_refs + picked
         for b in picked:
