@@ -63,7 +63,7 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
     val serverName = InProcessServerBuilder.generateName()
     server = InProcessServerBuilder.forName(serverName)
       .directExecutor()
-      .addService(new EchoWorkerService)
+      .addService(new UdfWorkerService(() => new EchoExecutionHandler))
       .build()
       .start()
     channel = InProcessChannelBuilder.forName(serverName).directExecutor().build()
@@ -151,11 +151,37 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
   private case object Cancelled extends WorkerState
   private case object Done extends WorkerState
 
-  private class EchoWorkerService extends UdfWorkerGrpc.UdfWorkerImplBase {
+  // ---------------------------------------------------------------------------
+  // Execution handler interface — the seam between the gRPC state machine and
+  // UDF-specific logic. The state machine calls these hooks at well-defined
+  // lifecycle points; the handler contains no I/O or state-machine knowledge.
+  // ---------------------------------------------------------------------------
+  private trait ExecutionHandler {
+    /** Returns None on success or Some(error) to fail init. */
+    def onInit(payload: ByteString): Option[ExecutionError]
+
+    /**
+     * Called for each DataRequest. The handler calls emit() to produce zero or
+     * more DataResponse messages. Returns None on success or Some(error) to
+     * signal a data-phase error.
+     */
+    def onData(data: DataRequest, emit: DataResponse => Unit): Option[ExecutionError]
+
+    /** Returns metrics to include in FinishResponse; called after all data is processed. */
+    def onFinish(): Map[String, String]
+
+    /** Called when the stream is cancelled or aborted (cleanup hook). */
+    def onCancel(): Unit
+  }
+
+  // UdfWorkerService wires a fresh ExecutionHandler instance to each Execute
+  // stream so that handler state is scoped to a single session.
+  private class UdfWorkerService(
+      mkHandler: () => ExecutionHandler) extends UdfWorkerGrpc.UdfWorkerImplBase {
 
     override def execute(
         responseObserver: StreamObserver[UdfResponse]): StreamObserver[UdfRequest] =
-      new ExecuteStreamHandler(responseObserver)
+      new ExecuteStreamHandler(mkHandler(), responseObserver)
 
     override def manage(
         request: WorkerRequest,
@@ -182,6 +208,7 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
   }
 
   private class ExecuteStreamHandler(
+      handler: ExecutionHandler,
       responseObserver: StreamObserver[UdfResponse]) extends StreamObserver[UdfRequest] {
 
     // State mutations go through `matchUpdateThen`: under stateLock, the
@@ -264,20 +291,11 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
     }
 
     // Init processing hook: invoked once with the complete assembled UDF
-    // payload (inline + all chunks, if any). A real worker would deserialize
-    // the UDF, run validation, set up runtime resources here. The echo worker
-    // succeeds for any payload other than INIT_ERROR_TRIGGER, which simulates
-    // an init-time failure (e.g. deserialization error, missing dependency).
+    // payload (inline + all chunks, if any). Delegates to handler.onInit so
+    // that UDF-specific logic (deserialization, validation, resource setup)
+    // lives in the handler rather than the state machine.
     private def finalizeInit(payload: ByteString): Unit = {
-      val initError: Option[ExecutionError] = if (payload == INIT_ERROR_TRIGGER) {
-        Some(ExecutionError.newBuilder()
-          .setWorker(WorkerError.newBuilder()
-            .setMessage("simulated init failure")
-            .build())
-          .build())
-      } else {
-        None
-      }
+      val initError: Option[ExecutionError] = handler.onInit(payload)
       matchUpdateThen {
         case AwaitingInit | AwaitingChunks(_) =>
           initError match {
@@ -297,48 +315,34 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
       }
     }
 
+    // Delegates to handler.onData. The emit callback wraps DataResponse in
+    // UdfResponse and serializes through responseLock. Workers that offload
+    // to a thread pool must apply back-pressure and serialize state mutations
+    // across threads.
     private def handleDataRequest(data: DataRequest): Unit = state match {
-      case Data => processEcho(data)
-
-      case _ => closeWithProtocolError(s"DataRequest received in state $state")
-    }
-
-    // Echo "processing" runs inline on the gRPC callback thread for test
-    // simplicity. Workers that offload to a thread pool (the typical
-    // approach for non-trivial UDFs) must apply back-pressure via a
-    // bounded queue and serialize state mutations across threads.
-    private def processEcho(data: DataRequest): Unit = {
-      if (data.getData == ERROR_TRIGGER) {
+      case Data =>
+        val emit: DataResponse => Unit = dr =>
+          responseLock.synchronized {
+            responseObserver.onNext(UdfResponse.newBuilder().setData(dr).build())
+          }
         // Data-phase error: emit ErrorResponse and enter PostError so the
         // terminator becomes CancelResponse after the engine's Cancel.
         // Only transition if we are still in Data: a concurrent Cancel
         // may have moved us to Cancelling, in which case the cancel path
         // owns the terminator.
-        val errEnvelope = UdfControlResponse.newBuilder()
-          .setError(ErrorResponse.newBuilder()
-            .setError(ExecutionError.newBuilder()
-              .setUser(UserError.newBuilder()
-                .setMessage("simulated user-code error")
-                .setErrorClass("SimulatedError")
-                .build())
-              .build())
-            .build())
-          .build()
-        matchUpdateThen {
-          case Data => (PostError, () => sendControl(errEnvelope))
-          // Concurrent Cancel / transport error already moved past data
-          // phase; the cancel path owns the terminator.
-          case other @ (Cancelling | Cancelled | Done) => (other, () => ())
-          case other =>
-            (other, () => closeWithProtocolError(s"processEcho invoked in state $other"))
+        handler.onData(data, emit).foreach { err =>
+          val errEnvelope = UdfControlResponse.newBuilder()
+            .setError(ErrorResponse.newBuilder().setError(err).build())
+            .build()
+          matchUpdateThen {
+            case Data => (PostError, () => sendControl(errEnvelope))
+            case other @ (Cancelling | Cancelled | Done) => (other, () => ())
+            case other =>
+              (other, () => closeWithProtocolError(s"handleDataRequest invoked in state $other"))
+          }
         }
-      } else {
-        responseLock.synchronized {
-          responseObserver.onNext(UdfResponse.newBuilder()
-            .setData(DataResponse.newBuilder().setData(data.getData).build())
-            .build())
-        }
-      }
+
+      case _ => closeWithProtocolError(s"DataRequest received in state $state")
     }
 
     private def handleFinish(): Unit = matchUpdateThen {
@@ -390,10 +394,11 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
     }
 
     private def sendFinishResponseAndFinalize(): Unit = {
+      val finishBuilder = handler.onFinish().foldLeft(FinishResponse.newBuilder()) {
+        case (b, (k, v)) => b.putMetrics(k, v)
+      }
       sendControl(UdfControlResponse.newBuilder()
-        .setFinish(FinishResponse.newBuilder()
-          .putMetrics("status", "ok")
-          .build())
+        .setFinish(finishBuilder.build())
         .build())
       matchUpdateThen { _ =>
         (Done, () => responseLock.synchronized { responseObserver.onCompleted() })
@@ -401,6 +406,7 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
     }
 
     private def sendCancelResponseAndFinalize(): Unit = {
+      handler.onCancel()
       sendControl(UdfControlResponse.newBuilder()
         .setCancel(CancelResponse.getDefaultInstance)
         .build())
@@ -449,6 +455,47 @@ class EchoProtocolSuite extends AnyFunSuite with BeforeAndAfterEach {
         .build())
       sendCancelResponseAndFinalize()
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Echo execution handler — the UDF-specific half of the decomposition.
+  //
+  // Contains only business logic: payload validation and per-batch processing.
+  // Knows nothing about gRPC, state machines, or wire framing.
+  // ---------------------------------------------------------------------------
+  private class EchoExecutionHandler extends ExecutionHandler {
+
+    override def onInit(payload: ByteString): Option[ExecutionError] =
+      if (payload == INIT_ERROR_TRIGGER) {
+        Some(ExecutionError.newBuilder()
+          .setWorker(WorkerError.newBuilder()
+            .setMessage("simulated init failure")
+            .build())
+          .build())
+      } else {
+        None
+      }
+
+    // Echoes the batch back via emit(). Returning Some(error) triggers an
+    // ErrorResponse; ERROR_TRIGGER simulates a user-code failure.
+    override def onData(
+        data: DataRequest,
+        emit: DataResponse => Unit): Option[ExecutionError] =
+      if (data.getData == ERROR_TRIGGER) {
+        Some(ExecutionError.newBuilder()
+          .setUser(UserError.newBuilder()
+            .setMessage("simulated user-code error")
+            .setErrorClass("SimulatedError")
+            .build())
+          .build())
+      } else {
+        emit(DataResponse.newBuilder().setData(data.getData).build())
+        None
+      }
+
+    override def onFinish(): Map[String, String] = Map("status" -> "ok")
+
+    override def onCancel(): Unit = ()
   }
 
   // ===========================================================================
