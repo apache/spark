@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, DataSourceCatalogResolver, Identifier, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -128,6 +128,30 @@ private[sql] object DataSourceV2Utils extends Logging {
       .getOrElse(CatalogManager.SESSION_CATALOG_NAME)
     (catalogName, ident)
   }
+
+  /**
+   * Resolver bound to a session [[SQLConf]] that maps a multipart SQL identifier
+   * (e.g. `pathformat.\`/path/to/t\``) to a `(catalogName, identifier)` pair when the head
+   * names a registered [[SupportsCatalogOptions]] data source. Returns `None` for non-SCO
+   * sources or unknown format heads, letting the caller fall back to standard catalog
+   * resolution.
+   */
+  def supportsCatalogOptionsResolver(conf: SQLConf): DataSourceCatalogResolver =
+    (nameParts: Seq[String]) =>
+      try {
+        DataSource.lookupDataSourceV2(nameParts.head, conf).flatMap {
+          case sco: SupportsCatalogOptions =>
+            val optionsWithPath = getOptionsWithPaths(
+              CaseInsensitiveMap(Map.empty), nameParts.tail.mkString("."))
+            val dsOptions = buildDsOptions(sco, conf, optionsWithPath)
+            Some(extractCatalogAndIdentifier(sco, dsOptions))
+          case _ => None
+        }
+      } catch {
+        // The format name is not a registered data source. Fall through and let the caller
+        // treat it as a catalog/namespace name.
+        case _: ClassNotFoundException => None
+      }
 
   def loadV2Source(
       sparkSession: SparkSession,

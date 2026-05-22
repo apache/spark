@@ -28,9 +28,8 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.{DataSourceCatalogResolver, DefaultCatalogManager, SupportsCatalogOptions}
+import org.apache.spark.sql.connector.catalog.{DataSourceCatalogResolver, DefaultCatalogManager}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
@@ -164,21 +163,7 @@ abstract class BaseSessionStateBuilder(
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
   protected lazy val dataSourceCatalogResolver: DataSourceCatalogResolver =
-    (nameParts: Seq[String]) =>
-      try {
-        DataSource.lookupDataSourceV2(nameParts.head, conf).flatMap {
-          case sco: SupportsCatalogOptions =>
-            val optionsWithPath = DataSourceV2Utils.getOptionsWithPaths(
-              CaseInsensitiveMap(Map.empty), nameParts.tail.mkString("."))
-            val dsOptions = DataSourceV2Utils.buildDsOptions(sco, conf, optionsWithPath)
-            Some(DataSourceV2Utils.extractCatalogAndIdentifier(sco, dsOptions))
-          case _ => None
-        }
-      } catch {
-        // The format name is not a registered data source. Fall through and let the caller
-        // treat it as a catalog/namespace name.
-        case _: ClassNotFoundException => None
-      }
+    DataSourceV2Utils.supportsCatalogOptionsResolver(conf)
 
   protected lazy val catalogManager = {
     val cm = new DefaultCatalogManager(v2SessionCatalog, catalog, dataSourceCatalogResolver)

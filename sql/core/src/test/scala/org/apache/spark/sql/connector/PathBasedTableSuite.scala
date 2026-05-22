@@ -121,14 +121,13 @@ class PathBasedTableSuite extends QueryTest with SharedSparkSession {
     }
     // The format head is not a registered data source and not a catalog. Resolution
     // falls through to a normal table-not-found error.
-    assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" ||
-      e.getMessage.toLowerCase.contains("not found"))
+    assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
   }
 
   test("VERSION AS OF on path-based table") {
     val base = "pathformat.`/p`"
     // InMemoryTableCatalog implements time travel by appending the version string to the
-    // identifier name (see loadTable(ident, version) — it looks up name + version).
+    // identifier name (see loadTable(ident, version) - it looks up name + version).
     val versioned = "pathformat.`/pv1`"
     sql(s"CREATE TABLE $base (id INT)")
     sql(s"CREATE TABLE $versioned (id INT)")
