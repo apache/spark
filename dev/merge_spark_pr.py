@@ -554,8 +554,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             "Upstream-First policy: non-bugfix commits on %s should also land on %s."
             % (pick_ref, sibling_x)
         )
-        print("If this is a %s-only maintenance bugfix, you may pick %s alone."
-              % (pick_ref, pick_ref))
+        print(
+            "If this is a %s-only maintenance bugfix, you may pick %s alone." % (pick_ref, pick_ref)
+        )
         print("Otherwise, pick both (%s first, then %s)." % (sibling_x, pick_ref))
         print("=" * 80)
         choice = (
@@ -1060,7 +1061,11 @@ def main():
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
         default = remaining_branches[0] if remaining_branches else branch_names[0]
         picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, target_ref,
+            pr_num,
+            merge_hash,
+            default,
+            branch_names,
+            target_ref,
             already_picked=tuple(merged_refs),
         )
         merged_refs = merged_refs + picked
