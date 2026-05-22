@@ -155,3 +155,9 @@ DO NOT push to the upstream repo. Always push to the personal fork. Open PRs aga
 DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+
+## Security
+
+Security model: [SECURITY.md](./SECURITY.md)
+
+Agents that scan this repository should consult `SECURITY.md` for the project's threat model, in-scope / out-of-scope declarations, and known non-findings before reporting issues.
