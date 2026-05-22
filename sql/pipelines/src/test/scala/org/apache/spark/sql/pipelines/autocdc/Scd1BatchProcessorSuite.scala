@@ -1160,7 +1160,7 @@ class Scd1BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Empty auxiliary: no rows means the left-anti join cannot match any microbatch row, so the
     // microbatch passes through untouched regardless of its contents.
-    
+
     // Conceptually, this means there are no tombstones that could potentially have delete-matched
     // against incoming rows in the microbatch.
     val auxiliary = microbatchOf(applyTombstonesToMicrobatchTestAuxiliarySchema)()
