@@ -369,8 +369,7 @@ case class GetArrayItem(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
-    // Order matters: the guarded case must come first.
+    // ANSI (failOnError) and non-ANSI paths generate different codegen.
     if (failOnError) {
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val index = ctx.freshName("index")
