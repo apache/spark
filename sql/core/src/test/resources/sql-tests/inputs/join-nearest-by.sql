@@ -36,6 +36,11 @@ SELECT u.user_id, p.product
 FROM users u LEFT OUTER JOIN (SELECT * FROM products WHERE false) p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
 
+-- INNER JOIN with NEAREST BY, empty right side
+SELECT u.user_id, p.product
+FROM users u INNER JOIN (SELECT * FROM products WHERE false) p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
+
 -- Explicit INNER keyword
 SELECT u.user_id, p.product
 FROM users u INNER JOIN products p
