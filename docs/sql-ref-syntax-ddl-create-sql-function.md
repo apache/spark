@@ -140,6 +140,7 @@ characteristic
   - [Aggregate functions](sql-ref-functions-builtin.md#aggregate-functions)
   - [Window functions](sql-ref-functions-builtin.md#analytic-window-functions)
   - [Ranking functions](sql-ref-functions-builtin.md#ranking-window-functions)
+  - Row producing functions such as `explode`
 
   A persistent SQL UDF cannot reference temporary views, temporary functions, or session
   variables.
@@ -149,7 +150,6 @@ characteristic
   `current_schema()` and `current_path()` inside the body still return the invoker's context.
   Use [DESCRIBE FUNCTION EXTENDED](sql-ref-syntax-aux-describe-function.html) to inspect the
   captured path. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
-  - Row producing functions such as `explode`
 
   Within the body of the function you can refer to parameter by its unqualified name or by qualifying the parameter with the function name.
 

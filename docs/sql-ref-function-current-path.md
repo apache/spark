@@ -69,7 +69,7 @@ re-issuing `SET PATH`.
 > SELECT current_path();
  spark_catalog.default,system.builtin
 
--- Inside a persisted view or SQL function body, current_path() returns the invoker's path,
+-- Inside a persistent view or SQL function body, current_path() returns the invoker's path,
 -- not the frozen path captured at creation time.
 > SET PATH = spark_catalog.default, system.builtin;
 > CREATE VIEW v_path AS SELECT current_path() AS p;

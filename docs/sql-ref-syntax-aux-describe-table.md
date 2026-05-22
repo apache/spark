@@ -284,7 +284,7 @@ DESC FORMATTED customer AS JSON;
   "schema_name": "default",
   "namespace": ["default"],
   "columns": [
-    {"name": "cust_id", "type": {"name": "integer"}, "nullable": true},
+    {"name": "cust_id", "type": {"name": "int"}, "nullable": true},
     {"name": "name", "type": {"name": "string"}, "comment": "Short name", "nullable": true},
     {"name": "state", "type": {"name": "varchar", "length": 20}, "nullable": true}
   ],

@@ -436,17 +436,27 @@ effective search path, for example
 > SELECT spark_catalog.default.func(4, 3);
  6
 
--- A built-in can always be reached by qualification, even when shadowed
-> CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999;
+-- A built-in can always be reached by qualification, even when shadowed.
+-- Put system.session ahead of system.builtin so a matching temp `abs` shadows the built-in.
+> SET PATH = system.session, system.builtin, spark_catalog.default;
+> CREATE TEMPORARY FUNCTION abs(x INT) RETURNS INT RETURN x + 100;
+
+-- Unqualified abs(-5) resolves to the temp (-5 + 100 = 95).
 > SELECT abs(-5);
- 5
-> SELECT session.abs();
- 999
-> SELECT builtin.abs(-5);
- 5
+ 95
+
+-- system.builtin.abs and builtin.abs reach the built-in around the shadow.
 > SELECT system.builtin.abs(-5);
  5
+> SELECT builtin.abs(-5);
+ 5
+
+-- session.abs reaches the temp explicitly.
+> SELECT session.abs(-5);
+ 95
+
 > DROP TEMPORARY FUNCTION abs;
+> SET PATH = DEFAULT_PATH;
 
 -- PATH controls unqualified routine lookup order
 > CREATE SCHEMA path_a;

@@ -71,7 +71,7 @@ path_element
       PATH |
       CURRENT_SCHEMA |
       CURRENT_DATABASE |
-      catalog_name . schema_name }
+      catalog_name . namespace [ . namespace ... ] }
 ```
 
 ### Parameters
@@ -118,7 +118,8 @@ path_element
 
 * **`schema_name`**
 
-  An explicit catalog-qualified schema reference (`catalog.schema`). Both parts are required.
+  An explicit catalog-qualified schema reference (`catalog.schema` or, for catalogs with
+  multi-level namespaces, `catalog.ns1.ns2...`). At least two parts are required.
   The catalog and schema do not need to exist at the time of `SET PATH`; non-existent entries
   are silently skipped during name resolution.
 
