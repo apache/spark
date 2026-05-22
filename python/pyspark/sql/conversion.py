@@ -891,8 +891,8 @@ class LocalDataToArrowConversion:
                 return value
 
             return convert_other
-        else:  # pragma: no cover
-            assert False, f"Need converter for {dataType} but failed to find one."
+
+        assert False, f"_need_converter returned True for {dataType} but no converter was created."
 
     @staticmethod
     def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
