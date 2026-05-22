@@ -45,9 +45,13 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
     val nestedRef = FieldReference(Seq("outer", "inner"))
 
     // A nested reference resolves to an Alias(GetStructField(...)), not an AttributeReference,
-    // so casting the result to AttributeReference fails.
+    // so the caller's checkcast fails when it dereferences an element as AttributeReference.
+    // (The `asInstanceOf[T]` inside `resolveRef` is erased to the `NamedExpression` upper bound,
+    // so the CCE fires at the call site, not inside the helper.)
     intercept[ClassCastException] {
-      V2ExpressionUtils.resolveRefs[AttributeReference](Seq(nestedRef), plan)
+      val resolvedAsAttr: AttributeReference =
+        V2ExpressionUtils.resolveRefs[AttributeReference](Seq(nestedRef), plan).head
+      resolvedAsAttr
     }
 
     // Widening the type parameter to NamedExpression preserves both flat and nested refs,
