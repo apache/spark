@@ -38,6 +38,8 @@ import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
+import org.apache.spark.sql.execution.externalUDF.{ClassicExternalUDFPlanner,
+  ExternalUDFPlanner, UnifiedExternalUDFPlanner}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -395,6 +397,19 @@ abstract class BaseSessionStateBuilder(
       extensions.buildQueryPostPlannerStrategyRules(session))
   }
 
+  /**
+   * Strategy for converting (Python) UDF calls into logical plan
+   * nodes. Uses the unified external UDF worker framework when
+   * the config is enabled, otherwise the classic Python runner.
+   */
+  protected def externalUDFPlanner: ExternalUDFPlanner = {
+    if (conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED)) {
+      new UnifiedExternalUDFPlanner(session.sparkContext.conf)
+    } else {
+      new ClassicExternalUDFPlanner()
+    }
+  }
+
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
     NormalizeCTEIds +:
     extensions.buildPlanNormalizationRules(session)
@@ -476,7 +491,8 @@ abstract class BaseSessionStateBuilder(
       columnarRules,
       adaptiveRulesHolder,
       planNormalizationRules,
-      () => artifactManager)
+      () => artifactManager,
+      externalUDFPlanner)
   }
 }
 
