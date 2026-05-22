@@ -45,7 +45,7 @@ case class Scd1ForeachBatchExec(
     )
 
     val microbatchWithCdcMetadata = batchProcessor.extendMicrobatchRowsWithCdcMetadata(
-      microbatchDf = deduplicatedMicrobatch
+      validatedMicrobatch = deduplicatedMicrobatch
     )
 
     val projectedMicrobatch = batchProcessor.projectTargetColumnsOntoMicrobatch(
