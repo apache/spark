@@ -72,6 +72,12 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalCalendarIntervalType) {
       return obj.getInterval(ordinal);
     }
+    if (physicalDataType instanceof PhysicalTimestampNTZNanosType) {
+      return obj.getTimestampNTZNanos(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalTimestampLTZNanosType) {
+      return obj.getTimestampLTZNanos(ordinal);
+    }
     if (physicalDataType instanceof PhysicalBinaryType) {
       return obj.getBinary(ordinal);
     }

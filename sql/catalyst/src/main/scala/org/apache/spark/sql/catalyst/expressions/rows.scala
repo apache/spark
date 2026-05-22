@@ -49,6 +49,8 @@ trait BaseGenericInternalRow extends InternalRow {
   override def getGeometry(ordinal: Int): GeometryVal = getAs(ordinal)
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNTZNanos = getAs(ordinal)
+  override def getTimestampLTZNanos(ordinal: Int): TimestampLTZNanos = getAs(ordinal)
   override def getVariant(ordinal: Int): VariantVal = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)

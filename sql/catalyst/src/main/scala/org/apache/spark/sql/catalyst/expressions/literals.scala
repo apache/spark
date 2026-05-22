@@ -149,6 +149,8 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[TimestampNTZNanos] => TimestampNTZNanosType()
+    case _ if clz == classOf[TimestampLTZNanos] => TimestampLTZNanosType()
     case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
@@ -242,6 +244,8 @@ object Literal {
         case PhysicalBooleanType => v.isInstanceOf[Boolean]
         case PhysicalByteType => v.isInstanceOf[Byte]
         case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
+        case PhysicalTimestampNTZNanosType => v.isInstanceOf[TimestampNTZNanos]
+        case PhysicalTimestampLTZNanosType => v.isInstanceOf[TimestampLTZNanos]
         case PhysicalIntegerType => v.isInstanceOf[Int]
         case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
         case PhysicalDoubleType => v.isInstanceOf[Double]

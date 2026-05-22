@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampLTZNanos;
+import org.apache.spark.unsafe.types.TimestampNTZNanos;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -153,6 +155,16 @@ public final class ColumnarBatchRow extends InternalRow {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     return columns[ordinal].getInterval(rowId);
+  }
+
+  @Override
+  public TimestampNTZNanos getTimestampNTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampNTZNanos(rowId);
+  }
+
+  @Override
+  public TimestampLTZNanos getTimestampLTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampLTZNanos(rowId);
   }
 
   @Override

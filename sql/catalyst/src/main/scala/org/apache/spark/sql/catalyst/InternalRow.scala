@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampLTZNanos, TimestampNTZNanos, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -62,6 +62,10 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
 
   def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
+
+  def setTimestampNTZNanos(i: Int, value: TimestampNTZNanos): Unit = update(i, value)
+
+  def setTimestampLTZNanos(i: Int, value: TimestampLTZNanos): Unit = update(i, value)
 
   /**
    * Make a copy of the current [[InternalRow]] object.
@@ -144,6 +148,10 @@ object InternalRow {
         case _: PhysicalStringType => (input, ordinal) => input.getUTF8String(ordinal)
         case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+        case PhysicalTimestampNTZNanosType => (input, ordinal) =>
+          input.getTimestampNTZNanos(ordinal)
+        case PhysicalTimestampLTZNanosType => (input, ordinal) =>
+          input.getTimestampLTZNanos(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
           input.getDecimal(ordinal, t.precision, t.scale)
         case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.length)
@@ -185,6 +193,10 @@ object InternalRow {
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
     case CalendarIntervalType =>
       (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
+    case _: TimestampNTZNanosType =>
+      (input, v) => input.setTimestampNTZNanos(ordinal, v.asInstanceOf[TimestampNTZNanos])
+    case _: TimestampLTZNanosType =>
+      (input, v) => input.setTimestampLTZNanos(ordinal, v.asInstanceOf[TimestampLTZNanos])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)

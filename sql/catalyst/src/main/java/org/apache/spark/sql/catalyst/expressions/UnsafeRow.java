@@ -38,6 +38,8 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampLTZNanos;
+import org.apache.spark.unsafe.types.TimestampNTZNanos;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -96,7 +98,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
     PhysicalDataType pdt = PhysicalDataType.apply(dt);
     return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
-      pdt instanceof PhysicalCalendarIntervalType;
+      pdt instanceof PhysicalCalendarIntervalType ||
+      pdt instanceof PhysicalTimestampNTZNanosType ||
+      pdt instanceof PhysicalTimestampLTZNanosType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -323,6 +327,36 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
+  public void setTimestampNTZNanos(int ordinal, TimestampNTZNanos value) {
+    setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
+      value == null ? 0 : value.nanosWithinMicro);
+  }
+
+  @Override
+  public void setTimestampLTZNanos(int ordinal, TimestampLTZNanos value) {
+    setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
+      value == null ? 0 : value.nanosWithinMicro);
+  }
+
+  private void setTimestampNanosPayload(
+      int ordinal, boolean isNull, long epochMicros, short nanosWithinMicro) {
+    assertIndexIsValid(ordinal);
+    long cursor = getLong(ordinal) >>> 32;
+    assert cursor > 0 : "invalid cursor " + cursor;
+    if (isNull) {
+      setNullAt(ordinal);
+      TimestampNanosRowValues.zeroPayload(baseObject, baseOffset, (int) cursor);
+      Platform.putLong(
+        baseObject, getFieldOffset(ordinal),
+        (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES);
+    } else {
+      TimestampNanosRowValues.writePayload(
+        baseObject, baseOffset, (int) cursor, epochMicros, nanosWithinMicro);
+      setLong(ordinal, (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES);
+    }
+  }
+
+  @Override
   public Object get(int ordinal, DataType dataType) {
     return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
@@ -443,6 +477,26 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final int days = (int) ((0xFFFFFFFF00000000L & monthAndDays) >> 32);
       final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
       return new CalendarInterval(months, days, microseconds);
+    }
+  }
+
+  @Override
+  public TimestampNTZNanos getTimestampNTZNanos(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final int offset = (int) (getLong(ordinal) >> 32);
+      return TimestampNanosRowValues.readNTZ(baseObject, baseOffset, offset);
+    }
+  }
+
+  @Override
+  public TimestampLTZNanos getTimestampLTZNanos(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final int offset = (int) (getLong(ordinal) >> 32);
+      return TimestampNanosRowValues.readLTZ(baseObject, baseOffset, offset);
     }
   }
 

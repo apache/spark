@@ -23,6 +23,8 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampLTZNanos;
+import org.apache.spark.unsafe.types.TimestampNTZNanos;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -57,6 +59,10 @@ public interface SpecializedGetters {
   GeometryVal getGeometry(int ordinal);
 
   CalendarInterval getInterval(int ordinal);
+
+  TimestampNTZNanos getTimestampNTZNanos(int ordinal);
+
+  TimestampLTZNanos getTimestampLTZNanos(int ordinal);
 
   VariantVal getVariant(int ordinal);
 

@@ -38,6 +38,8 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampLTZNanos;
+import org.apache.spark.unsafe.types.TimestampNTZNanos;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -246,6 +248,20 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final int days = (int) ((0xFFFFFFFF00000000L & monthAndDays) >> 32);
     final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  @Override
+  public TimestampNTZNanos getTimestampNTZNanos(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    final int offset = (int) (getLong(ordinal) >> 32);
+    return TimestampNanosRowValues.readNTZ(baseObject, baseOffset, offset);
+  }
+
+  @Override
+  public TimestampLTZNanos getTimestampLTZNanos(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    final int offset = (int) (getLong(ordinal) >> 32);
+    return TimestampNanosRowValues.readLTZ(baseObject, baseOffset, offset);
   }
 
   @Override

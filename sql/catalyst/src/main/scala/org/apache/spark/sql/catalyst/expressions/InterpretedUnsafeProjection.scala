@@ -159,6 +159,12 @@ object InterpretedUnsafeProjection {
 
         case PhysicalCalendarIntervalType => (v, i) => writer.write(i, v.getInterval(i))
 
+        case PhysicalTimestampNTZNanosType => (v, i) =>
+          writer.write(i, v.getTimestampNTZNanos(i))
+
+        case PhysicalTimestampLTZNanosType => (v, i) =>
+          writer.write(i, v.getTimestampLTZNanos(i))
+
         case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
         case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
