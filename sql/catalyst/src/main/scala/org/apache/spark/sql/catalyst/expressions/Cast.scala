@@ -2036,7 +2036,6 @@ case class Cast(
       val method = s"to${integralType.capitalize}"
       (c, evPrim, _) => code"$evPrim = $numericObj.$method($c);"
     } else {
-      // Byte/short narrowing remains inline; refactored in a follow-up PR.
       val (min, max) = lowerAndUpperBound(integralType)
       val mathClass = classOf[Math].getName
       val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
