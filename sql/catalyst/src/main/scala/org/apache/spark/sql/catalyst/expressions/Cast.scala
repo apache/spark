@@ -1999,7 +1999,6 @@ case class Cast(
       }).getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) => code"$evPrim = $numericObj.toInt($c);"
     } else {
-    } else {
       val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
       val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
       (c, evPrim, _) =>
