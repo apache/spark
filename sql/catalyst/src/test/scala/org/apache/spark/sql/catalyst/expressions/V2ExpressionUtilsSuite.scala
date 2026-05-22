@@ -59,7 +59,7 @@ class V2ExpressionUtilsSuite extends SparkFunSuite {
         assert(child == structAttr)
         assert(name == "inner")
       case other =>
-        fail(s"expected Alias(GetStructField(...), \"inner\"), got: $other")
+        fail(s"expected Alias(GetStructField(...), inner), got: $other")
     }
 
     val flat = resolved.map(_.toAttribute)
