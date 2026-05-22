@@ -200,6 +200,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // LocalRelation and does not trigger many rules.
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
+      FoldInnerJoinWithOneRowRelation,
       PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
@@ -261,6 +262,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReassignLambdaVariableID),
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
+      FoldInnerJoinWithOneRowRelation,
       PropagateEmptyRelation,
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
@@ -2659,10 +2661,89 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       val predicate = Predicate.create(condition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
+
+    // SPARK-57039: Inner join with a single-row LocalRelation (e.g. INNER JOIN VALUES (...)) can be
+    // folded into a Project that materializes the row's columns as constants on the other side,
+    // optionally followed by a Filter for the join condition. This eliminates an otherwise
+    // unavoidable BroadcastNestedLoopJoin/BroadcastHashJoin for a 1-row build side.
+    // Fills the TODO at DecorrelateInnerQuery.scala (search: "more general rule to optimize
+    // join with OneRowRelation").
+    case Join(LocalRelation(lOut, lData, false, _), right, Inner, condition, JoinHint.NONE)
+        if lData.length == 1 && !condition.exists(hasUnevaluableExpr) &&
+          !isSingleRowLeaf(right) =>
+      foldSingleRowJoin(lOut, lData.head, leftIsSingleRow = true, right, condition)
+
+    case Join(left, LocalRelation(rOut, rData, false, _), Inner, condition, JoinHint.NONE)
+        if rData.length == 1 && !condition.exists(hasUnevaluableExpr) &&
+          !isSingleRowLeaf(left) =>
+      foldSingleRowJoin(rOut, rData.head, leftIsSingleRow = false, left, condition)
   }
 
   def hasUnevaluableExpr(expr: Expression): Boolean = {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
+  }
+
+  // SPARK-57039: When BOTH sides of an Inner join are statically-single-row, folding the
+  // join would hide a cartesian product from CheckCartesianProducts and silently bypass the
+  // spark.sql.crossJoin.enabled=false guardrail. Leave those for the cartesian check.
+  //
+  // Use maxRows (not leaf-only pattern match): the optimizer is iterative and when this rule
+  // fires one side may still be wrapped (e.g. Project(LocalRelation(1 row))) while the other has
+  // already collapsed to a bare LocalRelation. maxRows transparently propagates through
+  // Project/Filter/Limit/etc., so the guard stays accurate regardless of which side reduces
+  // first. See SPARK-33100 CliSuite (t1(1 row) JOIN t2(1 row)) which exercised this race in r5.
+  def isSingleRowLeaf(plan: LogicalPlan): Boolean = plan.maxRows.contains(1L)
+
+  /**
+   * Build a `Project(...) [Filter(condition)]` plan that is logically equivalent to
+   * `Inner Join other (single-row LocalRelation) ON condition`, with the single-row side
+   * materialized as `Literal` columns.
+   *
+   * - Preserves the `exprId` of each output attribute of the single-row side so that any
+   *   reference above the join continues to resolve.
+   * - Uses `Literal.create` so the literal carries the correct nullable + complex-type metadata.
+   * - Preserves the original join's output ordering: `left.output ++ right.output`.
+   */
+  private def foldSingleRowJoin(
+      singleRowOutput: Seq[Attribute],
+      row: org.apache.spark.sql.catalyst.InternalRow,
+      leftIsSingleRow: Boolean,
+      other: LogicalPlan,
+      condition: Option[Expression]): LogicalPlan = {
+    val literals = singleRowOutput.zipWithIndex.map { case (attr, i) =>
+      Alias(Literal.create(row.get(i, attr.dataType), attr.dataType), attr.name)(attr.exprId)
+    }
+    val outputList = if (leftIsSingleRow) literals ++ other.output else other.output ++ literals
+    val projected = Project(outputList, other)
+    condition.map(Filter(_, projected)).getOrElse(projected)
+  }
+}
+
+/**
+ * SPARK-57039: Folds `Inner Join other (OneRowRelation) [ON condition]` into
+ * `[Filter(condition)](other)`.
+ *
+ * `OneRowRelation` is a zero-column, single-row leaf (e.g. produced by a `SELECT <consts>` after
+ * the projected literals have been folded away by constant propagation). An Inner join against it
+ * is logically a no-op on the row count of the other side, so it can be replaced by the other
+ * side directly. If the join carries a condition, the condition is preserved as a Filter on top.
+ *
+ * Complements [[ConvertToLocalRelation]]'s case 5 (single-row `LocalRelation`). Kept as a separate
+ * rule because the tree-pattern pruning is different: `OneRowRelation` does not register a
+ * `LOCAL_RELATION` pattern.
+ */
+object FoldInnerJoinWithOneRowRelation extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(INNER_LIKE_JOIN), ruleId) {
+    case Join(left, _: OneRowRelation, Inner, condition, JoinHint.NONE)
+        if !condition.exists(ConvertToLocalRelation.hasUnevaluableExpr) &&
+          !ConvertToLocalRelation.isSingleRowLeaf(left) =>
+      condition.map(Filter(_, left)).getOrElse(left)
+
+    case Join(_: OneRowRelation, right, Inner, condition, JoinHint.NONE)
+        if !condition.exists(ConvertToLocalRelation.hasUnevaluableExpr) &&
+          !ConvertToLocalRelation.isSingleRowLeaf(right) =>
+      condition.map(Filter(_, right)).getOrElse(right)
   }
 }
 
